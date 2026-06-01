@@ -2,13 +2,13 @@
 
 ## Статус
 
-Предложено.
+Принято.
 
 ## Контекст
 
 Проект стартует на Jetpack Compose. Автор хочет изучать современную Android-разработку и открыт к bleeding edge, если это упрощает жизнь.
 
-Navigation3 уже существует как современный вариант навигации для Compose. По состоянию на 2026-06-01 стабильная ветка Navigation3 есть в AndroidX.
+Navigation3 уже существует как современный вариант навигации для Compose. По состоянию на 2026-06-02 последняя stable-версия Navigation3 в AndroidX release notes - `1.1.2`; `1.2.0-alpha03` не берем, потому что это alpha.
 
 Release notes:
 
@@ -16,15 +16,19 @@ Release notes:
 
 ## Решение
 
-Для первого реального UI рассмотреть Navigation3 как предпочтительный вариант, но перед подключением зафиксировать конкретную версию в Gradle и проверить:
+Использовать Navigation3 stable:
 
-- стабильность API;
-- качество документации;
-- поддержку typed routes/back stack;
-- совместимость с текущей версией Compose;
-- удобство deep links для будущих share/detail сценариев.
+```text
+androidx.navigation3:navigation3-runtime:1.1.2
+androidx.navigation3:navigation3-ui:1.1.2
+```
 
-Если Navigation3 создаст лишнее трение на самом первом tracer bullet, допустимо временно начать с простой собственной навигации через sealed routes/screen state и вернуться к Navigation3 отдельным PR.
+Для MVP использовать `NavKey`, `rememberNavBackStack` и `NavDisplay`. Первый route-набор:
+
+```text
+Home
+Detail(fileId)
+```
 
 ## Почему не classic Navigation Compose по умолчанию
 
@@ -44,8 +48,9 @@ MediaDetailScreen
 SettingsScreen
 ```
 
+На текущем tracer bullet `ConnectServerScreen`, `LoginProgressScreen` и `TimelineScreen` живут внутри `Home`, потому что login/timeline зависит от auth state. `MediaDetailScreen` вынесен в отдельный route `Detail(fileId)`.
+
 ## Открытые вопросы
 
 - Как Navigation3 лучше хранить состояние detail/timeline scroll position?
-- Как совместить navigation state с process death restore?
 - Нужны ли deep links на media item в MVP-1?

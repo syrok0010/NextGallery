@@ -58,6 +58,7 @@ POST /apps/memories/api/image/multipreview
 - `GET /days/{id1,id2}` поддерживает загрузку нескольких дней одним запросом через comma-separated id в path.
 - `POST /days` используется браузерным клиентом для bulk-загрузки списка day ids через JSON body.
 - Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `auid`, а для видео также `isvideo` и `video_duration`.
+- Boolean-like поля могут приходить не как JSON boolean, а как `0/1`; например, `isfavorite: 1`. DTO/mapping слой должен быть tolerant к таким значениям.
 - `POST /image/multipreview` принимает список `{ fileid, x, y, a, reqid }` и подходит для батчевой загрузки thumbnails.
 
 Вывод для MVP-1: первый timeline можно строить напрямую на Memories API:

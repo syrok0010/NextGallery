@@ -18,6 +18,7 @@
 - [ADR 0002: Абстракция источников медиа](adr/0002-media-source-abstraction.md)
 - [ADR 0003: Навигация](adr/0003-navigation.md)
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
+- [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
 
 ## Ближайшие решения
 
