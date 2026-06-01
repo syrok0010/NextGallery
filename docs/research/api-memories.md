@@ -6,6 +6,8 @@ Memories API должен быть основным API для фотодоме�
 
 Это выглядит более легким и "воздушным" путем для native-клиента, чем строить всю фотомодель вручную поверх WebDAV.
 
+Репозиторий Memories не выглядит как активно развиваемый продуктовый фронт, но поддерживается обновлениями совместимости. Для NextGallery это приемлемый уровень риска: исходный код Memories можно использовать как практический ориентир, а интеграцию проектировать так, чтобы изолировать возможные изменения API внутри `MemoriesMediaSource`.
+
 ## Что найдено в локальном clone Memories
 
 Локальный clone: `/home/syrok/AndroidStudioProjects/memories`.
@@ -36,6 +38,36 @@ android/app/src/main/java/gallery/memories
 
 Это важно изучить отдельно: он может подсказать модель локальных фото, кеша и интеграции с уже существующим web/native слоем Memories.
 
+## Что показал browser capture главной страницы
+
+Raw capture из Chrome DevTools содержит cookies, request token, приватные URL и имена личных файлов, поэтому его нельзя коммитить. В документацию переносится только обезличенный вывод.
+
+При открытии главной Memories браузерный клиент делает минимальный полезный flow:
+
+```text
+GET  /apps/memories/api/config
+GET  /apps/memories/api/days
+GET  /apps/memories/api/days/{id1,id2}
+POST /apps/memories/api/image/multipreview
+```
+
+Наблюдения:
+
+- `/config` возвращает версию Memories и включенные возможности: albums, system tags, recognize, preview generator, timeline path, viewer/folder/album settings.
+- `GET /days` возвращает список дней с `dayid` и `count`; для первых дней ответ может сразу содержать `detail` с медиаэлементами.
+- `GET /days/{id1,id2}` поддерживает загрузку нескольких дней одним запросом через comma-separated id в path.
+- `POST /days` используется браузерным клиентом для bulk-загрузки списка day ids через JSON body.
+- Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `auid`, а для видео также `isvideo` и `video_duration`.
+- `POST /image/multipreview` принимает список `{ fileid, x, y, a, reqid }` и подходит для батчевой загрузки thumbnails.
+
+Вывод для MVP-1: первый timeline можно строить напрямую на Memories API:
+
+```text
+config -> days -> lazy day details -> multipreview -> grid/detail
+```
+
+WebDAV для первого timeline не нужен, но остается fallback и будущий слой для download/upload/file operations.
+
 ## Ключевые endpoint'ы для MVP-1
 
 API base path:
@@ -65,13 +97,14 @@ GET  /apps/memories/api/clusters/{backend}/preview
 
 Для MVP-1 наиболее важны:
 
-- `/api/describe` - проверка API, версия, base URL, login flow URL.
-- `/api/config` - настройки Memories и доступные возможности.
-- `/api/days` - структура timeline по дням.
-- `/api/days/{id}` - фото/видео конкретного дня.
-- `/api/image/preview/{id}` - thumbnails.
-- `/api/image/info/{id}` - detail metadata.
-- `/api/stream/{fileid}` - оригинал/поток файла, если применимо.
+- `/apps/memories/api/describe` - проверка API, версия, base URL, login flow URL.
+- `/apps/memories/api/config` - настройки Memories и доступные возможности.
+- `/apps/memories/api/days` - структура timeline по дням.
+- `/apps/memories/api/days/{id}` - фото/видео конкретного дня.
+- `/apps/memories/api/image/preview/{id}` - одиночный thumbnail.
+- `/apps/memories/api/image/multipreview` - батчевая загрузка thumbnails.
+- `/apps/memories/api/image/info/{id}` - detail metadata.
+- `/apps/memories/api/stream/{fileid}` - оригинал/поток файла, если применимо.
 
 ## Модель данных Memories
 
@@ -140,8 +173,8 @@ RemoteMediaSource
 ## Следующие исследовательские задачи
 
 - Вызвать `/apps/memories/api/describe` на личном сервере.
-- Вызвать `/apps/memories/api/days` с app password.
-- Проверить форму ответа `/api/days` и `/api/days/{id}` на реальном архиве.
+- Проверить `/apps/memories/api/config`, `/apps/memories/api/days` и `/apps/memories/api/days/{id}` с app password, а не browser session cookies.
+- Сравнить форму ответов browser session и app password flow.
 - Проверить preview URL и параметры размеров.
 - Проверить, нужен ли `OCS-APIRequest` или другие Nextcloud headers.
 - Изучить текущий Android-клиент Memories глубже: auth, cache, local media, sync hints.

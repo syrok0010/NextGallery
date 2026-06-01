@@ -4,6 +4,7 @@
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
+/.idea/.name
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
@@ -35,6 +36,8 @@ local.properties
 *.log
 .env
 .env.*
+requests.txt
+requests.*.txt
 
 # Keep the Gradle wrapper reproducible.
 !gradle/wrapper/gradle-wrapper.jar
