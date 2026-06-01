@@ -1,0 +1,40 @@
+*.iml
+.gradle
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Android Studio / IntelliJ
+/.idea/deploymentTargetSelector.xml
+/.idea/kotlinc.xml
+/.idea/misc.xml
+/.idea/vcs.xml
+
+# Gradle
+**/build/
+
+# Kotlin / Java
+*.class
+
+# Android artifacts
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Logs and local env
+*.log
+.env
+.env.*
+
+# Keep the Gradle wrapper reproducible.
+!gradle/wrapper/gradle-wrapper.jar
