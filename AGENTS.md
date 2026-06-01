@@ -8,3 +8,17 @@
 - Если информация полезна только на время текущей задачи, оставь ее в сообщении пользователю, а не в docs.
 - Не делай коммиты без прямой просьбы пользователя.
 - Не трогай unrelated-код и настройки без необходимости.
+
+## Agent skills
+
+### Issue tracker
+
+Задачи ведутся в GitHub Issues этого репозитория через `gh` CLI. См. `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Используется минимальный набор labels: существующие GitHub labels плюс `ready-for-agent` и `needs-decision`. См. `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Проект single-context: продуктовые документы в `docs/product/`, исследования в `docs/research/`, решения в `docs/adr/`. См. `docs/agents/domain.md`.
