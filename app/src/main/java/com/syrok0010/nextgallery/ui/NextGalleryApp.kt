@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,7 @@ import coil3.compose.AsyncImage
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import kotlinx.serialization.Serializable
@@ -137,14 +139,14 @@ private fun NextGalleryHomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NextGallery") },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     if (state.credentials != null) {
                         TextButton(onClick = onRefresh, enabled = !state.isBusy) {
-                            Text("Обновить")
+                            Text(stringResource(R.string.action_refresh))
                         }
                         TextButton(onClick = onLogout, enabled = !state.isBusy) {
-                            Text("Выйти")
+                            Text(stringResource(R.string.action_logout))
                         }
                     }
                 },
@@ -195,11 +197,11 @@ private fun MissingMediaDetail(onBack: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Элемент не найден",
+            text = stringResource(R.string.detail_missing_item),
             style = MaterialTheme.typography.titleMedium,
         )
         TextButton(onClick = onBack) {
-            Text("Назад")
+            Text(stringResource(R.string.action_back))
         }
     }
 }
@@ -241,7 +243,7 @@ private fun LoginPanel(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Подключение к Nextcloud",
+            text = stringResource(R.string.login_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -250,15 +252,23 @@ private fun LoginPanel(
             onValueChange = onServerUrlChange,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("Адрес сервера") },
-            placeholder = { Text("https://cloud.example.com") },
+            label = { Text(stringResource(R.string.login_server_url_label)) },
+            placeholder = { Text(stringResource(R.string.login_server_url_placeholder)) },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = onStartLogin,
                 enabled = !state.isBusy,
             ) {
-                Text(if (session == null) "Начать вход" else "Начать заново")
+                Text(
+                    stringResource(
+                        if (session == null) {
+                            R.string.action_start_login
+                        } else {
+                            R.string.action_restart_login
+                        },
+                    ),
+                )
             }
 
             if (session != null) {
@@ -266,7 +276,7 @@ private fun LoginPanel(
                     onClick = { openLoginUrl(session.loginUrl) },
                     enabled = !state.isBusy,
                 ) {
-                    Text("Открыть браузер")
+                    Text(stringResource(R.string.action_open_browser))
                 }
             }
         }
@@ -276,7 +286,7 @@ private fun LoginPanel(
                 onClick = onCancelLogin,
                 enabled = !state.isBusy,
             ) {
-                Text("Отменить вход")
+                Text(stringResource(R.string.action_cancel_login))
             }
         }
 
@@ -300,7 +310,12 @@ private fun TimelinePanel(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Text(
-                    text = "Memories ${timeline.memoriesVersion} · ${timeline.totalMediaCountHint} элементов · ${timeline.totalDayCount} дней",
+                    text = stringResource(
+                        R.string.timeline_summary,
+                        timeline.memoriesVersion,
+                        timeline.totalMediaCountHint,
+                        timeline.totalDayCount,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -319,7 +334,7 @@ private fun TimelinePanel(
 
         if (timeline?.items.isNullOrEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Пока нет загруженных элементов")
+                Text(stringResource(R.string.timeline_empty))
             }
         } else {
             LazyVerticalGrid(
@@ -367,7 +382,7 @@ private fun MediaTile(
 
         if (item.isVideo) {
             Text(
-                text = "VIDEO",
+                text = stringResource(R.string.media_video_badge),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(6.dp)
@@ -397,7 +412,7 @@ private fun MediaDetail(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             TextButton(onClick = onBack) {
-                Text("Назад")
+                Text(stringResource(R.string.action_back))
             }
             Text(
                 text = item.day.format(DateTimeFormatter.ISO_LOCAL_DATE),
@@ -425,10 +440,18 @@ private fun MediaDetail(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(item.displayName, style = MaterialTheme.typography.titleMedium)
-                Text("fileid: ${item.fileId}")
-                Text("mime: ${item.mimeType ?: "unknown"}")
-                Text("size: ${item.width ?: "?"} x ${item.height ?: "?"}")
-                item.videoDurationSeconds?.let { Text("duration: ${it}s") }
+                Text(stringResource(R.string.detail_file_id, item.fileId))
+                Text(stringResource(R.string.detail_mime, item.mimeType ?: stringResource(R.string.value_unknown)))
+                Text(
+                    stringResource(
+                        R.string.detail_size,
+                        item.width?.toString() ?: stringResource(R.string.value_unknown_short),
+                        item.height?.toString() ?: stringResource(R.string.value_unknown_short),
+                    ),
+                )
+                item.videoDurationSeconds?.let {
+                    Text(stringResource(R.string.detail_duration_seconds, it))
+                }
             }
         }
     }
@@ -471,7 +494,7 @@ private fun StatusBlock(state: MainUiState) {
     }
 
     Text(
-        text = message,
+        text = message.asString(),
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         color = color,
         style = MaterialTheme.typography.bodyMedium,

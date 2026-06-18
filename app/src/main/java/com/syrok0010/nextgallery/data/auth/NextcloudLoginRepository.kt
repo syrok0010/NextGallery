@@ -37,14 +37,14 @@ class NextcloudLoginRepository(
             if (error.code() == 404) {
                 LoginPollResult.Pending
             } else {
-                LoginPollResult.Failed("Проверка входа завершилась ошибкой HTTP ${error.code()}")
+                LoginPollResult.Failed(LoginPollFailure.Http(error.code()))
             }
         } catch (error: IOException) {
-            LoginPollResult.Failed("Не удалось проверить вход из-за сетевой ошибки", isRecoverable = true)
+            LoginPollResult.Failed(LoginPollFailure.Network, isRecoverable = true)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            LoginPollResult.Failed(error.message ?: "Не удалось проверить вход")
+            LoginPollResult.Failed(LoginPollFailure.Unknown)
         }
     }
 }
@@ -60,7 +60,13 @@ sealed interface LoginPollResult {
     data object Pending : LoginPollResult
     data class Ready(val credentials: AccountCredentials) : LoginPollResult
     data class Failed(
-        val message: String,
+        val failure: LoginPollFailure,
         val isRecoverable: Boolean = false,
     ) : LoginPollResult
+}
+
+sealed interface LoginPollFailure {
+    data class Http(val code: Int) : LoginPollFailure
+    data object Network : LoginPollFailure
+    data object Unknown : LoginPollFailure
 }

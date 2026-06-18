@@ -2,6 +2,8 @@ package com.syrok0010.nextgallery.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.data.auth.LoginPollFailure
 import com.syrok0010.nextgallery.data.auth.LoginPollResult
 import com.syrok0010.nextgallery.data.auth.LoginSession
 import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
@@ -37,7 +39,7 @@ class MainViewModel(
                 it.copy(
                     credentials = credentials,
                     serverUrlInput = credentials.serverUrl,
-                    statusMessage = "Загружаю Memories timeline",
+                    statusMessage = uiText(R.string.status_loading_memories_timeline),
                 )
             }
             loadTimeline(credentials)
@@ -61,7 +63,7 @@ class MainViewModel(
                     isLoginPolling = false,
                     loginSession = null,
                     loginBrowserOpened = false,
-                    errorMessage = "Укажи адрес Nextcloud",
+                    errorMessage = uiText(R.string.error_enter_nextcloud_url),
                     statusMessage = null,
                 )
             }
@@ -74,7 +76,7 @@ class MainViewModel(
                     isBusy = true,
                     isLoginPolling = false,
                     errorMessage = null,
-                    statusMessage = "Создаю Login Flow",
+                    statusMessage = uiText(R.string.status_creating_login_flow),
                     loginSession = null,
                     loginBrowserOpened = false,
                 )
@@ -93,7 +95,7 @@ class MainViewModel(
                         isLoginPolling = true,
                         loginSession = session,
                         loginBrowserOpened = false,
-                        statusMessage = "Открой браузер и подтверди вход",
+                        statusMessage = uiText(R.string.status_open_browser_confirm_login),
                     )
                 }
                 startLoginPolling(session)
@@ -106,7 +108,7 @@ class MainViewModel(
                         it.copy(
                             isBusy = false,
                             isLoginPolling = false,
-                            errorMessage = error.message ?: "Не удалось начать Login Flow",
+                            errorMessage = uiText(R.string.error_start_login_flow_failed),
                             statusMessage = null,
                         )
                     }
@@ -123,7 +125,7 @@ class MainViewModel(
         _state.update {
             it.copy(
                 loginBrowserOpened = true,
-                errorMessage = "Не удалось открыть браузер. Попробуй открыть вход вручную.",
+                errorMessage = uiText(R.string.error_open_browser_failed),
             )
         }
     }
@@ -141,7 +143,7 @@ class MainViewModel(
                 isLoginPolling = false,
                 loginBrowserOpened = false,
                 statusMessage = null,
-                errorMessage = "Вход отменен",
+                errorMessage = uiText(R.string.error_login_cancelled),
             )
         }
     }
@@ -161,7 +163,7 @@ class MainViewModel(
                     it.copy(
                         isLoginPolling = true,
                         errorMessage = null,
-                        statusMessage = "Жду подтверждения входа в браузере",
+                        statusMessage = uiText(R.string.status_waiting_browser_confirmation),
                     )
                 }
 
@@ -170,7 +172,7 @@ class MainViewModel(
                         _state.update {
                             it.copy(
                                 isLoginPolling = true,
-                                statusMessage = "Вход еще не подтвержден в браузере",
+                                statusMessage = uiText(R.string.status_login_not_confirmed_yet),
                             )
                         }
                     }
@@ -180,14 +182,14 @@ class MainViewModel(
                             _state.update {
                                 it.copy(
                                     isLoginPolling = true,
-                                    statusMessage = "${result.message}. Повторю проверку автоматически.",
+                                    statusMessage = loginPollRecoverableStatus(result.failure),
                                 )
                             }
                         } else {
                             _state.update {
                                 it.copy(
                                     isLoginPolling = false,
-                                    errorMessage = result.message,
+                                    errorMessage = result.failure.toUiText(),
                                     statusMessage = null,
                                 )
                             }
@@ -205,7 +207,7 @@ class MainViewModel(
                                 credentials = result.credentials,
                                 loginSession = null,
                                 loginBrowserOpened = false,
-                                statusMessage = "Вход выполнен, загружаю timeline",
+                                statusMessage = uiText(R.string.status_login_complete_loading_timeline),
                             )
                         }
                         loginPollingJob = null
@@ -221,7 +223,7 @@ class MainViewModel(
                         isLoginPolling = false,
                         loginSession = null,
                         loginBrowserOpened = false,
-                        errorMessage = "Не дождался подтверждения входа. Начни вход заново.",
+                        errorMessage = uiText(R.string.error_login_confirmation_timeout),
                         statusMessage = null,
                     )
                 }
@@ -255,7 +257,7 @@ class MainViewModel(
                 it.copy(
                     isBusy = true,
                     errorMessage = null,
-                    statusMessage = "Загружаю Memories API",
+                    statusMessage = uiText(R.string.status_loading_memories_api),
                 )
             }
 
@@ -265,7 +267,7 @@ class MainViewModel(
                         it.copy(
                             isBusy = false,
                             timeline = snapshot,
-                            statusMessage = "Загружено ${snapshot.items.size} элементов",
+                            statusMessage = uiText(R.string.status_loaded_items, snapshot.items.size),
                         )
                     }
                 }
@@ -273,12 +275,27 @@ class MainViewModel(
                     _state.update {
                         it.copy(
                             isBusy = false,
-                            errorMessage = error.message ?: "Не удалось загрузить Memories API",
+                            errorMessage = uiText(R.string.error_load_memories_api_failed),
                             statusMessage = null,
                         )
                     }
                 }
         }
+    }
+}
+
+private fun LoginPollFailure.toUiText(): UiText {
+    return when (this) {
+        is LoginPollFailure.Http -> uiText(R.string.error_login_poll_http, code)
+        LoginPollFailure.Network -> uiText(R.string.error_login_poll_network)
+        LoginPollFailure.Unknown -> uiText(R.string.error_login_poll_unknown)
+    }
+}
+
+private fun loginPollRecoverableStatus(failure: LoginPollFailure): UiText {
+    return when (failure) {
+        LoginPollFailure.Network -> uiText(R.string.status_login_poll_network_retrying)
+        else -> failure.toUiText()
     }
 }
 
@@ -290,8 +307,8 @@ data class MainUiState(
     val timeline: TimelineSnapshot? = null,
     val isBusy: Boolean = false,
     val isLoginPolling: Boolean = false,
-    val statusMessage: String? = null,
-    val errorMessage: String? = null,
+    val statusMessage: UiText? = null,
+    val errorMessage: UiText? = null,
 )
 
 private const val LOGIN_POLL_INTERVAL_MS = 2_000L
