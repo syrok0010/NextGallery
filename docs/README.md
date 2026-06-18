@@ -24,6 +24,7 @@
 - [ADR 0008: UI по вертикальным slice](adr/0008-ui-vertical-slices.md)
 - [ADR 0009: Типизированный UI session state](adr/0009-typed-ui-session-state.md)
 - [ADR 0010: MVP-1 warm-start cache policy](adr/0010-mvp-cache-policy.md)
+- [ADR 0011: Стек просмотра фото](adr/0011-photo-viewer-stack.md)
 
 ## Ближайшие решения
 
