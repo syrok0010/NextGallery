@@ -94,7 +94,9 @@ fun NextGalleryApp(
                     state = state,
                     onServerUrlChange = viewModel::updateServerUrl,
                     onStartLogin = viewModel::startLogin,
-                    onPollLogin = viewModel::pollLogin,
+                    onLoginBrowserOpened = viewModel::markLoginBrowserOpened,
+                    onLoginBrowserOpenFailed = viewModel::reportLoginBrowserOpenFailure,
+                    onCancelLogin = viewModel::cancelLogin,
                     onRefresh = viewModel::refresh,
                     onLogout = viewModel::logout,
                     onSelect = { item -> backStack.add(NextGalleryRoute.Detail(item.fileId)) },
@@ -125,7 +127,9 @@ private fun NextGalleryHomeScreen(
     state: MainUiState,
     onServerUrlChange: (String) -> Unit,
     onStartLogin: () -> Unit,
-    onPollLogin: () -> Unit,
+    onLoginBrowserOpened: () -> Unit,
+    onLoginBrowserOpenFailed: () -> Unit,
+    onCancelLogin: () -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onSelect: (MediaItem) -> Unit,
@@ -157,7 +161,9 @@ private fun NextGalleryHomeScreen(
                     state = state,
                     onServerUrlChange = onServerUrlChange,
                     onStartLogin = onStartLogin,
-                    onPollLogin = onPollLogin,
+                    onLoginBrowserOpened = onLoginBrowserOpened,
+                    onLoginBrowserOpenFailed = onLoginBrowserOpenFailed,
+                    onCancelLogin = onCancelLogin,
                 )
             } else {
                 TimelinePanel(
@@ -167,7 +173,7 @@ private fun NextGalleryHomeScreen(
                 )
             }
 
-            if (state.isBusy) {
+            if (state.isBusy || state.isLoginPolling) {
                 CircularProgressIndicator(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -203,10 +209,28 @@ private fun LoginPanel(
     state: MainUiState,
     onServerUrlChange: (String) -> Unit,
     onStartLogin: () -> Unit,
-    onPollLogin: () -> Unit,
+    onLoginBrowserOpened: () -> Unit,
+    onLoginBrowserOpenFailed: () -> Unit,
+    onCancelLogin: () -> Unit,
 ) {
     val context = LocalContext.current
     val session = state.loginSession
+    val openLoginUrl: (String) -> Unit = { loginUrl ->
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, loginUrl.toUri()))
+        }.onSuccess {
+            onLoginBrowserOpened()
+        }.onFailure {
+            onLoginBrowserOpenFailed()
+        }
+    }
+
+    val loginUrlToOpen = session?.loginUrl?.takeUnless { state.loginBrowserOpened }
+    LaunchedEffect(loginUrlToOpen) {
+        if (loginUrlToOpen != null) {
+            openLoginUrl(loginUrlToOpen)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -234,14 +258,12 @@ private fun LoginPanel(
                 onClick = onStartLogin,
                 enabled = !state.isBusy,
             ) {
-                Text("Начать вход")
+                Text(if (session == null) "Начать вход" else "Начать заново")
             }
 
             if (session != null) {
                 Button(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, session.loginUrl.toUri()))
-                    },
+                    onClick = { openLoginUrl(session.loginUrl) },
                     enabled = !state.isBusy,
                 ) {
                     Text("Открыть браузер")
@@ -250,11 +272,11 @@ private fun LoginPanel(
         }
 
         if (session != null) {
-            Button(
-                onClick = onPollLogin,
+            TextButton(
+                onClick = onCancelLogin,
                 enabled = !state.isBusy,
             ) {
-                Text("Я подтвердил вход")
+                Text("Отменить вход")
             }
         }
 

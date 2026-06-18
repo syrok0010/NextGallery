@@ -19,10 +19,10 @@
 - [ADR 0003: Навигация](adr/0003-navigation.md)
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
 - [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
+- [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
 
 ## Ближайшие решения
 
 - Проверить Memories API на личном Nextcloud через app password.
-- Выбрать стратегию secure storage для app password.
 - Решить, нужен ли WebDAV fallback уже в MVP-1.
 - После этого начинать tracer bullet: `Login -> describe API -> days -> grid -> detail`.

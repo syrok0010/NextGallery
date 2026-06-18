@@ -2,6 +2,8 @@ package com.syrok0010.nextgallery.data.auth
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.ApiFactory
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(
@@ -35,10 +37,14 @@ class NextcloudLoginRepository(
             if (error.code() == 404) {
                 LoginPollResult.Pending
             } else {
-                LoginPollResult.Failed("Login poll failed: HTTP ${error.code()}")
+                LoginPollResult.Failed("Проверка входа завершилась ошибкой HTTP ${error.code()}")
             }
+        } catch (error: IOException) {
+            LoginPollResult.Failed("Не удалось проверить вход из-за сетевой ошибки", isRecoverable = true)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
-            LoginPollResult.Failed(error.message ?: "Login poll failed")
+            LoginPollResult.Failed(error.message ?: "Не удалось проверить вход")
         }
     }
 }
@@ -53,5 +59,8 @@ data class LoginSession(
 sealed interface LoginPollResult {
     data object Pending : LoginPollResult
     data class Ready(val credentials: AccountCredentials) : LoginPollResult
-    data class Failed(val message: String) : LoginPollResult
+    data class Failed(
+        val message: String,
+        val isRecoverable: Boolean = false,
+    ) : LoginPollResult
 }
