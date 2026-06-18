@@ -40,6 +40,9 @@ class MainViewModel(
                     credentials = credentials,
                     serverUrlInput = credentials.serverUrl,
                     statusMessage = uiText(R.string.status_loading_memories_timeline),
+                    timelineLoadingDayIds = emptySet(),
+                    timelineFailedDayIds = emptySet(),
+                    timelineLoadMoreError = null,
                 )
             }
             loadTimeline(credentials)
@@ -267,9 +270,16 @@ class MainViewModel(
                         it.copy(
                             isBusy = false,
                             timeline = snapshot,
-                            statusMessage = uiText(R.string.status_loaded_items, snapshot.items.size),
+                            timelineLoadingDayIds = emptySet(),
+                            timelineFailedDayIds = emptySet(),
+                            timelineLoadMoreError = null,
+                            statusMessage = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
                         )
                     }
+                    loadVisibleTimelineRange(
+                        firstVisibleIndex = 0,
+                        lastVisibleIndex = INITIAL_TIMELINE_PREFETCH_SLOTS,
+                    )
                 }
                 .onFailure { error ->
                     _state.update {
@@ -277,6 +287,79 @@ class MainViewModel(
                             isBusy = false,
                             errorMessage = uiText(R.string.error_load_memories_api_failed),
                             statusMessage = null,
+                        )
+                    }
+                }
+        }
+    }
+
+    fun loadVisibleTimelineRange(
+        firstVisibleIndex: Int,
+        lastVisibleIndex: Int,
+    ) {
+        val currentState = state.value
+        val credentials = currentState.credentials ?: return
+        val timeline = currentState.timeline ?: return
+        if (timeline.slots.isEmpty()) {
+            return
+        }
+
+        val windowStart = (firstVisibleIndex - TIMELINE_PREFETCH_SLOTS).coerceAtLeast(0)
+        val windowEnd = (lastVisibleIndex + TIMELINE_PREFETCH_SLOTS).coerceAtMost(timeline.slots.lastIndex)
+        if (windowStart > windowEnd) {
+            return
+        }
+
+        val dayIds = timeline.slots
+            .asSequence()
+            .drop(windowStart)
+            .take(windowEnd - windowStart + 1)
+            .map { it.dayId }
+            .distinct()
+            .filterNot { it in timeline.loadedDayIds }
+            .filterNot { it in currentState.timelineLoadingDayIds }
+            .filterNot { it in currentState.timelineFailedDayIds }
+            .take(TIMELINE_DAY_BATCH_SIZE)
+            .toList()
+
+        if (dayIds.isEmpty()) {
+            return
+        }
+
+        _state.update {
+            it.copy(
+                timelineLoadingDayIds = it.timelineLoadingDayIds + dayIds,
+                timelineLoadMoreError = null,
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching { memoriesRepository.loadTimelineDays(credentials, dayIds) }
+                .onSuccess { items ->
+                    _state.update { state ->
+                        val updatedTimeline = state.timeline?.mergeLoadedItems(
+                            items = items,
+                            loadedDayIds = dayIds.toSet(),
+                        )
+
+                        state.copy(
+                            timeline = updatedTimeline,
+                            timelineLoadingDayIds = state.timelineLoadingDayIds - dayIds.toSet(),
+                            timelineFailedDayIds = state.timelineFailedDayIds - dayIds.toSet(),
+                            timelineLoadMoreError = null,
+                            statusMessage = uiText(
+                                R.string.status_loaded_items,
+                                updatedTimeline?.items?.size ?: state.timeline?.items?.size ?: 0,
+                            ),
+                        )
+                    }
+                }
+                .onFailure {
+                    _state.update { state ->
+                        state.copy(
+                            timelineLoadingDayIds = state.timelineLoadingDayIds - dayIds.toSet(),
+                            timelineFailedDayIds = state.timelineFailedDayIds + dayIds,
+                            timelineLoadMoreError = uiText(R.string.error_load_timeline_batch_failed),
                         )
                     }
                 }
@@ -307,9 +390,15 @@ data class MainUiState(
     val timeline: TimelineSnapshot? = null,
     val isBusy: Boolean = false,
     val isLoginPolling: Boolean = false,
+    val timelineLoadingDayIds: Set<Int> = emptySet(),
+    val timelineFailedDayIds: Set<Int> = emptySet(),
+    val timelineLoadMoreError: UiText? = null,
     val statusMessage: UiText? = null,
     val errorMessage: UiText? = null,
 )
 
 private const val LOGIN_POLL_INTERVAL_MS = 2_000L
 private const val LOGIN_POLL_TIMEOUT_MS = 120_000L
+private const val INITIAL_TIMELINE_PREFETCH_SLOTS = 80
+private const val TIMELINE_PREFETCH_SLOTS = 60
+private const val TIMELINE_DAY_BATCH_SIZE = 4

@@ -15,13 +15,49 @@ data class MemoriesConfig(
 
 data class TimelineSnapshot(
     val config: MemoriesConfig,
+    val days: List<TimelineDay>,
+    val slots: List<TimelineSlot>,
+    val loadedDayIds: Set<Int>,
     val totalDayCount: Int,
     val totalMediaCountHint: Int,
-    val items: List<MediaItem>,
 ) {
     val memoriesVersion: String = config.version
     val timelinePath: String? = config.timelinePath
+    val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
+
+    fun mergeLoadedItems(
+        items: List<MediaItem>,
+        loadedDayIds: Set<Int>,
+    ): TimelineSnapshot {
+        val currentItemsByDay = slots
+            .mapNotNull { it.mediaItem }
+            .groupBy { it.dayId }
+        val incomingItemsByDay = items.groupBy { it.dayId }
+        val mergedItemsByDay = currentItemsByDay + incomingItemsByDay
+
+        return copy(
+            slots = buildTimelineSlots(days, mergedItemsByDay),
+            loadedDayIds = this.loadedDayIds + loadedDayIds,
+        )
+    }
 }
+
+data class TimelineDay(
+    val dayId: Int,
+    val count: Int,
+)
+
+data class TimelineSlot(
+    val key: TimelineSlotKey,
+    val dayId: Int,
+    val indexInDay: Int,
+    val mediaItem: MediaItem?,
+)
+
+data class TimelineSlotKey(
+    val dayId: Int,
+    val indexInDay: Int,
+)
 
 data class MediaItem(
     val fileId: Long,
@@ -44,3 +80,22 @@ data class MediaItem(
     val thumbnailUrl: String,
     val detailPreviewUrl: String,
 )
+
+fun buildTimelineSlots(
+    days: List<TimelineDay>,
+    itemsByDay: Map<Int, List<MediaItem>>,
+): List<TimelineSlot> {
+    return days.flatMap { day ->
+        val items = itemsByDay[day.dayId].orEmpty()
+        val slotCount = maxOf(day.count, items.size)
+
+        List(slotCount) { index ->
+            TimelineSlot(
+                key = TimelineSlotKey(dayId = day.dayId, indexInDay = index),
+                dayId = day.dayId,
+                indexInDay = index,
+                mediaItem = items.getOrNull(index),
+            )
+        }
+    }
+}

@@ -20,6 +20,7 @@
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
 - [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
 - [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
+- [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
 
 ## Ближайшие решения
 

@@ -14,6 +14,7 @@
     <string name="detail_size">size: %1$s x %2$s</string>
     <string name="error_enter_nextcloud_url">Укажи адрес Nextcloud</string>
     <string name="error_load_memories_api_failed">Не удалось загрузить Memories API</string>
+    <string name="error_load_timeline_batch_failed">Не удалось дозагрузить часть timeline</string>
     <string name="error_login_cancelled">Вход отменен</string>
     <string name="error_login_confirmation_timeout">Не дождался подтверждения входа. Начни вход заново.</string>
     <string name="error_login_poll_http">Проверка входа завершилась ошибкой HTTP %1$d</string>
@@ -27,6 +28,8 @@
     <string name="media_video_badge">VIDEO</string>
     <string name="status_creating_login_flow">Начинаю вход</string>
     <string name="status_loaded_items">Загружено %1$d элементов</string>
+    <string name="status_loaded_timeline_index">Найдено %1$d элементов</string>
+    <string name="status_loading_timeline_batch">Дозагружаю фото</string>
     <string name="status_loading_memories_api">Загружаю Memories API</string>
     <string name="status_loading_memories_timeline">Загружаю Memories timeline</string>
     <string name="status_login_complete_loading_timeline">Вход выполнен, загружаю timeline</string>

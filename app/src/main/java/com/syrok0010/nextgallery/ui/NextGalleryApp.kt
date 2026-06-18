@@ -18,7 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +52,7 @@ import coil3.request.ImageRequest
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import kotlinx.serialization.Serializable
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -101,6 +104,7 @@ fun NextGalleryApp(
                     onCancelLogin = viewModel::cancelLogin,
                     onRefresh = viewModel::refresh,
                     onLogout = viewModel::logout,
+                    onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
                     onSelect = { item -> backStack.add(NextGalleryRoute.Detail(item.fileId)) },
                 )
             }
@@ -134,6 +138,7 @@ private fun NextGalleryHomeScreen(
     onCancelLogin: () -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
+    onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     Scaffold(
@@ -171,6 +176,7 @@ private fun NextGalleryHomeScreen(
                 TimelinePanel(
                     state = state,
                     credentials = state.credentials,
+                    onVisibleRange = onVisibleTimelineRange,
                     onSelect = onSelect,
                 )
             }
@@ -298,9 +304,28 @@ private fun LoginPanel(
 private fun TimelinePanel(
     state: MainUiState,
     credentials: AccountCredentials,
+    onVisibleRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val timeline = state.timeline
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(timeline?.slots) {
+        if (timeline == null) {
+            return@LaunchedEffect
+        }
+
+        snapshotFlow {
+            val visibleItems = gridState.layoutInfo.visibleItemsInfo
+            val firstIndex = visibleItems.minOfOrNull { it.index }
+            val lastIndex = visibleItems.maxOfOrNull { it.index }
+            firstIndex to lastIndex
+        }.collect { (firstIndex, lastIndex) ->
+            if (firstIndex != null && lastIndex != null) {
+                onVisibleRange(firstIndex, lastIndex)
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (timeline != null) {
@@ -331,32 +356,63 @@ private fun TimelinePanel(
         }
 
         StatusBlock(state)
+        TimelineLoadMoreStatus(state)
 
-        if (timeline?.items.isNullOrEmpty()) {
+        if (timeline?.slots.isNullOrEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.timeline_empty))
             }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 116.dp),
+                state = gridState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(
-                    items = timeline.items,
-                    key = { it.fileId },
-                ) { item ->
-                    MediaTile(
-                        item = item,
+                itemsIndexed(
+                    items = timeline.slots,
+                    key = { _, slot -> "${slot.key.dayId}:${slot.key.indexInDay}" },
+                ) { _, slot ->
+                    TimelineSlotTile(
+                        slot = slot,
                         credentials = credentials,
-                        onClick = { onSelect(item) },
+                        onSelect = onSelect,
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TimelineSlotTile(
+    slot: TimelineSlot,
+    credentials: AccountCredentials,
+    onSelect: (MediaItem) -> Unit,
+) {
+    val item = slot.mediaItem
+
+    if (item == null) {
+        PlaceholderMediaTile()
+    } else {
+        MediaTile(
+            item = item,
+            credentials = credentials,
+            onClick = { onSelect(item) },
+        )
+    }
+}
+
+@Composable
+private fun PlaceholderMediaTile() {
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    )
 }
 
 @Composable
@@ -481,6 +537,27 @@ private fun AuthenticatedImage(
         contentDescription = contentDescription,
         modifier = modifier,
         contentScale = contentScale,
+    )
+}
+
+@Composable
+private fun TimelineLoadMoreStatus(state: MainUiState) {
+    val message = when {
+        state.timelineLoadMoreError != null -> state.timelineLoadMoreError
+        state.timelineLoadingDayIds.isNotEmpty() -> uiText(R.string.status_loading_timeline_batch)
+        else -> null
+    } ?: return
+    val color = if (state.timelineLoadMoreError != null) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Text(
+        text = message.asString(),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        color = color,
+        style = MaterialTheme.typography.bodySmall,
     )
 }
 
