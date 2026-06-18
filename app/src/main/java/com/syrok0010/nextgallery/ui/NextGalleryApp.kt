@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +61,9 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import org.koin.androidx.compose.koinViewModel
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import okhttp3.Credentials as OkHttpCredentials
 
 @Serializable
@@ -309,20 +313,26 @@ private fun TimelinePanel(
 ) {
     val timeline = state.timeline
     val gridState = rememberLazyGridState()
+    val gridItems = remember(timeline?.slots) {
+        timeline?.slots?.toTimelineGridItems().orEmpty()
+    }
 
-    LaunchedEffect(timeline?.slots) {
+    LaunchedEffect(gridItems) {
         if (timeline == null) {
             return@LaunchedEffect
         }
 
         snapshotFlow {
             val visibleItems = gridState.layoutInfo.visibleItemsInfo
-            val firstIndex = visibleItems.minOfOrNull { it.index }
-            val lastIndex = visibleItems.maxOfOrNull { it.index }
-            firstIndex to lastIndex
-        }.collect { (firstIndex, lastIndex) ->
-            if (firstIndex != null && lastIndex != null) {
-                onVisibleRange(firstIndex, lastIndex)
+            val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
+                (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)?.slotIndex
+            }
+            val firstSlotIndex = visibleSlotIndexes.minOrNull()
+            val lastSlotIndex = visibleSlotIndexes.maxOrNull()
+            firstSlotIndex to lastSlotIndex
+        }.collect { (firstSlotIndex, lastSlotIndex) ->
+            if (firstSlotIndex != null && lastSlotIndex != null) {
+                onVisibleRange(firstSlotIndex, lastSlotIndex)
             }
         }
     }
@@ -372,18 +382,78 @@ private fun TimelinePanel(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 itemsIndexed(
-                    items = timeline.slots,
-                    key = { _, slot -> "${slot.key.dayId}:${slot.key.indexInDay}" },
-                ) { _, slot ->
-                    TimelineSlotTile(
-                        slot = slot,
-                        credentials = credentials,
-                        onSelect = onSelect,
-                    )
+                    items = gridItems,
+                    key = { _, item -> item.key },
+                    span = { _, item ->
+                        when (item) {
+                            is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
+                            is TimelineGridItem.Slot -> GridItemSpan(1)
+                        }
+                    },
+                ) { _, item ->
+                    when (item) {
+                        is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
+                        is TimelineGridItem.Slot -> TimelineSlotTile(
+                            slot = item.slot,
+                            credentials = credentials,
+                            onSelect = onSelect,
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private sealed interface TimelineGridItem {
+    val key: String
+
+    data class DayHeader(val dayId: Int) : TimelineGridItem {
+        override val key: String = "day-header:$dayId"
+    }
+
+    data class Slot(
+        val slotIndex: Int,
+        val slot: TimelineSlot,
+    ) : TimelineGridItem {
+        override val key: String = "slot:${slot.key.dayId}:${slot.key.indexInDay}"
+    }
+}
+
+private fun List<TimelineSlot>.toTimelineGridItems(): List<TimelineGridItem> {
+    val result = mutableListOf<TimelineGridItem>()
+    var previousDayId: Int? = null
+
+    forEachIndexed { slotIndex, slot ->
+        if (slot.dayId != previousDayId) {
+            result += TimelineGridItem.DayHeader(slot.dayId)
+            previousDayId = slot.dayId
+        }
+        result += TimelineGridItem.Slot(slotIndex = slotIndex, slot = slot)
+    }
+
+    return result
+}
+
+@Composable
+private fun TimelineDayHeader(dayId: Int) {
+    val pattern = stringResource(R.string.timeline_day_header_pattern)
+    val formatter = remember(pattern) {
+        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    }
+    val title = remember(dayId, formatter) {
+        LocalDate.ofEpochDay(dayId.toLong()).format(formatter)
+    }
+
+    Text(
+        text = title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp, bottom = 6.dp),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 @Composable
