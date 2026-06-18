@@ -1,37 +1,11 @@
 package com.syrok0010.nextgallery.ui
 
-import android.content.Intent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,41 +13,23 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import coil3.compose.AsyncImage
-import coil3.network.NetworkHeaders
-import coil3.network.httpHeaders
-import coil3.request.ImageRequest
-import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import kotlinx.serialization.Serializable
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.ui.auth.LoginPanel
+import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
+import com.syrok0010.nextgallery.ui.detail.MissingMediaDetailScreen
+import com.syrok0010.nextgallery.ui.timeline.TimelinePanel
+import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import okhttp3.Credentials as OkHttpCredentials
-
-private val TimelineScrollThumbHeight = 48.dp
-private val TimelineScrollThumbWidth = 4.dp
 
 @Serializable
 private sealed interface NextGalleryRoute : NavKey {
@@ -91,8 +47,8 @@ fun NextGalleryApp(
     val state by viewModel.state.collectAsState()
     val backStack = rememberNavBackStack(NextGalleryRoute.Home)
 
-    LaunchedEffect(state.credentials) {
-        if (state.credentials == null) {
+    LaunchedEffect(state.session) {
+        if (state.session !is SessionUiState.SignedIn) {
             while (backStack.size > 1) {
                 backStack.removeLastOrNull()
             }
@@ -123,17 +79,17 @@ fun NextGalleryApp(
             }
 
             entry<NextGalleryRoute.Detail> { route ->
-                val credentials = state.credentials
-                val item = state.timeline?.items?.firstOrNull { it.fileId == route.fileId }
+                val signedIn = state.session as? SessionUiState.SignedIn
+                val item = signedIn?.timeline?.snapshot?.items?.firstOrNull { it.fileId == route.fileId }
 
-                if (credentials != null && item != null) {
-                    MediaDetail(
+                if (signedIn != null && item != null) {
+                    MediaDetailScreen(
                         item = item,
-                        credentials = credentials,
+                        credentials = signedIn.credentials,
                         onBack = { backStack.removeLastOrNull() },
                     )
                 } else {
-                    MissingMediaDetail(onBack = { backStack.removeLastOrNull() })
+                    MissingMediaDetailScreen(onBack = { backStack.removeLastOrNull() })
                 }
             }
         },
@@ -159,7 +115,7 @@ private fun NextGalleryHomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    if (state.credentials != null) {
+                    if (state.session is SessionUiState.SignedIn) {
                         TextButton(onClick = onRefresh, enabled = !state.isBusy) {
                             Text(stringResource(R.string.action_refresh))
                         }
@@ -176,22 +132,29 @@ private fun NextGalleryHomeScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (state.credentials == null) {
-                LoginPanel(
-                    state = state,
-                    onServerUrlChange = onServerUrlChange,
-                    onStartLogin = onStartLogin,
-                    onLoginBrowserOpened = onLoginBrowserOpened,
-                    onLoginBrowserOpenFailed = onLoginBrowserOpenFailed,
-                    onCancelLogin = onCancelLogin,
-                )
-            } else {
-                TimelinePanel(
-                    state = state,
-                    credentials = state.credentials,
-                    onVisibleRange = onVisibleTimelineRange,
-                    onSelect = onSelect,
-                )
+            when (val session = state.session) {
+                is SessionUiState.SignedOut -> {
+                    LoginPanel(
+                        state = session.login,
+                        message = state.message,
+                        isBusy = state.isBusy,
+                        onServerUrlChange = onServerUrlChange,
+                        onStartLogin = onStartLogin,
+                        onLoginBrowserOpened = onLoginBrowserOpened,
+                        onLoginBrowserOpenFailed = onLoginBrowserOpenFailed,
+                        onCancelLogin = onCancelLogin,
+                    )
+                }
+
+                is SessionUiState.SignedIn -> {
+                    TimelinePanel(
+                        state = session.timeline,
+                        message = state.message,
+                        credentials = session.credentials,
+                        onVisibleRange = onVisibleTimelineRange,
+                        onSelect = onSelect,
+                    )
+                }
             }
 
             if (state.isBusy || state.isLoginPolling) {
@@ -204,559 +167,4 @@ private fun NextGalleryHomeScreen(
             }
         }
     }
-}
-
-@Composable
-private fun MissingMediaDetail(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.detail_missing_item),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        TextButton(onClick = onBack) {
-            Text(stringResource(R.string.action_back))
-        }
-    }
-}
-
-@Composable
-private fun LoginPanel(
-    state: MainUiState,
-    onServerUrlChange: (String) -> Unit,
-    onStartLogin: () -> Unit,
-    onLoginBrowserOpened: () -> Unit,
-    onLoginBrowserOpenFailed: () -> Unit,
-    onCancelLogin: () -> Unit,
-) {
-    val context = LocalContext.current
-    val session = state.loginSession
-    val openLoginUrl: (String) -> Unit = { loginUrl ->
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, loginUrl.toUri()))
-        }.onSuccess {
-            onLoginBrowserOpened()
-        }.onFailure {
-            onLoginBrowserOpenFailed()
-        }
-    }
-
-    val loginUrlToOpen = session?.loginUrl?.takeUnless { state.loginBrowserOpened }
-    LaunchedEffect(loginUrlToOpen) {
-        if (loginUrlToOpen != null) {
-            openLoginUrl(loginUrlToOpen)
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.login_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        OutlinedTextField(
-            value = state.serverUrlInput,
-            onValueChange = onServerUrlChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.login_server_url_label)) },
-            placeholder = { Text(stringResource(R.string.login_server_url_placeholder)) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = onStartLogin,
-                enabled = !state.isBusy,
-            ) {
-                Text(
-                    stringResource(
-                        if (session == null) {
-                            R.string.action_start_login
-                        } else {
-                            R.string.action_restart_login
-                        },
-                    ),
-                )
-            }
-
-            if (session != null) {
-                Button(
-                    onClick = { openLoginUrl(session.loginUrl) },
-                    enabled = !state.isBusy,
-                ) {
-                    Text(stringResource(R.string.action_open_browser))
-                }
-            }
-        }
-
-        if (session != null) {
-            TextButton(
-                onClick = onCancelLogin,
-                enabled = !state.isBusy,
-            ) {
-                Text(stringResource(R.string.action_cancel_login))
-            }
-        }
-
-        StatusBlock(state)
-    }
-}
-
-@Composable
-private fun TimelinePanel(
-    state: MainUiState,
-    credentials: AccountCredentials,
-    onVisibleRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
-    onSelect: (MediaItem) -> Unit,
-) {
-    val timeline = state.timeline
-    val gridState = rememberLazyGridState()
-    val gridItems = remember(timeline?.slots) {
-        timeline?.slots?.toTimelineGridItems().orEmpty()
-    }
-    val scrollInfo by remember(gridItems) {
-        derivedStateOf {
-            val visibleSlot = gridState.layoutInfo.visibleItemsInfo
-                .mapNotNull { visibleItem ->
-                    (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
-                        ?.let { it.slotIndex to it.slot.dayId }
-                }
-                .minByOrNull { it.first }
-            val totalSlots = timeline?.slots?.size ?: 0
-            val fraction = if (visibleSlot == null || totalSlots <= 1) {
-                0f
-            } else {
-                visibleSlot.first.toFloat() / (totalSlots - 1).toFloat()
-            }
-
-            TimelineScrollInfo(
-                dayId = visibleSlot?.second,
-                fraction = fraction.coerceIn(0f, 1f),
-            )
-        }
-    }
-
-    LaunchedEffect(gridItems) {
-        if (timeline == null) {
-            return@LaunchedEffect
-        }
-
-        snapshotFlow {
-            val visibleItems = gridState.layoutInfo.visibleItemsInfo
-            val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
-                (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)?.slotIndex
-            }
-            val firstSlotIndex = visibleSlotIndexes.minOrNull()
-            val lastSlotIndex = visibleSlotIndexes.maxOrNull()
-            firstSlotIndex to lastSlotIndex
-        }.collect { (firstSlotIndex, lastSlotIndex) ->
-            if (firstSlotIndex != null && lastSlotIndex != null) {
-                onVisibleRange(firstSlotIndex, lastSlotIndex)
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (timeline != null) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = stringResource(
-                        R.string.timeline_summary,
-                        timeline.memoriesVersion,
-                        timeline.totalMediaCountHint,
-                        timeline.totalDayCount,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                timeline.timelinePath?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        StatusBlock(state)
-        TimelineLoadMoreStatus(state)
-
-        if (timeline?.slots.isNullOrEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.timeline_empty))
-            }
-        } else {
-            Box(modifier = Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 116.dp),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    itemsIndexed(
-                        items = gridItems,
-                        key = { _, item -> item.key },
-                        span = { _, item ->
-                            when (item) {
-                                is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
-                                is TimelineGridItem.Slot -> GridItemSpan(1)
-                            }
-                        },
-                    ) { _, item ->
-                        when (item) {
-                            is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
-                            is TimelineGridItem.Slot -> TimelineSlotTile(
-                                slot = item.slot,
-                                credentials = credentials,
-                                onSelect = onSelect,
-                            )
-                        }
-                    }
-                }
-
-                TimelineScrollIndicator(
-                    dayId = scrollInfo.dayId,
-                    fraction = scrollInfo.fraction,
-                    isVisible = gridState.isScrollInProgress,
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                )
-            }
-        }
-    }
-}
-
-private data class TimelineScrollInfo(
-    val dayId: Int?,
-    val fraction: Float,
-)
-
-private sealed interface TimelineGridItem {
-    val key: String
-
-    data class DayHeader(val dayId: Int) : TimelineGridItem {
-        override val key: String = "day-header:$dayId"
-    }
-
-    data class Slot(
-        val slotIndex: Int,
-        val slot: TimelineSlot,
-    ) : TimelineGridItem {
-        override val key: String = "slot:${slot.key.dayId}:${slot.key.indexInDay}"
-    }
-}
-
-private fun List<TimelineSlot>.toTimelineGridItems(): List<TimelineGridItem> {
-    val result = mutableListOf<TimelineGridItem>()
-    var previousDayId: Int? = null
-
-    forEachIndexed { slotIndex, slot ->
-        if (slot.dayId != previousDayId) {
-            result += TimelineGridItem.DayHeader(slot.dayId)
-            previousDayId = slot.dayId
-        }
-        result += TimelineGridItem.Slot(slotIndex = slotIndex, slot = slot)
-    }
-
-    return result
-}
-
-@Composable
-private fun TimelineScrollIndicator(
-    dayId: Int?,
-    fraction: Float,
-    isVisible: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    if (!isVisible || dayId == null) {
-        return
-    }
-
-    val date = remember(dayId) {
-        LocalDate.ofEpochDay(dayId.toLong())
-    }
-    val currentYear = LocalDate.now().year
-    val pattern = stringResource(
-        if (date.year == currentYear) {
-            R.string.timeline_scroll_date_current_year_pattern
-        } else {
-            R.string.timeline_scroll_date_with_year_pattern
-        },
-    )
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
-    }
-    val label = remember(date, formatter) {
-        date.format(formatter)
-    }
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(150.dp)
-            .padding(end = 8.dp),
-    ) {
-        val topOffset = (maxHeight - TimelineScrollThumbHeight) * fraction.coerceIn(0f, 1f)
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = topOffset),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                modifier = Modifier
-                    .background(
-                        color = MaterialTheme.colorScheme.inverseSurface,
-                        shape = MaterialTheme.shapes.small,
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                color = MaterialTheme.colorScheme.inverseOnSurface,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-            )
-            Box(
-                modifier = Modifier
-                    .width(TimelineScrollThumbWidth)
-                    .height(TimelineScrollThumbHeight)
-                    .background(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.extraSmall,
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TimelineDayHeader(dayId: Int) {
-    val pattern = stringResource(R.string.timeline_day_header_pattern)
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
-    }
-    val title = remember(dayId, formatter) {
-        LocalDate.ofEpochDay(dayId.toLong()).format(formatter)
-    }
-
-    Text(
-        text = title,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 6.dp),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-}
-
-@Composable
-private fun TimelineSlotTile(
-    slot: TimelineSlot,
-    credentials: AccountCredentials,
-    onSelect: (MediaItem) -> Unit,
-) {
-    val item = slot.mediaItem
-
-    if (item == null) {
-        PlaceholderMediaTile()
-    } else {
-        MediaTile(
-            item = item,
-            credentials = credentials,
-            onClick = { onSelect(item) },
-        )
-    }
-}
-
-@Composable
-private fun PlaceholderMediaTile() {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.small)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    )
-}
-
-@Composable
-private fun MediaTile(
-    item: MediaItem,
-    credentials: AccountCredentials,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.small)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
-    ) {
-        AuthenticatedImage(
-            url = item.thumbnailUrl,
-            credentials = credentials,
-            contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
-
-        if (item.isVideo) {
-            Text(
-                text = stringResource(R.string.media_video_badge),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                        shape = MaterialTheme.shapes.extraSmall,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MediaDetail(
-    item: MediaItem,
-    credentials: AccountCredentials,
-    onBack: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            TextButton(onClick = onBack) {
-                Text(stringResource(R.string.action_back))
-            }
-            Text(
-                text = item.day.format(DateTimeFormatter.ISO_LOCAL_DATE),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        AuthenticatedImage(
-            url = item.detailPreviewUrl,
-            credentials = credentials,
-            contentDescription = item.displayName,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentScale = ContentScale.Fit,
-        )
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(item.displayName, style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.detail_file_id, item.fileId))
-                Text(stringResource(R.string.detail_mime, item.mimeType ?: stringResource(R.string.value_unknown)))
-                Text(
-                    stringResource(
-                        R.string.detail_size,
-                        item.width?.toString() ?: stringResource(R.string.value_unknown_short),
-                        item.height?.toString() ?: stringResource(R.string.value_unknown_short),
-                    ),
-                )
-                item.videoDurationSeconds?.let {
-                    Text(stringResource(R.string.detail_duration_seconds, it))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AuthenticatedImage(
-    url: String,
-    credentials: AccountCredentials,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop,
-) {
-    val context = LocalContext.current
-    val headers = NetworkHeaders.Builder()
-        .set("Authorization", OkHttpCredentials.basic(credentials.loginName, credentials.appPassword))
-        .set("X-Requested-With", "XMLHttpRequest")
-        .set("OCS-APIRequest", "true")
-        .build()
-    val request = ImageRequest.Builder(context)
-        .data(url)
-        .httpHeaders(headers)
-        .build()
-
-    AsyncImage(
-        model = request,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = contentScale,
-    )
-}
-
-@Composable
-private fun TimelineLoadMoreStatus(state: MainUiState) {
-    val message = when {
-        state.timelineLoadMoreError != null -> state.timelineLoadMoreError
-        state.timelineLoadingDayIds.isNotEmpty() -> uiText(R.string.status_loading_timeline_batch)
-        else -> null
-    } ?: return
-    val color = if (state.timelineLoadMoreError != null) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Text(
-        text = message.asString(),
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        color = color,
-        style = MaterialTheme.typography.bodySmall,
-    )
-}
-
-@Composable
-private fun StatusBlock(state: MainUiState) {
-    val message = state.errorMessage ?: state.statusMessage ?: return
-    val color = if (state.errorMessage != null) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Text(
-        text = message.asString(),
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        color = color,
-        style = MaterialTheme.typography.bodyMedium,
-    )
 }

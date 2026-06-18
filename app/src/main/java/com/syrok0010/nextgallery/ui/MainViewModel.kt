@@ -10,7 +10,6 @@ import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -37,12 +36,11 @@ class MainViewModel(
         if (credentials != null) {
             _state.update {
                 it.copy(
-                    credentials = credentials,
-                    serverUrlInput = credentials.serverUrl,
-                    statusMessage = uiText(R.string.status_loading_memories_timeline),
-                    timelineLoadingDayIds = emptySet(),
-                    timelineFailedDayIds = emptySet(),
-                    timelineLoadMoreError = null,
+                    session = SessionUiState.SignedIn(
+                        credentials = credentials,
+                        timeline = TimelineUiState(),
+                    ),
+                    message = AppMessageUiState(status = uiText(R.string.status_loading_memories_timeline)),
                 )
             }
             loadTimeline(credentials)
@@ -50,7 +48,9 @@ class MainViewModel(
     }
 
     fun updateServerUrl(value: String) {
-        _state.update { it.copy(serverUrlInput = value) }
+        _state.update { state ->
+            state.updateLogin { it.copy(serverUrlInput = value) }
+        }
     }
 
     fun startLogin() {
@@ -58,30 +58,34 @@ class MainViewModel(
         val attemptId = loginAttemptId
         loginStartJob?.cancel()
         loginPollingJob?.cancel()
-        val serverUrl = state.value.serverUrlInput.trim()
+        val serverUrl = state.value.loginState?.serverUrlInput?.trim() ?: return
         if (serverUrl.isBlank()) {
-            _state.update {
-                it.copy(
+            _state.update { state ->
+                state.updateLogin {
+                    it.copy(
+                        session = null,
+                        browserOpened = false,
+                        isPolling = false,
+                    )
+                }.copy(
                     isBusy = false,
-                    isLoginPolling = false,
-                    loginSession = null,
-                    loginBrowserOpened = false,
-                    errorMessage = uiText(R.string.error_enter_nextcloud_url),
-                    statusMessage = null,
+                    message = AppMessageUiState(error = uiText(R.string.error_enter_nextcloud_url)),
                 )
             }
             return
         }
 
         loginStartJob = viewModelScope.launch {
-            _state.update {
-                it.copy(
+            _state.update { state ->
+                state.updateLogin {
+                    it.copy(
+                        session = null,
+                        browserOpened = false,
+                        isPolling = false,
+                    )
+                }.copy(
                     isBusy = true,
-                    isLoginPolling = false,
-                    errorMessage = null,
-                    statusMessage = uiText(R.string.status_creating_login_flow),
-                    loginSession = null,
-                    loginBrowserOpened = false,
+                    message = AppMessageUiState(status = uiText(R.string.status_creating_login_flow)),
                 )
             }
 
@@ -92,13 +96,16 @@ class MainViewModel(
                 }
 
                 loginStartJob = null
-                _state.update {
-                    it.copy(
+                _state.update { state ->
+                    state.updateLogin {
+                        it.copy(
+                            session = session,
+                            browserOpened = false,
+                            isPolling = true,
+                        )
+                    }.copy(
                         isBusy = false,
-                        isLoginPolling = true,
-                        loginSession = session,
-                        loginBrowserOpened = false,
-                        statusMessage = uiText(R.string.status_open_browser_confirm_login),
+                        message = AppMessageUiState(status = uiText(R.string.status_open_browser_confirm_login)),
                     )
                 }
                 startLoginPolling(session)
@@ -107,12 +114,10 @@ class MainViewModel(
             } catch (error: Exception) {
                 if (attemptId == loginAttemptId) {
                     loginStartJob = null
-                    _state.update {
-                        it.copy(
+                    _state.update { state ->
+                        state.updateLogin { it.copy(isPolling = false) }.copy(
                             isBusy = false,
-                            isLoginPolling = false,
-                            errorMessage = uiText(R.string.error_start_login_flow_failed),
-                            statusMessage = null,
+                            message = AppMessageUiState(error = uiText(R.string.error_start_login_flow_failed)),
                         )
                     }
                 }
@@ -121,14 +126,17 @@ class MainViewModel(
     }
 
     fun markLoginBrowserOpened() {
-        _state.update { it.copy(loginBrowserOpened = true) }
+        _state.update { state ->
+            state.updateLogin { it.copy(browserOpened = true) }
+        }
     }
 
     fun reportLoginBrowserOpenFailure() {
-        _state.update {
-            it.copy(
-                loginBrowserOpened = true,
-                errorMessage = uiText(R.string.error_open_browser_failed),
+        _state.update { state ->
+            state.updateLogin {
+                it.copy(browserOpened = true)
+            }.copy(
+                message = AppMessageUiState(error = uiText(R.string.error_open_browser_failed)),
             )
         }
     }
@@ -139,14 +147,16 @@ class MainViewModel(
         loginStartJob = null
         loginPollingJob?.cancel()
         loginPollingJob = null
-        _state.update {
-            it.copy(
-                loginSession = null,
+        _state.update { state ->
+            state.updateLogin {
+                it.copy(
+                    session = null,
+                    browserOpened = false,
+                    isPolling = false,
+                )
+            }.copy(
                 isBusy = false,
-                isLoginPolling = false,
-                loginBrowserOpened = false,
-                statusMessage = null,
-                errorMessage = uiText(R.string.error_login_cancelled),
+                message = AppMessageUiState(error = uiText(R.string.error_login_cancelled)),
             )
         }
     }
@@ -158,42 +168,44 @@ class MainViewModel(
 
             while (elapsedMillis(startedAt) < LOGIN_POLL_TIMEOUT_MS) {
                 delay(LOGIN_POLL_INTERVAL_MS)
-                if (state.value.loginSession != session) {
+                if (state.value.loginState?.session != session) {
                     return@launch
                 }
 
-                _state.update {
-                    it.copy(
-                        isLoginPolling = true,
-                        errorMessage = null,
-                        statusMessage = uiText(R.string.status_waiting_browser_confirmation),
+                _state.update { state ->
+                    state.updateLogin {
+                        it.copy(isPolling = true)
+                    }.copy(
+                        message = AppMessageUiState(status = uiText(R.string.status_waiting_browser_confirmation)),
                     )
                 }
 
                 when (val result = loginRepository.pollLogin(session)) {
                     LoginPollResult.Pending -> {
-                        _state.update {
-                            it.copy(
-                                isLoginPolling = true,
-                                statusMessage = uiText(R.string.status_login_not_confirmed_yet),
+                        _state.update { state ->
+                            state.updateLogin {
+                                it.copy(isPolling = true)
+                            }.copy(
+                                message = AppMessageUiState(status = uiText(R.string.status_login_not_confirmed_yet)),
                             )
                         }
                     }
 
                     is LoginPollResult.Failed -> {
                         if (result.isRecoverable) {
-                            _state.update {
-                                it.copy(
-                                    isLoginPolling = true,
-                                    statusMessage = loginPollRecoverableStatus(result.failure),
+                            _state.update { state ->
+                                state.updateLogin {
+                                    it.copy(isPolling = true)
+                                }.copy(
+                                    message = AppMessageUiState(status = loginPollRecoverableStatus(result.failure)),
                                 )
                             }
                         } else {
-                            _state.update {
-                                it.copy(
-                                    isLoginPolling = false,
-                                    errorMessage = result.failure.toUiText(),
-                                    statusMessage = null,
+                            _state.update { state ->
+                                state.updateLogin {
+                                    it.copy(isPolling = false)
+                                }.copy(
+                                    message = AppMessageUiState(error = result.failure.toUiText()),
                                 )
                             }
                             loginPollingJob = null
@@ -206,11 +218,13 @@ class MainViewModel(
                         _state.update {
                             it.copy(
                                 isBusy = false,
-                                isLoginPolling = false,
-                                credentials = result.credentials,
-                                loginSession = null,
-                                loginBrowserOpened = false,
-                                statusMessage = uiText(R.string.status_login_complete_loading_timeline),
+                                session = SessionUiState.SignedIn(
+                                    credentials = result.credentials,
+                                    timeline = TimelineUiState(),
+                                ),
+                                message = AppMessageUiState(
+                                    status = uiText(R.string.status_login_complete_loading_timeline),
+                                ),
                             )
                         }
                         loginPollingJob = null
@@ -220,14 +234,16 @@ class MainViewModel(
                 }
             }
 
-            if (state.value.loginSession == session) {
-                _state.update {
-                    it.copy(
-                        isLoginPolling = false,
-                        loginSession = null,
-                        loginBrowserOpened = false,
-                        errorMessage = uiText(R.string.error_login_confirmation_timeout),
-                        statusMessage = null,
+            if (state.value.loginState?.session == session) {
+                _state.update { state ->
+                    state.updateLogin {
+                        it.copy(
+                            session = null,
+                            browserOpened = false,
+                            isPolling = false,
+                        )
+                    }.copy(
+                        message = AppMessageUiState(error = uiText(R.string.error_login_confirmation_timeout)),
                     )
                 }
             }
@@ -240,7 +256,7 @@ class MainViewModel(
     }
 
     fun refresh() {
-        val credentials = state.value.credentials ?: return
+        val credentials = state.value.signedIn?.credentials ?: return
         loadTimeline(credentials)
     }
 
@@ -259,21 +275,20 @@ class MainViewModel(
             _state.update {
                 it.copy(
                     isBusy = true,
-                    errorMessage = null,
-                    statusMessage = uiText(R.string.status_loading_memories_api),
+                    message = AppMessageUiState(status = uiText(R.string.status_loading_memories_api)),
                 )
             }
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
                 .onSuccess { snapshot ->
-                    _state.update {
-                        it.copy(
+                    _state.update { state ->
+                        state.updateTimeline {
+                            TimelineUiState(snapshot = snapshot)
+                        }.copy(
                             isBusy = false,
-                            timeline = snapshot,
-                            timelineLoadingDayIds = emptySet(),
-                            timelineFailedDayIds = emptySet(),
-                            timelineLoadMoreError = null,
-                            statusMessage = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
+                            message = AppMessageUiState(
+                                status = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
+                            ),
                         )
                     }
                     loadVisibleTimelineRange(
@@ -285,8 +300,7 @@ class MainViewModel(
                     _state.update {
                         it.copy(
                             isBusy = false,
-                            errorMessage = uiText(R.string.error_load_memories_api_failed),
-                            statusMessage = null,
+                            message = AppMessageUiState(error = uiText(R.string.error_load_memories_api_failed)),
                         )
                     }
                 }
@@ -298,8 +312,10 @@ class MainViewModel(
         lastVisibleIndex: Int,
     ) {
         val currentState = state.value
-        val credentials = currentState.credentials ?: return
-        val timeline = currentState.timeline ?: return
+        val signedIn = currentState.signedIn ?: return
+        val credentials = signedIn.credentials
+        val timelineState = signedIn.timeline
+        val timeline = timelineState.snapshot ?: return
         if (timeline.slots.isEmpty()) {
             return
         }
@@ -317,8 +333,8 @@ class MainViewModel(
             .map { it.dayId }
             .distinct()
             .filterNot { it in timeline.loadedDayIds }
-            .filterNot { it in currentState.timelineLoadingDayIds }
-            .filterNot { it in currentState.timelineFailedDayIds }
+            .filterNot { it in timelineState.loadingDayIds }
+            .filterNot { it in timelineState.failedDayIds }
             .take(TIMELINE_DAY_BATCH_SIZE)
             .toList()
 
@@ -326,41 +342,49 @@ class MainViewModel(
             return
         }
 
-        _state.update {
-            it.copy(
-                timelineLoadingDayIds = it.timelineLoadingDayIds + dayIds,
-                timelineLoadMoreError = null,
-            )
+        _state.update { state ->
+            state.updateTimeline {
+                it.copy(
+                    loadingDayIds = it.loadingDayIds + dayIds,
+                    loadMoreError = null,
+                )
+            }
         }
 
         viewModelScope.launch {
             runCatching { memoriesRepository.loadTimelineDays(credentials, dayIds) }
                 .onSuccess { items ->
                     _state.update { state ->
-                        val updatedTimeline = state.timeline?.mergeLoadedItems(
+                        val currentTimeline = state.signedIn?.timeline?.snapshot
+                        val updatedTimeline = currentTimeline?.mergeLoadedItems(
                             items = items,
                             loadedDayIds = dayIds.toSet(),
                         )
 
-                        state.copy(
-                            timeline = updatedTimeline,
-                            timelineLoadingDayIds = state.timelineLoadingDayIds - dayIds.toSet(),
-                            timelineFailedDayIds = state.timelineFailedDayIds - dayIds.toSet(),
-                            timelineLoadMoreError = null,
-                            statusMessage = uiText(
+                        state.updateTimeline {
+                            it.copy(
+                                snapshot = updatedTimeline,
+                                loadingDayIds = it.loadingDayIds - dayIds.toSet(),
+                                failedDayIds = it.failedDayIds - dayIds.toSet(),
+                                loadMoreError = null,
+                            )
+                        }.copy(
+                            message = AppMessageUiState(status = uiText(
                                 R.string.status_loaded_items,
-                                updatedTimeline?.items?.size ?: state.timeline?.items?.size ?: 0,
-                            ),
+                                updatedTimeline?.items?.size ?: currentTimeline?.items?.size ?: 0,
+                            )),
                         )
                     }
                 }
                 .onFailure {
                     _state.update { state ->
-                        state.copy(
-                            timelineLoadingDayIds = state.timelineLoadingDayIds - dayIds.toSet(),
-                            timelineFailedDayIds = state.timelineFailedDayIds + dayIds,
-                            timelineLoadMoreError = uiText(R.string.error_load_timeline_batch_failed),
-                        )
+                        state.updateTimeline {
+                            it.copy(
+                                loadingDayIds = it.loadingDayIds - dayIds.toSet(),
+                                failedDayIds = it.failedDayIds + dayIds,
+                                loadMoreError = uiText(R.string.error_load_timeline_batch_failed),
+                            )
+                        }
                     }
                 }
         }
@@ -381,21 +405,6 @@ private fun loginPollRecoverableStatus(failure: LoginPollFailure): UiText {
         else -> failure.toUiText()
     }
 }
-
-data class MainUiState(
-    val serverUrlInput: String = "",
-    val credentials: AccountCredentials? = null,
-    val loginSession: LoginSession? = null,
-    val loginBrowserOpened: Boolean = false,
-    val timeline: TimelineSnapshot? = null,
-    val isBusy: Boolean = false,
-    val isLoginPolling: Boolean = false,
-    val timelineLoadingDayIds: Set<Int> = emptySet(),
-    val timelineFailedDayIds: Set<Int> = emptySet(),
-    val timelineLoadMoreError: UiText? = null,
-    val statusMessage: UiText? = null,
-    val errorMessage: UiText? = null,
-)
 
 private const val LOGIN_POLL_INTERVAL_MS = 2_000L
 private const val LOGIN_POLL_TIMEOUT_MS = 120_000L

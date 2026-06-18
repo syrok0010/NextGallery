@@ -21,6 +21,8 @@
 - [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
 - [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
 - [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
+- [ADR 0008: UI по вертикальным slice](adr/0008-ui-vertical-slices.md)
+- [ADR 0009: Типизированный UI session state](adr/0009-typed-ui-session-state.md)
 
 ## Ближайшие решения
 
