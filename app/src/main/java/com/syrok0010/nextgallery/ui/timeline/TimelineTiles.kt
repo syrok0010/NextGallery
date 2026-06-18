@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import java.time.LocalDate
@@ -52,6 +53,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
     credentials: AccountCredentials,
+    thumbnailPreview: ThumbnailPreview?,
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
@@ -62,6 +64,7 @@ internal fun TimelineSlotTile(
         MediaTile(
             item = item,
             credentials = credentials,
+            thumbnailPreview = thumbnailPreview,
             onClick = { onSelect(item) },
         )
     }
@@ -81,6 +84,7 @@ private fun PlaceholderMediaTile() {
 private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
+    thumbnailPreview: ThumbnailPreview?,
     onClick: () -> Unit,
 ) {
     Box(
@@ -93,6 +97,7 @@ private fun MediaTile(
         AuthenticatedImage(
             url = item.thumbnailUrl,
             credentials = credentials,
+            data = thumbnailPreview?.bytes,
             contentDescription = item.displayName,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,

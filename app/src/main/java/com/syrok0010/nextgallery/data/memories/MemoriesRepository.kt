@@ -5,6 +5,7 @@ import com.syrok0010.nextgallery.data.network.ApiFactory
 
 class MemoriesRepository(
     private val apiFactory: ApiFactory,
+    private val multipreviewClient: MemoriesMultipreviewClient,
 ) {
     suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
         val api = apiFactory.memoriesApi(credentials)
@@ -47,5 +48,12 @@ class MemoriesRepository(
         return api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
             .map { it.toMediaItem(credentials.serverUrl) }
+    }
+
+    suspend fun loadThumbnails(
+        credentials: AccountCredentials,
+        fileIds: List<Long>,
+    ): List<ThumbnailPreview> {
+        return multipreviewClient.loadThumbnails(credentials, fileIds)
     }
 }

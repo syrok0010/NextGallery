@@ -15,6 +15,7 @@ import okhttp3.Credentials as OkHttpCredentials
 internal fun AuthenticatedImage(
     url: String,
     credentials: AccountCredentials,
+    data: Any? = null,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
@@ -26,8 +27,12 @@ internal fun AuthenticatedImage(
         .set("OCS-APIRequest", "true")
         .build()
     val request = ImageRequest.Builder(context)
-        .data(url)
-        .httpHeaders(headers)
+        .data(data ?: url)
+        .apply {
+            if (data == null) {
+                httpHeaders(headers)
+            }
+        }
         .build()
 
     AsyncImage(

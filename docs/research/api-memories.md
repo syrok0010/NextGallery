@@ -107,6 +107,30 @@ GET  /apps/memories/api/clusters/{backend}/preview
 - `/apps/memories/api/image/info/{id}` - detail metadata.
 - `/apps/memories/api/stream/{fileid}` - оригинал/поток файла, если применимо.
 
+## Binary protocol `/image/multipreview`
+
+Источник: локальный clone Memories, `lib/Controller/ImageController.php` и `src/components/frame/XImgWorker.ts`.
+
+Request:
+
+```json
+{
+  "files": [
+    { "fileid": 42, "x": 512, "y": 512, "a": "1", "reqid": 1 }
+  ]
+}
+```
+
+Response имеет `Content-Type: application/octet-stream` и состоит из последовательности блоков:
+
+```text
+1 byte    length of JSON header
+N bytes   JSON header: {"reqid":1,"len":12345,"type":"image/jpeg"}
+len bytes image bytes
+```
+
+Сервер может пропустить отдельный файл без error-блока, если preview недоступен или generation не удалась. Клиент должен сопоставлять ответ по `reqid`, а для отсутствующих элементов использовать fallback на одиночный `/image/preview/{id}`.
+
 ## Модель данных Memories
 
 Из `src/typings/data.d.ts` видны важные поля `IPhoto`:

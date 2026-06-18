@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.ui
 
 import com.syrok0010.nextgallery.data.auth.LoginSession
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 
 data class MainUiState(
@@ -33,6 +34,9 @@ data class TimelineUiState(
     val loadingDayIds: Set<Int> = emptySet(),
     val failedDayIds: Set<Int> = emptySet(),
     val loadMoreError: UiText? = null,
+    val thumbnailPreviews: Map<Long, ThumbnailPreview> = emptyMap(),
+    val thumbnailLoadingFileIds: Set<Long> = emptySet(),
+    val thumbnailFailedFileIds: Set<Long> = emptySet(),
 )
 
 data class AppMessageUiState(

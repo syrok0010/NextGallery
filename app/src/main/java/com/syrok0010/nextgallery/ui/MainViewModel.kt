@@ -326,6 +326,13 @@ class MainViewModel(
             return
         }
 
+        loadVisibleThumbnails(
+            credentials = credentials,
+            timelineState = timelineState,
+            windowStart = windowStart,
+            windowEnd = windowEnd,
+        )
+
         val dayIds = timeline.slots
             .asSequence()
             .drop(windowStart)
@@ -375,6 +382,15 @@ class MainViewModel(
                             )),
                         )
                     }
+                    val updatedTimelineState = state.value.signedIn?.timeline
+                    if (updatedTimelineState != null) {
+                        loadVisibleThumbnails(
+                            credentials = credentials,
+                            timelineState = updatedTimelineState,
+                            windowStart = windowStart,
+                            windowEnd = windowEnd,
+                        )
+                    }
                 }
                 .onFailure {
                     _state.update { state ->
@@ -383,6 +399,68 @@ class MainViewModel(
                                 loadingDayIds = it.loadingDayIds - dayIds.toSet(),
                                 failedDayIds = it.failedDayIds + dayIds,
                                 loadMoreError = uiText(R.string.error_load_timeline_batch_failed),
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun loadVisibleThumbnails(
+        credentials: AccountCredentials,
+        timelineState: TimelineUiState,
+        windowStart: Int,
+        windowEnd: Int,
+    ) {
+        val timeline = timelineState.snapshot ?: return
+        if (windowStart > windowEnd) {
+            return
+        }
+
+        val fileIds = timeline.slots
+            .asSequence()
+            .drop(windowStart)
+            .take(windowEnd - windowStart + 1)
+            .mapNotNull { it.mediaItem?.fileId }
+            .distinct()
+            .filterNot { it in timelineState.thumbnailPreviews }
+            .filterNot { it in timelineState.thumbnailLoadingFileIds }
+            .filterNot { it in timelineState.thumbnailFailedFileIds }
+            .take(TIMELINE_THUMBNAIL_BATCH_SIZE)
+            .toList()
+
+        if (fileIds.isEmpty()) {
+            return
+        }
+
+        _state.update { state ->
+            state.updateTimeline {
+                it.copy(thumbnailLoadingFileIds = it.thumbnailLoadingFileIds + fileIds)
+            }
+        }
+
+        viewModelScope.launch {
+            runCatching { memoriesRepository.loadThumbnails(credentials, fileIds) }
+                .onSuccess { previews ->
+                    val previewsByFileId = previews.associateBy { it.fileId }
+                    val missingFileIds = fileIds.filterNot { it in previewsByFileId }
+
+                    _state.update { state ->
+                        state.updateTimeline {
+                            it.copy(
+                                thumbnailPreviews = it.thumbnailPreviews + previewsByFileId,
+                                thumbnailLoadingFileIds = it.thumbnailLoadingFileIds - fileIds.toSet(),
+                                thumbnailFailedFileIds = it.thumbnailFailedFileIds + missingFileIds,
+                            )
+                        }
+                    }
+                }
+                .onFailure {
+                    _state.update { state ->
+                        state.updateTimeline {
+                            it.copy(
+                                thumbnailLoadingFileIds = it.thumbnailLoadingFileIds - fileIds.toSet(),
+                                thumbnailFailedFileIds = it.thumbnailFailedFileIds + fileIds,
                             )
                         }
                     }
@@ -411,3 +489,4 @@ private const val LOGIN_POLL_TIMEOUT_MS = 120_000L
 private const val INITIAL_TIMELINE_PREFETCH_SLOTS = 80
 private const val TIMELINE_PREFETCH_SLOTS = 60
 private const val TIMELINE_DAY_BATCH_SIZE = 4
+private const val TIMELINE_THUMBNAIL_BATCH_SIZE = 64

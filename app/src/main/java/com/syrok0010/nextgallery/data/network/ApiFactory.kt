@@ -43,15 +43,16 @@ class ApiFactory(
         return withScheme.trimEnd('/') + "/"
     }
 
-    private fun authenticatedClient(credentials: AccountCredentials): OkHttpClient {
+    fun authenticatedClient(credentials: AccountCredentials): OkHttpClient {
         val authorization = Credentials.basic(credentials.loginName, credentials.appPassword)
 
         return baseClientBuilder()
             .addInterceptor { chain ->
+                val originalRequest = chain.request()
                 val request = chain.request()
                     .newBuilder()
                     .header("Authorization", authorization)
-                    .header("Accept", "application/json")
+                    .header("Accept", originalRequest.header("Accept") ?: "application/json")
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header("OCS-APIRequest", "true")
                     .build()

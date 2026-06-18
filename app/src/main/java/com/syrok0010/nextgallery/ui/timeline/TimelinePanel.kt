@@ -187,6 +187,8 @@ internal fun TimelinePanel(
                             is TimelineGridItem.Slot -> TimelineSlotTile(
                                 slot = item.slot,
                                 credentials = credentials,
+                                thumbnailPreview = item.slot.mediaItem
+                                    ?.let { state.thumbnailPreviews[it.fileId] },
                                 onSelect = onSelect,
                             )
                         }

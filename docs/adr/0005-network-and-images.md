@@ -51,9 +51,13 @@ Coil 3 выбран как Compose-friendly image loader. Для MVP thumbnails 
 - Нужно дисциплинированно держать общую auth/header/error-handling политику в одном месте.
 - Coil 3 на момент выбора используется осознанно как modern stack, несмотря на то что latest artifact сейчас `3.5.0-beta01`.
 
+## Дополнения
+
+- `image/multipreview` реализован как raw OkHttp client, потому что endpoint возвращает custom binary stream, а не JSON.
+- Grid thumbnails используют batch preview bytes из `TimelineUiState`, но сохраняют fallback на одиночный Memories preview URL, если batch-запрос упал или сервер пропустил конкретный файл.
+
 ## Не решено здесь
 
 - Secure storage для app password.
 - HTTP cache policy для thumbnails/originals.
-- Реализация `image/multipreview`.
 - WebDAV fallback.
