@@ -1,6 +1,9 @@
 package com.syrok0010.nextgallery.di
 
 import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
+import com.syrok0010.nextgallery.data.cache.ThumbnailFileStore
+import com.syrok0010.nextgallery.data.cache.TimelineCacheDatabase
+import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
@@ -23,9 +26,12 @@ val appModule = module {
 
     single { ApiFactory(get()) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
+    single { TimelineCacheDatabase.create(androidContext()) }
+    single { ThumbnailFileStore(androidContext()) }
+    single { TimelineCacheRepository(get(), get()) }
     single { NextcloudLoginRepository(get()) }
     single { MemoriesMultipreviewClient(get(), get()) }
-    single { MemoriesRepository(get(), get()) }
+    single { MemoriesRepository(get(), get(), get()) }
 
     viewModelOf(::MainViewModel)
 }

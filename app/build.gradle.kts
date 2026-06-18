@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -53,6 +54,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.runtime)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.koin.android)
@@ -62,6 +65,7 @@ dependencies {
     implementation(libs.okhttp.logging.interceptor)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
+    ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

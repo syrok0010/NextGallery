@@ -267,6 +267,9 @@ class MainViewModel(
         loginPollingJob?.cancel()
         loginPollingJob = null
         credentialsStore.clear()
+        viewModelScope.launch {
+            memoriesRepository.clearCache()
+        }
         _state.value = MainUiState()
     }
 
@@ -277,6 +280,28 @@ class MainViewModel(
                     isBusy = true,
                     message = AppMessageUiState(status = uiText(R.string.status_loading_memories_api)),
                 )
+            }
+
+            val canShowCachedTimeline = state.value.signedIn?.timeline?.snapshot == null
+            if (canShowCachedTimeline) {
+                memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
+                    _state.update { state ->
+                        state.updateTimeline {
+                            TimelineUiState(snapshot = cachedSnapshot)
+                        }.copy(
+                            message = AppMessageUiState(
+                                status = uiText(
+                                    R.string.status_loaded_timeline_index,
+                                    cachedSnapshot.totalMediaCountHint,
+                                ),
+                            ),
+                        )
+                    }
+                    loadVisibleTimelineRange(
+                        firstVisibleIndex = 0,
+                        lastVisibleIndex = INITIAL_TIMELINE_PREFETCH_SLOTS,
+                    )
+                }
             }
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
@@ -433,6 +458,13 @@ class MainViewModel(
             return
         }
 
+        val etagsByFileId = timeline.slots
+            .asSequence()
+            .drop(windowStart)
+            .take(windowEnd - windowStart + 1)
+            .mapNotNull { it.mediaItem }
+            .associate { it.fileId to it.etag }
+
         _state.update { state ->
             state.updateTimeline {
                 it.copy(thumbnailLoadingFileIds = it.thumbnailLoadingFileIds + fileIds)
@@ -440,7 +472,7 @@ class MainViewModel(
         }
 
         viewModelScope.launch {
-            runCatching { memoriesRepository.loadThumbnails(credentials, fileIds) }
+            runCatching { memoriesRepository.loadThumbnails(credentials, fileIds, etagsByFileId) }
                 .onSuccess { previews ->
                     val previewsByFileId = previews.associateBy { it.fileId }
                     val missingFileIds = fileIds.filterNot { it in previewsByFileId }

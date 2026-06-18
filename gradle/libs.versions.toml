@@ -9,11 +9,13 @@ activityCompose = "1.8.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
 koin = "4.2.1"
+ksp = "2.2.10-2.0.2"
 kotlinxSerializationJson = "1.11.0"
 okhttp = "5.3.2"
 retrofit = "3.0.0"
 coil = "3.5.0-beta01"
 navigation3 = "1.1.2"
+room = "2.8.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -43,8 +45,12 @@ coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref 
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -1,12 +1,18 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.ApiFactory
 
 class MemoriesRepository(
     private val apiFactory: ApiFactory,
     private val multipreviewClient: MemoriesMultipreviewClient,
+    private val cacheRepository: TimelineCacheRepository,
 ) {
+    suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? {
+        return runCatching { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
+    }
+
     suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
         val api = apiFactory.memoriesApi(credentials)
         val config = api.config()
@@ -26,7 +32,7 @@ class MemoriesRepository(
             .filter { it.count == 0 || it.detail.isNotEmpty() }
             .mapTo(mutableSetOf()) { it.dayid }
 
-        return TimelineSnapshot(
+        val snapshot = TimelineSnapshot(
             config = config.toMemoriesConfig(),
             days = days,
             slots = buildTimelineSlots(days, preloadedItemsByDay),
@@ -34,6 +40,9 @@ class MemoriesRepository(
             totalDayCount = days.size,
             totalMediaCountHint = days.sumOf { it.count },
         )
+
+        runCatching { cacheRepository.saveTimelineSnapshot(credentials, snapshot) }
+        return snapshot
     }
 
     suspend fun loadTimelineDays(
@@ -45,15 +54,57 @@ class MemoriesRepository(
         }
 
         val api = apiFactory.memoriesApi(credentials)
-        return api.dayDetails(dayIds.joinToString(","))
+        val items = api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
             .map { it.toMediaItem(credentials.serverUrl) }
+
+        runCatching { cacheRepository.saveDayDetails(items, dayIds.toSet()) }
+        return items
     }
 
     suspend fun loadThumbnails(
         credentials: AccountCredentials,
         fileIds: List<Long>,
+        etagsByFileId: Map<Long, String?> = emptyMap(),
     ): List<ThumbnailPreview> {
-        return multipreviewClient.loadThumbnails(credentials, fileIds)
+        val distinctFileIds = fileIds.distinct()
+        val cachedPreviews = runCatching {
+            cacheRepository.loadThumbnails(
+                fileIds = distinctFileIds,
+                width = DEFAULT_THUMBNAIL_SIZE,
+                height = DEFAULT_THUMBNAIL_SIZE,
+                etagsByFileId = etagsByFileId,
+            )
+        }.getOrDefault(emptyList())
+        val cachedFileIds = cachedPreviews.mapTo(mutableSetOf()) { it.fileId }
+        val missingFileIds = distinctFileIds.filterNot { it in cachedFileIds }
+        if (missingFileIds.isEmpty()) {
+            return cachedPreviews
+        }
+
+        val remotePreviews = multipreviewClient.loadThumbnails(
+            credentials = credentials,
+            fileIds = missingFileIds,
+            width = DEFAULT_THUMBNAIL_SIZE,
+            height = DEFAULT_THUMBNAIL_SIZE,
+        )
+        runCatching {
+            cacheRepository.saveThumbnails(
+                previews = remotePreviews,
+                width = DEFAULT_THUMBNAIL_SIZE,
+                height = DEFAULT_THUMBNAIL_SIZE,
+                etagsByFileId = etagsByFileId,
+            )
+        }
+
+        return cachedPreviews + remotePreviews
+    }
+
+    suspend fun clearCache() {
+        runCatching { cacheRepository.clear() }
+    }
+
+    private companion object {
+        const val DEFAULT_THUMBNAIL_SIZE = 512
     }
 }
