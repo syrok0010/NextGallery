@@ -1,0 +1,23 @@
+[
+  {
+    "dayid": 19870,
+    "count": 1,
+    "detail": [
+      {
+        "fileid": 42,
+        "dayid": 19870,
+        "w": 4032,
+        "h": 3024,
+        "etag": "etag-42",
+        "basename": "IMG_0042.jpg",
+        "epoch": 1716768000,
+        "mimetype": "image/jpeg",
+        "liveid": "live-42",
+        "auid": "auid-42",
+        "buid": "buid-42",
+        "shared_by": "Alice",
+        "isfavorite": 1
+      }
+    ]
+  }
+]

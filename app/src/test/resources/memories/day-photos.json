@@ -1,0 +1,34 @@
+[
+  {
+    "fileid": 42,
+    "dayid": 19870,
+    "w": 4032,
+    "h": 3024,
+    "etag": "etag-42",
+    "basename": "IMG_0042.jpg",
+    "epoch": 1716768000,
+    "mimetype": "image/jpeg",
+    "liveid": "live-42",
+    "auid": "auid-42",
+    "buid": "buid-42",
+    "shared_by": "Alice",
+    "isfavorite": 0,
+    "ishidden": false
+  },
+  {
+    "fileid": 43,
+    "dayid": 19870,
+    "w": 1920,
+    "h": 1080,
+    "etag": "etag-43",
+    "basename": "VID_0043.mp4",
+    "epoch": 1716769000,
+    "mimetype": "video/mp4",
+    "isvideo": 1,
+    "video_duration": 12,
+    "isfavorite": "1",
+    "ishidden": true,
+    "auid": "auid-43",
+    "buid": "buid-43"
+  }
+]
