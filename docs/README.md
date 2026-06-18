@@ -23,6 +23,7 @@
 - [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
 - [ADR 0008: UI по вертикальным slice](adr/0008-ui-vertical-slices.md)
 - [ADR 0009: Типизированный UI session state](adr/0009-typed-ui-session-state.md)
+- [ADR 0010: MVP-1 warm-start cache policy](adr/0010-mvp-cache-policy.md)
 
 ## Ближайшие решения
 
