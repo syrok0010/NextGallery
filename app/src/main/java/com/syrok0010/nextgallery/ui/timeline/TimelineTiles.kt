@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.ui.timeline
 
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -10,11 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,7 +60,11 @@ internal fun TimelineDayHeader(dayId: Int) {
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
     credentials: AccountCredentials,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    enableSharedElement: Boolean,
     thumbnailPreview: ThumbnailPreview?,
+    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
@@ -64,7 +75,11 @@ internal fun TimelineSlotTile(
         MediaTile(
             item = item,
             credentials = credentials,
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            enableSharedElement = enableSharedElement,
             thumbnailPreview = thumbnailPreview,
+            onBoundsChanged = onBoundsChanged,
             onClick = { onSelect(item) },
         )
     }
@@ -80,16 +95,40 @@ private fun PlaceholderMediaTile() {
     )
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    enableSharedElement: Boolean,
     thumbnailPreview: ThumbnailPreview?,
+    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onClick: () -> Unit,
 ) {
+    val sharedModifier = if (enableSharedElement) with(sharedTransitionScope) {
+        Modifier.sharedElement(
+            sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
+            animatedVisibilityScope = animatedVisibilityScope,
+        )
+    } else {
+        Modifier
+    }
+
+    DisposableEffect(item.fileId) {
+        onDispose {
+            onBoundsChanged(item.fileId, null)
+        }
+    }
+
     Box(
         modifier = Modifier
             .aspectRatio(1f)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(item.fileId, coordinates.boundsInRoot())
+            }
+            .then(sharedModifier)
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
@@ -119,3 +158,6 @@ private fun MediaTile(
         }
     }
 }
+
+internal val MediaItem.sharedElementKey: String
+    get() = "media-$fileId"

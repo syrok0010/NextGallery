@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.ui.timeline
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,7 +50,13 @@ internal fun TimelinePanel(
     state: TimelineUiState,
     message: AppMessageUiState,
     credentials: AccountCredentials,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    enableSharedElements: Boolean,
     onVisibleRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
+    revealFileId: Long?,
+    onFileRevealed: () -> Unit,
+    onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val timeline = state.snapshot
@@ -127,6 +136,17 @@ internal fun TimelinePanel(
         }
     }
 
+    LaunchedEffect(revealFileId, gridItems) {
+        val fileId = revealFileId ?: return@LaunchedEffect
+        val targetGridIndex = gridItems.indexOfFirst { item ->
+            item is TimelineGridItem.Slot && item.slot.mediaItem?.fileId == fileId
+        }
+        if (targetGridIndex >= 0) {
+            gridState.scrollToItem(targetGridIndex)
+            onFileRevealed()
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (timeline != null) {
             Column(
@@ -187,8 +207,12 @@ internal fun TimelinePanel(
                             is TimelineGridItem.Slot -> TimelineSlotTile(
                                 slot = item.slot,
                                 credentials = credentials,
+                                sharedTransitionScope = sharedTransitionScope,
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                enableSharedElement = enableSharedElements,
                                 thumbnailPreview = item.slot.mediaItem
                                     ?.let { state.thumbnailPreviews[it.fileId] },
+                                onBoundsChanged = onTileBoundsChanged,
                                 onSelect = onSelect,
                             )
                         }

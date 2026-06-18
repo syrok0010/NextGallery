@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class TimelineCacheDatabase : RoomDatabase() {

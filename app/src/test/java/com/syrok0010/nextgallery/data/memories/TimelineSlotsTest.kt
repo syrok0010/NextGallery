@@ -79,6 +79,7 @@ class TimelineSlotsTest {
             isHidden = false,
             thumbnailUrl = "https://cloud.example.com/thumb/$fileId",
             detailPreviewUrl = "https://cloud.example.com/detail/$fileId",
+            originalUrl = "https://cloud.example.com/original/$fileId",
         )
     }
 }

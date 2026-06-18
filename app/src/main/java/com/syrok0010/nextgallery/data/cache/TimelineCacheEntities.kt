@@ -49,6 +49,7 @@ data class MediaItemEntity(
     val isHidden: Boolean,
     val thumbnailUrl: String,
     val detailPreviewUrl: String,
+    val originalUrl: String,
 )
 
 @Entity(tableName = "loaded_days")

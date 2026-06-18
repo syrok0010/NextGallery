@@ -73,6 +73,7 @@ class MemoriesDtoMappingTest {
         assertEquals(12L, item.videoDurationSeconds)
         assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=512&y=512&a=1", item.thumbnailUrl)
         assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=1600&y=1600&a=1", item.detailPreviewUrl)
+        assertEquals("https://cloud.example.com/apps/memories/api/stream/43", item.originalUrl)
     }
 
     private fun fixture(name: String): String {

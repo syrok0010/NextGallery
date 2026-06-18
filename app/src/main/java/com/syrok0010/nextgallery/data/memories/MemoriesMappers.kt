@@ -43,6 +43,7 @@ fun MemoriesPhotoDto.toMediaItem(serverUrl: String): MediaItem {
         isHidden = isHidden.asFlexibleBoolean(),
         thumbnailUrl = "$normalizedServerUrl/apps/memories/api/image/preview/$fileid?x=512&y=512&a=1",
         detailPreviewUrl = "$normalizedServerUrl/apps/memories/api/image/preview/$fileid?x=1600&y=1600&a=1",
+        originalUrl = "$normalizedServerUrl/apps/memories/api/stream/$fileid",
     )
 }
 

@@ -79,6 +79,7 @@ data class MediaItem(
     val isHidden: Boolean,
     val thumbnailUrl: String,
     val detailPreviewUrl: String,
+    val originalUrl: String,
 )
 
 fun buildTimelineSlots(

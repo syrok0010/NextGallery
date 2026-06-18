@@ -71,6 +71,7 @@ fun MediaItem.toEntity(): MediaItemEntity {
         isHidden = isHidden,
         thumbnailUrl = thumbnailUrl,
         detailPreviewUrl = detailPreviewUrl,
+        originalUrl = originalUrl,
     )
 }
 
@@ -95,5 +96,6 @@ fun MediaItemEntity.toMediaItem(): MediaItem {
         isHidden = isHidden,
         thumbnailUrl = thumbnailUrl,
         detailPreviewUrl = detailPreviewUrl,
+        originalUrl = originalUrl,
     )
 }

@@ -8,6 +8,7 @@ import coil3.compose.AsyncImage
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
+import android.content.Context
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import okhttp3.Credentials as OkHttpCredentials
 
@@ -21,19 +22,12 @@ internal fun AuthenticatedImage(
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current
-    val headers = NetworkHeaders.Builder()
-        .set("Authorization", OkHttpCredentials.basic(credentials.loginName, credentials.appPassword))
-        .set("X-Requested-With", "XMLHttpRequest")
-        .set("OCS-APIRequest", "true")
-        .build()
-    val request = ImageRequest.Builder(context)
-        .data(data ?: url)
-        .apply {
-            if (data == null) {
-                httpHeaders(headers)
-            }
-        }
-        .build()
+    val request = authenticatedImageRequest(
+        context = context,
+        url = url,
+        credentials = credentials,
+        data = data,
+    )
 
     AsyncImage(
         model = request,
@@ -41,4 +35,25 @@ internal fun AuthenticatedImage(
         modifier = modifier,
         contentScale = contentScale,
     )
+}
+
+internal fun authenticatedImageRequest(
+    context: Context,
+    url: String,
+    credentials: AccountCredentials,
+    data: Any? = null,
+): ImageRequest {
+    val headers = NetworkHeaders.Builder()
+        .set("Authorization", OkHttpCredentials.basic(credentials.loginName, credentials.appPassword))
+        .set("X-Requested-With", "XMLHttpRequest")
+        .set("OCS-APIRequest", "true")
+        .build()
+    return ImageRequest.Builder(context)
+        .data(data ?: url)
+        .apply {
+            if (data == null) {
+                httpHeaders(headers)
+            }
+        }
+        .build()
 }
