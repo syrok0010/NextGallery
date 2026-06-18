@@ -39,6 +39,8 @@
     <string name="status_waiting_browser_confirmation">Жду подтверждения входа в браузере</string>
     <string name="timeline_empty">Пока нет загруженных элементов</string>
     <string name="timeline_day_header_pattern">d MMMM</string>
+    <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
+    <string name="timeline_scroll_date_with_year_pattern">d MMMM yyyy</string>
     <string name="timeline_summary">Memories %1$s · %2$d элементов · %3$d дней</string>
     <string name="value_unknown">unknown</string>
     <string name="value_unknown_short">?</string>

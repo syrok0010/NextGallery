@@ -7,15 +7,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -34,6 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -65,6 +71,9 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import okhttp3.Credentials as OkHttpCredentials
+
+private val TimelineScrollThumbHeight = 48.dp
+private val TimelineScrollThumbWidth = 4.dp
 
 @Serializable
 private sealed interface NextGalleryRoute : NavKey {
@@ -316,6 +325,27 @@ private fun TimelinePanel(
     val gridItems = remember(timeline?.slots) {
         timeline?.slots?.toTimelineGridItems().orEmpty()
     }
+    val scrollInfo by remember(gridItems) {
+        derivedStateOf {
+            val visibleSlot = gridState.layoutInfo.visibleItemsInfo
+                .mapNotNull { visibleItem ->
+                    (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
+                        ?.let { it.slotIndex to it.slot.dayId }
+                }
+                .minByOrNull { it.first }
+            val totalSlots = timeline?.slots?.size ?: 0
+            val fraction = if (visibleSlot == null || totalSlots <= 1) {
+                0f
+            } else {
+                visibleSlot.first.toFloat() / (totalSlots - 1).toFloat()
+            }
+
+            TimelineScrollInfo(
+                dayId = visibleSlot?.second,
+                fraction = fraction.coerceIn(0f, 1f),
+            )
+        }
+    }
 
     LaunchedEffect(gridItems) {
         if (timeline == null) {
@@ -373,37 +403,51 @@ private fun TimelinePanel(
                 Text(stringResource(R.string.timeline_empty))
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 116.dp),
-                state = gridState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                itemsIndexed(
-                    items = gridItems,
-                    key = { _, item -> item.key },
-                    span = { _, item ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 116.dp),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    itemsIndexed(
+                        items = gridItems,
+                        key = { _, item -> item.key },
+                        span = { _, item ->
+                            when (item) {
+                                is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
+                                is TimelineGridItem.Slot -> GridItemSpan(1)
+                            }
+                        },
+                    ) { _, item ->
                         when (item) {
-                            is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
-                            is TimelineGridItem.Slot -> GridItemSpan(1)
+                            is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
+                            is TimelineGridItem.Slot -> TimelineSlotTile(
+                                slot = item.slot,
+                                credentials = credentials,
+                                onSelect = onSelect,
+                            )
                         }
-                    },
-                ) { _, item ->
-                    when (item) {
-                        is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
-                        is TimelineGridItem.Slot -> TimelineSlotTile(
-                            slot = item.slot,
-                            credentials = credentials,
-                            onSelect = onSelect,
-                        )
                     }
                 }
+
+                TimelineScrollIndicator(
+                    dayId = scrollInfo.dayId,
+                    fraction = scrollInfo.fraction,
+                    isVisible = gridState.isScrollInProgress,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
         }
     }
 }
+
+private data class TimelineScrollInfo(
+    val dayId: Int?,
+    val fraction: Float,
+)
 
 private sealed interface TimelineGridItem {
     val key: String
@@ -433,6 +477,75 @@ private fun List<TimelineSlot>.toTimelineGridItems(): List<TimelineGridItem> {
     }
 
     return result
+}
+
+@Composable
+private fun TimelineScrollIndicator(
+    dayId: Int?,
+    fraction: Float,
+    isVisible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!isVisible || dayId == null) {
+        return
+    }
+
+    val date = remember(dayId) {
+        LocalDate.ofEpochDay(dayId.toLong())
+    }
+    val currentYear = LocalDate.now().year
+    val pattern = stringResource(
+        if (date.year == currentYear) {
+            R.string.timeline_scroll_date_current_year_pattern
+        } else {
+            R.string.timeline_scroll_date_with_year_pattern
+        },
+    )
+    val formatter = remember(pattern) {
+        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    }
+    val label = remember(date, formatter) {
+        date.format(formatter)
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(150.dp)
+            .padding(end = 8.dp),
+    ) {
+        val topOffset = (maxHeight - TimelineScrollThumbHeight) * fraction.coerceIn(0f, 1f)
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = topOffset),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier
+                    .background(
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        shape = MaterialTheme.shapes.small,
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+            )
+            Box(
+                modifier = Modifier
+                    .width(TimelineScrollThumbWidth)
+                    .height(TimelineScrollThumbHeight)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.extraSmall,
+                    ),
+            )
+        }
+    }
 }
 
 @Composable
