@@ -9,7 +9,7 @@ class NextGalleryAppRouteTest {
     fun `signed out session maps to login route`() {
         assertEquals(
             NextGalleryRoute.Login,
-            SessionUiState.SignedOut().rootRoute(),
+            SessionUiState.SignedOut.rootRoute(),
         )
     }
 
@@ -27,7 +27,7 @@ class NextGalleryAppRouteTest {
 
         assertEquals(
             listOf(NextGalleryRoute.Login),
-            syncedBackStack(backStack, SessionUiState.SignedOut()),
+            syncedBackStack(backStack, SessionUiState.SignedOut),
         )
     }
 

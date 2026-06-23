@@ -10,6 +10,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -18,26 +20,24 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
-import com.syrok0010.nextgallery.ui.SessionUiState
 import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
-internal fun AuthenticatedDestinationScreen(
-    session: SessionUiState.SignedIn?,
-    message: AppMessageUiState,
-    isBusy: Boolean,
+internal fun HomeScreen(
     viewerTransitionCoordinator: ViewerTransitionCoordinator,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onRefresh: () -> Unit,
-    onLogout: () -> Unit,
-    onViewportObservation: (TimelineViewportObservation) -> Unit,
-    onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
+    viewModel: AuthenticatedViewModel = koinViewModel(),
 ) {
-    val viewerItems = session?.timeline?.snapshot
+    val state by viewModel.state.collectAsState()
+    val credentials = state.credentials ?: run {
+        NextGalleryScaffold(showTopBar = false) { _ -> }
+        return
+    }
+    val viewerItems = state.timeline.snapshot
         ?.slots
         ?.mapIndexedNotNull { slotIndex, slot ->
             slot.mediaItem?.let { item ->
@@ -57,10 +57,10 @@ internal fun AuthenticatedDestinationScreen(
     NextGalleryScaffold(
         showTopBar = visibleViewerFileId == null,
         actions = {
-            TextButton(onClick = onRefresh, enabled = !isBusy) {
+            TextButton(onClick = viewModel::refresh, enabled = !state.isBusy) {
                 Text(stringResource(R.string.action_refresh))
             }
-            TextButton(onClick = onLogout, enabled = !isBusy) {
+            TextButton(onClick = viewModel::logout, enabled = !state.isBusy) {
                 Text(stringResource(R.string.action_logout))
             }
         },
@@ -69,32 +69,30 @@ internal fun AuthenticatedDestinationScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            if (session != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .onGloballyPositioned { coordinates ->
-                            viewerTransitionCoordinator.onAppBoundsChanged(coordinates.boundsInRoot())
-                        },
-                ) {
-                    TimelinePanel(
-                        state = session.timeline,
-                        message = message,
-                        credentials = session.credentials,
-                        sharedTransitionScope = sharedTransitionScope,
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        enableSharedElements = visibleViewerFileId == null,
-                        onViewportObservation = onViewportObservation,
-                        revealFileId = viewerTransitionCoordinator.revealFileId,
-                        onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
-                        onTileBoundsChanged = viewerTransitionCoordinator::onTileBoundsChanged,
-                        onSelect = { item -> viewerTransitionCoordinator.open(item.fileId) },
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .onGloballyPositioned { coordinates ->
+                        viewerTransitionCoordinator.onAppBoundsChanged(coordinates.boundsInRoot())
+                    },
+            ) {
+                TimelinePanel(
+                    state = state.timeline,
+                    message = state.message,
+                    credentials = credentials,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    enableSharedElements = visibleViewerFileId == null,
+                    onViewportObservation = viewModel::observeTimelineViewport,
+                    revealFileId = viewerTransitionCoordinator.revealFileId,
+                    onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
+                    onTileBoundsChanged = viewerTransitionCoordinator::onTileBoundsChanged,
+                    onSelect = { item -> viewerTransitionCoordinator.open(item.fileId) },
+                )
             }
 
-            if (isBusy) {
+            if (state.isBusy) {
                 CircularProgressIndicator(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -104,21 +102,21 @@ internal fun AuthenticatedDestinationScreen(
                 )
             }
 
-            if (session != null && visibleViewerFileId != null) {
+            if (visibleViewerFileId != null) {
                 MediaDetailScreen(
                     initialFileId = visibleViewerFileId,
                     items = items,
                     slotIndexByFileId = slotIndexByFileId,
                     tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
-                    thumbnailPreviews = session.timeline.thumbnailPreviews,
-                    credentials = session.credentials,
+                    thumbnailPreviews = state.timeline.thumbnailPreviews,
+                    credentials = credentials,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->
                         viewerTransitionCoordinator.onCurrentItemChanged(currentItem.fileId)
                     },
-                    onVisibleTimelineRange = onVisibleTimelineRange,
+                    onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
                 )
             }
         }

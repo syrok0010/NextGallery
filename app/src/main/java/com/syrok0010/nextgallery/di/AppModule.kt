@@ -9,7 +9,10 @@ import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
 import com.syrok0010.nextgallery.data.network.ApiFactory
-import com.syrok0010.nextgallery.ui.MainViewModel
+import com.syrok0010.nextgallery.ui.SessionStore
+import com.syrok0010.nextgallery.ui.SessionViewModel
+import com.syrok0010.nextgallery.ui.auth.LoginViewModel
+import com.syrok0010.nextgallery.ui.timeline.AuthenticatedViewModel
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
@@ -32,6 +35,9 @@ val appModule = module {
     single { NextcloudLoginRepository(get()) }
     single { MemoriesMultipreviewClient(get(), get()) }
     single { MemoriesRepository(get(), get(), get()) }
+    single { SessionStore(get()) }
 
-    viewModelOf(::MainViewModel)
+    viewModelOf(::SessionViewModel)
+    viewModelOf(::LoginViewModel)
+    viewModelOf(::AuthenticatedViewModel)
 }

@@ -70,7 +70,7 @@ class ViewerTransitionCoordinatorTest {
         coordinator.onTileBoundsChanged(fileId = 1L, bounds = visibleTileBounds)
         coordinator.open(1L)
 
-        coordinator.onSessionChanged(SessionUiState.SignedOut())
+        coordinator.onSessionChanged(SessionUiState.SignedOut)
 
         assertNull(coordinator.viewerFileId)
         assertNull(coordinator.revealFileId)
