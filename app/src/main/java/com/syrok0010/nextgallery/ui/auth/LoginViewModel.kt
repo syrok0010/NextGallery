@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 data class LoginScreenUiState(
     val login: LoginUiState = LoginUiState(),
@@ -148,7 +149,7 @@ class LoginViewModel(
             val startedAt = System.nanoTime()
 
             while (elapsedMillis(startedAt) < LOGIN_POLL_TIMEOUT_MS) {
-                delay(LOGIN_POLL_INTERVAL_MS)
+                delay(LOGIN_POLL_INTERVAL_MS.milliseconds)
                 if (state.value.login.session != session) {
                     return@launch
                 }

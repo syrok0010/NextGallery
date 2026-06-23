@@ -39,11 +39,11 @@ class NextcloudLoginRepository(
             } else {
                 LoginPollResult.Failed(LoginPollFailure.Http(error.code()))
             }
-        } catch (error: IOException) {
+        } catch (_: IOException) {
             LoginPollResult.Failed(LoginPollFailure.Network, isRecoverable = true)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Exception) {
+        } catch (_: Exception) {
             LoginPollResult.Failed(LoginPollFailure.Unknown)
         }
     }

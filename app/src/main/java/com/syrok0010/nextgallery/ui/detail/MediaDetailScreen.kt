@@ -1,17 +1,17 @@
 package com.syrok0010.nextgallery.ui.detail
 
-import androidx.activity.compose.PredictiveBackHandler
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.os.Build
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -19,11 +19,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -36,17 +36,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -73,31 +73,12 @@ import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
 import com.syrok0010.nextgallery.ui.timeline.sharedElementKey
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
-
-@Composable
-internal fun MissingMediaDetailScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.detail_missing_item),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        TextButton(onClick = onBack) {
-            Text(stringResource(R.string.action_back))
-        }
-    }
-}
+import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun MediaDetailScreen(
@@ -119,7 +100,7 @@ internal fun MediaDetailScreen(
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     val openingFileId = remember { initialFileId }
     var chromeVisible by remember { mutableStateOf(true) }
-    var predictiveBackProgress by remember { mutableStateOf(0f) }
+    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
     var currentSurfaceBounds by remember { mutableStateOf<Rect?>(null) }
     var enterPending by remember { mutableStateOf(true) }
     var enterTarget by remember { mutableStateOf<ViewerBoundsTransform?>(null) }
@@ -278,9 +259,8 @@ internal fun MediaDetailScreen(
                             }
                         },
                         onDragEnd = {
-                            val item = currentItem
-                            if (item != null && dragOffset.value.y > dismissThresholdPx) {
-                                closeViewer(item, true)
+                            if (currentItem != null && dragOffset.value.y > dismissThresholdPx) {
+                                closeViewer(currentItem, true)
                             } else {
                                 coroutineScope.launch {
                                     dragOffset.animateTo(Offset.Zero)
@@ -616,14 +596,13 @@ private fun Modifier.viewerSurfaceTransform(
     val predictiveProgress = predictiveBackProgress.coerceIn(0f, 1f)
 
     return graphicsLayer {
-        val target = settleTarget
-        if (target != null) {
+        if (settleTarget != null) {
             val progress = settleProgress.coerceIn(0f, 1f)
-            val offset = lerpOffset(target.startOffset, target.targetOffset, progress)
+            val offset = lerpOffset(settleTarget.startOffset, settleTarget.targetOffset, progress)
             translationX = offset.x
             translationY = offset.y
-            scaleX = lerpFloat(target.startScaleX, target.targetScaleX, progress)
-            scaleY = lerpFloat(target.startScaleY, target.targetScaleY, progress)
+            scaleX = lerpFloat(settleTarget.startScaleX, settleTarget.targetScaleX, progress)
+            scaleY = lerpFloat(settleTarget.startScaleY, settleTarget.targetScaleY, progress)
         } else if (predictiveProgress > 0f && predictiveTarget != null) {
             val offset = lerpOffset(Offset.Zero, predictiveTarget.targetOffset, predictiveProgress)
             translationX = offset.x

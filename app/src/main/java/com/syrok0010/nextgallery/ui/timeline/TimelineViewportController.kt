@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 internal data class TimelineViewportObservation(
     val firstVisibleSlotIndex: Int,
@@ -81,7 +82,7 @@ internal class DefaultTimelineViewportController(
             TimelineViewportLoadingMode.Debounced -> {
                 pendingObservationJob?.cancel()
                 pendingObservationJob = scope.launch {
-                    delay(scrollbarDragLoadDebounceMillis)
+                    delay(scrollbarDragLoadDebounceMillis.milliseconds)
                     processObservation(observation)
                     pendingObservationJob = null
                 }
