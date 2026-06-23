@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
+
 private const val PREVIEW_AUTH_QUERY = "a=1"
 
 data class MemoriesImageUrlSet(
@@ -13,7 +15,7 @@ object MemoriesAssetUrlFactory {
         assetRef: MediaAssetRef,
         serverUrl: String,
     ): MemoriesImageUrlSet {
-        val normalizedServerUrl = serverUrl.trimEnd('/')
+        val normalizedServerUrl = NextcloudTransport.normalizeServerOrigin(serverUrl)
         return when (assetRef) {
             is MediaAssetRef.MemoriesFile -> {
                 val fileId = assetRef.photoFileId

@@ -2,10 +2,10 @@ package com.syrok0010.nextgallery.data.memories
 
 import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.network.ApiFactory
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
 
 class MemoriesRepository(
-    private val apiFactory: ApiFactory,
+    private val transport: NextcloudTransport,
     private val multipreviewClient: MemoriesMultipreviewClient,
     private val cacheRepository: TimelineCacheRepository,
 ) {
@@ -14,7 +14,7 @@ class MemoriesRepository(
     }
 
     suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
-        val api = apiFactory.memoriesApi(credentials)
+        val api = transport.memoriesApi(credentials)
         val config = api.config()
         val dayDtos = api.days()
         val days = dayDtos.map { day ->
@@ -53,7 +53,7 @@ class MemoriesRepository(
             return emptyList()
         }
 
-        val api = apiFactory.memoriesApi(credentials)
+        val api = transport.memoriesApi(credentials)
         val items = api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
             .map { it.toMediaItem() }

@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.data.memories
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.network.ApiFactory
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -12,7 +12,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 class MemoriesMultipreviewClient(
-    private val apiFactory: ApiFactory,
+    private val transport: NextcloudTransport,
     private val json: Json,
 ) {
     suspend fun loadThumbnails(
@@ -36,14 +36,15 @@ class MemoriesMultipreviewClient(
         }
         val body = json.encodeToString(MemoriesMultipreviewRequest(files = requests))
             .toRequestBody("application/json".toMediaType())
-        val serverUrl = apiFactory.normalizeServerUrl(credentials.serverUrl)
-        val request = Request.Builder()
-            .url("${serverUrl}apps/memories/api/image/multipreview")
+        val request = transport.authenticatedRequestBuilder(
+            credentials = credentials,
+            url = "${transport.normalizeBaseUrl(credentials.serverUrl)}apps/memories/api/image/multipreview",
+            accept = "application/octet-stream",
+        )
             .post(body)
-            .header("Accept", "application/octet-stream")
             .build()
         return withContext(Dispatchers.IO) {
-            val response = apiFactory.authenticatedClient(credentials).newCall(request).execute()
+            val response = transport.authenticatedClient(credentials).newCall(request).execute()
             response.use {
                 if (!it.isSuccessful) {
                     error("Multipreview failed with HTTP ${it.code}")

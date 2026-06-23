@@ -37,6 +37,8 @@ WebDAV
 
 Coil 3 выбран как Compose-friendly image loader. Для MVP thumbnails грузятся через обычный Memories preview endpoint с Basic Auth headers.
 
+Политика auth headers, нормализация server URL и правила сборки request должны жить в одном transport adapter module, чтобы JSON API, binary endpoints и image loading не дублировали transport rules по разным caller'ам.
+
 ## Последствия
 
 Плюсы:
@@ -54,6 +56,7 @@ Coil 3 выбран как Compose-friendly image loader. Для MVP thumbnails 
 ## Дополнения
 
 - `image/multipreview` реализован как raw OkHttp client, потому что endpoint возвращает custom binary stream, а не JSON.
+- `NextcloudTransport` централизует normalized base/origin URL, auth headers и request policy для Retrofit JSON API, raw binary fetch и Coil image requests.
 - Grid thumbnails используют batch preview bytes из `TimelineUiState`, но сохраняют fallback на одиночный Memories preview URL, если batch-запрос упал или сервер пропустил конкретный файл.
 
 ## Не решено здесь

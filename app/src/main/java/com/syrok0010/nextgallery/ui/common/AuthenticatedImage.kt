@@ -5,12 +5,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
-import coil3.network.NetworkHeaders
-import coil3.network.httpHeaders
-import coil3.request.ImageRequest
 import android.content.Context
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import okhttp3.Credentials as OkHttpCredentials
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
 
 @Composable
 internal fun AuthenticatedImage(
@@ -42,18 +39,9 @@ internal fun authenticatedImageRequest(
     url: String,
     credentials: AccountCredentials,
     data: Any? = null,
-): ImageRequest {
-    val headers = NetworkHeaders.Builder()
-        .set("Authorization", OkHttpCredentials.basic(credentials.loginName, credentials.appPassword))
-        .set("X-Requested-With", "XMLHttpRequest")
-        .set("OCS-APIRequest", "true")
-        .build()
-    return ImageRequest.Builder(context)
-        .data(data ?: url)
-        .apply {
-            if (data == null) {
-                httpHeaders(headers)
-            }
-        }
-        .build()
-}
+) = NextcloudTransport.authenticatedImageRequest(
+    context = context,
+    url = url,
+    credentials = credentials,
+    data = data,
+)

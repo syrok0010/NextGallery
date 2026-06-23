@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.buildTimelineSlots
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
 
 class TimelineCacheRepository(
     private val database: TimelineCacheDatabase,
@@ -206,6 +207,6 @@ class TimelineCacheRepository(
     }
 
     private fun AccountCredentials.normalizedServerUrl(): String {
-        return serverUrl.trim().trimEnd('/')
+        return NextcloudTransport.normalizeServerOrigin(serverUrl)
     }
 }

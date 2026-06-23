@@ -1,17 +1,17 @@
 package com.syrok0010.nextgallery.data.auth
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.network.ApiFactory
+import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(
-    private val apiFactory: ApiFactory,
+    private val transport: NextcloudTransport,
 ) {
     suspend fun startLogin(serverUrl: String): LoginSession {
-        val normalizedServerUrl = apiFactory.normalizeServerUrl(serverUrl)
-        val api = apiFactory.nextcloudAuthApi(normalizedServerUrl)
+        val normalizedServerUrl = transport.normalizeBaseUrl(serverUrl)
+        val api = transport.nextcloudAuthApi(normalizedServerUrl)
         val response = api.startLogin()
 
         return LoginSession(
@@ -24,11 +24,11 @@ class NextcloudLoginRepository(
 
     suspend fun pollLogin(session: LoginSession): LoginPollResult {
         return try {
-            val api = apiFactory.nextcloudAuthApi(session.serverUrl)
+            val api = transport.nextcloudAuthApi(session.serverUrl)
             val response = api.pollLogin(session.pollEndpoint, session.pollToken)
             LoginPollResult.Ready(
                 AccountCredentials(
-                    serverUrl = apiFactory.normalizeServerUrl(response.server),
+                    serverUrl = transport.normalizeBaseUrl(response.server),
                     loginName = response.loginName,
                     appPassword = response.appPassword,
                 ),
