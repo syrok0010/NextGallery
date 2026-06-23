@@ -26,7 +26,7 @@ class MemoriesRepository(
         val preloadedItems = dayDtos
             .flatMap { it.detail }
             .distinctBy { it.fileid }
-            .map { it.toMediaItem(credentials.serverUrl) }
+            .map { it.toMediaItem() }
         val preloadedItemsByDay = preloadedItems.groupBy { it.dayId }
         val loadedDayIds = dayDtos
             .filter { it.count == 0 || it.detail.isNotEmpty() }
@@ -56,7 +56,7 @@ class MemoriesRepository(
         val api = apiFactory.memoriesApi(credentials)
         val items = api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
-            .map { it.toMediaItem(credentials.serverUrl) }
+            .map { it.toMediaItem() }
 
         runCatching { cacheRepository.saveDayDetails(items, dayIds.toSet()) }
         return items

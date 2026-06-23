@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.ui.timeline
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
@@ -297,9 +298,7 @@ class TimelineViewportControllerTest {
             videoDurationSeconds = null,
             isFavorite = false,
             isHidden = false,
-            thumbnailUrl = "https://cloud.example.com/thumb/$fileId",
-            detailPreviewUrl = "https://cloud.example.com/detail/$fileId",
-            originalUrl = "https://cloud.example.com/original/$fileId",
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
         )
     }
 

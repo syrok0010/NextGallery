@@ -62,7 +62,11 @@ class MemoriesDtoMappingTest {
     fun `map video response to media item`() {
         val photo = json.decodeFromString<List<MemoriesPhotoDto>>(fixture("day-photos.json"))[1]
 
-        val item = photo.toMediaItem("https://cloud.example.com/")
+        val item = photo.toMediaItem()
+        val imageUrls = MemoriesAssetUrlFactory.urlsFor(
+            assetRef = item.assetRef,
+            serverUrl = "https://cloud.example.com/",
+        )
 
         assertEquals(43L, item.fileId)
         assertEquals("VID_0043.mp4", item.displayName)
@@ -71,9 +75,10 @@ class MemoriesDtoMappingTest {
         assertTrue(item.isFavorite)
         assertTrue(item.isHidden)
         assertEquals(12L, item.videoDurationSeconds)
-        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=512&y=512&a=1", item.thumbnailUrl)
-        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=1600&y=1600&a=1", item.detailPreviewUrl)
-        assertEquals("https://cloud.example.com/apps/memories/api/stream/43", item.originalUrl)
+        assertEquals(MediaAssetRef.MemoriesFile(photoFileId = 43L), item.assetRef)
+        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=512&y=512&a=1", imageUrls.thumbnailUrl)
+        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=1600&y=1600&a=1", imageUrls.detailPreviewUrl)
+        assertEquals("https://cloud.example.com/apps/memories/api/stream/43", imageUrls.originalUrl)
     }
 
     private fun fixture(name: String): String {

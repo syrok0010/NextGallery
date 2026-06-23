@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
@@ -107,6 +108,13 @@ private fun MediaTile(
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onClick: () -> Unit,
 ) {
+    val imageUrls = remember(item.assetRef, credentials.serverUrl) {
+        MemoriesAssetUrlFactory.urlsFor(
+            assetRef = item.assetRef,
+            serverUrl = credentials.serverUrl,
+        )
+    }
+
     val sharedModifier = if (enableSharedElement) with(sharedTransitionScope) {
         Modifier.sharedElement(
             sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
@@ -134,7 +142,7 @@ private fun MediaTile(
             .clickable(onClick = onClick),
     ) {
         AuthenticatedImage(
-            url = item.thumbnailUrl,
+            url = imageUrls.thumbnailUrl,
             credentials = credentials,
             data = thumbnailPreview?.bytes,
             contentDescription = item.displayName,

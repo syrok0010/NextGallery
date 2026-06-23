@@ -68,6 +68,7 @@ import coil3.Image
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
@@ -379,6 +380,13 @@ private fun MediaViewerPage(
     onZoomedOutChange: (Boolean) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
 ) {
+    val imageUrls = remember(item.assetRef, credentials.serverUrl) {
+        MemoriesAssetUrlFactory.urlsFor(
+            assetRef = item.assetRef,
+            serverUrl = credentials.serverUrl,
+        )
+    }
+
     val shouldUpdateSurfaceBounds = isCurrentPage &&
         dragOffset == Offset.Zero &&
         predictiveBackProgress == 0f &&
@@ -441,7 +449,7 @@ private fun MediaViewerPage(
                     },
             ) {
                 AuthenticatedImage(
-                    url = item.detailPreviewUrl,
+                    url = imageUrls.detailPreviewUrl,
                     credentials = credentials,
                     data = thumbnailPreview?.bytes,
                     contentDescription = item.displayName,
@@ -464,10 +472,10 @@ private fun MediaViewerPage(
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
-            val originalRequest = remember(context, item.originalUrl, credentials) {
+            val originalRequest = remember(context, imageUrls.originalUrl, credentials) {
                 authenticatedImageRequest(
                     context = context,
-                    url = item.originalUrl,
+                    url = imageUrls.originalUrl,
                     credentials = credentials,
                 )
                     .newBuilder(context)
@@ -504,7 +512,7 @@ private fun MediaViewerPage(
                         },
                 ) {
                     AuthenticatedImage(
-                        url = item.detailPreviewUrl,
+                        url = imageUrls.detailPreviewUrl,
                         credentials = credentials,
                         data = thumbnailPreview?.bytes,
                         contentDescription = item.displayName,

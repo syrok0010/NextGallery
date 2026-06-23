@@ -19,8 +19,7 @@ fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig {
     )
 }
 
-fun MemoriesPhotoDto.toMediaItem(serverUrl: String): MediaItem {
-    val normalizedServerUrl = serverUrl.trimEnd('/')
+fun MemoriesPhotoDto.toMediaItem(): MediaItem {
     val isVideoValue = isVideo.asFlexibleBoolean() || mimetype?.startsWith("video/") == true
 
     return MediaItem(
@@ -41,9 +40,7 @@ fun MemoriesPhotoDto.toMediaItem(serverUrl: String): MediaItem {
         videoDurationSeconds = videoDuration,
         isFavorite = isFavorite.asFlexibleBoolean(),
         isHidden = isHidden.asFlexibleBoolean(),
-        thumbnailUrl = "$normalizedServerUrl/apps/memories/api/image/preview/$fileid?x=512&y=512&a=1",
-        detailPreviewUrl = "$normalizedServerUrl/apps/memories/api/image/preview/$fileid?x=1600&y=1600&a=1",
-        originalUrl = "$normalizedServerUrl/apps/memories/api/stream/$fileid",
+        assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileid),
     )
 }
 

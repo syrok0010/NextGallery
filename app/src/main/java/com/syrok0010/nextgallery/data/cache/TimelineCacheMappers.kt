@@ -1,9 +1,12 @@
 package com.syrok0010.nextgallery.data.cache
 
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import java.time.LocalDate
+
+private const val MEMORIES_ASSET_SOURCE = "memories"
 
 fun MemoriesConfig.toCacheMetadataEntity(
     serverUrl: String,
@@ -52,6 +55,7 @@ fun TimelineDayEntity.toTimelineDay(): TimelineDay {
 }
 
 fun MediaItem.toEntity(): MediaItemEntity {
+    val mediaAssetRef = assetRef
     return MediaItemEntity(
         fileId = fileId,
         dayId = dayId,
@@ -69,9 +73,12 @@ fun MediaItem.toEntity(): MediaItemEntity {
         videoDurationSeconds = videoDurationSeconds,
         isFavorite = isFavorite,
         isHidden = isHidden,
-        thumbnailUrl = thumbnailUrl,
-        detailPreviewUrl = detailPreviewUrl,
-        originalUrl = originalUrl,
+        assetSource = when (mediaAssetRef) {
+            is MediaAssetRef.MemoriesFile -> MEMORIES_ASSET_SOURCE
+        },
+        assetSourcePhotoFileId = when (mediaAssetRef) {
+            is MediaAssetRef.MemoriesFile -> mediaAssetRef.photoFileId
+        },
     )
 }
 
@@ -94,8 +101,9 @@ fun MediaItemEntity.toMediaItem(): MediaItem {
         videoDurationSeconds = videoDurationSeconds,
         isFavorite = isFavorite,
         isHidden = isHidden,
-        thumbnailUrl = thumbnailUrl,
-        detailPreviewUrl = detailPreviewUrl,
-        originalUrl = originalUrl,
+        assetRef = when (assetSource) {
+            MEMORIES_ASSET_SOURCE -> MediaAssetRef.MemoriesFile(photoFileId = assetSourcePhotoFileId)
+            else -> error("Unsupported media asset source: $assetSource")
+        },
     )
 }

@@ -77,9 +77,7 @@ class TimelineSlotsTest {
             videoDurationSeconds = null,
             isFavorite = false,
             isHidden = false,
-            thumbnailUrl = "https://cloud.example.com/thumb/$fileId",
-            detailPreviewUrl = "https://cloud.example.com/detail/$fileId",
-            originalUrl = "https://cloud.example.com/original/$fileId",
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
         )
     }
 }

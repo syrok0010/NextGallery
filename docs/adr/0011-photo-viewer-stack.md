@@ -83,7 +83,7 @@ MVP-1 должен довести detail viewer до базово хорошег
 - При приближении к краям загруженной sequence использовать существующую lazy loading механику timeline metadata.
 - Видео включать в viewer sequence, но в MVP показывать как static preview/first-frame placeholder без проигрывателя.
 - Не делать явный prefetch originals для соседних страниц; full-resolution original грузится только для текущей страницы viewer.
-- Для still images original source брать из Memories `/apps/memories/api/stream/{fileId}` и хранить URL в `MediaItem.originalUrl`.
+- Для still images original source брать из Memories `/apps/memories/api/stream/{fileId}` и строить authenticated request из `MediaItem.assetRef`, а не хранить transport URL в domain модели.
 - WebDAV/download fallback для original source не добавлять в этот срез.
 - Swipe-down dismiss не затемняет фон: пользователь двигает viewer surface пальцем, а после отпускания поверхность уменьшается и возвращается shared transition'ом в соответствующий tile сетки.
 - Если swipe-down не проходит threshold по смещению или velocity, viewer surface возвращается в полноэкранное положение.
@@ -93,7 +93,7 @@ MVP-1 должен довести detail viewer до базово хорошег
 - Predictive back gesture в viewer должен использовать тот же return-to-grid target, что и swipe-down dismiss. Для кастомной Compose-анимации использовать AndroidX `PredictiveBackHandler`, который отдает progress gesture.
 - Viewer chrome не участвует в shared transition: при swipe-down dismiss или predictive back progress скрывается, при отмене жеста возвращается.
 - Небольшой собственный слой только для:
-  - построения authenticated original URL/request;
+  - построения authenticated original request из source asset reference;
   - preview placeholder до загрузки original;
   - swipe-down dismiss;
   - predictive back progress для return-to-grid;

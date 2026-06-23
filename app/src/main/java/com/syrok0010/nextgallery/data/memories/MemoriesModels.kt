@@ -77,10 +77,14 @@ data class MediaItem(
     val videoDurationSeconds: Long?,
     val isFavorite: Boolean,
     val isHidden: Boolean,
-    val thumbnailUrl: String,
-    val detailPreviewUrl: String,
-    val originalUrl: String,
+    val assetRef: MediaAssetRef,
 )
+
+sealed interface MediaAssetRef {
+    data class MemoriesFile(
+        val photoFileId: Long,
+    ) : MediaAssetRef
+}
 
 fun buildTimelineSlots(
     days: List<TimelineDay>,

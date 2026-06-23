@@ -47,9 +47,8 @@ data class MediaItemEntity(
     val videoDurationSeconds: Long?,
     val isFavorite: Boolean,
     val isHidden: Boolean,
-    val thumbnailUrl: String,
-    val detailPreviewUrl: String,
-    val originalUrl: String,
+    val assetSource: String,
+    val assetSourcePhotoFileId: Long,
 )
 
 @Entity(tableName = "loaded_days")
