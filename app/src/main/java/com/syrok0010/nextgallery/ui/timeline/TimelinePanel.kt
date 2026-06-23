@@ -39,11 +39,7 @@ import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.asString
 import com.syrok0010.nextgallery.ui.common.StatusBlock
 import com.syrok0010.nextgallery.ui.uiText
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val TimelineScrollbarDragLoadDebounceMillis = 450L
 
 @Composable
 internal fun TimelinePanel(
@@ -53,7 +49,7 @@ internal fun TimelinePanel(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     enableSharedElements: Boolean,
-    onVisibleRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
+    onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealFileId: Long?,
     onFileRevealed: () -> Unit,
     onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
@@ -96,8 +92,6 @@ internal fun TimelinePanel(
             return@LaunchedEffect
         }
 
-        var pendingDragLoadJob: Job? = null
-
         snapshotFlow {
             val visibleItems = gridState.layoutInfo.visibleItemsInfo
             val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
@@ -119,18 +113,23 @@ internal fun TimelinePanel(
 
             when (visibleRange.loadingMode) {
                 TimelineVisibleRangeLoadingMode.Immediate -> {
-                    pendingDragLoadJob?.cancel()
-                    pendingDragLoadJob = null
-                    onVisibleRange(visibleRange.firstSlotIndex, visibleRange.lastSlotIndex)
+                    onViewportObservation(
+                        TimelineViewportObservation(
+                            firstVisibleSlotIndex = visibleRange.firstSlotIndex,
+                            lastVisibleSlotIndex = visibleRange.lastSlotIndex,
+                            loadingMode = TimelineViewportLoadingMode.Immediate,
+                        ),
+                    )
                 }
 
                 TimelineVisibleRangeLoadingMode.Debounced -> {
-                    pendingDragLoadJob?.cancel()
-                    pendingDragLoadJob = launch {
-                        delay(TimelineScrollbarDragLoadDebounceMillis)
-                        onVisibleRange(visibleRange.firstSlotIndex, visibleRange.lastSlotIndex)
-                        pendingDragLoadJob = null
-                    }
+                    onViewportObservation(
+                        TimelineViewportObservation(
+                            firstVisibleSlotIndex = visibleRange.firstSlotIndex,
+                            lastVisibleSlotIndex = visibleRange.lastSlotIndex,
+                            loadingMode = TimelineViewportLoadingMode.Debounced,
+                        ),
+                    )
                 }
             }
         }

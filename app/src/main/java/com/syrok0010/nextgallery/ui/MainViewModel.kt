@@ -10,6 +10,12 @@ import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.ui.timeline.DefaultTimelineViewportController
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportController
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportHost
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportLoadingMode
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportObservation
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportSession
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -27,6 +33,46 @@ class MainViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = _state.asStateFlow()
+    private val timelineViewportController: TimelineViewportController =
+        DefaultTimelineViewportController(
+            scope = viewModelScope,
+            host = object : TimelineViewportHost {
+                override fun currentSession(): TimelineViewportSession? {
+                    val signedIn = state.value.signedIn ?: return null
+                    return TimelineViewportSession(
+                        credentials = signedIn.credentials,
+                        timelineState = signedIn.timeline,
+                    )
+                }
+
+                override fun updateTimeline(transform: (TimelineUiState) -> TimelineUiState) {
+                    _state.update { state ->
+                        state.updateTimeline(transform)
+                    }
+                }
+
+                override fun showLoadedItemsStatus(itemCount: Int) {
+                    _state.update { state ->
+                        state.copy(
+                            message = AppMessageUiState(
+                                status = uiText(R.string.status_loaded_items, itemCount),
+                            ),
+                        )
+                    }
+                }
+
+                override suspend fun loadTimelineDays(
+                    credentials: AccountCredentials,
+                    dayIds: List<Int>,
+                ) = memoriesRepository.loadTimelineDays(credentials, dayIds)
+
+                override suspend fun loadThumbnails(
+                    credentials: AccountCredentials,
+                    fileIds: List<Long>,
+                    etagsByFileId: Map<Long, String?>,
+                ) = memoriesRepository.loadThumbnails(credentials, fileIds, etagsByFileId)
+            },
+        )
     private var loginStartJob: Job? = null
     private var loginPollingJob: Job? = null
     private var loginAttemptId = 0L
@@ -297,10 +343,7 @@ class MainViewModel(
                             ),
                         )
                     }
-                    loadVisibleTimelineRange(
-                        firstVisibleIndex = 0,
-                        lastVisibleIndex = INITIAL_TIMELINE_PREFETCH_SLOTS,
-                    )
+                    timelineViewportController.prefetchFromStart()
                 }
             }
 
@@ -316,12 +359,9 @@ class MainViewModel(
                             ),
                         )
                     }
-                    loadVisibleTimelineRange(
-                        firstVisibleIndex = 0,
-                        lastVisibleIndex = INITIAL_TIMELINE_PREFETCH_SLOTS,
-                    )
+                    timelineViewportController.prefetchFromStart()
                 }
-                .onFailure { error ->
+                .onFailure {
                     _state.update {
                         it.copy(
                             isBusy = false,
@@ -332,172 +372,26 @@ class MainViewModel(
         }
     }
 
+    internal fun observeTimelineViewport(observation: TimelineViewportObservation) {
+        timelineViewportController.onViewportObservation(observation)
+    }
+
     fun loadVisibleTimelineRange(
         firstVisibleIndex: Int,
         lastVisibleIndex: Int,
     ) {
-        val currentState = state.value
-        val signedIn = currentState.signedIn ?: return
-        val credentials = signedIn.credentials
-        val timelineState = signedIn.timeline
-        val timeline = timelineState.snapshot ?: return
-        if (timeline.slots.isEmpty()) {
-            return
-        }
-
-        val windowStart = (firstVisibleIndex - TIMELINE_PREFETCH_SLOTS).coerceAtLeast(0)
-        val windowEnd = (lastVisibleIndex + TIMELINE_PREFETCH_SLOTS).coerceAtMost(timeline.slots.lastIndex)
-        if (windowStart > windowEnd) {
-            return
-        }
-
-        loadVisibleThumbnails(
-            credentials = credentials,
-            timelineState = timelineState,
-            windowStart = windowStart,
-            windowEnd = windowEnd,
+        observeTimelineViewport(
+            TimelineViewportObservation(
+                firstVisibleSlotIndex = firstVisibleIndex,
+                lastVisibleSlotIndex = lastVisibleIndex,
+                loadingMode = TimelineViewportLoadingMode.Immediate,
+            ),
         )
-
-        val dayIds = timeline.slots
-            .asSequence()
-            .drop(windowStart)
-            .take(windowEnd - windowStart + 1)
-            .map { it.dayId }
-            .distinct()
-            .filterNot { it in timeline.loadedDayIds }
-            .filterNot { it in timelineState.loadingDayIds }
-            .filterNot { it in timelineState.failedDayIds }
-            .take(TIMELINE_DAY_BATCH_SIZE)
-            .toList()
-
-        if (dayIds.isEmpty()) {
-            return
-        }
-
-        _state.update { state ->
-            state.updateTimeline {
-                it.copy(
-                    loadingDayIds = it.loadingDayIds + dayIds,
-                    loadMoreError = null,
-                )
-            }
-        }
-
-        viewModelScope.launch {
-            runCatching { memoriesRepository.loadTimelineDays(credentials, dayIds) }
-                .onSuccess { items ->
-                    _state.update { state ->
-                        val currentTimeline = state.signedIn?.timeline?.snapshot
-                        val updatedTimeline = currentTimeline?.mergeLoadedItems(
-                            items = items,
-                            loadedDayIds = dayIds.toSet(),
-                        )
-
-                        state.updateTimeline {
-                            it.copy(
-                                snapshot = updatedTimeline,
-                                loadingDayIds = it.loadingDayIds - dayIds.toSet(),
-                                failedDayIds = it.failedDayIds - dayIds.toSet(),
-                                loadMoreError = null,
-                            )
-                        }.copy(
-                            message = AppMessageUiState(status = uiText(
-                                R.string.status_loaded_items,
-                                updatedTimeline?.items?.size ?: currentTimeline?.items?.size ?: 0,
-                            )),
-                        )
-                    }
-                    val updatedTimelineState = state.value.signedIn?.timeline
-                    if (updatedTimelineState != null) {
-                        loadVisibleThumbnails(
-                            credentials = credentials,
-                            timelineState = updatedTimelineState,
-                            windowStart = windowStart,
-                            windowEnd = windowEnd,
-                        )
-                    }
-                }
-                .onFailure {
-                    _state.update { state ->
-                        state.updateTimeline {
-                            it.copy(
-                                loadingDayIds = it.loadingDayIds - dayIds.toSet(),
-                                failedDayIds = it.failedDayIds + dayIds,
-                                loadMoreError = uiText(R.string.error_load_timeline_batch_failed),
-                            )
-                        }
-                    }
-                }
-        }
     }
 
-    private fun loadVisibleThumbnails(
-        credentials: AccountCredentials,
-        timelineState: TimelineUiState,
-        windowStart: Int,
-        windowEnd: Int,
-    ) {
-        val timeline = timelineState.snapshot ?: return
-        if (windowStart > windowEnd) {
-            return
-        }
-
-        val fileIds = timeline.slots
-            .asSequence()
-            .drop(windowStart)
-            .take(windowEnd - windowStart + 1)
-            .mapNotNull { it.mediaItem?.fileId }
-            .distinct()
-            .filterNot { it in timelineState.thumbnailPreviews }
-            .filterNot { it in timelineState.thumbnailLoadingFileIds }
-            .filterNot { it in timelineState.thumbnailFailedFileIds }
-            .take(TIMELINE_THUMBNAIL_BATCH_SIZE)
-            .toList()
-
-        if (fileIds.isEmpty()) {
-            return
-        }
-
-        val etagsByFileId = timeline.slots
-            .asSequence()
-            .drop(windowStart)
-            .take(windowEnd - windowStart + 1)
-            .mapNotNull { it.mediaItem }
-            .associate { it.fileId to it.etag }
-
-        _state.update { state ->
-            state.updateTimeline {
-                it.copy(thumbnailLoadingFileIds = it.thumbnailLoadingFileIds + fileIds)
-            }
-        }
-
-        viewModelScope.launch {
-            runCatching { memoriesRepository.loadThumbnails(credentials, fileIds, etagsByFileId) }
-                .onSuccess { previews ->
-                    val previewsByFileId = previews.associateBy { it.fileId }
-                    val missingFileIds = fileIds.filterNot { it in previewsByFileId }
-
-                    _state.update { state ->
-                        state.updateTimeline {
-                            it.copy(
-                                thumbnailPreviews = it.thumbnailPreviews + previewsByFileId,
-                                thumbnailLoadingFileIds = it.thumbnailLoadingFileIds - fileIds.toSet(),
-                                thumbnailFailedFileIds = it.thumbnailFailedFileIds + missingFileIds,
-                            )
-                        }
-                    }
-                }
-                .onFailure {
-                    _state.update { state ->
-                        state.updateTimeline {
-                            it.copy(
-                                thumbnailLoadingFileIds = it.thumbnailLoadingFileIds - fileIds.toSet(),
-                                thumbnailFailedFileIds = it.thumbnailFailedFileIds + fileIds,
-                            )
-                        }
-                    }
-                }
-        }
+    override fun onCleared() {
+        timelineViewportController.cancel()
+        super.onCleared()
     }
 }
 
@@ -518,7 +412,3 @@ private fun loginPollRecoverableStatus(failure: LoginPollFailure): UiText {
 
 private const val LOGIN_POLL_INTERVAL_MS = 2_000L
 private const val LOGIN_POLL_TIMEOUT_MS = 120_000L
-private const val INITIAL_TIMELINE_PREFETCH_SLOTS = 80
-private const val TIMELINE_PREFETCH_SLOTS = 60
-private const val TIMELINE_DAY_BATCH_SIZE = 4
-private const val TIMELINE_THUMBNAIL_BATCH_SIZE = 64

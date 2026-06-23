@@ -39,6 +39,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.ui.auth.LoginPanel
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
 import com.syrok0010.nextgallery.ui.timeline.TimelinePanel
+import com.syrok0010.nextgallery.ui.timeline.TimelineViewportObservation
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 
@@ -132,7 +133,7 @@ fun NextGalleryApp(
                                 viewerFileId = null
                                 viewModel.logout()
                             },
-                            onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
+                            onViewportObservation = viewModel::observeTimelineViewport,
                             revealFileId = revealTimelineFileId,
                             onTimelineFileRevealed = { revealTimelineFileId = null },
                             onTileBoundsChanged = { fileId, bounds ->
@@ -194,7 +195,7 @@ private fun NextGalleryHomeScreen(
     onCancelLogin: () -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
-    onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
+    onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealFileId: Long?,
     onTimelineFileRevealed: () -> Unit,
     onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
@@ -244,7 +245,7 @@ private fun NextGalleryHomeScreen(
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         enableSharedElements = enableTimelineSharedElements,
-                        onVisibleRange = onVisibleTimelineRange,
+                        onViewportObservation = onViewportObservation,
                         revealFileId = revealFileId,
                         onFileRevealed = onTimelineFileRevealed,
                         onTileBoundsChanged = onTileBoundsChanged,
