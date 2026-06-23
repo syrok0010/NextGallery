@@ -6,11 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Rect
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -26,16 +22,10 @@ fun NextGalleryApp(
 ) {
     val state by viewModel.state.collectAsState()
     val backStack = rememberNavBackStack(state.session.rootRoute())
-    var revealTimelineFileId by remember { mutableStateOf<Long?>(null) }
-    var viewerFileId by remember { mutableStateOf<Long?>(null) }
-    var appBounds by remember { mutableStateOf<Rect?>(null) }
-    val timelineTileBoundsByFileId = remember { mutableStateMapOf<Long, Rect>() }
+    val viewerTransitionCoordinator = remember { DefaultViewerTransitionCoordinator() }
 
     LaunchedEffect(state.session) {
-        if (state.session !is SessionUiState.SignedIn) {
-            revealTimelineFileId = null
-            viewerFileId = null
-        }
+        viewerTransitionCoordinator.onSessionChanged(state.session)
 
         val expectedBackStack = syncedBackStack(
             currentBackStack = backStack.toList(),
@@ -75,34 +65,16 @@ fun NextGalleryApp(
                         session = state.session as? SessionUiState.SignedIn,
                         message = state.message,
                         isBusy = state.isBusy,
+                        viewerTransitionCoordinator = viewerTransitionCoordinator,
                         sharedTransitionScope = this@SharedTransitionLayout,
                         animatedVisibilityScope = LocalNavAnimatedContentScope.current,
-                        revealFileId = revealTimelineFileId,
-                        viewerFileId = viewerFileId,
-                        appBounds = appBounds,
-                        timelineTileBoundsByFileId = timelineTileBoundsByFileId,
                         onRefresh = viewModel::refresh,
                         onLogout = {
-                            viewerFileId = null
+                            viewerTransitionCoordinator.onSessionChanged(SessionUiState.SignedOut())
                             viewModel.logout()
                         },
                         onViewportObservation = viewModel::observeTimelineViewport,
-                        onTimelineFileRevealed = { revealTimelineFileId = null },
-                        onTileBoundsChanged = { fileId, bounds ->
-                            if (bounds == null) {
-                                timelineTileBoundsByFileId.remove(fileId)
-                            } else {
-                                timelineTileBoundsByFileId[fileId] = bounds
-                            }
-                        },
-                        onSelect = { item ->
-                            revealTimelineFileId = null
-                            viewerFileId = item.fileId
-                        },
-                        onViewerFileIdChange = { viewerFileId = it },
-                        onRevealTimelineFile = { revealTimelineFileId = it },
                         onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
-                        onAppBoundsChanged = { appBounds = it },
                     )
                 }
             },

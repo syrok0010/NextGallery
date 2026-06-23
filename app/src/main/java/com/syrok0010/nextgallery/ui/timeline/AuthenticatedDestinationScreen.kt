@@ -12,7 +12,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
@@ -22,6 +21,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
 import com.syrok0010.nextgallery.ui.SessionUiState
+import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
 
 @Composable
@@ -29,22 +29,13 @@ internal fun AuthenticatedDestinationScreen(
     session: SessionUiState.SignedIn?,
     message: AppMessageUiState,
     isBusy: Boolean,
+    viewerTransitionCoordinator: ViewerTransitionCoordinator,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    revealFileId: Long?,
-    viewerFileId: Long?,
-    appBounds: Rect?,
-    timelineTileBoundsByFileId: Map<Long, Rect>,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onViewportObservation: (TimelineViewportObservation) -> Unit,
-    onTimelineFileRevealed: () -> Unit,
-    onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
-    onSelect: (MediaItem) -> Unit,
-    onViewerFileIdChange: (Long?) -> Unit,
-    onRevealTimelineFile: (Long?) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
-    onAppBoundsChanged: (Rect) -> Unit,
 ) {
     val viewerItems = session?.timeline?.snapshot
         ?.slots
@@ -59,20 +50,9 @@ internal fun AuthenticatedDestinationScreen(
         .orEmpty()
     val items = viewerItems.map { it.item }
     val slotIndexByFileId = viewerItems.associate { it.item.fileId to it.slotIndex }
-    val visibleViewerFileId = viewerFileId?.takeIf { fileId ->
+    val visibleViewerFileId = viewerTransitionCoordinator.viewerFileId?.takeIf { fileId ->
         items.any { it.fileId == fileId }
     }
-
-    fun isTimelineTileVisible(fileId: Long): Boolean {
-        val tileBounds = timelineTileBoundsByFileId[fileId] ?: return false
-        val rootBounds = appBounds ?: return true
-        return tileBounds.overlaps(rootBounds)
-    }
-
-    val visibleTimelineTileBoundsByFileId = timelineTileBoundsByFileId
-        .filterValues { tileBounds ->
-            appBounds?.let { rootBounds -> tileBounds.overlaps(rootBounds) } ?: true
-        }
 
     NextGalleryScaffold(
         showTopBar = visibleViewerFileId == null,
@@ -95,7 +75,7 @@ internal fun AuthenticatedDestinationScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .onGloballyPositioned { coordinates ->
-                            onAppBoundsChanged(coordinates.boundsInRoot())
+                            viewerTransitionCoordinator.onAppBoundsChanged(coordinates.boundsInRoot())
                         },
                 ) {
                     TimelinePanel(
@@ -106,10 +86,10 @@ internal fun AuthenticatedDestinationScreen(
                         animatedVisibilityScope = animatedVisibilityScope,
                         enableSharedElements = visibleViewerFileId == null,
                         onViewportObservation = onViewportObservation,
-                        revealFileId = revealFileId,
-                        onFileRevealed = onTimelineFileRevealed,
-                        onTileBoundsChanged = onTileBoundsChanged,
-                        onSelect = onSelect,
+                        revealFileId = viewerTransitionCoordinator.revealFileId,
+                        onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
+                        onTileBoundsChanged = viewerTransitionCoordinator::onTileBoundsChanged,
+                        onSelect = { item -> viewerTransitionCoordinator.open(item.fileId) },
                     )
                 }
             }
@@ -129,22 +109,14 @@ internal fun AuthenticatedDestinationScreen(
                     initialFileId = visibleViewerFileId,
                     items = items,
                     slotIndexByFileId = slotIndexByFileId,
-                    tileBoundsByFileId = visibleTimelineTileBoundsByFileId,
+                    tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
                     thumbnailPreviews = session.timeline.thumbnailPreviews,
                     credentials = session.credentials,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
-                    onBack = { currentItem ->
-                        if (!isTimelineTileVisible(currentItem.fileId)) {
-                            onRevealTimelineFile(currentItem.fileId)
-                        }
-                        onViewerFileIdChange(null)
-                    },
+                    onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->
-                        if (!isTimelineTileVisible(currentItem.fileId)) {
-                            onRevealTimelineFile(currentItem.fileId)
-                        }
-                        onViewerFileIdChange(currentItem.fileId)
+                        viewerTransitionCoordinator.onCurrentItemChanged(currentItem.fileId)
                     },
                     onVisibleTimelineRange = onVisibleTimelineRange,
                 )
