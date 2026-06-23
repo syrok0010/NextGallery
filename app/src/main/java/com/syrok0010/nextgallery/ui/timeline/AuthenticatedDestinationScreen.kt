@@ -75,6 +75,7 @@ internal fun AuthenticatedDestinationScreen(
         }
 
     NextGalleryScaffold(
+        showTopBar = visibleViewerFileId == null,
         actions = {
             TextButton(onClick = onRefresh, enabled = !isBusy) {
                 Text(stringResource(R.string.action_refresh))
@@ -87,31 +88,37 @@ internal fun AuthenticatedDestinationScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .onGloballyPositioned { coordinates ->
-                    onAppBoundsChanged(coordinates.boundsInRoot())
-                },
         ) {
             if (session != null) {
-                TimelinePanel(
-                    state = session.timeline,
-                    message = message,
-                    credentials = session.credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    enableSharedElements = visibleViewerFileId == null,
-                    onViewportObservation = onViewportObservation,
-                    revealFileId = revealFileId,
-                    onFileRevealed = onTimelineFileRevealed,
-                    onTileBoundsChanged = onTileBoundsChanged,
-                    onSelect = onSelect,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .onGloballyPositioned { coordinates ->
+                            onAppBoundsChanged(coordinates.boundsInRoot())
+                        },
+                ) {
+                    TimelinePanel(
+                        state = session.timeline,
+                        message = message,
+                        credentials = session.credentials,
+                        sharedTransitionScope = sharedTransitionScope,
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        enableSharedElements = visibleViewerFileId == null,
+                        onViewportObservation = onViewportObservation,
+                        revealFileId = revealFileId,
+                        onFileRevealed = onTimelineFileRevealed,
+                        onTileBoundsChanged = onTileBoundsChanged,
+                        onSelect = onSelect,
+                    )
+                }
             }
 
             if (isBusy) {
                 CircularProgressIndicator(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .padding(padding)
                         .padding(16.dp)
                         .size(28.dp),
                 )

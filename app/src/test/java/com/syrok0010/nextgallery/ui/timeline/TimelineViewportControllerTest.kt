@@ -46,7 +46,7 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Immediate,
             ),
         )
-        delay(10)
+        awaitUntil { host.dayLoadRequests == listOf(listOf(11, 14)) }
 
         assertEquals(listOf(listOf(11, 14)), host.dayLoadRequests)
     }
@@ -88,7 +88,13 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Immediate,
             ),
         )
-        delay(10)
+        awaitUntil {
+            host.dayLoadRequests == listOf(listOf(dayId)) &&
+                host.thumbnailLoadRequests == listOf(listOf(1000L)) &&
+                host.loadedItemsStatusCounts == listOf(1) &&
+                host.requireSession().timelineState.snapshot?.loadedDayIds == setOf(dayId) &&
+                host.requireSession().timelineState.thumbnailPreviews.containsKey(1000L)
+        }
 
         assertEquals(listOf(listOf(dayId)), host.dayLoadRequests)
         assertEquals(listOf(listOf(1000L)), host.thumbnailLoadRequests)
@@ -136,7 +142,7 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Immediate,
             ),
         )
-        delay(10)
+        awaitUntil { host.thumbnailLoadRequests == listOf(listOf(4L, 5L)) }
 
         assertEquals(listOf(listOf(4L, 5L)), host.thumbnailLoadRequests)
         assertTrue(host.dayLoadRequests.isEmpty())
@@ -184,9 +190,22 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Debounced,
             ),
         )
-        delay(40)
+        awaitUntil(timeoutMillis = 200) { host.dayLoadRequests == listOf(listOf(12)) }
 
         assertEquals(listOf(listOf(12)), host.dayLoadRequests)
+    }
+
+    private suspend fun awaitUntil(
+        timeoutMillis: Long = 500,
+        condition: () -> Boolean,
+    ) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (!condition()) {
+            if (System.currentTimeMillis() >= deadline) {
+                throw AssertionError("Condition was not met within ${timeoutMillis}ms")
+            }
+            delay(10)
+        }
     }
 
     private class FakeTimelineViewportHost(

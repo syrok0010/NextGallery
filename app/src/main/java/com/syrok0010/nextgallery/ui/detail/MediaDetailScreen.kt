@@ -400,34 +400,27 @@ private fun MediaViewerPage(
             .fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        val surfaceModifier = Modifier
+        val contentSurfaceModifier = Modifier
             .viewerSurfaceSize(
                 item = item,
                 viewportWidth = maxWidth,
                 viewportHeight = maxHeight,
             )
             .then(sharedModifier)
-            .then(
-                if (isCurrentPage) {
-                    Modifier.viewerSurfaceTransform(
-                        dragOffset = dragOffset,
-                        predictiveBackProgress = predictiveBackProgress,
-                        enterPending = enterPending,
-                        enterTarget = enterTarget,
-                        enterProgress = enterProgress,
-                        settleTarget = settleTarget,
-                        settleProgress = settleProgress,
-                        predictiveTarget = predictiveTarget,
-                    )
-                } else {
-                    Modifier
-                },
+        val pageTransformModifier = if (isCurrentPage) {
+            Modifier.viewerSurfaceTransform(
+                dragOffset = dragOffset,
+                predictiveBackProgress = predictiveBackProgress,
+                enterPending = enterPending,
+                enterTarget = enterTarget,
+                enterProgress = enterProgress,
+                settleTarget = settleTarget,
+                settleProgress = settleProgress,
+                predictiveTarget = predictiveTarget,
             )
-            .onGloballyPositioned { coordinates ->
-                if (shouldUpdateSurfaceBounds) {
-                    onSurfaceBoundsChange(coordinates.boundsInRoot())
-                }
-            }
+        } else {
+            Modifier
+        }
 
         DisposableEffect(item.fileId, isCurrentPage) {
             onDispose {
@@ -437,17 +430,25 @@ private fun MediaViewerPage(
             }
         }
 
-        Box(modifier = surfaceModifier) {
-            AuthenticatedImage(
-                url = item.detailPreviewUrl,
-                credentials = credentials,
-                data = thumbnailPreview?.bytes,
-                contentDescription = item.displayName,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-            )
+        if (item.isVideo) {
+            Box(
+                modifier = contentSurfaceModifier
+                    .then(pageTransformModifier)
+                    .onGloballyPositioned { coordinates ->
+                        if (shouldUpdateSurfaceBounds) {
+                            onSurfaceBoundsChange(coordinates.boundsInRoot())
+                        }
+                    },
+            ) {
+                AuthenticatedImage(
+                    url = item.detailPreviewUrl,
+                    credentials = credentials,
+                    data = thumbnailPreview?.bytes,
+                    contentDescription = item.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
 
-            if (item.isVideo) {
                 LaunchedEffect(item.fileId) {
                     onHdrChange(false)
                     onZoomedOutChange(true)
@@ -458,33 +459,58 @@ private fun MediaViewerPage(
                         .clickable(onClick = onToggleChrome),
                 )
                 VideoBadge(modifier = Modifier.align(Alignment.Center))
-            } else {
-                val context = LocalContext.current
-                val zoomableState = rememberZoomableState()
-                val zoomableImageState = rememberZoomableImageState(zoomableState)
-                val originalRequest = remember(context, item.originalUrl, credentials) {
-                    authenticatedImageRequest(
-                        context = context,
-                        url = item.originalUrl,
-                        credentials = credentials,
+            }
+        } else {
+            val context = LocalContext.current
+            val zoomableState = rememberZoomableState()
+            val zoomableImageState = rememberZoomableImageState(zoomableState)
+            val originalRequest = remember(context, item.originalUrl, credentials) {
+                authenticatedImageRequest(
+                    context = context,
+                    url = item.originalUrl,
+                    credentials = credentials,
+                )
+                    .newBuilder(context)
+                    .listener(
+                        onSuccess = { _, result ->
+                            onHdrChange(result.image.hasGainmapCompat())
+                        },
+                        onError = { _, _ ->
+                            onHdrChange(false)
+                        },
                     )
-                        .newBuilder(context)
-                        .listener(
-                            onSuccess = { _, result ->
-                                onHdrChange(result.image.hasGainmapCompat())
-                            },
-                            onError = { _, _ ->
-                                onHdrChange(false)
-                            },
-                        )
-                        .build()
-                }
+                    .build()
+            }
 
-                LaunchedEffect(item.fileId, zoomableState) {
-                    snapshotFlow { zoomableState.zoomFraction ?: 0f }
-                        .collect { zoomFraction ->
-                            onZoomedOutChange(zoomFraction <= 0.01f)
-                        }
+            LaunchedEffect(item.fileId, zoomableState) {
+                snapshotFlow { zoomableState.zoomFraction ?: 0f }
+                    .collect { zoomFraction ->
+                        onZoomedOutChange(zoomFraction <= 0.01f)
+                    }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(pageTransformModifier),
+            ) {
+                Box(
+                    modifier = contentSurfaceModifier
+                        .align(Alignment.Center)
+                        .onGloballyPositioned { coordinates ->
+                            if (shouldUpdateSurfaceBounds) {
+                                onSurfaceBoundsChange(coordinates.boundsInRoot())
+                            }
+                        },
+                ) {
+                    AuthenticatedImage(
+                        url = item.detailPreviewUrl,
+                        credentials = credentials,
+                        data = thumbnailPreview?.bytes,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
                 }
 
                 ZoomableAsyncImage(
@@ -508,43 +534,48 @@ private fun ViewerChrome(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
             .background(Color.Black.copy(alpha = 0.48f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.action_back),
-                tint = Color.White,
-            )
-        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    tint = Color.White,
+                )
+            }
 
-        Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.displayName,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = item.day.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                    color = Color.White.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             Text(
-                text = item.displayName,
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = item.day.format(DateTimeFormatter.ISO_LOCAL_DATE),
-                color = Color.White.copy(alpha = 0.72f),
+                text = stringResource(R.string.viewer_position, page + 1, pageCount),
+                color = Color.White.copy(alpha = 0.86f),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-
-        Text(
-            text = stringResource(R.string.viewer_position, page + 1, pageCount),
-            color = Color.White.copy(alpha = 0.86f),
-            style = MaterialTheme.typography.bodySmall,
-        )
     }
 }
 
