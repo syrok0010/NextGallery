@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.ui.common
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -19,12 +20,14 @@ internal fun AuthenticatedImage(
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current
-    val request = authenticatedImageRequest(
-        context = context,
-        url = url,
-        credentials = credentials,
-        data = data,
-    )
+    val request = remember(context, url, credentials, data) {
+        authenticatedImageRequest(
+            context = context,
+            url = url,
+            credentials = credentials,
+            data = data,
+        )
+    }
 
     AsyncImage(
         model = request,

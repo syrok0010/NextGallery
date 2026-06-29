@@ -2,27 +2,19 @@ package com.syrok0010.nextgallery.ui.timeline
 
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -39,7 +31,6 @@ import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.asString
 import com.syrok0010.nextgallery.ui.common.StatusBlock
 import com.syrok0010.nextgallery.ui.uiText
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun TimelinePanel(
@@ -63,29 +54,7 @@ internal fun TimelinePanel(
     val slotGridIndexes = remember(gridItems) {
         gridItems.toSlotGridIndexes()
     }
-    val coroutineScope = rememberCoroutineScope()
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
-    val scrollInfo by remember(gridItems) {
-        derivedStateOf {
-            val visibleSlot = gridState.layoutInfo.visibleItemsInfo
-                .mapNotNull { visibleItem ->
-                    (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
-                        ?.let { it.slotIndex to it.slot.dayId }
-                }
-                .minByOrNull { it.first }
-            val totalSlots = timeline?.slots?.size ?: 0
-            val fraction = if (visibleSlot == null || totalSlots <= 1) {
-                0f
-            } else {
-                visibleSlot.first.toFloat() / (totalSlots - 1).toFloat()
-            }
-
-            TimelineScrollInfo(
-                dayId = visibleSlot?.second,
-                fraction = fraction.coerceIn(0f, 1f),
-            )
-        }
-    }
 
     LaunchedEffect(gridItems) {
         if (timeline == null) {
@@ -183,65 +152,31 @@ internal fun TimelinePanel(
             }
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 116.dp),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    itemsIndexed(
-                        items = gridItems,
-                        key = { _, item -> item.key },
-                        span = { _, item ->
-                            when (item) {
-                                is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
-                                is TimelineGridItem.Slot -> GridItemSpan(1)
-                            }
-                        },
-                    ) { _, item ->
-                        when (item) {
-                            is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
-                            is TimelineGridItem.Slot -> TimelineSlotTile(
-                                slot = item.slot,
-                                credentials = credentials,
-                                sharedTransitionScope = sharedTransitionScope,
-                                animatedVisibilityScope = animatedVisibilityScope,
-                                enableSharedElement = enableSharedElements,
-                                thumbnailPreview = item.slot.mediaItem
-                                    ?.let { state.thumbnailPreviews[it.fileId] },
-                                onBoundsChanged = onTileBoundsChanged,
-                                onSelect = onSelect,
-                            )
-                        }
-                    }
-                }
+                TimelineGrid(
+                    gridItems = gridItems,
+                    gridState = gridState,
+                    thumbnailPreviews = state.thumbnailPreviews,
+                    credentials = credentials,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    enableSharedElements = enableSharedElements,
+                    onTileBoundsChanged = onTileBoundsChanged,
+                    onSelect = onSelect,
+                )
 
-                TimelineScrollIndicator(
-                    dayId = scrollInfo.dayId,
-                    fraction = scrollInfo.fraction,
-                    isTooltipVisible = gridState.isScrollInProgress || isDraggingScrollIndicator,
+                TimelineScrollIndicatorHost(
+                    timeline = timeline,
+                    gridItems = gridItems,
+                    slotGridIndexes = slotGridIndexes,
+                    gridState = gridState,
+                    isDragging = isDraggingScrollIndicator,
                     onDragStateChange = { isDraggingScrollIndicator = it },
-                    onFractionChange = { fraction ->
-                        val targetGridIndex = slotGridIndexes.gridIndexAtFraction(fraction)
-                        if (targetGridIndex != null) {
-                            coroutineScope.launch {
-                                gridState.scrollToItem(targetGridIndex)
-                            }
-                        }
-                    },
                     modifier = Modifier.align(Alignment.CenterEnd),
                 )
             }
         }
     }
 }
-
-private data class TimelineScrollInfo(
-    val dayId: Int?,
-    val fraction: Float,
-)
 
 private data class TimelineVisibleRange(
     val firstSlotIndex: Int?,

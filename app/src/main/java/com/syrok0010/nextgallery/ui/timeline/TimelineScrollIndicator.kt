@@ -9,10 +9,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -20,6 +24,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -130,3 +136,58 @@ internal fun TimelineScrollIndicator(
         }
     }
 }
+
+@Composable
+internal fun TimelineScrollIndicatorHost(
+    timeline: TimelineSnapshot,
+    gridItems: List<TimelineGridItem>,
+    slotGridIndexes: IntArray,
+    gridState: LazyGridState,
+    isDragging: Boolean,
+    onDragStateChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val scrollInfo by remember(timeline, gridItems, gridState) {
+        derivedStateOf {
+            val visibleSlot = gridState.layoutInfo.visibleItemsInfo
+                .mapNotNull { visibleItem ->
+                    (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
+                        ?.let { it.slotIndex to it.slot.dayId }
+                }
+                .minByOrNull { it.first }
+            val totalSlots = timeline.slots.size
+            val fraction = if (visibleSlot == null || totalSlots <= 1) {
+                0f
+            } else {
+                visibleSlot.first.toFloat() / (totalSlots - 1).toFloat()
+            }
+
+            TimelineScrollInfo(
+                dayId = visibleSlot?.second,
+                fraction = fraction.coerceIn(0f, 1f),
+            )
+        }
+    }
+
+    TimelineScrollIndicator(
+        dayId = scrollInfo.dayId,
+        fraction = scrollInfo.fraction,
+        isTooltipVisible = gridState.isScrollInProgress || isDragging,
+        onDragStateChange = onDragStateChange,
+        onFractionChange = { fraction ->
+            val targetGridIndex = slotGridIndexes.gridIndexAtFraction(fraction)
+            if (targetGridIndex != null) {
+                coroutineScope.launch {
+                    gridState.scrollToItem(targetGridIndex)
+                }
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+private data class TimelineScrollInfo(
+    val dayId: Int?,
+    val fraction: Float,
+)
