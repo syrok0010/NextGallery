@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import kotlinx.coroutines.CoroutineScope
@@ -146,10 +147,13 @@ internal class DefaultTimelineViewportController(
 
                     host.updateTimeline { state ->
                         val currentTimeline = state.snapshot
-                        val updatedTimeline = currentTimeline?.mergeLoadedItems(
-                            items = items,
-                            loadedDayIds = dayIds.toSet(),
-                        )
+                        val updatedTimeline = currentTimeline?.let {
+                            TimelineSnapshotAssembler.mergeLoadedItems(
+                                snapshot = it,
+                                items = items,
+                                loadedDayIds = dayIds.toSet(),
+                            )
+                        }
                         loadedItemCount = updatedTimeline?.items?.size ?: currentTimeline?.items?.size
 
                         state.copy(

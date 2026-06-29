@@ -7,7 +7,7 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.data.memories.buildTimelineSlots
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import kotlinx.coroutines.delay
@@ -260,7 +260,8 @@ class TimelineViewportControllerTest {
         itemsByDay: Map<Int, List<MediaItem>> = emptyMap(),
         loadedDayIds: Set<Int> = emptySet(),
     ): TimelineSnapshot {
-        return TimelineSnapshot(
+        val mediaItems = itemsByDay.values.flatten()
+        return TimelineSnapshotAssembler.assemble(
             config = MemoriesConfig(
                 version = "7.5.2",
                 timelinePath = "/Photos",
@@ -272,10 +273,8 @@ class TimelineViewportControllerTest {
                 dedupIdentical = false,
             ),
             days = days,
-            slots = buildTimelineSlots(days, itemsByDay),
+            mediaItems = mediaItems,
             loadedDayIds = loadedDayIds,
-            totalDayCount = days.size,
-            totalMediaCountHint = days.sumOf { it.count },
         )
     }
 

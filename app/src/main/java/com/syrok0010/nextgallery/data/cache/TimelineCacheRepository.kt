@@ -5,7 +5,7 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.data.memories.buildTimelineSlots
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 
 class TimelineCacheRepository(
@@ -26,16 +26,13 @@ class TimelineCacheRepository(
         }
 
         val mediaItems = dao.mediaItems().map { it.toMediaItem() }
-        val itemsByDay = mediaItems.groupBy { it.dayId }
         val loadedDayIds = dao.loadedDayIds().toSet()
 
-        return TimelineSnapshot(
+        return TimelineSnapshotAssembler.assemble(
             config = metadata.toMemoriesConfig(),
             days = days,
-            slots = buildTimelineSlots(days, itemsByDay),
+            mediaItems = mediaItems,
             loadedDayIds = loadedDayIds,
-            totalDayCount = days.size,
-            totalMediaCountHint = days.sumOf { it.count },
         )
     }
 

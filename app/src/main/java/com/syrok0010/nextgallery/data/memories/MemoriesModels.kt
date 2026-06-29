@@ -24,22 +24,6 @@ data class TimelineSnapshot(
     val memoriesVersion: String = config.version
     val timelinePath: String? = config.timelinePath
     val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
-
-    fun mergeLoadedItems(
-        items: List<MediaItem>,
-        loadedDayIds: Set<Int>,
-    ): TimelineSnapshot {
-        val currentItemsByDay = slots
-            .mapNotNull { it.mediaItem }
-            .groupBy { it.dayId }
-        val incomingItemsByDay = items.groupBy { it.dayId }
-        val mergedItemsByDay = currentItemsByDay + incomingItemsByDay
-
-        return copy(
-            slots = buildTimelineSlots(days, mergedItemsByDay),
-            loadedDayIds = this.loadedDayIds + loadedDayIds,
-        )
-    }
 }
 
 data class TimelineDay(
@@ -84,23 +68,4 @@ sealed interface MediaAssetRef {
     data class MemoriesFile(
         val photoFileId: Long,
     ) : MediaAssetRef
-}
-
-fun buildTimelineSlots(
-    days: List<TimelineDay>,
-    itemsByDay: Map<Int, List<MediaItem>>,
-): List<TimelineSlot> {
-    return days.flatMap { day ->
-        val items = itemsByDay[day.dayId].orEmpty()
-        val slotCount = maxOf(day.count, items.size)
-
-        List(slotCount) { index ->
-            TimelineSlot(
-                key = TimelineSlotKey(dayId = day.dayId, indexInDay = index),
-                dayId = day.dayId,
-                indexInDay = index,
-                mediaItem = items.getOrNull(index),
-            )
-        }
-    }
 }

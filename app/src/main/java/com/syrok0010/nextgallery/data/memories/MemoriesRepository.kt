@@ -27,18 +27,15 @@ class MemoriesRepository(
             .flatMap { it.detail }
             .distinctBy { it.fileid }
             .map { it.toMediaItem() }
-        val preloadedItemsByDay = preloadedItems.groupBy { it.dayId }
         val loadedDayIds = dayDtos
             .filter { it.count == 0 || it.detail.isNotEmpty() }
             .mapTo(mutableSetOf()) { it.dayid }
 
-        val snapshot = TimelineSnapshot(
+        val snapshot = TimelineSnapshotAssembler.assemble(
             config = config.toMemoriesConfig(),
             days = days,
-            slots = buildTimelineSlots(days, preloadedItemsByDay),
+            mediaItems = preloadedItems,
             loadedDayIds = loadedDayIds,
-            totalDayCount = days.size,
-            totalMediaCountHint = days.sumOf { it.count },
         )
 
         runCatching { cacheRepository.saveTimelineSnapshot(credentials, snapshot) }
