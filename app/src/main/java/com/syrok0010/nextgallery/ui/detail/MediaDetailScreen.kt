@@ -522,19 +522,6 @@ private fun ViewerChrome(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val metadataParts = buildList {
-        item.mimeType?.takeIf { it.isNotBlank() }?.let {
-            add(stringResource(R.string.detail_mime, it))
-        }
-        if (item.width != null && item.height != null) {
-            add(stringResource(R.string.detail_size, item.width, item.height))
-        }
-        item.videoDurationSeconds?.takeIf { it > 0 }?.let {
-            add(stringResource(R.string.detail_duration_seconds, it))
-        }
-        add(stringResource(R.string.detail_file_id, item.fileId))
-    }
-
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -568,13 +555,6 @@ private fun ViewerChrome(
                     text = item.day.format(DateTimeFormatter.ISO_LOCAL_DATE),
                     color = Color.White.copy(alpha = 0.72f),
                     style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = metadataParts.joinToString(separator = " · "),
-                    color = Color.White.copy(alpha = 0.72f),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
