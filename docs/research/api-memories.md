@@ -69,6 +69,27 @@ config -> days -> lazy day details -> multipreview -> grid/detail
 
 WebDAV для первого timeline не нужен, но остается fallback и будущий слой для download/upload/file operations.
 
+## Live-проверка MVP-1 baseline
+
+2026-06-29 текущая реализация была проверена на живом Android-устройстве и личном Nextcloud/Memories сервере через app password из Login Flow v2.
+
+Проверенный flow:
+
+```text
+login -> Memories API -> days -> lazy day details -> thumbnails -> grid -> viewer
+```
+
+Наблюдения:
+
+- Удаленный timeline загружается и отображается в grid.
+- Lazy loading day details работает на стабильном архиве без добавления или удаления фото во время проверки.
+- Thumbnail loading работает для просмотренных участков timeline.
+- Viewer открывает элементы из grid и работает корректно на проверенном устройстве.
+- Проверка выполнялась на хорошем интернете; degraded network сценарии еще не проверены.
+- Проверка изменяющегося архива еще не выполнялась: не проверены добавление/удаление фото на сервере, изменение `count` у дня и поведение stale cache.
+
+Вывод для MVP-1: при текущих фактах WebDAV fallback не нужен для основного remote-first сценария. Memories API закрывает login-adjacent проверку доступности, timeline, thumbnails и viewer-доступ к media достаточно для продолжения MVP-1 без WebDAV fallback.
+
 ## Ключевые endpoint'ы для MVP-1
 
 API base path:
@@ -179,15 +200,16 @@ RemoteMediaDto -> MediaItem
 
 - Memories API может быть внутренним API приложения, а не стабильным публичным контрактом.
 - Endpoint'ы могут меняться между версиями Memories.
-- Нужно понять, какие заголовки/CSRF/CORS/Nextcloud conventions нужны native-клиенту.
-- Нужно проверить, как API ведет себя с app password из Login Flow v2.
+- Проверка с app password на живом сервере прошла успешно для базового MVP-1 flow, но degraded network и изменяющийся архив еще не проверены.
 - Нужно проверить версионирование API: есть ли compatibility guarantees.
 
 ## Решение на сейчас
 
 Для MVP-1 считать Memories API предпочтительным фотодоменным remote source.
 
-При этом код должен быть устроен так, чтобы можно было добавить fallback:
+WebDAV fallback не входит в MVP-1, пока нет конкретного пробела Memories API в проверяемом пользовательском сценарии.
+
+При этом код должен оставаться устроенным так, чтобы fallback можно было добавить позже:
 
 ```text
 RemoteMediaSource
@@ -197,9 +219,7 @@ RemoteMediaSource
 
 ## Следующие исследовательские задачи
 
-- Вызвать `/apps/memories/api/describe` на личном сервере.
-- Проверить `/apps/memories/api/config`, `/apps/memories/api/days` и `/apps/memories/api/days/{id}` с app password, а не browser session cookies.
-- Сравнить форму ответов browser session и app password flow.
-- Проверить preview URL и параметры размеров.
-- Проверить, нужен ли `OCS-APIRequest` или другие Nextcloud headers.
+- Проверить degraded network сценарии: медленная сеть, потеря сети во время lazy loading, thumbnail loading и viewer loading.
+- Проверить изменяющийся архив: добавление/удаление фото на сервере, изменение `count` у дня и invalidation cached day details.
+- Проверить fallback одиночного `/image/preview/{id}` для элементов, пропущенных в `/image/multipreview` response.
 - Изучить текущий Android-клиент Memories глубже: auth, cache, local media, sync hints.

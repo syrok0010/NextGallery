@@ -28,6 +28,6 @@
 
 ## Ближайшие решения
 
-- Проверить Memories API на личном Nextcloud через app password.
-- Решить, нужен ли WebDAV fallback уже в MVP-1.
-- После этого начинать tracer bullet: `Login -> describe API -> days -> grid -> detail`.
+- Проверить degraded network сценарии для remote-first MVP: lazy loading, thumbnails и viewer на медленной/пропадающей сети.
+- Проверить поведение изменяющегося архива: добавление/удаление фото, изменение `count` у дня и invalidation warm-start cache.
+- WebDAV fallback не включать в MVP-1, пока Memories API закрывает проверенный пользовательский flow.
