@@ -6,9 +6,6 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
@@ -73,7 +70,6 @@ import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import com.syrok0010.nextgallery.ui.common.CachedImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
-import com.syrok0010.nextgallery.ui.timeline.sharedElementKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
@@ -89,8 +85,6 @@ internal fun MediaDetailScreen(
     tileBoundsByFileId: Map<Long, Rect>,
     thumbnailPreviews: Map<Long, ThumbnailPreview>,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
@@ -308,8 +302,6 @@ internal fun MediaDetailScreen(
                         null
                     },
                     credentials = credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
                     thumbnailPreview = thumbnailPreviews[item.fileId],
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
@@ -339,7 +331,6 @@ internal fun MediaDetailScreen(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MediaViewerPage(
     item: MediaItem,
@@ -353,8 +344,6 @@ private fun MediaViewerPage(
     settleProgress: Float,
     predictiveTarget: ViewerBoundsTransform?,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     thumbnailPreview: ThumbnailPreview?,
     onToggleChrome: () -> Unit,
     onHdrChange: (Boolean) -> Unit,
@@ -373,17 +362,6 @@ private fun MediaViewerPage(
         predictiveBackProgress == 0f &&
         enterTarget == null &&
         settleTarget == null
-    val sharedModifier = if (isCurrentPage) {
-        with(sharedTransitionScope) {
-            Modifier.sharedElement(
-                sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
-                animatedVisibilityScope = animatedVisibilityScope,
-            )
-        }
-    } else {
-        Modifier
-    }
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize(),
@@ -395,7 +373,6 @@ private fun MediaViewerPage(
                 viewportWidth = maxWidth,
                 viewportHeight = maxHeight,
             )
-            .then(sharedModifier)
         val pageTransformModifier = if (isCurrentPage) {
             Modifier.viewerSurfaceTransform(
                 dragOffset = dragOffset,

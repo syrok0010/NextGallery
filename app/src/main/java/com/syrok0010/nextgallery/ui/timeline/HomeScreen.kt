@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -28,8 +26,6 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 internal fun HomeScreen(
     viewerTransitionCoordinator: ViewerTransitionCoordinator,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     viewModel: AuthenticatedViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -80,9 +76,6 @@ internal fun HomeScreen(
                 TimelinePanel(
                     state = state.timeline,
                     message = state.message,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    enableSharedElements = visibleViewerFileId == null,
                     onViewportObservation = viewModel::observeTimelineViewport,
                     revealFileId = viewerTransitionCoordinator.revealFileId,
                     onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
@@ -109,8 +102,6 @@ internal fun HomeScreen(
                     tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
                     thumbnailPreviews = state.timeline.thumbnailPreviews,
                     credentials = credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->
                         viewerTransitionCoordinator.onCurrentItemChanged(currentItem.fileId)

@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,9 +20,6 @@ internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
     thumbnailPreviews: Map<Long, ThumbnailPreview>,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElements: Boolean,
     onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
@@ -50,9 +45,6 @@ internal fun TimelineGrid(
                 is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
                 is TimelineGridItem.Slot -> TimelineSlotTile(
                     slot = item.slot,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    enableSharedElement = enableSharedElements,
                     thumbnailPreview = item.slot.mediaItem
                         ?.let { thumbnailPreviews[it.fileId] },
                     onBoundsChanged = onTileBoundsChanged,

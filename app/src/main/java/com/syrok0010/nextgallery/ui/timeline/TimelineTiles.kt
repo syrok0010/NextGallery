@@ -1,8 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -58,9 +55,6 @@ internal fun TimelineDayHeader(dayId: Int) {
 @Composable
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElement: Boolean,
     thumbnailPreview: ThumbnailPreview?,
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
@@ -72,9 +66,6 @@ internal fun TimelineSlotTile(
     } else {
         MediaTile(
             item = item,
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            enableSharedElement = enableSharedElement,
             thumbnailPreview = thumbnailPreview,
             onBoundsChanged = onBoundsChanged,
             onClick = { onSelect(item) },
@@ -92,26 +83,13 @@ private fun PlaceholderMediaTile() {
     )
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MediaTile(
     item: MediaItem,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElement: Boolean,
     thumbnailPreview: ThumbnailPreview?,
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onClick: () -> Unit,
 ) {
-    val sharedModifier = if (enableSharedElement) with(sharedTransitionScope) {
-        Modifier.sharedElement(
-            sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
-            animatedVisibilityScope = animatedVisibilityScope,
-        )
-    } else {
-        Modifier
-    }
-
     DisposableEffect(item.fileId) {
         onDispose {
             onBoundsChanged(item.fileId, null)
@@ -124,7 +102,6 @@ private fun MediaTile(
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged(item.fileId, coordinates.boundsInRoot())
             }
-            .then(sharedModifier)
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
@@ -154,6 +131,3 @@ private fun MediaTile(
         }
     }
 }
-
-internal val MediaItem.sharedElementKey: String
-    get() = "media-$fileId"

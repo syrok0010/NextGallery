@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,9 +33,6 @@ import com.syrok0010.nextgallery.ui.uiText
 internal fun TimelinePanel(
     state: TimelineUiState,
     message: AppMessageUiState,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElements: Boolean,
     onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealFileId: Long?,
     onFileRevealed: () -> Unit,
@@ -154,9 +149,6 @@ internal fun TimelinePanel(
                     gridItems = gridItems,
                     gridState = gridState,
                     thumbnailPreviews = state.thumbnailPreviews,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    enableSharedElements = enableSharedElements,
                     onTileBoundsChanged = onTileBoundsChanged,
                     onSelect = onSelect,
                 )
