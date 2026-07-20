@@ -27,6 +27,31 @@ data class TimelineUiState(
     val thumbnailFailedFileIds: Set<Long> = emptySet(),
 )
 
+internal fun TimelineUiState.withRefreshedSnapshot(refreshedSnapshot: TimelineSnapshot): TimelineUiState {
+    val previousItemsByFileId = snapshot?.items?.associateBy { it.fileId }.orEmpty()
+    val reusableThumbnailFileIds = refreshedSnapshot.items
+        .asSequence()
+        .filter { refreshedItem ->
+            previousItemsByFileId[refreshedItem.fileId]?.etag == refreshedItem.etag
+        }
+        .mapTo(mutableSetOf()) { it.fileId }
+    val refreshedDayIds = refreshedSnapshot.days.mapTo(mutableSetOf()) { it.dayId }
+
+    return copy(
+        snapshot = refreshedSnapshot,
+        loadingDayIds = loadingDayIds
+            .intersect(refreshedDayIds)
+            .minus(refreshedSnapshot.loadedDayIds),
+        failedDayIds = failedDayIds
+            .intersect(refreshedDayIds)
+            .minus(refreshedSnapshot.loadedDayIds),
+        loadMoreError = null,
+        thumbnailPreviews = thumbnailPreviews.filterKeys(reusableThumbnailFileIds::contains),
+        thumbnailLoadingFileIds = thumbnailLoadingFileIds.intersect(reusableThumbnailFileIds),
+        thumbnailFailedFileIds = emptySet(),
+    )
+}
+
 data class AppMessageUiState(
     val status: UiText? = null,
     val error: UiText? = null,

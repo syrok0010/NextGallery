@@ -11,6 +11,7 @@ import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionUiState
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
+import com.syrok0010.nextgallery.ui.withRefreshedSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -139,9 +140,11 @@ class AuthenticatedViewModel(
                 )
             }
 
+            var showedCachedTimeline = false
             val canShowCachedTimeline = state.value.credentials == credentials && state.value.timeline.snapshot == null
             if (canShowCachedTimeline) {
                 memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
+                    showedCachedTimeline = true
                     _state.update { state ->
                         state.copy(
                             timeline = TimelineUiState(snapshot = cachedSnapshot),
@@ -162,14 +165,16 @@ class AuthenticatedViewModel(
                     _state.update { state ->
                         state.copy(
                             credentials = credentials,
-                            timeline = TimelineUiState(snapshot = snapshot),
+                            timeline = state.timeline.withRefreshedSnapshot(snapshot),
                             isBusy = false,
                             message = AppMessageUiState(
                                 status = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
                             ),
                         )
                     }
-                    timelineViewportController.prefetchFromStart()
+                    if (!showedCachedTimeline) {
+                        timelineViewportController.prefetchFromStart()
+                    }
                 }
                 .onFailure {
                     _state.update { state ->

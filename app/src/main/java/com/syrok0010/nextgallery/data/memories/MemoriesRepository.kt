@@ -38,8 +38,11 @@ class MemoriesRepository(
             loadedDayIds = loadedDayIds,
         )
 
-        runCatching { cacheRepository.saveTimelineSnapshot(credentials, snapshot) }
-        return snapshot
+        val refreshedCachedSnapshot = runCatching {
+            cacheRepository.saveTimelineSnapshot(credentials, snapshot)
+            cacheRepository.loadTimelineSnapshot(credentials)
+        }.getOrNull()
+        return refreshedCachedSnapshot ?: snapshot
     }
 
     suspend fun loadTimelineDays(
