@@ -8,7 +8,9 @@ import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -61,10 +63,12 @@ internal class DefaultTimelineViewportController(
     private val thumbnailBatchSize: Int = DEFAULT_THUMBNAIL_BATCH_SIZE,
 ) : TimelineViewportController {
     private var pendingObservationJob: Job? = null
+    private val thumbnailLoadJobs = mutableMapOf<Job, Set<Long>>()
+    private var activeObservation: TimelineViewportObservation? = null
 
     override fun prefetchFromStart() {
-        processObservation(
-            TimelineViewportObservation(
+        acceptObservation(
+            observation = TimelineViewportObservation(
                 firstVisibleSlotIndex = 0,
                 lastVisibleSlotIndex = initialPrefetchLastVisibleIndex,
                 loadingMode = TimelineViewportLoadingMode.Immediate,
@@ -77,14 +81,14 @@ internal class DefaultTimelineViewportController(
             TimelineViewportLoadingMode.Immediate -> {
                 pendingObservationJob?.cancel()
                 pendingObservationJob = null
-                processObservation(observation)
+                acceptObservation(observation)
             }
 
             TimelineViewportLoadingMode.Debounced -> {
                 pendingObservationJob?.cancel()
                 pendingObservationJob = scope.launch {
                     delay(scrollbarDragLoadDebounceMillis.milliseconds)
-                    processObservation(observation)
+                    acceptObservation(observation)
                     pendingObservationJob = null
                 }
             }
@@ -94,6 +98,25 @@ internal class DefaultTimelineViewportController(
     override fun cancel() {
         pendingObservationJob?.cancel()
         pendingObservationJob = null
+        thumbnailLoadJobs.keys.toList().forEach(Job::cancel)
+        thumbnailLoadJobs.clear()
+        activeObservation = null
+    }
+
+    private fun acceptObservation(observation: TimelineViewportObservation) {
+        activeObservation = observation
+        processObservation(observation)
+    }
+
+    private fun cancelObsoleteThumbnailLoads(desiredFileIds: Set<Long>) {
+        val obsoleteJobs = thumbnailLoadJobs
+            .filterValues { loadingFileIds -> loadingFileIds.none(desiredFileIds::contains) }
+            .keys
+            .toList()
+        obsoleteJobs.forEach { job ->
+            thumbnailLoadJobs.remove(job)
+            job.cancel()
+        }
     }
 
     private fun processObservation(observation: TimelineViewportObservation) {
@@ -109,6 +132,14 @@ internal class DefaultTimelineViewportController(
         if (windowStart > windowEnd) {
             return
         }
+
+        val desiredFileIds = timeline.slots
+            .asSequence()
+            .drop(windowStart)
+            .take(windowEnd - windowStart + 1)
+            .mapNotNull { it.mediaItem?.fileId }
+            .toSet()
+        cancelObsoleteThumbnailLoads(desiredFileIds)
 
         loadVisibleThumbnails(
             credentials = session.credentials,
@@ -192,6 +223,10 @@ internal class DefaultTimelineViewportController(
         windowStart: Int,
         windowEnd: Int,
     ) {
+        if (thumbnailLoadJobs.size >= MAX_CONCURRENT_THUMBNAIL_BATCHES) {
+            return
+        }
+
         val timeline = timelineState.snapshot ?: return
         if (windowStart > windowEnd) {
             return
@@ -226,34 +261,54 @@ internal class DefaultTimelineViewportController(
             )
         }
 
-        scope.launch {
-            runCatching { host.loadThumbnails(credentials, fileIds, etagsByFileId) }
-                .onSuccess { previews ->
-                    val previewsByFileId = previews.associateBy { it.fileId }
-                    val missingFileIds = fileIds.filterNot { it in previewsByFileId }
+        lateinit var thumbnailLoadJob: Job
+        thumbnailLoadJob = scope.launch {
+            try {
+                runCatching { host.loadThumbnails(credentials, fileIds, etagsByFileId) }
+                    .onSuccess { previews ->
+                        val previewsByFileId = previews.associateBy { it.fileId }
+                        val missingFileIds = fileIds.filterNot { it in previewsByFileId }
 
+                        host.updateTimeline { state ->
+                            state.copy(
+                                thumbnailPreviews = state.thumbnailPreviews + previewsByFileId,
+                                thumbnailLoadingFileIds = state.thumbnailLoadingFileIds - fileIds.toSet(),
+                                thumbnailFailedFileIds = state.thumbnailFailedFileIds + missingFileIds,
+                            )
+                        }
+                    }
+                    .onFailure { failure ->
+                        if (failure is CancellationException) {
+                            throw failure
+                        }
+
+                        host.updateTimeline { state ->
+                            state.copy(
+                                thumbnailLoadingFileIds = state.thumbnailLoadingFileIds - fileIds.toSet(),
+                                thumbnailFailedFileIds = state.thumbnailFailedFileIds + fileIds,
+                            )
+                        }
+                    }
+            } finally {
+                thumbnailLoadJobs.remove(thumbnailLoadJob)
+                if (!isActive) {
                     host.updateTimeline { state ->
                         state.copy(
-                            thumbnailPreviews = state.thumbnailPreviews + previewsByFileId,
                             thumbnailLoadingFileIds = state.thumbnailLoadingFileIds - fileIds.toSet(),
-                            thumbnailFailedFileIds = state.thumbnailFailedFileIds + missingFileIds,
                         )
                     }
+                } else {
+                    activeObservation?.let(::processObservation)
                 }
-                .onFailure {
-                    host.updateTimeline { state ->
-                        state.copy(
-                            thumbnailLoadingFileIds = state.thumbnailLoadingFileIds - fileIds.toSet(),
-                            thumbnailFailedFileIds = state.thumbnailFailedFileIds + fileIds,
-                        )
-                    }
-                }
+            }
         }
+        thumbnailLoadJobs[thumbnailLoadJob] = fileIds.toSet()
     }
 }
 
 private const val DEFAULT_SCROLLBAR_DRAG_LOAD_DEBOUNCE_MILLIS = 450L
-private const val DEFAULT_INITIAL_PREFETCH_LAST_VISIBLE_INDEX = 80
-private const val DEFAULT_PREFETCH_SLOTS = 60
+private const val DEFAULT_INITIAL_PREFETCH_LAST_VISIBLE_INDEX = 11
+private const val DEFAULT_PREFETCH_SLOTS = 12
 private const val DEFAULT_DAY_BATCH_SIZE = 4
-private const val DEFAULT_THUMBNAIL_BATCH_SIZE = 64
+private const val DEFAULT_THUMBNAIL_BATCH_SIZE = 12
+private const val MAX_CONCURRENT_THUMBNAIL_BATCHES = 2

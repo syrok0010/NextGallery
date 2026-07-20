@@ -105,7 +105,7 @@ class TimelineViewportControllerTest {
     }
 
     @Test
-    fun `thumbnail batching skips already handled file ids`() = runBlocking {
+    fun `thumbnail batches stay bounded and skip already handled file ids`() = runBlocking {
         val days = (10..15).map { TimelineDay(dayId = it, count = 1) }
         val itemsByDay = days.associate { day ->
             day.dayId to listOf(mediaItem(fileId = (day.dayId - 9).toLong(), dayId = day.dayId))
@@ -126,6 +126,7 @@ class TimelineViewportControllerTest {
             ),
         ).apply {
             thumbnailLoader = { _, fileIds, _ ->
+                delay(20)
                 fileIds.map(::thumbnail)
             }
         }
@@ -143,9 +144,13 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Immediate,
             ),
         )
-        awaitUntil { host.thumbnailLoadRequests == listOf(listOf(4L, 5L)) }
+        awaitUntil {
+            host.thumbnailLoadRequests == listOf(listOf(4L, 5L), listOf(6L)) &&
+                host.requireSession().timelineState.thumbnailPreviews.keys.containsAll(listOf(4L, 5L, 6L))
+        }
 
-        assertEquals(listOf(listOf(4L, 5L)), host.thumbnailLoadRequests)
+        assertEquals(listOf(listOf(4L, 5L), listOf(6L)), host.thumbnailLoadRequests)
+        assertTrue(host.maxConcurrentThumbnailLoads <= 2)
         assertTrue(host.dayLoadRequests.isEmpty())
     }
 
@@ -219,6 +224,9 @@ class TimelineViewportControllerTest {
         val dayLoadRequests = mutableListOf<List<Int>>()
         val thumbnailLoadRequests = mutableListOf<List<Long>>()
         val loadedItemsStatusCounts = mutableListOf<Int>()
+        var maxConcurrentThumbnailLoads = 0
+            private set
+        private var concurrentThumbnailLoads = 0
 
         override fun currentSession(): TimelineViewportSession? = session
 
@@ -247,7 +255,13 @@ class TimelineViewportControllerTest {
             etagsByFileId: Map<Long, String?>,
         ): List<ThumbnailPreview> {
             thumbnailLoadRequests += fileIds
-            return thumbnailLoader(credentials, fileIds, etagsByFileId)
+            concurrentThumbnailLoads += 1
+            maxConcurrentThumbnailLoads = maxOf(maxConcurrentThumbnailLoads, concurrentThumbnailLoads)
+            return try {
+                thumbnailLoader(credentials, fileIds, etagsByFileId)
+            } finally {
+                concurrentThumbnailLoads -= 1
+            }
         }
 
         fun requireSession(): TimelineViewportSession {

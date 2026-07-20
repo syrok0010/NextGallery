@@ -80,7 +80,6 @@ internal fun HomeScreen(
                 TimelinePanel(
                     state = state.timeline,
                     message = state.message,
-                    credentials = credentials,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     enableSharedElements = visibleViewerFileId == null,

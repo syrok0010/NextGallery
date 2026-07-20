@@ -71,6 +71,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
+import com.syrok0010.nextgallery.ui.common.CachedImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
 import com.syrok0010.nextgallery.ui.timeline.sharedElementKey
 import kotlinx.coroutines.CancellationException
@@ -428,14 +429,22 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
-                AuthenticatedImage(
-                    url = imageUrls.detailPreviewUrl,
-                    credentials = credentials,
-                    data = thumbnailPreview?.bytes,
-                    contentDescription = item.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
+                if (thumbnailPreview != null) {
+                    CachedImage(
+                        data = thumbnailPreview.bytes,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                } else {
+                    AuthenticatedImage(
+                        url = imageUrls.detailPreviewUrl,
+                        credentials = credentials,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
 
                 LaunchedEffect(item.fileId) {
                     onHdrChange(false)
@@ -491,14 +500,14 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    AuthenticatedImage(
-                        url = imageUrls.detailPreviewUrl,
-                        credentials = credentials,
-                        data = thumbnailPreview?.bytes,
-                        contentDescription = item.displayName,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                    )
+                    thumbnailPreview?.let { preview ->
+                        CachedImage(
+                            data = preview.bytes,
+                            contentDescription = item.displayName,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
                 }
 
                 ZoomableAsyncImage(

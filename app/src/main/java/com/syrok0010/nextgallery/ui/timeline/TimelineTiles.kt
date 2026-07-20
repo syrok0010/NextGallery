@@ -26,12 +26,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
+import com.syrok0010.nextgallery.ui.common.CachedImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -60,7 +58,6 @@ internal fun TimelineDayHeader(dayId: Int) {
 @Composable
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
-    credentials: AccountCredentials,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     enableSharedElement: Boolean,
@@ -75,7 +72,6 @@ internal fun TimelineSlotTile(
     } else {
         MediaTile(
             item = item,
-            credentials = credentials,
             sharedTransitionScope = sharedTransitionScope,
             animatedVisibilityScope = animatedVisibilityScope,
             enableSharedElement = enableSharedElement,
@@ -100,7 +96,6 @@ private fun PlaceholderMediaTile() {
 @Composable
 private fun MediaTile(
     item: MediaItem,
-    credentials: AccountCredentials,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     enableSharedElement: Boolean,
@@ -108,13 +103,6 @@ private fun MediaTile(
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onClick: () -> Unit,
 ) {
-    val imageUrls = remember(item.assetRef, credentials.serverUrl) {
-        MemoriesAssetUrlFactory.urlsFor(
-            assetRef = item.assetRef,
-            serverUrl = credentials.serverUrl,
-        )
-    }
-
     val sharedModifier = if (enableSharedElement) with(sharedTransitionScope) {
         Modifier.sharedElement(
             sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
@@ -141,14 +129,14 @@ private fun MediaTile(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
     ) {
-        AuthenticatedImage(
-            url = imageUrls.thumbnailUrl,
-            credentials = credentials,
-            data = thumbnailPreview?.bytes,
-            contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
+        if (thumbnailPreview != null) {
+            CachedImage(
+                data = thumbnailPreview.bytes,
+                contentDescription = item.displayName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
 
         if (item.isVideo) {
             Text(

@@ -15,8 +15,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -25,6 +27,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -148,6 +152,14 @@ internal fun TimelineScrollIndicatorHost(
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val scrollDispatcher = remember(coroutineScope, gridState, slotGridIndexes) {
+        TimelineHandleScrollDispatcher(
+            scope = coroutineScope,
+            gridState = gridState,
+            slotGridIndexes = slotGridIndexes,
+        )
+    }
+    var dragFraction by remember { mutableStateOf<Float?>(null) }
     val scrollInfo by remember(timeline, gridItems, gridState) {
         derivedStateOf {
             val visibleSlot = gridState.layoutInfo.visibleItemsInfo
@@ -169,19 +181,24 @@ internal fun TimelineScrollIndicatorHost(
             )
         }
     }
+    val displayFraction = dragFraction ?: scrollInfo.fraction
+    val displayDayId = dragFraction
+        ?.let { timeline.dayIdAtFraction(it) }
+        ?: scrollInfo.dayId
 
     TimelineScrollIndicator(
-        dayId = scrollInfo.dayId,
-        fraction = scrollInfo.fraction,
+        dayId = displayDayId,
+        fraction = displayFraction,
         isTooltipVisible = gridState.isScrollInProgress || isDragging,
-        onDragStateChange = onDragStateChange,
-        onFractionChange = { fraction ->
-            val targetGridIndex = slotGridIndexes.gridIndexAtFraction(fraction)
-            if (targetGridIndex != null) {
-                coroutineScope.launch {
-                    gridState.scrollToItem(targetGridIndex)
-                }
+        onDragStateChange = { dragging ->
+            if (!dragging) {
+                dragFraction = null
             }
+            onDragStateChange(dragging)
+        },
+        onFractionChange = { fraction ->
+            dragFraction = fraction
+            scrollDispatcher.scrollToFraction(fraction)
         },
         modifier = modifier,
     )
@@ -191,3 +208,43 @@ private data class TimelineScrollInfo(
     val dayId: Int?,
     val fraction: Float,
 )
+
+private fun TimelineSnapshot.dayIdAtFraction(fraction: Float): Int? {
+    if (slots.isEmpty()) {
+        return null
+    }
+
+    val slotIndex = ((slots.size - 1) * fraction.coerceIn(0f, 1f)).toInt()
+    return slots.getOrNull(slotIndex)?.dayId
+}
+
+private class TimelineHandleScrollDispatcher(
+    private val scope: CoroutineScope,
+    private val gridState: LazyGridState,
+    private val slotGridIndexes: IntArray,
+) {
+    private var activeJob: Job? = null
+    private var pendingGridIndex: Int? = null
+    private var lastRequestedGridIndex: Int? = null
+
+    fun scrollToFraction(fraction: Float) {
+        val targetGridIndex = slotGridIndexes.gridIndexAtFraction(fraction) ?: return
+        if (targetGridIndex == lastRequestedGridIndex && activeJob?.isActive == true) {
+            return
+        }
+
+        pendingGridIndex = targetGridIndex
+        if (activeJob?.isActive == true) {
+            return
+        }
+
+        activeJob = scope.launch {
+            while (true) {
+                val nextGridIndex = pendingGridIndex ?: break
+                pendingGridIndex = null
+                lastRequestedGridIndex = nextGridIndex
+                gridState.scrollToItem(nextGridIndex)
+            }
+        }
+    }
+}

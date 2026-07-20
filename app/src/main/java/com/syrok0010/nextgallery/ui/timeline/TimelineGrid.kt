@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 
@@ -23,7 +22,6 @@ internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
     thumbnailPreviews: Map<Long, ThumbnailPreview>,
-    credentials: AccountCredentials,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     enableSharedElements: Boolean,
@@ -52,7 +50,6 @@ internal fun TimelineGrid(
                 is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
                 is TimelineGridItem.Slot -> TimelineSlotTile(
                     slot = item.slot,
-                    credentials = credentials,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     enableSharedElement = enableSharedElements,
