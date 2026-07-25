@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.ui
 
 import com.syrok0010.nextgallery.data.auth.LoginSession
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 
 sealed interface SessionUiState {
     data object SignedOut : SessionUiState
@@ -22,7 +22,7 @@ data class TimelineUiState(
     val loadingDayIds: Set<Int> = emptySet(),
     val failedDayIds: Set<Int> = emptySet(),
     val loadMoreError: UiText? = null,
-    val thumbnailPreviews: Map<Long, ThumbnailPreview> = emptyMap(),
+    val thumbnailKeys: Map<Long, ThumbnailKey> = emptyMap(),
     val thumbnailLoadingFileIds: Set<Long> = emptySet(),
     val thumbnailFailedFileIds: Set<Long> = emptySet(),
 )
@@ -46,7 +46,7 @@ internal fun TimelineUiState.withRefreshedSnapshot(refreshedSnapshot: TimelineSn
             .intersect(refreshedDayIds)
             .minus(refreshedSnapshot.loadedDayIds),
         loadMoreError = null,
-        thumbnailPreviews = thumbnailPreviews.filterKeys(reusableThumbnailFileIds::contains),
+        thumbnailKeys = thumbnailKeys.filterKeys(reusableThumbnailFileIds::contains),
         thumbnailLoadingFileIds = thumbnailLoadingFileIds.intersect(reusableThumbnailFileIds),
         thumbnailFailedFileIds = emptySet(),
     )

@@ -1,34 +1,28 @@
 package com.syrok0010.nextgallery.data.cache
 
 import android.content.Context
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import java.io.File
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ThumbnailFileStore(context: Context) {
     private val root = File(context.cacheDir, THUMBNAIL_CACHE_DIRECTORY)
 
-    suspend fun load(relativePath: String): ByteArray? {
+    suspend fun exists(relativePath: String): Boolean {
         return withContext(Dispatchers.IO) {
-            val file = File(root, relativePath)
-            if (file.isFile) {
-                file.readBytes()
-            } else {
-                null
-            }
+            File(root, relativePath).isFile
         }
     }
 
     suspend fun save(
-        fileId: Long,
-        width: Int,
-        height: Int,
-        etag: String?,
+        key: ThumbnailKey,
         bytes: ByteArray,
     ): StoredThumbnailFile {
         return withContext(Dispatchers.IO) {
             root.mkdirs()
-            val cacheKey = cacheKey(fileId, width, height, etag)
+            val cacheKey = cacheKey(key)
             File(root, cacheKey).writeBytes(bytes)
             StoredThumbnailFile(
                 cacheKey = cacheKey,
@@ -55,13 +49,8 @@ class ThumbnailFileStore(context: Context) {
         }
     }
 
-    fun cacheKey(
-        fileId: Long,
-        width: Int,
-        height: Int,
-        etag: String?,
-    ): String {
-        val etagPart = etag
+    internal fun cacheKey(key: ThumbnailKey): String {
+        val etagPart = key.etag
             ?.takeIf { it.isNotBlank() }
             ?.map { character ->
                 if (character.isLetterOrDigit() || character == '-' || character == '_' || character == '.') {
@@ -73,7 +62,17 @@ class ThumbnailFileStore(context: Context) {
             ?.joinToString(separator = "")
             ?: NO_ETAG
 
-        return "$fileId-${width}x$height-$etagPart.bin"
+        return "${key.accountScope.sha256()}-${key.fileId}-${key.width}x${key.height}-$etagPart.bin"
+    }
+
+    internal fun fileFor(key: ThumbnailKey): File {
+        return File(root, cacheKey(key))
+    }
+
+    private fun String.sha256(): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(toByteArray())
+            .joinToString(separator = "") { byte -> "%02x".format(byte) }
     }
 
     private companion object {

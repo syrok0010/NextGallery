@@ -3,8 +3,8 @@ package com.syrok0010.nextgallery.ui.timeline
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +44,7 @@ internal interface TimelineViewportHost {
         credentials: AccountCredentials,
         fileIds: List<Long>,
         etagsByFileId: Map<Long, String?>,
-    ): List<ThumbnailPreview>
+    ): List<ThumbnailKey>
 }
 
 internal interface TimelineViewportController {
@@ -238,7 +238,7 @@ internal class DefaultTimelineViewportController(
             .take(windowEnd - windowStart + 1)
             .mapNotNull { it.mediaItem?.fileId }
             .distinct()
-            .filterNot { it in timelineState.thumbnailPreviews }
+            .filterNot { it in timelineState.thumbnailKeys }
             .filterNot { it in timelineState.thumbnailLoadingFileIds }
             .filterNot { it in timelineState.thumbnailFailedFileIds }
             .take(thumbnailBatchSize)
@@ -265,13 +265,13 @@ internal class DefaultTimelineViewportController(
         thumbnailLoadJob = scope.launch {
             try {
                 runCatching { host.loadThumbnails(credentials, fileIds, etagsByFileId) }
-                    .onSuccess { previews ->
-                        val previewsByFileId = previews.associateBy { it.fileId }
-                        val missingFileIds = fileIds.filterNot { it in previewsByFileId }
+                    .onSuccess { thumbnailKeys ->
+                        val keysByFileId = thumbnailKeys.associateBy { it.fileId }
+                        val missingFileIds = fileIds.filterNot { it in keysByFileId }
 
                         host.updateTimeline { state ->
                             state.copy(
-                                thumbnailPreviews = state.thumbnailPreviews + previewsByFileId,
+                                thumbnailKeys = state.thumbnailKeys + keysByFileId,
                                 thumbnailLoadingFileIds = state.thumbnailLoadingFileIds - fileIds.toSet(),
                                 thumbnailFailedFileIds = state.thumbnailFailedFileIds + missingFileIds,
                             )

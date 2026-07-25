@@ -87,7 +87,7 @@ internal fun HomeScreen(
                     items = viewerTimeline.items,
                     slotIndexByFileId = viewerTimeline.slotIndexByFileId,
                     tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
-                    thumbnailPreviews = state.timeline.thumbnailPreviews,
+                    thumbnailKeys = state.timeline.thumbnailKeys,
                     credentials = credentials,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->

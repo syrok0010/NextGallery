@@ -71,9 +71,9 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
-import com.syrok0010.nextgallery.ui.common.CachedImage
+import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -88,7 +88,7 @@ internal fun MediaDetailScreen(
     items: List<MediaItem>,
     slotIndexByFileId: Map<Long, Int>,
     tileBoundsByFileId: Map<Long, Rect>,
-    thumbnailPreviews: Map<Long, ThumbnailPreview>,
+    thumbnailKeys: Map<Long, ThumbnailKey>,
     credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
@@ -307,7 +307,7 @@ internal fun MediaDetailScreen(
                         null
                     },
                     credentials = credentials,
-                    thumbnailPreview = thumbnailPreviews[item.fileId],
+                    thumbnailKey = thumbnailKeys[item.fileId],
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
                         hdrByFileId[item.fileId] = hasHdr
@@ -349,7 +349,7 @@ private fun MediaViewerPage(
     settleProgress: Float,
     predictiveTarget: ViewerBoundsTransform?,
     credentials: AccountCredentials,
-    thumbnailPreview: ThumbnailPreview?,
+    thumbnailKey: ThumbnailKey?,
     onToggleChrome: () -> Unit,
     onHdrChange: (Boolean) -> Unit,
     onZoomedOutChange: (Boolean) -> Unit,
@@ -411,9 +411,9 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
-                if (thumbnailPreview != null) {
-                    CachedImage(
-                        data = thumbnailPreview.bytes,
+                if (thumbnailKey != null) {
+                    ThumbnailImage(
+                        key = thumbnailKey,
                         contentDescription = item.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
@@ -482,9 +482,9 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    thumbnailPreview?.let { preview ->
-                        CachedImage(
-                            data = preview.bytes,
+                    thumbnailKey?.let { key ->
+                        ThumbnailImage(
+                            key = key,
                             contentDescription = item.displayName,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit,

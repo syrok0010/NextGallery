@@ -3,10 +3,10 @@ package com.syrok0010.nextgallery.ui
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,14 +29,14 @@ class TimelineUiStateTest {
         )
         val state = TimelineUiState(
             snapshot = previousSnapshot,
-            thumbnailPreviews = mapOf(1L to thumbnail(1), 2L to thumbnail(2)),
+            thumbnailKeys = mapOf(1L to thumbnailKey(1), 2L to thumbnailKey(2)),
             thumbnailLoadingFileIds = setOf(1, 2),
             thumbnailFailedFileIds = setOf(1, 2),
         )
 
         val refreshedState = state.withRefreshedSnapshot(refreshedSnapshot)
 
-        assertEquals(setOf(1L), refreshedState.thumbnailPreviews.keys)
+        assertEquals(setOf(1L), refreshedState.thumbnailKeys.keys)
         assertEquals(setOf(1L), refreshedState.thumbnailLoadingFileIds)
         assertTrue(refreshedState.thumbnailFailedFileIds.isEmpty())
     }
@@ -82,12 +82,13 @@ class TimelineUiStateTest {
         )
     }
 
-    private fun thumbnail(fileId: Long): ThumbnailPreview {
-        return ThumbnailPreview(
+    private fun thumbnailKey(fileId: Long): ThumbnailKey {
+        return ThumbnailKey(
+            accountScope = "cloud.example.com|user",
             fileId = fileId,
-            requestId = fileId.toInt(),
-            mimeType = "image/jpeg",
-            bytes = byteArrayOf(fileId.toByte()),
+            width = 512,
+            height = 512,
+            etag = "etag-$fileId",
         )
     }
 

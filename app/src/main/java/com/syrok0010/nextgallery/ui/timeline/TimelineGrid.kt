@@ -13,13 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 
 @Composable
 internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
-    thumbnailPreviews: Map<Long, ThumbnailPreview>,
+    thumbnailKeys: Map<Long, ThumbnailKey>,
     onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
@@ -28,8 +28,8 @@ internal fun TimelineGrid(
         state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         itemsIndexed(
             items = gridItems,
@@ -45,8 +45,8 @@ internal fun TimelineGrid(
                 is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
                 is TimelineGridItem.Slot -> TimelineSlotTile(
                     slot = item.slot,
-                    thumbnailPreview = item.slot.mediaItem
-                        ?.let { thumbnailPreviews[it.fileId] },
+                    thumbnailKey = item.slot.mediaItem
+                        ?.let { thumbnailKeys[it.fileId] },
                     onBoundsChanged = onTileBoundsChanged,
                     onSelect = onSelect,
                 )

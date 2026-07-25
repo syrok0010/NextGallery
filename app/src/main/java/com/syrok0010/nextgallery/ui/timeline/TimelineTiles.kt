@@ -24,9 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.ui.common.CachedImage
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -55,7 +55,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 @Composable
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
-    thumbnailPreview: ThumbnailPreview?,
+    thumbnailKey: ThumbnailKey?,
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
@@ -66,7 +66,7 @@ internal fun TimelineSlotTile(
     } else {
         MediaTile(
             item = item,
-            thumbnailPreview = thumbnailPreview,
+            thumbnailKey = thumbnailKey,
             onBoundsChanged = onBoundsChanged,
             onClick = { onSelect(item) },
         )
@@ -78,7 +78,6 @@ private fun PlaceholderMediaTile() {
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     )
 }
@@ -86,7 +85,7 @@ private fun PlaceholderMediaTile() {
 @Composable
 private fun MediaTile(
     item: MediaItem,
-    thumbnailPreview: ThumbnailPreview?,
+    thumbnailKey: ThumbnailKey?,
     onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
     onClick: () -> Unit,
 ) {
@@ -102,13 +101,12 @@ private fun MediaTile(
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged(item.fileId, coordinates.boundsInRoot())
             }
-            .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
     ) {
-        if (thumbnailPreview != null) {
-            CachedImage(
-                data = thumbnailPreview.bytes,
+        if (thumbnailKey != null) {
+            ThumbnailImage(
+                key = thumbnailKey,
                 contentDescription = item.displayName,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,

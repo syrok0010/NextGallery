@@ -148,7 +148,7 @@ internal fun TimelinePanel(
                 TimelineGrid(
                     gridItems = gridItems,
                     gridState = gridState,
-                    thumbnailPreviews = state.thumbnailPreviews,
+                    thumbnailKeys = state.thumbnailKeys,
                     onTileBoundsChanged = onTileBoundsChanged,
                     onSelect = onSelect,
                 )

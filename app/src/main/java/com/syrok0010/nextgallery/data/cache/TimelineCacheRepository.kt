@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 
 class TimelineCacheRepository(
     private val database: TimelineCacheDatabase,
@@ -90,36 +91,38 @@ class TimelineCacheRepository(
         }
     }
 
-    suspend fun loadThumbnails(
+    suspend fun loadThumbnailKeys(
         fileIds: List<Long>,
         width: Int,
         height: Int,
         etagsByFileId: Map<Long, String?>,
-    ): List<ThumbnailPreview> {
+        accountScope: String,
+    ): List<ThumbnailKey> {
         if (fileIds.isEmpty()) {
             return emptyList()
         }
 
         val rows = dao.thumbnailRows(fileIds, width, height)
         val staleRows = mutableListOf<ThumbnailCacheEntity>()
-        val previews = rows.mapNotNull { row ->
-            val expectedCacheKey = thumbnailFileStore.cacheKey(row.fileId, width, height, etagsByFileId[row.fileId])
+        val keys = rows.mapNotNull { row ->
+            val thumbnailKey = ThumbnailKey(
+                accountScope = accountScope,
+                fileId = row.fileId,
+                width = width,
+                height = height,
+                etag = etagsByFileId[row.fileId],
+            )
+            val expectedCacheKey = thumbnailFileStore.cacheKey(thumbnailKey)
             if (row.cacheKey != expectedCacheKey) {
                 staleRows += row
                 return@mapNotNull null
             }
 
-            val bytes = thumbnailFileStore.load(row.relativePath)
-            if (bytes == null) {
+            if (!thumbnailFileStore.exists(row.relativePath)) {
                 staleRows += row
                 null
             } else {
-                ThumbnailPreview(
-                    fileId = row.fileId,
-                    requestId = 0,
-                    mimeType = row.mimeType,
-                    bytes = bytes,
-                )
+                thumbnailKey
             }
         }
 
@@ -128,7 +131,7 @@ class TimelineCacheRepository(
             thumbnailFileStore.delete(staleRows.map { it.relativePath })
         }
 
-        return previews
+        return keys
     }
 
     suspend fun saveThumbnails(
@@ -136,6 +139,7 @@ class TimelineCacheRepository(
         width: Int,
         height: Int,
         etagsByFileId: Map<Long, String?>,
+        accountScope: String,
     ) {
         if (previews.isEmpty()) {
             return
@@ -143,11 +147,15 @@ class TimelineCacheRepository(
 
         val now = System.currentTimeMillis()
         val rows = previews.map { preview ->
-            val storedFile = thumbnailFileStore.save(
+            val thumbnailKey = ThumbnailKey(
+                accountScope = accountScope,
                 fileId = preview.fileId,
                 width = width,
                 height = height,
                 etag = etagsByFileId[preview.fileId],
+            )
+            val storedFile = thumbnailFileStore.save(
+                key = thumbnailKey,
                 bytes = preview.bytes,
             )
             ThumbnailCacheEntity(

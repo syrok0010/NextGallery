@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.data.memories
 import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 
 class MemoriesRepository(
     private val transport: NextcloudTransport,
@@ -66,20 +67,31 @@ class MemoriesRepository(
         credentials: AccountCredentials,
         fileIds: List<Long>,
         etagsByFileId: Map<Long, String?> = emptyMap(),
-    ): List<ThumbnailPreview> {
+    ): List<ThumbnailKey> {
         val distinctFileIds = fileIds.distinct()
-        val cachedPreviews = runCatching {
-            cacheRepository.loadThumbnails(
+        val accountScope = credentials.thumbnailAccountScope()
+        val requestedKeysByFileId = distinctFileIds.associateWith { fileId ->
+            ThumbnailKey(
+                accountScope = accountScope,
+                fileId = fileId,
+                width = DEFAULT_THUMBNAIL_SIZE,
+                height = DEFAULT_THUMBNAIL_SIZE,
+                etag = etagsByFileId[fileId],
+            )
+        }
+        val cachedKeys = runCatching {
+            cacheRepository.loadThumbnailKeys(
                 fileIds = distinctFileIds,
                 width = DEFAULT_THUMBNAIL_SIZE,
                 height = DEFAULT_THUMBNAIL_SIZE,
                 etagsByFileId = etagsByFileId,
+                accountScope = accountScope,
             )
         }.getOrDefault(emptyList())
-        val cachedFileIds = cachedPreviews.mapTo(mutableSetOf()) { it.fileId }
+        val cachedFileIds = cachedKeys.mapTo(mutableSetOf()) { it.fileId }
         val missingFileIds = distinctFileIds.filterNot { it in cachedFileIds }
         if (missingFileIds.isEmpty()) {
-            return cachedPreviews
+            return cachedKeys
         }
 
         val remotePreviews = multipreviewClient.loadThumbnails(
@@ -88,16 +100,18 @@ class MemoriesRepository(
             width = DEFAULT_THUMBNAIL_SIZE,
             height = DEFAULT_THUMBNAIL_SIZE,
         )
-        runCatching {
+        val storedRemoteKeys = runCatching {
             cacheRepository.saveThumbnails(
                 previews = remotePreviews,
                 width = DEFAULT_THUMBNAIL_SIZE,
                 height = DEFAULT_THUMBNAIL_SIZE,
                 etagsByFileId = etagsByFileId,
+                accountScope = accountScope,
             )
-        }
+            remotePreviews.mapNotNull { preview -> requestedKeysByFileId[preview.fileId] }
+        }.getOrDefault(emptyList())
 
-        return cachedPreviews + remotePreviews
+        return cachedKeys + storedRemoteKeys
     }
 
     suspend fun clearCache() {
@@ -106,5 +120,9 @@ class MemoriesRepository(
 
     private companion object {
         const val DEFAULT_THUMBNAIL_SIZE = 512
+    }
+
+    private fun AccountCredentials.thumbnailAccountScope(): String {
+        return "${NextcloudTransport.normalizeServerOrigin(serverUrl)}|$loginName"
     }
 }
