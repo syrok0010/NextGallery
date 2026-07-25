@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,34 +43,13 @@ private val TimelineScrollDragWidth = 40.dp
 
 @Composable
 internal fun TimelineScrollIndicator(
-    dayId: Int?,
+    dayId: () -> Int?,
     fraction: () -> Float,
-    isTooltipVisible: Boolean,
+    isTooltipVisible: () -> Boolean,
     onDragStateChange: (Boolean) -> Unit,
     onFractionChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (dayId == null) {
-        return
-    }
-
-    val date = remember(dayId) {
-        LocalDate.ofEpochDay(dayId.toLong())
-    }
-    val currentYear = LocalDate.now().year
-    val pattern = stringResource(
-        if (date.year == currentYear) {
-            R.string.timeline_scroll_date_current_year_pattern
-        } else {
-            R.string.timeline_scroll_date_with_year_pattern
-        },
-    )
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
-    }
-    val label = remember(date, formatter) {
-        date.format(formatter)
-    }
     val thumbHeightPx = with(LocalDensity.current) {
         TimelineScrollThumbHeight.toPx()
     }
@@ -88,23 +68,13 @@ internal fun TimelineScrollIndicator(
             )
         }
 
-        if (isTooltipVisible) {
-            Text(
-                text = label,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .then(thumbOffset)
-                    .padding(end = 16.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.inverseSurface,
-                        shape = MaterialTheme.shapes.small,
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                color = MaterialTheme.colorScheme.inverseOnSurface,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-            )
-        }
+        TimelineScrollTooltip(
+            dayId = dayId,
+            isVisible = isTooltipVisible,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .then(thumbOffset),
+        )
 
         Box(
             modifier = Modifier
@@ -147,6 +117,49 @@ internal fun TimelineScrollIndicator(
             )
         }
     }
+}
+
+@Composable
+private fun TimelineScrollTooltip(
+    dayId: () -> Int?,
+    isVisible: () -> Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!isVisible()) {
+        return
+    }
+    val currentDayId = dayId() ?: return
+    val date = remember(currentDayId) {
+        LocalDate.ofEpochDay(currentDayId.toLong())
+    }
+    val currentYear = LocalDate.now().year
+    val pattern = stringResource(
+        if (date.year == currentYear) {
+            R.string.timeline_scroll_date_current_year_pattern
+        } else {
+            R.string.timeline_scroll_date_with_year_pattern
+        },
+    )
+    val formatter = remember(pattern) {
+        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    }
+    val label = remember(date, formatter) {
+        date.format(formatter)
+    }
+
+    Text(
+        text = label,
+        modifier = modifier
+            .padding(end = 16.dp)
+            .background(
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shape = MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        color = MaterialTheme.colorScheme.inverseOnSurface,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+    )
 }
 
 @Composable
@@ -194,28 +207,47 @@ internal fun TimelineScrollIndicatorHost(
             dragFraction ?: scrollInfo.value.fraction
         }
     }
-    val displayDayId by remember(timeline, scrollInfo) {
+    val displayDayIdState = remember(timeline, scrollInfo) {
         derivedStateOf {
             dragFraction
                 ?.let { timeline.dayIdAtFraction(it) }
                 ?: scrollInfo.value.dayId
         }
     }
+    val displayDayId = remember(displayDayIdState) {
+        { displayDayIdState.value }
+    }
+    val currentIsDragging = rememberUpdatedState(isDragging)
+    val tooltipVisibleState = remember(gridState) {
+        derivedStateOf {
+            currentIsDragging.value || gridState.isScrollInProgress
+        }
+    }
+    val isTooltipVisible = remember(tooltipVisibleState) {
+        { tooltipVisibleState.value }
+    }
+    val currentOnDragStateChange = rememberUpdatedState(onDragStateChange)
+    val handleDragStateChange: (Boolean) -> Unit = remember {
+        { dragging ->
+            if (!dragging) {
+                dragFraction = null
+            }
+            currentOnDragStateChange.value(dragging)
+        }
+    }
+    val handleFractionChange: (Float) -> Unit = remember(scrollDispatcher) {
+        { fraction ->
+            dragFraction = fraction
+            scrollDispatcher.scrollToFraction(fraction)
+        }
+    }
 
     TimelineScrollIndicator(
         dayId = displayDayId,
         fraction = displayFraction,
-        isTooltipVisible = gridState.isScrollInProgress || isDragging,
-        onDragStateChange = { dragging ->
-            if (!dragging) {
-                dragFraction = null
-            }
-            onDragStateChange(dragging)
-        },
-        onFractionChange = { fraction ->
-            dragFraction = fraction
-            scrollDispatcher.scrollToFraction(fraction)
-        },
+        isTooltipVisible = isTooltipVisible,
+        onDragStateChange = handleDragStateChange,
+        onFractionChange = handleFractionChange,
         modifier = modifier,
     )
 }
