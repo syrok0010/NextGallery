@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
@@ -33,6 +34,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val TimelineScrollThumbHeight = 48.dp
 private val TimelineScrollThumbWidth = 4.dp
@@ -41,7 +43,7 @@ private val TimelineScrollDragWidth = 40.dp
 @Composable
 internal fun TimelineScrollIndicator(
     dayId: Int?,
-    fraction: Float,
+    fraction: () -> Float,
     isTooltipVisible: Boolean,
     onDragStateChange: (Boolean) -> Unit,
     onFractionChange: (Float) -> Unit,
@@ -78,14 +80,20 @@ internal fun TimelineScrollIndicator(
             .width(150.dp)
             .padding(end = 8.dp),
     ) {
-        val topOffset = (maxHeight - TimelineScrollThumbHeight) * fraction.coerceIn(0f, 1f)
+        val thumbOffset = Modifier.offset {
+            val availableHeightPx = (maxHeight - TimelineScrollThumbHeight).roundToPx()
+            IntOffset(
+                x = 0,
+                y = (availableHeightPx * fraction().coerceIn(0f, 1f)).roundToInt(),
+            )
+        }
 
         if (isTooltipVisible) {
             Text(
                 text = label,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(y = topOffset)
+                    .then(thumbOffset)
                     .padding(end = 16.dp)
                     .background(
                         color = MaterialTheme.colorScheme.inverseSurface,
@@ -129,7 +137,7 @@ internal fun TimelineScrollIndicator(
         ) {
             Box(
                 modifier = Modifier
-                    .offset(y = topOffset)
+                    .then(thumbOffset)
                     .width(TimelineScrollThumbWidth)
                     .height(TimelineScrollThumbHeight)
                     .background(
@@ -160,7 +168,7 @@ internal fun TimelineScrollIndicatorHost(
         )
     }
     var dragFraction by remember { mutableStateOf<Float?>(null) }
-    val scrollInfo by remember(timeline, gridItems, gridState) {
+    val scrollInfo = remember(timeline, gridItems, gridState) {
         derivedStateOf {
             val visibleSlot = gridState.layoutInfo.visibleItemsInfo
                 .mapNotNull { visibleItem ->
@@ -181,10 +189,18 @@ internal fun TimelineScrollIndicatorHost(
             )
         }
     }
-    val displayFraction = dragFraction ?: scrollInfo.fraction
-    val displayDayId = dragFraction
-        ?.let { timeline.dayIdAtFraction(it) }
-        ?: scrollInfo.dayId
+    val displayFraction = remember(scrollInfo) {
+        {
+            dragFraction ?: scrollInfo.value.fraction
+        }
+    }
+    val displayDayId by remember(timeline, scrollInfo) {
+        derivedStateOf {
+            dragFraction
+                ?.let { timeline.dayIdAtFraction(it) }
+                ?: scrollInfo.value.dayId
+        }
+    }
 
     TimelineScrollIndicator(
         dayId = displayDayId,

@@ -17,7 +17,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
 import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
@@ -33,21 +32,9 @@ internal fun HomeScreen(
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return
     }
-    val viewerItems = state.timeline.snapshot
-        ?.slots
-        ?.mapIndexedNotNull { slotIndex, slot ->
-            slot.mediaItem?.let { item ->
-                ViewerMediaItem(
-                    item = item,
-                    slotIndex = slotIndex,
-                )
-            }
-        }
-        .orEmpty()
-    val items = viewerItems.map { it.item }
-    val slotIndexByFileId = viewerItems.associate { it.item.fileId to it.slotIndex }
+    val viewerTimeline = rememberViewerTimeline(state.timeline.snapshot)
     val visibleViewerFileId = viewerTransitionCoordinator.viewerFileId?.takeIf { fileId ->
-        items.any { it.fileId == fileId }
+        viewerTimeline.slotIndexByFileId.containsKey(fileId)
     }
 
     NextGalleryScaffold(
@@ -97,8 +84,8 @@ internal fun HomeScreen(
             if (visibleViewerFileId != null) {
                 MediaDetailScreen(
                     initialFileId = visibleViewerFileId,
-                    items = items,
-                    slotIndexByFileId = slotIndexByFileId,
+                    items = viewerTimeline.items,
+                    slotIndexByFileId = viewerTimeline.slotIndexByFileId,
                     tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
                     thumbnailPreviews = state.timeline.thumbnailPreviews,
                     credentials = credentials,
@@ -112,8 +99,3 @@ internal fun HomeScreen(
         }
     }
 }
-
-private data class ViewerMediaItem(
-    val item: MediaItem,
-    val slotIndex: Int,
-)
