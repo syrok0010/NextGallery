@@ -108,4 +108,10 @@ UI через `LazyGridState` сообщает видимый диапазон s
 
 - Нужен ли лимит/особая стратегия для дней с тысячами элементов.
 - Когда подключать metadata cache.
-- Как лучше совместить day details batching с Memories `image/multipreview`.
+
+## Дополнение: граница загрузки thumbnail
+
+Viewport-controller загружает только day details. Thumbnail-запрос запускает Coil при композиции
+tile в `LazyGrid`; общий Fetcher объединяет близкие по времени cache miss в
+`image/multipreview`. Поэтому состав видимых элементов остаётся ответственностью LazyGrid, а
+batching транспортного endpoint не требует отдельной карты thumbnail-состояния во ViewModel.

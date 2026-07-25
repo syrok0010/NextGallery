@@ -6,39 +6,25 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TimelineUiStateTest {
     @Test
-    fun `refresh preserves only thumbnails whose file and etag are unchanged`() {
-        val previousSnapshot = snapshot(
-            items = listOf(
-                mediaItem(fileId = 1, etag = "same"),
-                mediaItem(fileId = 2, etag = "old"),
-            ),
-        )
+    fun `refresh retains only pending days that still exist and remain unloaded`() {
         val refreshedSnapshot = snapshot(
-            items = listOf(
-                mediaItem(fileId = 1, etag = "same"),
-                mediaItem(fileId = 2, etag = "new"),
-            ),
+            items = listOf(mediaItem(fileId = 1, etag = "same")),
         )
         val state = TimelineUiState(
-            snapshot = previousSnapshot,
-            thumbnailKeys = mapOf(1L to thumbnailKey(1), 2L to thumbnailKey(2)),
-            thumbnailLoadingFileIds = setOf(1, 2),
-            thumbnailFailedFileIds = setOf(1, 2),
+            loadingDayIds = setOf(DAY_ID, DAY_ID + 1),
+            failedDayIds = setOf(DAY_ID, DAY_ID + 1),
         )
 
         val refreshedState = state.withRefreshedSnapshot(refreshedSnapshot)
 
-        assertEquals(setOf(1L), refreshedState.thumbnailKeys.keys)
-        assertEquals(setOf(1L), refreshedState.thumbnailLoadingFileIds)
-        assertTrue(refreshedState.thumbnailFailedFileIds.isEmpty())
+        assertEquals(emptySet<Int>(), refreshedState.loadingDayIds)
+        assertEquals(emptySet<Int>(), refreshedState.failedDayIds)
     }
 
     private fun snapshot(items: List<MediaItem>): TimelineSnapshot {
@@ -79,16 +65,6 @@ class TimelineUiStateTest {
             isFavorite = false,
             isHidden = false,
             assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-        )
-    }
-
-    private fun thumbnailKey(fileId: Long): ThumbnailKey {
-        return ThumbnailKey(
-            accountScope = "cloud.example.com|user",
-            fileId = fileId,
-            width = 512,
-            height = 512,
-            etag = "etag-$fileId",
         )
     }
 

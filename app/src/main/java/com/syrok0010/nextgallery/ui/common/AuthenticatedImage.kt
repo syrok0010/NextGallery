@@ -10,7 +10,7 @@ import coil3.request.ImageRequest
 import android.content.Context
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailRequest
 
 @Composable
 internal fun AuthenticatedImage(
@@ -39,20 +39,20 @@ internal fun AuthenticatedImage(
 
 @Composable
 internal fun ThumbnailImage(
-    key: ThumbnailKey,
+    request: ThumbnailRequest,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current
-    val request = remember(context, key) {
+    val imageRequest = remember(context, request) {
         ImageRequest.Builder(context)
-            .data(key)
+            .data(request)
             .build()
     }
 
     AsyncImage(
-        model = request,
+        model = imageRequest,
         contentDescription = contentDescription,
         modifier = modifier,
         contentScale = contentScale,

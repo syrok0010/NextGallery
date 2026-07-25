@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.thumbnail
 
+import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -29,6 +30,24 @@ class ThumbnailKeyTest {
             original.coilMemoryCacheKey(),
             thumbnailKey(width = 256, height = 256).coilMemoryCacheKey(),
         )
+    }
+
+    @Test
+    fun `thumbnail request creates its cache identity immediately`() {
+        val request = thumbnailRequest(
+            credentials = AccountCredentials(
+                serverUrl = "https://cloud.example.com/",
+                loginName = "user",
+                appPassword = "secret",
+            ),
+            fileId = 42,
+            etag = "etag",
+        )
+
+        assertEquals("https://cloud.example.com|user", request.key.accountScope)
+        assertEquals(42L, request.key.fileId)
+        assertEquals(512, request.key.width)
+        assertEquals("etag", request.key.etag)
     }
 
     private fun thumbnailKey(

@@ -35,9 +35,9 @@ stream/download
 WebDAV
 ```
 
-Coil 3 выбран как Compose-friendly image loader. Grid thumbnails загружаются batch-запросом
-`image/multipreview`, сохраняются в файловый cache и затем передаются Coil через стабильный
-`ThumbnailKey`.
+Coil 3 выбран как Compose-friendly image loader. Каждый tile сразу создаёт стабильный
+`ThumbnailRequest`. Custom Coil Fetcher проверяет файловый cache, а одновременные cache miss
+объединяет в batch-запросы `image/multipreview`.
 
 Политика auth headers, нормализация server URL и правила сборки request должны жить в одном transport adapter module, чтобы JSON API, binary endpoints и image loading не дублировали transport rules по разным caller'ам.
 
@@ -61,10 +61,16 @@ Coil 3 выбран как Compose-friendly image loader. Grid thumbnails заг
 - `NextcloudTransport` централизует normalized base/origin URL, auth headers и request policy для Retrofit JSON API, raw binary fetch и Coil image requests.
 - `ThumbnailPreview.bytes` является только транспортным значением между multipreview parser и
   файловым cache. UI state не удерживает compressed bytes.
-- UI state хранит лёгкий `Map<Long, ThumbnailKey>`. Ключ включает account scope, `fileId`, размер
-  и `etag`, поэтому корректно разделяет аккаунты и версии файла.
-- Custom Coil `Keyer<ThumbnailKey>` управляет идентичностью decoded memory cache, а
-  `Fetcher<ThumbnailKey>` читает исходные compressed bytes из файлового cache.
+- UI state не хранит карту thumbnail-ключей. Tile синхронно строит `ThumbnailRequest` из
+  credentials, `fileId`, размера и `etag`; поэтому модель Coil существует уже при первой
+  композиции tile.
+- `ThumbnailRequest` разделяет идентичность и доступ: `ThumbnailKey` содержит account scope,
+  `fileId`, размер и `etag`, а credentials используются только Fetcher для cache miss.
+- Custom Coil `Keyer<ThumbnailRequest>` управляет идентичностью decoded memory cache.
+  `Fetcher<ThumbnailRequest>` сначала читает файловый cache, затем передаёт miss общему
+  `ThumbnailBatchLoader`.
+- `ThumbnailBatchLoader` дедуплицирует одновременные запросы, собирает их в течение короткого
+  окна 12 мс и ограничивает один вызов `image/multipreview` 12 элементами.
 - Coil memory cache ограничен 15% доступной приложению памяти. Файловый cache остаётся отдельным
   cache-first слоем для batch endpoint.
 
@@ -73,4 +79,5 @@ Coil 3 выбран как Compose-friendly image loader. Grid thumbnails заг
 - Secure storage для app password.
 - HTTP cache policy для thumbnails/originals.
 - Ограничение размера и eviction policy файлового thumbnail cache.
+- Политика retry и fallback одиночного preview для partial/failed multipreview.
 - WebDAV fallback.

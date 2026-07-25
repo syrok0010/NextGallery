@@ -9,6 +9,7 @@ import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionViewModel
 import com.syrok0010.nextgallery.ui.auth.LoginViewModel
@@ -35,6 +36,7 @@ val appModule = module {
     single { NextcloudLoginRepository(get()) }
     single { MemoriesMultipreviewClient(get(), get()) }
     single { MemoriesRepository(get(), get(), get()) }
+    single { ThumbnailBatchLoader(get()) }
     single { SessionStore(get()) }
 
     viewModelOf(::SessionViewModel)

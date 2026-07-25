@@ -63,6 +63,7 @@ internal fun HomeScreen(
                 TimelinePanel(
                     state = state.timeline,
                     message = state.message,
+                    credentials = credentials,
                     onViewportObservation = viewModel::observeTimelineViewport,
                     revealFileId = viewerTransitionCoordinator.revealFileId,
                     onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
@@ -89,7 +90,6 @@ internal fun HomeScreen(
                     items = viewerTimeline.items,
                     slotIndexByFileId = viewerTimeline.slotIndexByFileId,
                     tileBoundsForFileId = viewerTransitionCoordinator::timelineTileBounds,
-                    thumbnailKeys = state.timeline.thumbnailKeys,
                     credentials = credentials,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->

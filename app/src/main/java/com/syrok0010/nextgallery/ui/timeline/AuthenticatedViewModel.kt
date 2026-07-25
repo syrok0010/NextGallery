@@ -67,12 +67,6 @@ class AuthenticatedViewModel(
                     credentials: AccountCredentials,
                     dayIds: List<Int>,
                 ) = memoriesRepository.loadTimelineDays(credentials, dayIds)
-
-                override suspend fun loadThumbnails(
-                    credentials: AccountCredentials,
-                    fileIds: List<Long>,
-                    etagsByFileId: Map<Long, String?>,
-                ) = memoriesRepository.loadThumbnails(credentials, fileIds, etagsByFileId)
             },
         )
 

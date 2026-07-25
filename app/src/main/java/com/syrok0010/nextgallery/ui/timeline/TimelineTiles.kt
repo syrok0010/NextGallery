@@ -23,9 +23,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -55,7 +56,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 @Composable
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
-    thumbnailKey: ThumbnailKey?,
+    credentials: AccountCredentials,
     registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
@@ -66,7 +67,7 @@ internal fun TimelineSlotTile(
     } else {
         MediaTile(
             item = item,
-            thumbnailKey = thumbnailKey,
+            credentials = credentials,
             registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
@@ -85,7 +86,7 @@ private fun PlaceholderMediaTile() {
 @Composable
 private fun MediaTile(
     item: MediaItem,
-    thumbnailKey: ThumbnailKey?,
+    credentials: AccountCredentials,
     registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -106,14 +107,18 @@ private fun MediaTile(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
     ) {
-        if (thumbnailKey != null) {
-            ThumbnailImage(
-                key = thumbnailKey,
-                contentDescription = item.displayName,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        }
+        ThumbnailImage(
+            request = remember(credentials, item.fileId, item.etag) {
+                thumbnailRequest(
+                    credentials = credentials,
+                    fileId = item.fileId,
+                    etag = item.etag,
+                )
+            },
+            contentDescription = item.displayName,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
 
         if (item.isVideo) {
             Text(

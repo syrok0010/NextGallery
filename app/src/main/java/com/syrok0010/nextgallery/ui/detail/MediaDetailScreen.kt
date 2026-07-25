@@ -71,7 +71,7 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
@@ -88,7 +88,6 @@ internal fun MediaDetailScreen(
     items: List<MediaItem>,
     slotIndexByFileId: Map<Long, Int>,
     tileBoundsForFileId: (fileId: Long) -> Rect?,
-    thumbnailKeys: Map<Long, ThumbnailKey>,
     credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
@@ -306,7 +305,6 @@ internal fun MediaDetailScreen(
                         null
                     },
                     credentials = credentials,
-                    thumbnailKey = thumbnailKeys[item.fileId],
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
                         hdrByFileId[item.fileId] = hasHdr
@@ -348,7 +346,6 @@ private fun MediaViewerPage(
     settleProgress: Float,
     predictiveTarget: ViewerBoundsTransform?,
     credentials: AccountCredentials,
-    thumbnailKey: ThumbnailKey?,
     onToggleChrome: () -> Unit,
     onHdrChange: (Boolean) -> Unit,
     onZoomedOutChange: (Boolean) -> Unit,
@@ -358,6 +355,13 @@ private fun MediaViewerPage(
         MemoriesAssetUrlFactory.urlsFor(
             assetRef = item.assetRef,
             serverUrl = credentials.serverUrl,
+        )
+    }
+    val thumbnail = remember(credentials, item.fileId, item.etag) {
+        thumbnailRequest(
+            credentials = credentials,
+            fileId = item.fileId,
+            etag = item.etag,
         )
     }
 
@@ -410,22 +414,20 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
-                if (thumbnailKey != null) {
-                    ThumbnailImage(
-                        key = thumbnailKey,
-                        contentDescription = item.displayName,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                    )
-                } else {
-                    AuthenticatedImage(
-                        url = imageUrls.detailPreviewUrl,
-                        credentials = credentials,
-                        contentDescription = item.displayName,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
+                ThumbnailImage(
+                    request = thumbnail,
+                    contentDescription = item.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
+
+                AuthenticatedImage(
+                    url = imageUrls.detailPreviewUrl,
+                    credentials = credentials,
+                    contentDescription = item.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
 
                 LaunchedEffect(item.fileId) {
                     onHdrChange(false)
@@ -481,14 +483,12 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    thumbnailKey?.let { key ->
-                        ThumbnailImage(
-                            key = key,
-                            contentDescription = item.displayName,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
+                    ThumbnailImage(
+                        request = thumbnail,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
                 }
 
                 ZoomableAsyncImage(

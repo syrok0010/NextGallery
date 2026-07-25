@@ -3,7 +3,6 @@ package com.syrok0010.nextgallery.ui
 import com.syrok0010.nextgallery.data.auth.LoginSession
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 
 sealed interface SessionUiState {
     data object SignedOut : SessionUiState
@@ -22,19 +21,9 @@ data class TimelineUiState(
     val loadingDayIds: Set<Int> = emptySet(),
     val failedDayIds: Set<Int> = emptySet(),
     val loadMoreError: UiText? = null,
-    val thumbnailKeys: Map<Long, ThumbnailKey> = emptyMap(),
-    val thumbnailLoadingFileIds: Set<Long> = emptySet(),
-    val thumbnailFailedFileIds: Set<Long> = emptySet(),
 )
 
 internal fun TimelineUiState.withRefreshedSnapshot(refreshedSnapshot: TimelineSnapshot): TimelineUiState {
-    val previousItemsByFileId = snapshot?.items?.associateBy { it.fileId }.orEmpty()
-    val reusableThumbnailFileIds = refreshedSnapshot.items
-        .asSequence()
-        .filter { refreshedItem ->
-            previousItemsByFileId[refreshedItem.fileId]?.etag == refreshedItem.etag
-        }
-        .mapTo(mutableSetOf()) { it.fileId }
     val refreshedDayIds = refreshedSnapshot.days.mapTo(mutableSetOf()) { it.dayId }
 
     return copy(
@@ -46,9 +35,6 @@ internal fun TimelineUiState.withRefreshedSnapshot(refreshedSnapshot: TimelineSn
             .intersect(refreshedDayIds)
             .minus(refreshedSnapshot.loadedDayIds),
         loadMoreError = null,
-        thumbnailKeys = thumbnailKeys.filterKeys(reusableThumbnailFileIds::contains),
-        thumbnailLoadingFileIds = thumbnailLoadingFileIds.intersect(reusableThumbnailFileIds),
-        thumbnailFailedFileIds = emptySet(),
     )
 }
 

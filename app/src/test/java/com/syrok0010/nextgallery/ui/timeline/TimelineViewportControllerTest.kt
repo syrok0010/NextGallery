@@ -7,13 +7,11 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TimelineViewportControllerTest {
@@ -53,7 +51,7 @@ class TimelineViewportControllerTest {
     }
 
     @Test
-    fun `successful day hydration triggers thumbnail loading for newly visible items`() = runBlocking {
+    fun `successful day hydration merges items and reports loaded count`() = runBlocking {
         val dayId = 10
         val host = FakeTimelineViewportHost(
             initialSession = TimelineViewportSession(
@@ -70,16 +68,12 @@ class TimelineViewportControllerTest {
                     mediaItem(fileId = requestedDayId.toLong() * 100, dayId = requestedDayId)
                 }
             }
-            thumbnailLoader = { _, fileIds, _ ->
-                fileIds.map(::thumbnailKey)
-            }
         }
         val controller = DefaultTimelineViewportController(
             scope = this,
             host = host,
             prefetchSlots = 0,
             dayBatchSize = 1,
-            thumbnailBatchSize = 4,
         )
 
         controller.onViewportObservation(
@@ -91,67 +85,13 @@ class TimelineViewportControllerTest {
         )
         awaitUntil {
             host.dayLoadRequests == listOf(listOf(dayId)) &&
-                host.thumbnailLoadRequests == listOf(listOf(1000L)) &&
                 host.loadedItemsStatusCounts == listOf(1) &&
-                host.requireSession().timelineState.snapshot?.loadedDayIds == setOf(dayId) &&
-                host.requireSession().timelineState.thumbnailKeys.containsKey(1000L)
+                host.requireSession().timelineState.snapshot?.loadedDayIds == setOf(dayId)
         }
 
         assertEquals(listOf(listOf(dayId)), host.dayLoadRequests)
-        assertEquals(listOf(listOf(1000L)), host.thumbnailLoadRequests)
         assertEquals(listOf(1), host.loadedItemsStatusCounts)
         assertEquals(setOf(dayId), host.requireSession().timelineState.snapshot?.loadedDayIds)
-        assertTrue(host.requireSession().timelineState.thumbnailKeys.containsKey(1000L))
-    }
-
-    @Test
-    fun `thumbnail batches stay bounded and skip already handled file ids`() = runBlocking {
-        val days = (10..15).map { TimelineDay(dayId = it, count = 1) }
-        val itemsByDay = days.associate { day ->
-            day.dayId to listOf(mediaItem(fileId = (day.dayId - 9).toLong(), dayId = day.dayId))
-        }
-        val host = FakeTimelineViewportHost(
-            initialSession = TimelineViewportSession(
-                credentials = credentials(),
-                timelineState = TimelineUiState(
-                    snapshot = timelineSnapshot(
-                        days = days,
-                        itemsByDay = itemsByDay,
-                        loadedDayIds = days.mapTo(mutableSetOf()) { it.dayId },
-                    ),
-                    thumbnailKeys = mapOf(1L to thumbnailKey(1L)),
-                    thumbnailLoadingFileIds = setOf(2L),
-                    thumbnailFailedFileIds = setOf(3L),
-                ),
-            ),
-        ).apply {
-            thumbnailLoader = { _, fileIds, _ ->
-                delay(20)
-                fileIds.map(::thumbnailKey)
-            }
-        }
-        val controller = DefaultTimelineViewportController(
-            scope = this,
-            host = host,
-            prefetchSlots = 0,
-            thumbnailBatchSize = 2,
-        )
-
-        controller.onViewportObservation(
-            TimelineViewportObservation(
-                firstVisibleSlotIndex = 0,
-                lastVisibleSlotIndex = 5,
-                loadingMode = TimelineViewportLoadingMode.Immediate,
-            ),
-        )
-        awaitUntil {
-            host.thumbnailLoadRequests == listOf(listOf(4L, 5L), listOf(6L)) &&
-                host.requireSession().timelineState.thumbnailKeys.keys.containsAll(listOf(4L, 5L, 6L))
-        }
-
-        assertEquals(listOf(listOf(4L, 5L), listOf(6L)), host.thumbnailLoadRequests)
-        assertTrue(host.maxConcurrentThumbnailLoads <= 2)
-        assertTrue(host.dayLoadRequests.isEmpty())
     }
 
     @Test
@@ -219,14 +159,8 @@ class TimelineViewportControllerTest {
     ) : TimelineViewportHost {
         var session: TimelineViewportSession? = initialSession
         var dayLoader: suspend (AccountCredentials, List<Int>) -> List<MediaItem> = { _, _ -> emptyList() }
-        var thumbnailLoader: suspend (AccountCredentials, List<Long>, Map<Long, String?>) -> List<ThumbnailKey> =
-            { _, _, _ -> emptyList() }
         val dayLoadRequests = mutableListOf<List<Int>>()
-        val thumbnailLoadRequests = mutableListOf<List<Long>>()
         val loadedItemsStatusCounts = mutableListOf<Int>()
-        var maxConcurrentThumbnailLoads = 0
-            private set
-        private var concurrentThumbnailLoads = 0
 
         override fun currentSession(): TimelineViewportSession? = session
 
@@ -247,21 +181,6 @@ class TimelineViewportControllerTest {
         ): List<MediaItem> {
             dayLoadRequests += dayIds
             return dayLoader(credentials, dayIds)
-        }
-
-        override suspend fun loadThumbnails(
-            credentials: AccountCredentials,
-            fileIds: List<Long>,
-            etagsByFileId: Map<Long, String?>,
-        ): List<ThumbnailKey> {
-            thumbnailLoadRequests += fileIds
-            concurrentThumbnailLoads += 1
-            maxConcurrentThumbnailLoads = maxOf(maxConcurrentThumbnailLoads, concurrentThumbnailLoads)
-            return try {
-                thumbnailLoader(credentials, fileIds, etagsByFileId)
-            } finally {
-                concurrentThumbnailLoads -= 1
-            }
         }
 
         fun requireSession(): TimelineViewportSession {
@@ -312,16 +231,6 @@ class TimelineViewportControllerTest {
             isFavorite = false,
             isHidden = false,
             assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-        )
-    }
-
-    private fun thumbnailKey(fileId: Long): ThumbnailKey {
-        return ThumbnailKey(
-            accountScope = "cloud.example.com|user",
-            fileId = fileId,
-            width = 512,
-            height = 512,
-            etag = "etag-$fileId",
         )
     }
 

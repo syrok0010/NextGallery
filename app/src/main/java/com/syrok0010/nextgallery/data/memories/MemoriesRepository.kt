@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.data.thumbnail.thumbnailAccountScope
 
 class MemoriesRepository(
     private val transport: NextcloudTransport,
@@ -63,27 +64,31 @@ class MemoriesRepository(
         return items
     }
 
-    suspend fun loadThumbnails(
+    suspend fun ensureThumbnails(
         credentials: AccountCredentials,
-        fileIds: List<Long>,
-        etagsByFileId: Map<Long, String?> = emptyMap(),
+        requestedKeys: List<ThumbnailKey>,
     ): List<ThumbnailKey> {
-        val distinctFileIds = fileIds.distinct()
-        val accountScope = credentials.thumbnailAccountScope()
-        val requestedKeysByFileId = distinctFileIds.associateWith { fileId ->
-            ThumbnailKey(
-                accountScope = accountScope,
-                fileId = fileId,
-                width = DEFAULT_THUMBNAIL_SIZE,
-                height = DEFAULT_THUMBNAIL_SIZE,
-                etag = etagsByFileId[fileId],
-            )
+        if (requestedKeys.isEmpty()) {
+            return emptyList()
         }
+
+        val accountScope = credentials.thumbnailAccountScope()
+        val firstKey = requestedKeys.first()
+        require(requestedKeys.all { key ->
+            key.accountScope == accountScope &&
+                key.width == firstKey.width &&
+                key.height == firstKey.height
+        }) {
+            "A thumbnail batch must belong to one account and use one size"
+        }
+        val keysByFileId = requestedKeys.distinctBy { it.fileId }.associateBy { it.fileId }
+        val distinctFileIds = keysByFileId.keys.toList()
+        val etagsByFileId = keysByFileId.mapValues { (_, key) -> key.etag }
         val cachedKeys = runCatching {
             cacheRepository.loadThumbnailKeys(
                 fileIds = distinctFileIds,
-                width = DEFAULT_THUMBNAIL_SIZE,
-                height = DEFAULT_THUMBNAIL_SIZE,
+                width = firstKey.width,
+                height = firstKey.height,
                 etagsByFileId = etagsByFileId,
                 accountScope = accountScope,
             )
@@ -97,18 +102,18 @@ class MemoriesRepository(
         val remotePreviews = multipreviewClient.loadThumbnails(
             credentials = credentials,
             fileIds = missingFileIds,
-            width = DEFAULT_THUMBNAIL_SIZE,
-            height = DEFAULT_THUMBNAIL_SIZE,
+            width = firstKey.width,
+            height = firstKey.height,
         )
         val storedRemoteKeys = runCatching {
             cacheRepository.saveThumbnails(
                 previews = remotePreviews,
-                width = DEFAULT_THUMBNAIL_SIZE,
-                height = DEFAULT_THUMBNAIL_SIZE,
+                width = firstKey.width,
+                height = firstKey.height,
                 etagsByFileId = etagsByFileId,
                 accountScope = accountScope,
             )
-            remotePreviews.mapNotNull { preview -> requestedKeysByFileId[preview.fileId] }
+            remotePreviews.mapNotNull { preview -> keysByFileId[preview.fileId] }
         }.getOrDefault(emptyList())
 
         return cachedKeys + storedRemoteKeys
@@ -118,11 +123,4 @@ class MemoriesRepository(
         runCatching { cacheRepository.clear() }
     }
 
-    private companion object {
-        const val DEFAULT_THUMBNAIL_SIZE = 512
-    }
-
-    private fun AccountCredentials.thumbnailAccountScope(): String {
-        return "${NextcloudTransport.normalizeServerOrigin(serverUrl)}|$loginName"
-    }
 }
