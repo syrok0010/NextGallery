@@ -20,7 +20,7 @@ internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
     thumbnailKeys: Map<Long, ThumbnailKey>,
-    onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     LazyVerticalGrid(
@@ -47,7 +47,7 @@ internal fun TimelineGrid(
                     slot = item.slot,
                     thumbnailKey = item.slot.mediaItem
                         ?.let { thumbnailKeys[it.fileId] },
-                    onBoundsChanged = onTileBoundsChanged,
+                    registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
                 )
             }

@@ -11,7 +11,7 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.onTileBoundsChanged(fileId = 2L, bounds = offscreenTileBounds)
+        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
         coordinator.onCurrentItemChanged(2L)
 
         coordinator.open(1L)
@@ -25,7 +25,7 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.onTileBoundsChanged(fileId = 2L, bounds = offscreenTileBounds)
+        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
 
         coordinator.onCurrentItemChanged(2L)
 
@@ -38,8 +38,8 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.onTileBoundsChanged(fileId = 1L, bounds = visibleTileBounds)
-        coordinator.onTileBoundsChanged(fileId = 2L, bounds = offscreenTileBounds)
+        coordinator.registerTimelineTile(fileId = 1L) { visibleTileBounds }
+        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
         coordinator.onCurrentItemChanged(2L)
 
         coordinator.onCurrentItemChanged(1L)
@@ -53,7 +53,7 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.onTileBoundsChanged(fileId = 2L, bounds = offscreenTileBounds)
+        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
         coordinator.onCurrentItemChanged(2L)
 
         coordinator.close(2L)
@@ -63,18 +63,52 @@ class ViewerTransitionCoordinatorTest {
     }
 
     @Test
+    fun `tile bounds are queried from provider on demand`() {
+        val coordinator = DefaultViewerTransitionCoordinator()
+        var currentBounds = visibleTileBounds
+
+        coordinator.onAppBoundsChanged(appBounds)
+        coordinator.registerTimelineTile(fileId = 1L) { currentBounds }
+
+        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(1L))
+
+        currentBounds = offscreenTileBounds
+
+        assertNull(coordinator.timelineTileBounds(1L))
+    }
+
+    @Test
+    fun `stale unregister callback does not remove newer tile provider`() {
+        val coordinator = DefaultViewerTransitionCoordinator()
+        val unregisterOldProvider = coordinator.registerTimelineTile(fileId = 1L) {
+            offscreenTileBounds
+        }
+        val unregisterCurrentProvider = coordinator.registerTimelineTile(fileId = 1L) {
+            visibleTileBounds
+        }
+
+        unregisterOldProvider()
+
+        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(1L))
+
+        unregisterCurrentProvider()
+
+        assertNull(coordinator.timelineTileBounds(1L))
+    }
+
+    @Test
     fun `signed out session resets viewer transition state`() {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.onTileBoundsChanged(fileId = 1L, bounds = visibleTileBounds)
+        coordinator.registerTimelineTile(fileId = 1L) { visibleTileBounds }
         coordinator.open(1L)
 
         coordinator.onSessionChanged(SessionUiState.SignedOut)
 
         assertNull(coordinator.viewerFileId)
         assertNull(coordinator.revealFileId)
-        assertEquals(emptyMap<Long, Rect>(), coordinator.visibleTimelineTileBoundsByFileId)
+        assertNull(coordinator.timelineTileBounds(1L))
     }
 
     companion object {

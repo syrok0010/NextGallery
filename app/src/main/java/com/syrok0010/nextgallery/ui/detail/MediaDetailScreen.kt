@@ -87,7 +87,7 @@ internal fun MediaDetailScreen(
     initialFileId: Long,
     items: List<MediaItem>,
     slotIndexByFileId: Map<Long, Int>,
-    tileBoundsByFileId: Map<Long, Rect>,
+    tileBoundsForFileId: (fileId: Long) -> Rect?,
     thumbnailKeys: Map<Long, ThumbnailKey>,
     credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
@@ -127,7 +127,7 @@ internal fun MediaDetailScreen(
         coroutineScope.launch {
             val target = if (animateToTile) {
                 currentSurfaceBounds?.settleTarget(
-                    tileBounds = tileBoundsByFileId[item.fileId],
+                    tileBounds = tileBoundsForFileId(item.fileId),
                     dragOffset = dragOffset.value,
                     predictiveBackProgress = predictiveBackProgress,
                 )
@@ -169,7 +169,6 @@ internal fun MediaDetailScreen(
     LaunchedEffect(
         currentItem?.fileId,
         currentSurfaceBounds,
-        tileBoundsByFileId[openingFileId],
     ) {
         if (!enterPending) {
             return@LaunchedEffect
@@ -183,7 +182,7 @@ internal fun MediaDetailScreen(
         }
 
         val surfaceBounds = currentSurfaceBounds ?: return@LaunchedEffect
-        val target = surfaceBounds.enterTarget(tileBoundsByFileId[item.fileId])
+        val target = surfaceBounds.enterTarget(tileBoundsForFileId(item.fileId))
         if (target == null) {
             enterProgress.snapTo(1f)
             enterPending = false
@@ -299,7 +298,7 @@ internal fun MediaDetailScreen(
                     settleProgress = settleProgress.value,
                     predictiveTarget = if (page == pagerState.currentPage) {
                         currentSurfaceBounds?.settleTarget(
-                            tileBounds = tileBoundsByFileId[item.fileId],
+                            tileBounds = tileBoundsForFileId(item.fileId),
                             dragOffset = Offset.Zero,
                             predictiveBackProgress = 0f,
                         )

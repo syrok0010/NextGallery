@@ -66,8 +66,10 @@ internal fun HomeScreen(
                     onViewportObservation = viewModel::observeTimelineViewport,
                     revealFileId = viewerTransitionCoordinator.revealFileId,
                     onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
-                    onTileBoundsChanged = viewerTransitionCoordinator::onTileBoundsChanged,
-                    onSelect = { item -> viewerTransitionCoordinator.open(item.fileId) },
+                    registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
+                    onSelect = { item ->
+                        viewerTransitionCoordinator.open(item.fileId)
+                    },
                 )
             }
 
@@ -86,7 +88,7 @@ internal fun HomeScreen(
                     initialFileId = visibleViewerFileId,
                     items = viewerTimeline.items,
                     slotIndexByFileId = viewerTimeline.slotIndexByFileId,
-                    tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
+                    tileBoundsForFileId = viewerTransitionCoordinator::timelineTileBounds,
                     thumbnailKeys = state.timeline.thumbnailKeys,
                     credentials = credentials,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },

@@ -36,7 +36,7 @@ internal fun TimelinePanel(
     onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealFileId: Long?,
     onFileRevealed: () -> Unit,
-    onTileBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val timeline = state.snapshot
@@ -149,7 +149,7 @@ internal fun TimelinePanel(
                     gridItems = gridItems,
                     gridState = gridState,
                     thumbnailKeys = state.thumbnailKeys,
-                    onTileBoundsChanged = onTileBoundsChanged,
+                    registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
                 )
 

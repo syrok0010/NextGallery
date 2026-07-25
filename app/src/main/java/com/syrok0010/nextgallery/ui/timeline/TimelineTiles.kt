@@ -14,9 +14,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
@@ -56,7 +56,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
     thumbnailKey: ThumbnailKey?,
-    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
@@ -67,7 +67,7 @@ internal fun TimelineSlotTile(
         MediaTile(
             item = item,
             thumbnailKey = thumbnailKey,
-            onBoundsChanged = onBoundsChanged,
+            registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
     }
@@ -86,20 +86,22 @@ private fun PlaceholderMediaTile() {
 private fun MediaTile(
     item: MediaItem,
     thumbnailKey: ThumbnailKey?,
-    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
-    DisposableEffect(item.fileId) {
-        onDispose {
-            onBoundsChanged(item.fileId, null)
-        }
+    val coordinatesHolder = remember(item.fileId) {
+        TimelineTileCoordinates()
+    }
+    DisposableEffect(item.fileId, registerTimelineTile) {
+        val unregister = registerTimelineTile(item.fileId, coordinatesHolder::boundsInRoot)
+        onDispose(unregister)
     }
 
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .onGloballyPositioned { coordinates ->
-                onBoundsChanged(item.fileId, coordinates.boundsInRoot())
+                coordinatesHolder.coordinates = coordinates
             }
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
@@ -127,5 +129,15 @@ private fun MediaTile(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
+    }
+}
+
+private class TimelineTileCoordinates {
+    var coordinates: LayoutCoordinates? = null
+
+    fun boundsInRoot(): Rect? {
+        return coordinates
+            ?.takeIf(LayoutCoordinates::isAttached)
+            ?.boundsInRoot()
     }
 }
