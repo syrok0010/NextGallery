@@ -109,9 +109,20 @@ Policy:
 - если день уже есть в cache, не перезагружать его автоматически в MVP-1;
 - manual refresh обновляет timeline index из сети;
 - если при refresh у дня изменился `count`, cached day details для этого дня можно удалить или пометить stale;
-- logout удаляет credentials и timeline cache/thumbnail files для аккаунта;
+- logout удаляет credentials, cloud metadata, remote thumbnail files и account-scoped связи;
+- logout сохраняет device-scoped MediaStore index и persistent `MediaId`, но signed-out UI не показывает локальную библиотеку;
+- после следующего входа сохраненная локальная проекция заново объединяется с cloud timeline подключенного аккаунта;
 - schema changes могут делать destructive reset cache DB, пока действует dev-допущение;
 - TTL в MVP-1 не вводить.
+
+Для unified timeline с локальными фото при отсутствии сети:
+
+- облачный медиаобъект показывается, только если в cache есть его metadata, достаточные для identity, дедупликации и положения в timeline;
+- отсутствие cached thumbnail не скрывает объект: тайл показывает placeholder с признаком облачной копии;
+- index-only remote slots без metadata не показываются, потому что их нельзя дедуплицировать с локальными копиями или точно встроить в общий порядок;
+- после восстановления сети загруженные metadata и thumbnails дополняют timeline.
+
+Локальные thumbnails не копируются в `ThumbnailFileStore`: image loader читает их по MediaStore `content://` URI и использует собственные memory/disk caches. `ThumbnailFileStore` остается хранилищем remote previews, которым нужны authenticated requests и warm-start cache. Ключ локального thumbnail учитывает identity локальной копии и `DATE_MODIFIED`, чтобы изменение файла инвалидировало изображение.
 
 ## Последствия
 
@@ -119,7 +130,9 @@ Policy:
 - Cache loss допустим: source of truth остается Nextcloud/Memories.
 - Room появляется как долговечный storage seam раньше sync engine, но без migration guarantees.
 - Thumbnail bytes не раздувают Room DB.
+- Приложение не создает отдельную файловую копию каждого локального thumbnail и не вводит вторую eviction policy поверх MediaStore/image loader.
 - Offline mode остается отдельным будущим решением.
+- Offline unified timeline может показывать только ранее материализованную часть облачного архива, но не содержит постоянных неидентифицируемых placeholders и ложных дублей с локальными фото.
 
 ## Открытые вопросы
 
