@@ -2,18 +2,23 @@ package com.syrok0010.nextgallery.data.thumbnail
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import kotlin.time.Duration.Companion.milliseconds
 
 class ThumbnailBatchLoaderTest {
     @get:Rule
@@ -57,6 +62,93 @@ class ThumbnailBatchLoaderTest {
         }.awaitAll()
 
         assertEquals(listOf(3, 3, 1), loadedBatchSizes)
+    }
+
+    @Test
+    fun `full batch flushes without waiting for time window`() = runBlocking {
+        val credentials = credentials()
+        val loader = loader(
+            batchSize = 3,
+            batchWindowMillis = 5_000,
+        ) { _, keys ->
+            keys.toSet()
+        }
+
+        val results = withTimeout(500.milliseconds) {
+            (1L..3L).map { fileId ->
+                async {
+                    loader.ensureAvailable(thumbnailRequest(credentials, fileId, etag = "etag-$fileId"))
+                }
+            }.awaitAll()
+        }
+
+        assertTrue(results.all { it })
+    }
+
+    @Test
+    fun `duplicate request joins batch that is already loading`() = runBlocking {
+        val credentials = credentials()
+        val request = thumbnailRequest(credentials, fileId = 42, etag = "etag-42")
+        val batchStarted = CompletableDeferred<Unit>()
+        val releaseBatch = CompletableDeferred<Unit>()
+        var batchCalls = 0
+        val loader = loader(batchWindowMillis = 0) { _, keys ->
+            batchCalls += 1
+            batchStarted.complete(Unit)
+            releaseBatch.await()
+            keys.toSet()
+        }
+
+        val firstResult = async { loader.ensureAvailable(request) }
+        batchStarted.await()
+        val duplicateResult = async(start = CoroutineStart.UNDISPATCHED) {
+            loader.ensureAvailable(request)
+        }
+        releaseBatch.complete(Unit)
+
+        assertTrue(firstResult.await())
+        assertTrue(duplicateResult.await())
+        assertEquals(1, batchCalls)
+    }
+
+    @Test
+    fun `no more than configured number of batches load concurrently`() = runBlocking {
+        val credentials = credentials()
+        val activeBatches = AtomicInteger()
+        val maximumActiveBatches = AtomicInteger()
+        val fourBatchesStarted = CompletableDeferred<Unit>()
+        val releaseBatches = CompletableDeferred<Unit>()
+        val loader = loader(
+            batchSize = 1,
+            batchWindowMillis = 0,
+            maxConcurrentBatches = 4,
+        ) { _, keys ->
+            val active = activeBatches.incrementAndGet()
+            maximumActiveBatches.updateAndGet { current -> maxOf(current, active) }
+            if (active == 4) {
+                fourBatchesStarted.complete(Unit)
+            }
+            try {
+                releaseBatches.await()
+                keys.toSet()
+            } finally {
+                activeBatches.decrementAndGet()
+            }
+        }
+
+        val results = (1L..8L).map { fileId ->
+            async {
+                loader.ensureAvailable(thumbnailRequest(credentials, fileId, etag = "etag-$fileId"))
+            }
+        }
+        withTimeout(500.milliseconds) {
+            fourBatchesStarted.await()
+        }
+        assertEquals(4, maximumActiveBatches.get())
+
+        releaseBatches.complete(Unit)
+        assertTrue(results.awaitAll().all { it })
+        assertEquals(4, maximumActiveBatches.get())
     }
 
     @Test
@@ -109,13 +201,16 @@ class ThumbnailBatchLoaderTest {
 
     private fun loader(
         batchSize: Int = 12,
+        batchWindowMillis: Long = 5,
+        maxConcurrentBatches: Int = 4,
         loadBatch: suspend (AccountCredentials, List<ThumbnailKey>) -> Set<ThumbnailKey>,
     ): ThumbnailBatchLoader {
         return ThumbnailBatchLoader(
             loadBatch = loadBatch,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-            batchWindowMillis = 5,
+            batchWindowMillis = batchWindowMillis,
             batchSize = batchSize,
+            maxConcurrentBatches = maxConcurrentBatches,
         )
     }
 
