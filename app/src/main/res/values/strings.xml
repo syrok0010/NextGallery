@@ -25,6 +25,7 @@
     <string name="login_server_url_label">Адрес сервера</string>
     <string name="login_server_url_placeholder">https://cloud.example.com</string>
     <string name="login_title">Подключение к Nextcloud</string>
+    <string name="media_cloud_copy">Облачная копия</string>
     <string name="media_video_badge">VIDEO</string>
     <string name="status_creating_login_flow">Начинаю вход</string>
     <string name="status_loaded_items">Загружено %1$d элементов</string>
