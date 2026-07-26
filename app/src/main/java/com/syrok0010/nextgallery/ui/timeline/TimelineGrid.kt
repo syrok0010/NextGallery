@@ -14,13 +14,14 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.domain.media.MediaId
 
 @Composable
 internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
     credentials: AccountCredentials,
-    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
+    registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     LazyVerticalGrid(

@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import kotlinx.coroutines.delay
@@ -213,6 +214,7 @@ class TimelineViewportControllerTest {
 
     private fun mediaItem(fileId: Long, dayId: Int): MediaItem {
         return MediaItem(
+            mediaId = MediaId("remote-$fileId"),
             fileId = fileId,
             dayId = dayId,
             day = LocalDate.ofEpochDay(dayId.toLong()),

@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -14,8 +15,8 @@ import org.junit.Test
 class ViewerTimelineTest {
     @Test
     fun `projection keeps media order and original slot indexes`() {
-        val first = mediaItem(fileId = 11)
-        val second = mediaItem(fileId = 22)
+        val first = mediaItem(mediaId = MediaId("media-first"), fileId = 11)
+        val second = mediaItem(mediaId = MediaId("media-second"), fileId = 22)
         val snapshot = snapshot(
             mediaItems = listOf(first, null, second),
         )
@@ -23,7 +24,10 @@ class ViewerTimelineTest {
         val projection = snapshot.toViewerTimeline()
 
         assertEquals(listOf(first, second), projection.items)
-        assertEquals(mapOf(11L to 0, 22L to 2), projection.slotIndexByFileId)
+        assertEquals(
+            mapOf(MediaId("media-first") to 0, MediaId("media-second") to 2),
+            projection.slotIndexByMediaId,
+        )
     }
 
     @Test
@@ -33,32 +37,41 @@ class ViewerTimelineTest {
         val projection = snapshot.toViewerTimeline()
 
         assertEquals(emptyList<MediaItem>(), projection.items)
-        assertEquals(emptyMap<Long, Int>(), projection.slotIndexByFileId)
+        assertEquals(emptyMap<MediaId, Int>(), projection.slotIndexByMediaId)
     }
 
     @Test
     fun `projection reflects media added by hydration`() {
-        val loadedItem = mediaItem(fileId = 11)
-        val hydratedItem = mediaItem(fileId = 22)
+        val loadedItem = mediaItem(mediaId = MediaId("media-loaded"), fileId = 11)
+        val hydratedItem = mediaItem(mediaId = MediaId("media-hydrated"), fileId = 22)
         val initialSnapshot = snapshot(listOf(loadedItem, null))
         val hydratedSnapshot = snapshot(listOf(loadedItem, hydratedItem))
 
         val projection = hydratedSnapshot.toViewerTimeline()
 
         assertEquals(listOf(loadedItem, hydratedItem), projection.items)
-        assertEquals(mapOf(11L to 0, 22L to 1), projection.slotIndexByFileId)
+        assertEquals(
+            mapOf(MediaId("media-loaded") to 0, MediaId("media-hydrated") to 1),
+            projection.slotIndexByMediaId,
+        )
         assertEquals(listOf(loadedItem), initialSnapshot.toViewerTimeline().items)
     }
 
     @Test
-    fun `duplicate file id keeps every item and maps to the last slot`() {
-        val first = mediaItem(fileId = 11)
-        val duplicate = first.copy(displayName = "duplicate")
+    fun `same remote file id with different media ids keeps both viewer identities`() {
+        val first = mediaItem(mediaId = MediaId("media-first"), fileId = 11)
+        val duplicate = first.copy(
+            mediaId = MediaId("media-second"),
+            displayName = "duplicate",
+        )
 
         val projection = snapshot(listOf(first, null, duplicate)).toViewerTimeline()
 
         assertEquals(listOf(first, duplicate), projection.items)
-        assertEquals(mapOf(11L to 2), projection.slotIndexByFileId)
+        assertEquals(
+            mapOf(MediaId("media-first") to 0, MediaId("media-second") to 2),
+            projection.slotIndexByMediaId,
+        )
     }
 
     private fun snapshot(mediaItems: List<MediaItem?>): TimelineSnapshot {
@@ -89,8 +102,9 @@ class ViewerTimelineTest {
         )
     }
 
-    private fun mediaItem(fileId: Long): MediaItem {
+    private fun mediaItem(mediaId: MediaId, fileId: Long): MediaItem {
         return MediaItem(
+            mediaId = mediaId,
             fileId = fileId,
             dayId = DAY_ID,
             day = LocalDate.ofEpochDay(DAY_ID.toLong()),

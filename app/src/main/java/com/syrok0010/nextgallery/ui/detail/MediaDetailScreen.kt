@@ -72,6 +72,7 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
+import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
 import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
@@ -84,20 +85,20 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun MediaDetailScreen(
-    initialFileId: Long,
+    initialMediaId: MediaId,
     items: List<MediaItem>,
-    slotIndexByFileId: Map<Long, Int>,
-    tileBoundsForFileId: (fileId: Long) -> Rect?,
+    slotIndexByMediaId: Map<MediaId, Int>,
+    tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
 ) {
-    val initialPage = remember(initialFileId, items) {
-        items.indexOfFirst { it.fileId == initialFileId }.coerceAtLeast(0)
+    val initialPage = remember(initialMediaId, items) {
+        items.indexOfFirst { it.mediaId == initialMediaId }.coerceAtLeast(0)
     }
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
-    val openingFileId = remember { initialFileId }
+    val openingMediaId = remember { initialMediaId }
     var chromeVisible by remember { mutableStateOf(true) }
     var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
     var currentSurfaceBounds by remember { mutableStateOf<Rect?>(null) }
@@ -110,13 +111,13 @@ internal fun MediaDetailScreen(
     val backgroundAlpha = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
     val dismissThresholdPx = with(LocalDensity.current) { ViewerDismissThreshold.toPx() }
-    val pageZoomedOutByFileId = remember { mutableStateMapOf<Long, Boolean>() }
-    val hdrByFileId = remember { mutableStateMapOf<Long, Boolean>() }
+    val pageZoomedOutByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }
+    val hdrByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }
     val currentItem = items.getOrNull(pagerState.currentPage)
     val activity = LocalContext.current.findActivity()
-    val currentPageHasHdr = currentItem?.let { hdrByFileId[it.fileId] == true } == true
+    val currentPageHasHdr = currentItem?.let { hdrByMediaId[it.mediaId] == true } == true
     val currentPageCanDragDown = currentItem
-        ?.let { pageZoomedOutByFileId[it.fileId] }
+        ?.let { pageZoomedOutByMediaId[it.mediaId] }
         ?: true
     val dismissInProgress = dragOffset.value != Offset.Zero ||
         predictiveBackProgress > 0f ||
@@ -126,7 +127,7 @@ internal fun MediaDetailScreen(
         coroutineScope.launch {
             val target = if (animateToTile) {
                 currentSurfaceBounds?.settleTarget(
-                    tileBounds = tileBoundsForFileId(item.fileId),
+                    tileBounds = tileBoundsForMediaId(item.mediaId),
                     dragOffset = dragOffset.value,
                     predictiveBackProgress = predictiveBackProgress,
                 )
@@ -166,7 +167,7 @@ internal fun MediaDetailScreen(
     }
 
     LaunchedEffect(
-        currentItem?.fileId,
+        currentItem?.mediaId,
         currentSurfaceBounds,
     ) {
         if (!enterPending) {
@@ -174,14 +175,14 @@ internal fun MediaDetailScreen(
         }
 
         val item = currentItem ?: return@LaunchedEffect
-        if (item.fileId != openingFileId) {
+        if (item.mediaId != openingMediaId) {
             enterProgress.snapTo(1f)
             enterPending = false
             return@LaunchedEffect
         }
 
         val surfaceBounds = currentSurfaceBounds ?: return@LaunchedEffect
-        val target = surfaceBounds.enterTarget(tileBoundsForFileId(item.fileId))
+        val target = surfaceBounds.enterTarget(tileBoundsForMediaId(item.mediaId))
         if (target == null) {
             enterProgress.snapTo(1f)
             enterPending = false
@@ -228,7 +229,7 @@ internal fun MediaDetailScreen(
     LaunchedEffect(pagerState.currentPage, items) {
         val item = items.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
         onCurrentItemChange(item)
-        val slotIndex = slotIndexByFileId[item.fileId] ?: return@LaunchedEffect
+        val slotIndex = slotIndexByMediaId[item.mediaId] ?: return@LaunchedEffect
         onVisibleTimelineRange(
             (slotIndex - ViewerTimelinePrefetchSlots).coerceAtLeast(0),
             slotIndex + ViewerTimelinePrefetchSlots,
@@ -248,7 +249,7 @@ internal fun MediaDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(currentItem?.fileId, currentPageCanDragDown) {
+                .pointerInput(currentItem?.mediaId, currentPageCanDragDown) {
                     detectDragGestures(
                         onDragCancel = {
                             predictiveBackProgress = 0f
@@ -290,14 +291,14 @@ internal fun MediaDetailScreen(
                     isCurrentPage = page == pagerState.currentPage,
                     dragOffset = dragOffset.value,
                     predictiveBackProgress = predictiveBackProgress,
-                    enterPending = enterPending && item.fileId == openingFileId,
+                    enterPending = enterPending && item.mediaId == openingMediaId,
                     enterTarget = enterTarget,
                     enterProgress = enterProgress.value,
                     settleTarget = settleTarget,
                     settleProgress = settleProgress.value,
                     predictiveTarget = if (page == pagerState.currentPage) {
                         currentSurfaceBounds?.settleTarget(
-                            tileBounds = tileBoundsForFileId(item.fileId),
+                            tileBounds = tileBoundsForMediaId(item.mediaId),
                             dragOffset = Offset.Zero,
                             predictiveBackProgress = 0f,
                         )
@@ -307,10 +308,10 @@ internal fun MediaDetailScreen(
                     credentials = credentials,
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
-                        hdrByFileId[item.fileId] = hasHdr
+                        hdrByMediaId[item.mediaId] = hasHdr
                     },
                     onZoomedOutChange = { isZoomedOut ->
-                        pageZoomedOutByFileId[item.fileId] = isZoomedOut
+                        pageZoomedOutByMediaId[item.mediaId] = isZoomedOut
                     },
                     onSurfaceBoundsChange = { bounds ->
                         if (page == pagerState.currentPage) {
@@ -396,7 +397,7 @@ private fun MediaViewerPage(
             Modifier
         }
 
-        DisposableEffect(item.fileId, isCurrentPage) {
+        DisposableEffect(item.mediaId, isCurrentPage) {
             onDispose {
                 if (isCurrentPage) {
                     onSurfaceBoundsChange(null)
@@ -429,7 +430,7 @@ private fun MediaViewerPage(
                     contentScale = ContentScale.Fit,
                 )
 
-                LaunchedEffect(item.fileId) {
+                LaunchedEffect(item.mediaId) {
                     onHdrChange(false)
                     onZoomedOutChange(true)
                 }
@@ -462,7 +463,7 @@ private fun MediaViewerPage(
                     .build()
             }
 
-            LaunchedEffect(item.fileId, zoomableState) {
+            LaunchedEffect(item.mediaId, zoomableState) {
                 snapshotFlow { zoomableState.zoomFraction ?: 0f }
                     .collect { zoomFraction ->
                         onZoomedOutChange(zoomFraction <= 0.01f)

@@ -8,10 +8,12 @@ import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
+import com.syrok0010.nextgallery.domain.media.MediaId
 
 class TimelineCacheRepository(
     private val database: TimelineCacheDatabase,
     private val thumbnailFileStore: ThumbnailFileStore,
+    private val mediaIdFactory: () -> MediaId = MediaId::generate,
 ) {
     private val dao = database.timelineCacheDao()
 
@@ -42,11 +44,6 @@ class TimelineCacheRepository(
         snapshot: TimelineSnapshot,
     ) {
         val normalizedServerUrl = credentials.normalizedServerUrl()
-        val existingMetadata = dao.metadata()
-        if (existingMetadata != null && existingMetadata.serverUrl != normalizedServerUrl) {
-            clear()
-        }
-
         val oldCounts = dao.timelineDayCounts().associate { it.dayId to it.count }
         val newCounts = snapshot.days.associate { it.dayId to it.count }
         val invalidatedDayIds = oldCounts
@@ -88,6 +85,29 @@ class TimelineCacheRepository(
                     loadedDayIds.map { LoadedDayEntity(dayId = it, loadedAtEpochMillis = now) },
                 )
             }
+        }
+    }
+
+    suspend fun resolveRemoteMediaIds(fileIds: Collection<Long>): Map<Long, MediaId> {
+        if (fileIds.isEmpty()) {
+            return emptyMap()
+        }
+
+        val distinctFileIds = fileIds.toSet()
+        return database.withTransaction {
+            val existingIds = dao.remoteMediaIdentities(distinctFileIds)
+                .associate { it.fileId to MediaId(it.mediaId) }
+            val missingIdentities = distinctFileIds
+                .filterNot(existingIds::containsKey)
+                .associateWith { mediaIdFactory() }
+            if (missingIdentities.isNotEmpty()) {
+                dao.upsertRemoteMediaIdentities(
+                    missingIdentities.map { (fileId, mediaId) ->
+                        RemoteMediaIdentityEntity(fileId = fileId, mediaId = mediaId.value)
+                    },
+                )
+            }
+            existingIds + missingIdentities
         }
     }
 
@@ -177,6 +197,7 @@ class TimelineCacheRepository(
             dao.deleteAllThumbnailRows()
             dao.deleteAllLoadedDays()
             dao.deleteAllMediaItems()
+            dao.deleteAllRemoteMediaIdentities()
             dao.deleteAllTimelineDays()
             dao.deleteMetadata()
         }

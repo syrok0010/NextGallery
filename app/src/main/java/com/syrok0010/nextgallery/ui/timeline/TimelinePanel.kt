@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.asString
@@ -36,9 +37,9 @@ internal fun TimelinePanel(
     message: AppMessageUiState,
     credentials: AccountCredentials,
     onViewportObservation: (TimelineViewportObservation) -> Unit,
-    revealFileId: Long?,
-    onFileRevealed: () -> Unit,
-    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
+    revealMediaId: MediaId?,
+    onMediaRevealed: () -> Unit,
+    registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val timeline = state.snapshot
@@ -99,14 +100,14 @@ internal fun TimelinePanel(
         }
     }
 
-    LaunchedEffect(revealFileId, gridItems) {
-        val fileId = revealFileId ?: return@LaunchedEffect
+    LaunchedEffect(revealMediaId, gridItems) {
+        val mediaId = revealMediaId ?: return@LaunchedEffect
         val targetGridIndex = gridItems.indexOfFirst { item ->
-            item is TimelineGridItem.Slot && item.slot.mediaItem?.fileId == fileId
+            item is TimelineGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
         }
         if (targetGridIndex >= 0) {
             gridState.scrollToItem(targetGridIndex)
-            onFileRevealed()
+            onMediaRevealed()
         }
     }
 

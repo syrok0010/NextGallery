@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.data.cache
 
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -10,6 +11,7 @@ class TimelineCacheMappersTest {
     @Test
     fun `cache mapping preserves memories asset reference instead of derived urls`() {
         val item = MediaItem(
+            mediaId = MediaId("persistent-media-id"),
             fileId = 42L,
             dayId = 19870,
             day = LocalDate.ofEpochDay(19870),
@@ -35,6 +37,7 @@ class TimelineCacheMappersTest {
 
         assertEquals("memories", entity.assetSource)
         assertEquals(42L, entity.assetSourcePhotoFileId)
+        assertEquals("persistent-media-id", entity.mediaId)
         assertEquals(item, restored)
     }
 }

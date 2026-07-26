@@ -35,6 +35,7 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
+import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -65,7 +66,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
     credentials: AccountCredentials,
-    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
+    registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
@@ -101,14 +102,14 @@ private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
     cloudCopyDescription: String,
-    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
+    registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
-    val coordinatesHolder = remember(item.fileId) {
+    val coordinatesHolder = remember(item.mediaId) {
         TimelineTileCoordinates()
     }
-    DisposableEffect(item.fileId, registerTimelineTile) {
-        val unregister = registerTimelineTile(item.fileId, coordinatesHolder::boundsInRoot)
+    DisposableEffect(item.mediaId, registerTimelineTile) {
+        val unregister = registerTimelineTile(item.mediaId, coordinatesHolder::boundsInRoot)
         onDispose(unregister)
     }
 

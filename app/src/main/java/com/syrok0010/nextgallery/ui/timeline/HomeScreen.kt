@@ -33,12 +33,12 @@ internal fun HomeScreen(
         return
     }
     val viewerTimeline = rememberViewerTimeline(state.timeline.snapshot)
-    val visibleViewerFileId = viewerTransitionCoordinator.viewerFileId?.takeIf { fileId ->
-        viewerTimeline.slotIndexByFileId.containsKey(fileId)
+    val visibleViewerMediaId = viewerTransitionCoordinator.viewerMediaId?.takeIf { mediaId ->
+        viewerTimeline.slotIndexByMediaId.containsKey(mediaId)
     }
 
     NextGalleryScaffold(
-        showTopBar = visibleViewerFileId == null,
+        showTopBar = visibleViewerMediaId == null,
         actions = {
             TextButton(onClick = viewModel::refresh, enabled = !state.isBusy) {
                 Text(stringResource(R.string.action_refresh))
@@ -65,11 +65,11 @@ internal fun HomeScreen(
                     message = state.message,
                     credentials = credentials,
                     onViewportObservation = viewModel::observeTimelineViewport,
-                    revealFileId = viewerTransitionCoordinator.revealFileId,
-                    onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
+                    revealMediaId = viewerTransitionCoordinator.revealMediaId,
+                    onMediaRevealed = viewerTransitionCoordinator::onTimelineMediaRevealed,
                     registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
                     onSelect = { item ->
-                        viewerTransitionCoordinator.open(item.fileId)
+                        viewerTransitionCoordinator.open(item.mediaId)
                     },
                 )
             }
@@ -84,16 +84,16 @@ internal fun HomeScreen(
                 )
             }
 
-            if (visibleViewerFileId != null) {
+            if (visibleViewerMediaId != null) {
                 MediaDetailScreen(
-                    initialFileId = visibleViewerFileId,
+                    initialMediaId = visibleViewerMediaId,
                     items = viewerTimeline.items,
-                    slotIndexByFileId = viewerTimeline.slotIndexByFileId,
-                    tileBoundsForFileId = viewerTransitionCoordinator::timelineTileBounds,
+                    slotIndexByMediaId = viewerTimeline.slotIndexByMediaId,
+                    tileBoundsForMediaId = viewerTransitionCoordinator::timelineTileBounds,
                     credentials = credentials,
-                    onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
+                    onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.mediaId) },
                     onCurrentItemChange = { currentItem ->
-                        viewerTransitionCoordinator.onCurrentItemChanged(currentItem.fileId)
+                        viewerTransitionCoordinator.onCurrentItemChanged(currentItem.mediaId)
                     },
                     onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
                 )

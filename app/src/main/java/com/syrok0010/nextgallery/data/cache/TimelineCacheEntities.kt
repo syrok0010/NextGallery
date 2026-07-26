@@ -32,6 +32,7 @@ data class TimelineDayEntity(
 )
 data class MediaItemEntity(
     @PrimaryKey val fileId: Long,
+    val mediaId: String,
     val dayId: Int,
     val displayName: String,
     val mimeType: String?,
@@ -49,6 +50,15 @@ data class MediaItemEntity(
     val isHidden: Boolean,
     val assetSource: String,
     val assetSourcePhotoFileId: Long,
+)
+
+@Entity(
+    tableName = "remote_media_identities",
+    indices = [Index(value = ["mediaId"], unique = true)],
+)
+data class RemoteMediaIdentityEntity(
+    @PrimaryKey val fileId: Long,
+    val mediaId: String,
 )
 
 @Entity(tableName = "loaded_days")

@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -129,6 +130,7 @@ class TimelineSnapshotAssemblerTest {
 
     private fun mediaItem(fileId: Long, dayId: Int): MediaItem {
         return MediaItem(
+            mediaId = MediaId("remote-$fileId"),
             fileId = fileId,
             dayId = dayId,
             day = LocalDate.ofEpochDay(dayId.toLong()),

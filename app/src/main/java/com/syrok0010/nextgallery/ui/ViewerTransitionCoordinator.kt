@@ -4,97 +4,98 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
+import com.syrok0010.nextgallery.domain.media.MediaId
 
 internal interface ViewerTransitionCoordinator {
-    val viewerFileId: Long?
-    val revealFileId: Long?
+    val viewerMediaId: MediaId?
+    val revealMediaId: MediaId?
 
     fun onSessionChanged(session: SessionUiState)
 
-    fun open(fileId: Long)
+    fun open(mediaId: MediaId)
 
-    fun close(fileId: Long)
+    fun close(mediaId: MediaId)
 
-    fun onCurrentItemChanged(fileId: Long)
+    fun onCurrentItemChanged(mediaId: MediaId)
 
-    fun onTimelineFileRevealed()
+    fun onTimelineMediaRevealed()
 
     fun registerTimelineTile(
-        fileId: Long,
+        mediaId: MediaId,
         boundsProvider: () -> Rect?,
     ): () -> Unit
 
-    fun timelineTileBounds(fileId: Long): Rect?
+    fun timelineTileBounds(mediaId: MediaId): Rect?
 
     fun onAppBoundsChanged(bounds: Rect)
 }
 
 internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator {
-    override var viewerFileId: Long? by mutableStateOf(null)
+    override var viewerMediaId: MediaId? by mutableStateOf(null)
         private set
 
-    override var revealFileId: Long? by mutableStateOf(null)
+    override var revealMediaId: MediaId? by mutableStateOf(null)
         private set
 
     private var appBounds: Rect? = null
-    private val timelineTileBoundsProvidersByFileId = mutableMapOf<Long, () -> Rect?>()
+    private val timelineTileBoundsProvidersByMediaId = mutableMapOf<MediaId, () -> Rect?>()
 
     override fun onSessionChanged(session: SessionUiState) {
         if (session is SessionUiState.SignedIn) {
             return
         }
 
-        viewerFileId = null
-        revealFileId = null
+        viewerMediaId = null
+        revealMediaId = null
         appBounds = null
-        timelineTileBoundsProvidersByFileId.clear()
+        timelineTileBoundsProvidersByMediaId.clear()
     }
 
-    override fun open(fileId: Long) {
-        viewerFileId = fileId
-        revealFileId = null
+    override fun open(mediaId: MediaId) {
+        viewerMediaId = mediaId
+        revealMediaId = null
     }
 
-    override fun close(fileId: Long) {
-        viewerFileId = null
-        syncRevealTarget(fileId)
+    override fun close(mediaId: MediaId) {
+        viewerMediaId = null
+        syncRevealTarget(mediaId)
     }
 
-    override fun onCurrentItemChanged(fileId: Long) {
-        viewerFileId = fileId
-        syncRevealTarget(fileId)
+    override fun onCurrentItemChanged(mediaId: MediaId) {
+        viewerMediaId = mediaId
+        syncRevealTarget(mediaId)
     }
 
-    override fun onTimelineFileRevealed() {
-        revealFileId = null
+    override fun onTimelineMediaRevealed() {
+        revealMediaId = null
     }
 
     override fun registerTimelineTile(
-        fileId: Long,
+        mediaId: MediaId,
         boundsProvider: () -> Rect?,
     ): () -> Unit {
-        timelineTileBoundsProvidersByFileId[fileId] = boundsProvider
+        timelineTileBoundsProvidersByMediaId[mediaId] = boundsProvider
         return {
-            timelineTileBoundsProvidersByFileId.remove(fileId)
+            timelineTileBoundsProvidersByMediaId.remove(mediaId, boundsProvider)
         }
     }
 
-    override fun timelineTileBounds(fileId: Long): Rect? {
-        return timelineTileBoundsProvidersByFileId[fileId]
+    override fun timelineTileBounds(mediaId: MediaId): Rect? {
+        return timelineTileBoundsProvidersByMediaId[mediaId]
             ?.invoke()
             ?.takeIf(::isVisibleInAppBounds)
     }
 
     override fun onAppBoundsChanged(bounds: Rect) {
         appBounds = bounds
-        viewerFileId?.let(::syncRevealTarget)
+        viewerMediaId?.let(::syncRevealTarget)
     }
 
-    private fun syncRevealTarget(fileId: Long) {
-        revealFileId = if (timelineTileBounds(fileId) != null) {
+    private fun syncRevealTarget(mediaId: MediaId) {
+        revealMediaId = if (timelineTileBounds(mediaId) != null) {
             null
         } else {
-            fileId
+            mediaId
         }
     }
 

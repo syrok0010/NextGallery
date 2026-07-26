@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
@@ -19,10 +20,11 @@ fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig {
     )
 }
 
-fun MemoriesPhotoDto.toMediaItem(): MediaItem {
+fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
     val isVideoValue = isVideo.asFlexibleBoolean() || mimetype?.startsWith("video/") == true
 
     return MediaItem(
+        mediaId = mediaId,
         fileId = fileid,
         dayId = dayid,
         day = LocalDate.ofEpochDay(dayid.toLong()),

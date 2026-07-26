@@ -66,7 +66,6 @@ GET /apps/memories/api/days/{ids} -> metadata элементов выбранн�
 Плюсы:
 
 - Grid появляется почти сразу после индекса дней.
-- Placeholder и реальный item имеют стабильный ключ `dayId/indexInDay`.
 - Metadata loading отделен от thumbnail loading.
 - Ошибка дозагрузки не сбрасывает уже показанную сетку.
 - Есть естественная единица будущего cache: day details.
@@ -101,6 +100,8 @@ UI через `LazyGridState` сообщает видимый диапазон s
 - `/days` становится индексом timeline.
 - Начальная загрузка больше не загружает первые N дней сразу.
 - Grid показывает placeholders до прихода metadata.
+- Placeholder имеет позиционный ключ `dayId/indexInDay`; после гидратации tile адресуется по
+  persistent `MediaId`.
 - Повторная загрузка day details блокируется через `loadedDayIds` и `timelineLoadingDayIds`.
 - При ошибке дозагрузки main timeline остается на экране, ошибка показывается отдельно.
 
