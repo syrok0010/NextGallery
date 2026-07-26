@@ -23,11 +23,11 @@ androidx.navigation3:navigation3-runtime:1.1.2
 androidx.navigation3:navigation3-ui:1.1.2
 ```
 
-Для MVP использовать `NavKey`, `rememberNavBackStack` и `NavDisplay`. Первый route-набор:
+Для MVP использовать `NavKey`, `rememberNavBackStack` и `NavDisplay`. Текущий root route-набор:
 
 ```text
-Home
-Detail(fileId)
+Login
+Authenticated
 ```
 
 ## Почему не classic Navigation Compose по умолчанию
@@ -48,7 +48,9 @@ MediaDetailScreen
 SettingsScreen
 ```
 
-На текущем tracer bullet `ConnectServerScreen`, `LoginProgressScreen` и `TimelineScreen` живут внутри `Home`, потому что login/timeline зависит от auth state. `MediaDetailScreen` вынесен в отдельный route `Detail(fileId)`.
+На текущем tracer bullet login, timeline и viewer живут внутри соответствующего root route.
+Viewer показывается поверх timeline для симметричного перехода, а его target state адресуется по
+`MediaId`.
 
 ## Открытые вопросы
 

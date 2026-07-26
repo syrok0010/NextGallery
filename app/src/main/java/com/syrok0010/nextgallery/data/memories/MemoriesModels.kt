@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 
 data class MemoriesConfig(
@@ -44,6 +45,7 @@ data class TimelineSlotKey(
 )
 
 data class MediaItem(
+    val mediaId: MediaId,
     val fileId: Long,
     val dayId: Int,
     val day: LocalDate,

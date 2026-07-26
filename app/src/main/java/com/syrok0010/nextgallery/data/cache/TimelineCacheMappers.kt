@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 
 private const val MEMORIES_ASSET_SOURCE = "memories"
@@ -58,6 +59,7 @@ fun MediaItem.toEntity(): MediaItemEntity {
     val mediaAssetRef = assetRef
     return MediaItemEntity(
         fileId = fileId,
+        mediaId = mediaId.value,
         dayId = dayId,
         displayName = displayName,
         mimeType = mimeType,
@@ -84,6 +86,7 @@ fun MediaItem.toEntity(): MediaItemEntity {
 
 fun MediaItemEntity.toMediaItem(): MediaItem {
     return MediaItem(
+        mediaId = MediaId(mediaId),
         fileId = fileId,
         dayId = dayId,
         day = LocalDate.ofEpochDay(dayId.toLong()),

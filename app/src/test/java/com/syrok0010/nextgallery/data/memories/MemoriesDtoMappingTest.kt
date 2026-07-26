@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.memories
 
+import com.syrok0010.nextgallery.domain.media.MediaId
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -59,16 +60,17 @@ class MemoriesDtoMappingTest {
     }
 
     @Test
-    fun `map video response to media item`() {
+    fun `map video response with resolved media identity`() {
         val photo = json.decodeFromString<List<MemoriesPhotoDto>>(fixture("day-photos.json"))[1]
 
-        val item = photo.toMediaItem()
+        val item = photo.toMediaItem(MediaId("resolved-media"))
         val imageUrls = MemoriesAssetUrlFactory.urlsFor(
             assetRef = item.assetRef,
             serverUrl = "https://cloud.example.com/",
         )
 
         assertEquals(43L, item.fileId)
+        assertEquals(MediaId("resolved-media"), item.mediaId)
         assertEquals("VID_0043.mp4", item.displayName)
         assertEquals("video/mp4", item.mimeType)
         assertTrue(item.isVideo)

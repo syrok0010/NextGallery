@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -47,6 +48,7 @@ class TimelineUiStateTest {
 
     private fun mediaItem(fileId: Long, etag: String): MediaItem {
         return MediaItem(
+            mediaId = MediaId("remote-$fileId"),
             fileId = fileId,
             dayId = DAY_ID,
             day = LocalDate.ofEpochDay(DAY_ID.toLong()),

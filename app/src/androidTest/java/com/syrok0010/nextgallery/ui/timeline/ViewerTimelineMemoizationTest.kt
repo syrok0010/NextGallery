@@ -12,6 +12,7 @@ import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
@@ -29,7 +30,9 @@ class ViewerTimelineMemoizationTest {
     @Test
     fun unrelatedStateKeepsProjectionAndHydrationRebuildsIt() {
         val initialSnapshot = snapshot(mediaItem = null)
-        val hydratedSnapshot = snapshot(mediaItem = mediaItem(fileId = 22))
+        val hydratedSnapshot = snapshot(
+            mediaItem = mediaItem(mediaId = MediaId("hydrated-media"), fileId = 22),
+        )
         val snapshotState = mutableStateOf(initialSnapshot)
         val unrelatedState = mutableIntStateOf(0)
         val currentProjection = AtomicReference<ViewerTimeline>()
@@ -58,7 +61,10 @@ class ViewerTimelineMemoizationTest {
         composeRule.waitForIdle()
 
         assertNotSame(initialProjection, currentProjection.get())
-        assertEquals(listOf(22L), currentProjection.get().items.map { it.fileId })
+        assertEquals(
+            listOf(MediaId("hydrated-media")),
+            currentProjection.get().items.map { it.mediaId },
+        )
     }
 
     private fun snapshot(mediaItem: MediaItem?): TimelineSnapshot {
@@ -87,8 +93,9 @@ class ViewerTimelineMemoizationTest {
         )
     }
 
-    private fun mediaItem(fileId: Long): MediaItem {
+    private fun mediaItem(mediaId: MediaId, fileId: Long): MediaItem {
         return MediaItem(
+            mediaId = mediaId,
             fileId = fileId,
             dayId = DAY_ID,
             day = LocalDate.ofEpochDay(DAY_ID.toLong()),

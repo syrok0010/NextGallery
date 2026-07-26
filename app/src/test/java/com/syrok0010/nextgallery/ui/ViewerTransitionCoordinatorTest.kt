@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.ui
 
 import androidx.compose.ui.geometry.Rect
+import com.syrok0010.nextgallery.domain.media.MediaId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -11,13 +12,13 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(2L)
+        coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
+        coordinator.onCurrentItemChanged(secondMediaId)
 
-        coordinator.open(1L)
+        coordinator.open(firstMediaId)
 
-        assertEquals(1L, coordinator.viewerFileId)
-        assertNull(coordinator.revealFileId)
+        assertEquals(firstMediaId, coordinator.viewerMediaId)
+        assertNull(coordinator.revealMediaId)
     }
 
     @Test
@@ -25,12 +26,12 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
+        coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
 
-        coordinator.onCurrentItemChanged(2L)
+        coordinator.onCurrentItemChanged(secondMediaId)
 
-        assertEquals(2L, coordinator.viewerFileId)
-        assertEquals(2L, coordinator.revealFileId)
+        assertEquals(secondMediaId, coordinator.viewerMediaId)
+        assertEquals(secondMediaId, coordinator.revealMediaId)
     }
 
     @Test
@@ -38,14 +39,14 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 1L) { visibleTileBounds }
-        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(2L)
+        coordinator.registerTimelineTile(firstMediaId) { visibleTileBounds }
+        coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
+        coordinator.onCurrentItemChanged(secondMediaId)
 
-        coordinator.onCurrentItemChanged(1L)
+        coordinator.onCurrentItemChanged(firstMediaId)
 
-        assertEquals(1L, coordinator.viewerFileId)
-        assertNull(coordinator.revealFileId)
+        assertEquals(firstMediaId, coordinator.viewerMediaId)
+        assertNull(coordinator.revealMediaId)
     }
 
     @Test
@@ -53,13 +54,13 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 2L) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(2L)
+        coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
+        coordinator.onCurrentItemChanged(secondMediaId)
 
-        coordinator.close(2L)
+        coordinator.close(secondMediaId)
 
-        assertNull(coordinator.viewerFileId)
-        assertEquals(2L, coordinator.revealFileId)
+        assertNull(coordinator.viewerMediaId)
+        assertEquals(secondMediaId, coordinator.revealMediaId)
     }
 
     @Test
@@ -68,32 +69,32 @@ class ViewerTransitionCoordinatorTest {
         var currentBounds = visibleTileBounds
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 1L) { currentBounds }
+        coordinator.registerTimelineTile(firstMediaId) { currentBounds }
 
-        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(1L))
+        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(firstMediaId))
 
         currentBounds = offscreenTileBounds
 
-        assertNull(coordinator.timelineTileBounds(1L))
+        assertNull(coordinator.timelineTileBounds(firstMediaId))
     }
 
     @Test
     fun `stale unregister callback does not remove newer tile provider`() {
         val coordinator = DefaultViewerTransitionCoordinator()
-        val unregisterOldProvider = coordinator.registerTimelineTile(fileId = 1L) {
+        val unregisterOldProvider = coordinator.registerTimelineTile(firstMediaId) {
             offscreenTileBounds
         }
-        val unregisterCurrentProvider = coordinator.registerTimelineTile(fileId = 1L) {
+        val unregisterCurrentProvider = coordinator.registerTimelineTile(firstMediaId) {
             visibleTileBounds
         }
 
         unregisterOldProvider()
 
-        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(1L))
+        assertEquals(visibleTileBounds, coordinator.timelineTileBounds(firstMediaId))
 
         unregisterCurrentProvider()
 
-        assertNull(coordinator.timelineTileBounds(1L))
+        assertNull(coordinator.timelineTileBounds(firstMediaId))
     }
 
     @Test
@@ -101,19 +102,21 @@ class ViewerTransitionCoordinatorTest {
         val coordinator = DefaultViewerTransitionCoordinator()
 
         coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(fileId = 1L) { visibleTileBounds }
-        coordinator.open(1L)
+        coordinator.registerTimelineTile(firstMediaId) { visibleTileBounds }
+        coordinator.open(firstMediaId)
 
         coordinator.onSessionChanged(SessionUiState.SignedOut)
 
-        assertNull(coordinator.viewerFileId)
-        assertNull(coordinator.revealFileId)
-        assertNull(coordinator.timelineTileBounds(1L))
+        assertNull(coordinator.viewerMediaId)
+        assertNull(coordinator.revealMediaId)
+        assertNull(coordinator.timelineTileBounds(firstMediaId))
     }
 
     companion object {
         private val appBounds = Rect(left = 0f, top = 0f, right = 100f, bottom = 100f)
         private val visibleTileBounds = Rect(left = 8f, top = 8f, right = 48f, bottom = 48f)
         private val offscreenTileBounds = Rect(left = 8f, top = 140f, right = 48f, bottom = 180f)
+        private val firstMediaId = MediaId("media-first")
+        private val secondMediaId = MediaId("media-second")
     }
 }

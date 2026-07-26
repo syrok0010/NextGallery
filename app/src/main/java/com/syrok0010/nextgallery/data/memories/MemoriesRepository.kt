@@ -25,10 +25,15 @@ class MemoriesRepository(
                 count = day.count,
             )
         }
-        val preloadedItems = dayDtos
+        val preloadedPhotoDtos = dayDtos
             .flatMap { it.detail }
             .distinctBy { it.fileid }
-            .map { it.toMediaItem() }
+        val preloadedMediaIds = cacheRepository.resolveRemoteMediaIds(
+            fileIds = preloadedPhotoDtos.map { it.fileid },
+        )
+        val preloadedItems = preloadedPhotoDtos.map { photo ->
+            photo.toMediaItem(preloadedMediaIds.getValue(photo.fileid))
+        }
         val loadedDayIds = dayDtos
             .filter { it.count == 0 || it.detail.isNotEmpty() }
             .mapTo(mutableSetOf()) { it.dayid }
@@ -56,11 +61,18 @@ class MemoriesRepository(
         }
 
         val api = transport.memoriesApi(credentials)
-        val items = api.dayDetails(dayIds.joinToString(","))
+        val photoDtos = api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
-            .map { it.toMediaItem() }
+        val mediaIds = cacheRepository.resolveRemoteMediaIds(
+            fileIds = photoDtos.map { it.fileid },
+        )
+        val items = photoDtos.map { photo ->
+            photo.toMediaItem(mediaIds.getValue(photo.fileid))
+        }
 
-        runCatching { cacheRepository.saveDayDetails(items, dayIds.toSet()) }
+        runCatching {
+            cacheRepository.saveDayDetails(items, dayIds.toSet())
+        }
         return items
     }
 

@@ -14,6 +14,7 @@ import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -97,6 +98,7 @@ class TimelineSlotTileTest {
     }
 
     private fun mediaItem(isVideo: Boolean): MediaItem = MediaItem(
+        mediaId = MediaId("remote-42"),
         fileId = 42,
         dayId = DAY_ID,
         day = LocalDate.ofEpochDay(DAY_ID.toLong()),
