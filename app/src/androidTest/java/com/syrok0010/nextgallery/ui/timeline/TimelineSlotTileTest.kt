@@ -36,7 +36,7 @@ class TimelineSlotTileTest {
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
                 CLOUD_COPY_DESCRIPTION,
-            ),
+            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
         ).assertIsDisplayed()
     }
 
@@ -89,7 +89,7 @@ class TimelineSlotTileTest {
                         mediaItem = mediaItem,
                     ),
                     credentials = CREDENTIALS,
-                    registerTimelineTile = { _, _ -> emptyFunction },
+                    registerTimelineTile = { _, _ -> noOpUnregister },
                     onSelect = {},
                 )
             }
@@ -127,6 +127,6 @@ class TimelineSlotTileTest {
             loginName = "test",
             appPassword = "secret",
         )
-        val emptyFunction: () -> Unit = {}
+        val noOpUnregister: () -> Unit = {}
     }
 }

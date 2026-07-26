@@ -88,9 +88,7 @@ private fun PlaceholderMediaTile(cloudCopyDescription: String) {
         modifier = Modifier
             .aspectRatio(1f)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .semantics {
-                stateDescription = cloudCopyDescription
-            },
+            .cloudCopySemantics(cloudCopyDescription),
     ) {
         RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
     }
@@ -119,9 +117,7 @@ private fun MediaTile(
                 coordinatesHolder.coordinates = coordinates
             }
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .semantics {
-                stateDescription = cloudCopyDescription
-            }
+            .cloudCopySemantics(cloudCopyDescription)
             .clickable(onClick = onClick),
     ) {
         ThumbnailImage(
@@ -173,6 +169,11 @@ private fun RemoteCloudIndicator(modifier: Modifier = Modifier) {
         tint = MaterialTheme.colorScheme.onSurface,
     )
 }
+
+private fun Modifier.cloudCopySemantics(description: String): Modifier =
+    semantics {
+        stateDescription = description
+    }
 
 private class TimelineTileCoordinates {
     var coordinates: LayoutCoordinates? = null
