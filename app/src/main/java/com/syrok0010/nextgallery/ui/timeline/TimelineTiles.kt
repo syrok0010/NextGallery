@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +21,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
@@ -61,13 +67,15 @@ internal fun TimelineSlotTile(
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
+    val cloudCopyDescription = stringResource(R.string.media_cloud_copy)
 
     if (item == null) {
-        PlaceholderMediaTile()
+        PlaceholderMediaTile(cloudCopyDescription = cloudCopyDescription)
     } else {
         MediaTile(
             item = item,
             credentials = credentials,
+            cloudCopyDescription = cloudCopyDescription,
             registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
@@ -75,18 +83,24 @@ internal fun TimelineSlotTile(
 }
 
 @Composable
-private fun PlaceholderMediaTile() {
+private fun PlaceholderMediaTile(cloudCopyDescription: String) {
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    )
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .semantics {
+                stateDescription = cloudCopyDescription
+            },
+    ) {
+        RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
+    }
 }
 
 @Composable
 private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
+    cloudCopyDescription: String,
     registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -105,6 +119,9 @@ private fun MediaTile(
                 coordinatesHolder.coordinates = coordinates
             }
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .semantics {
+                stateDescription = cloudCopyDescription
+            }
             .clickable(onClick = onClick),
     ) {
         ThumbnailImage(
@@ -119,6 +136,8 @@ private fun MediaTile(
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
         )
+
+        RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
 
         if (item.isVideo) {
             Text(
@@ -135,6 +154,24 @@ private fun MediaTile(
             )
         }
     }
+}
+
+@Composable
+private fun RemoteCloudIndicator(modifier: Modifier = Modifier) {
+    Icon(
+        painter = painterResource(R.drawable.ic_cloud),
+        contentDescription = null,
+        modifier = modifier
+            .padding(6.dp)
+            .background(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                shape = MaterialTheme.shapes.extraSmall,
+            )
+            .padding(4.dp)
+            .size(16.dp)
+            .testTag("remote-cloud-indicator"),
+        tint = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 private class TimelineTileCoordinates {
