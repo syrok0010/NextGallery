@@ -6,9 +6,6 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
@@ -51,7 +48,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -62,6 +62,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
@@ -69,10 +71,10 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
+import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
+import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
-import com.syrok0010.nextgallery.ui.timeline.sharedElementKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
@@ -85,11 +87,8 @@ internal fun MediaDetailScreen(
     initialFileId: Long,
     items: List<MediaItem>,
     slotIndexByFileId: Map<Long, Int>,
-    tileBoundsByFileId: Map<Long, Rect>,
-    thumbnailPreviews: Map<Long, ThumbnailPreview>,
+    tileBoundsForFileId: (fileId: Long) -> Rect?,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
@@ -127,7 +126,7 @@ internal fun MediaDetailScreen(
         coroutineScope.launch {
             val target = if (animateToTile) {
                 currentSurfaceBounds?.settleTarget(
-                    tileBounds = tileBoundsByFileId[item.fileId],
+                    tileBounds = tileBoundsForFileId(item.fileId),
                     dragOffset = dragOffset.value,
                     predictiveBackProgress = predictiveBackProgress,
                 )
@@ -169,7 +168,6 @@ internal fun MediaDetailScreen(
     LaunchedEffect(
         currentItem?.fileId,
         currentSurfaceBounds,
-        tileBoundsByFileId[openingFileId],
     ) {
         if (!enterPending) {
             return@LaunchedEffect
@@ -183,7 +181,7 @@ internal fun MediaDetailScreen(
         }
 
         val surfaceBounds = currentSurfaceBounds ?: return@LaunchedEffect
-        val target = surfaceBounds.enterTarget(tileBoundsByFileId[item.fileId])
+        val target = surfaceBounds.enterTarget(tileBoundsForFileId(item.fileId))
         if (target == null) {
             enterProgress.snapTo(1f)
             enterPending = false
@@ -299,7 +297,7 @@ internal fun MediaDetailScreen(
                     settleProgress = settleProgress.value,
                     predictiveTarget = if (page == pagerState.currentPage) {
                         currentSurfaceBounds?.settleTarget(
-                            tileBounds = tileBoundsByFileId[item.fileId],
+                            tileBounds = tileBoundsForFileId(item.fileId),
                             dragOffset = Offset.Zero,
                             predictiveBackProgress = 0f,
                         )
@@ -307,9 +305,6 @@ internal fun MediaDetailScreen(
                         null
                     },
                     credentials = credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    thumbnailPreview = thumbnailPreviews[item.fileId],
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
                         hdrByFileId[item.fileId] = hasHdr
@@ -338,7 +333,6 @@ internal fun MediaDetailScreen(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MediaViewerPage(
     item: MediaItem,
@@ -352,9 +346,6 @@ private fun MediaViewerPage(
     settleProgress: Float,
     predictiveTarget: ViewerBoundsTransform?,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    thumbnailPreview: ThumbnailPreview?,
     onToggleChrome: () -> Unit,
     onHdrChange: (Boolean) -> Unit,
     onZoomedOutChange: (Boolean) -> Unit,
@@ -366,23 +357,19 @@ private fun MediaViewerPage(
             serverUrl = credentials.serverUrl,
         )
     }
+    val thumbnail = remember(credentials, item.fileId, item.etag) {
+        thumbnailRequest(
+            credentials = credentials,
+            fileId = item.fileId,
+            etag = item.etag,
+        )
+    }
 
     val shouldUpdateSurfaceBounds = isCurrentPage &&
         dragOffset == Offset.Zero &&
         predictiveBackProgress == 0f &&
         enterTarget == null &&
         settleTarget == null
-    val sharedModifier = if (isCurrentPage) {
-        with(sharedTransitionScope) {
-            Modifier.sharedElement(
-                sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
-                animatedVisibilityScope = animatedVisibilityScope,
-            )
-        }
-    } else {
-        Modifier
-    }
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize(),
@@ -394,7 +381,6 @@ private fun MediaViewerPage(
                 viewportWidth = maxWidth,
                 viewportHeight = maxHeight,
             )
-            .then(sharedModifier)
         val pageTransformModifier = if (isCurrentPage) {
             Modifier.viewerSurfaceTransform(
                 dragOffset = dragOffset,
@@ -428,10 +414,16 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
+                ThumbnailImage(
+                    request = thumbnail,
+                    contentDescription = item.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
+
                 AuthenticatedImage(
                     url = imageUrls.detailPreviewUrl,
                     credentials = credentials,
-                    data = thumbnailPreview?.bytes,
                     contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
@@ -491,10 +483,8 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    AuthenticatedImage(
-                        url = imageUrls.detailPreviewUrl,
-                        credentials = credentials,
-                        data = thumbnailPreview?.bytes,
+                    ThumbnailImage(
+                        request = thumbnail,
                         contentDescription = item.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
@@ -594,28 +584,54 @@ private fun Modifier.viewerSurfaceTransform(
 ): Modifier {
     val dragScale = viewerDragScale(dragOffset)
     val predictiveProgress = predictiveBackProgress.coerceIn(0f, 1f)
+    val clipShape = when {
+        settleTarget != null -> ViewerTransitionClipShape(
+            transform = settleTarget,
+            progress = settleProgress,
+            opening = false,
+        )
+        predictiveProgress > 0f && predictiveTarget != null -> ViewerTransitionClipShape(
+            transform = predictiveTarget,
+            progress = predictiveProgress,
+            opening = false,
+            startScaleOverride = 1f,
+        )
+        enterTarget != null -> ViewerTransitionClipShape(
+            transform = enterTarget,
+            progress = enterProgress,
+            opening = true,
+        )
+        else -> null
+    }
 
     return graphicsLayer {
+        if (clipShape != null) {
+            shape = clipShape
+            clip = true
+        }
         if (settleTarget != null) {
             val progress = settleProgress.coerceIn(0f, 1f)
             val offset = lerpOffset(settleTarget.startOffset, settleTarget.targetOffset, progress)
             translationX = offset.x
             translationY = offset.y
-            scaleX = lerpFloat(settleTarget.startScaleX, settleTarget.targetScaleX, progress)
-            scaleY = lerpFloat(settleTarget.startScaleY, settleTarget.targetScaleY, progress)
+            val scale = lerpFloat(settleTarget.startScale, settleTarget.targetScale, progress)
+            scaleX = scale
+            scaleY = scale
         } else if (predictiveProgress > 0f && predictiveTarget != null) {
             val offset = lerpOffset(Offset.Zero, predictiveTarget.targetOffset, predictiveProgress)
             translationX = offset.x
             translationY = offset.y
-            scaleX = lerpFloat(1f, predictiveTarget.targetScaleX, predictiveProgress)
-            scaleY = lerpFloat(1f, predictiveTarget.targetScaleY, predictiveProgress)
+            val scale = lerpFloat(1f, predictiveTarget.targetScale, predictiveProgress)
+            scaleX = scale
+            scaleY = scale
         } else if (enterTarget != null) {
             val progress = enterProgress.coerceIn(0f, 1f)
             val offset = lerpOffset(enterTarget.startOffset, enterTarget.targetOffset, progress)
             translationX = offset.x
             translationY = offset.y
-            scaleX = lerpFloat(enterTarget.startScaleX, enterTarget.targetScaleX, progress)
-            scaleY = lerpFloat(enterTarget.startScaleY, enterTarget.targetScaleY, progress)
+            val scale = lerpFloat(enterTarget.startScale, enterTarget.targetScale, progress)
+            scaleX = scale
+            scaleY = scale
         } else if (enterPending) {
             alpha = 0f
         } else {
@@ -627,13 +643,79 @@ private fun Modifier.viewerSurfaceTransform(
     }
 }
 
-private data class ViewerBoundsTransform(
+internal fun animatedLocalClipSize(
+    layerWidth: Float,
+    layerHeight: Float,
+    startScale: Float,
+    targetScale: Float,
+    targetClipWidth: Float,
+    targetClipHeight: Float,
+    progress: Float,
+    opening: Boolean,
+): Offset {
+    val fraction = progress.coerceIn(0f, 1f)
+    val currentScale = lerpFloat(startScale, targetScale, fraction)
+        .coerceAtLeast(0.01f)
+    val targetScreenWidth = targetClipWidth * startScale
+    val targetScreenHeight = targetClipHeight * startScale
+
+    val screenWidth = if (opening) {
+        lerpFloat(targetScreenWidth, layerWidth * targetScale, fraction)
+    } else {
+        lerpFloat(layerWidth * startScale, targetClipWidth * targetScale, fraction)
+    }
+    val screenHeight = if (opening) {
+        lerpFloat(targetScreenHeight, layerHeight * targetScale, fraction)
+    } else {
+        lerpFloat(layerHeight * startScale, targetClipHeight * targetScale, fraction)
+    }
+
+    return Offset(screenWidth / currentScale, screenHeight / currentScale)
+}
+
+private data class ViewerTransitionClipShape(
+    val transform: ViewerBoundsTransform,
+    val progress: Float,
+    val opening: Boolean,
+    val startScaleOverride: Float? = null,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val clipSize = animatedLocalClipSize(
+            layerWidth = size.width,
+            layerHeight = size.height,
+            startScale = startScaleOverride ?: transform.startScale,
+            targetScale = transform.targetScale,
+            targetClipWidth = transform.targetClipWidth,
+            targetClipHeight = transform.targetClipHeight,
+            progress = progress,
+            opening = opening,
+        )
+        val clipWidth = clipSize.x.coerceIn(0f, size.width)
+        val clipHeight = clipSize.y.coerceIn(0f, size.height)
+        val left = (size.width - clipWidth) / 2f
+        val top = (size.height - clipHeight) / 2f
+        return Outline.Rectangle(
+            Rect(
+                left = left,
+                top = top,
+                right = left + clipWidth,
+                bottom = top + clipHeight,
+            ),
+        )
+    }
+}
+
+internal data class ViewerBoundsTransform(
     val startOffset: Offset,
     val targetOffset: Offset,
-    val startScaleX: Float,
-    val startScaleY: Float,
-    val targetScaleX: Float,
-    val targetScaleY: Float,
+    val startScale: Float,
+    val targetScale: Float,
+    val targetClipWidth: Float,
+    val targetClipHeight: Float,
 )
 
 private fun Rect.settleTarget(
@@ -646,8 +728,8 @@ private fun Rect.settleTarget(
     }
 
     val targetOffset = tileBounds.center - center
-    val targetScaleX = (tileBounds.width / width).coerceIn(0.01f, 1f)
-    val targetScaleY = (tileBounds.height / height).coerceIn(0.01f, 1f)
+    val targetSide = minOf(tileBounds.width, tileBounds.height)
+    val targetScale = viewerCropScale(targetSide).coerceIn(0.01f, 1f)
     val predictiveProgress = predictiveBackProgress.coerceIn(0f, 1f)
     val dragScale = viewerDragScale(dragOffset)
     val startOffset = if (predictiveProgress > 0f) {
@@ -655,13 +737,8 @@ private fun Rect.settleTarget(
     } else {
         dragOffset
     }
-    val startScaleX = if (predictiveProgress > 0f) {
-        lerpFloat(1f, targetScaleX, predictiveProgress)
-    } else {
-        dragScale
-    }
-    val startScaleY = if (predictiveProgress > 0f) {
-        lerpFloat(1f, targetScaleY, predictiveProgress)
+    val startScale = if (predictiveProgress > 0f) {
+        lerpFloat(1f, targetScale, predictiveProgress)
     } else {
         dragScale
     }
@@ -669,10 +746,10 @@ private fun Rect.settleTarget(
     return ViewerBoundsTransform(
         startOffset = startOffset,
         targetOffset = targetOffset,
-        startScaleX = startScaleX,
-        startScaleY = startScaleY,
-        targetScaleX = targetScaleX,
-        targetScaleY = targetScaleY,
+        startScale = startScale,
+        targetScale = targetScale,
+        targetClipWidth = targetSide / targetScale,
+        targetClipHeight = targetSide / targetScale,
     )
 }
 
@@ -681,15 +758,20 @@ private fun Rect.enterTarget(tileBounds: Rect?): ViewerBoundsTransform? {
         return null
     }
 
+    val targetSide = minOf(tileBounds.width, tileBounds.height)
+    val startScale = viewerCropScale(targetSide).coerceIn(0.01f, 1f)
     return ViewerBoundsTransform(
         startOffset = tileBounds.center - center,
         targetOffset = Offset.Zero,
-        startScaleX = (tileBounds.width / width).coerceIn(0.01f, 1f),
-        startScaleY = (tileBounds.height / height).coerceIn(0.01f, 1f),
-        targetScaleX = 1f,
-        targetScaleY = 1f,
+        startScale = startScale,
+        targetScale = 1f,
+        targetClipWidth = targetSide / startScale,
+        targetClipHeight = targetSide / startScale,
     )
 }
+
+internal fun Rect.viewerCropScale(targetSide: Float): Float =
+    maxOf(targetSide / width, targetSide / height)
 
 private fun viewerDragScale(dragOffset: Offset): Float =
     (1f - (dragOffset.y / ViewerDismissScaleDistancePx)).coerceIn(0.86f, 1f)

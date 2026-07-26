@@ -4,7 +4,6 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
@@ -13,7 +12,6 @@ import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TimelineViewportControllerTest {
@@ -53,7 +51,7 @@ class TimelineViewportControllerTest {
     }
 
     @Test
-    fun `successful day hydration triggers thumbnail loading for newly visible items`() = runBlocking {
+    fun `successful day hydration merges items and reports loaded count`() = runBlocking {
         val dayId = 10
         val host = FakeTimelineViewportHost(
             initialSession = TimelineViewportSession(
@@ -70,16 +68,12 @@ class TimelineViewportControllerTest {
                     mediaItem(fileId = requestedDayId.toLong() * 100, dayId = requestedDayId)
                 }
             }
-            thumbnailLoader = { _, fileIds, _ ->
-                fileIds.map(::thumbnail)
-            }
         }
         val controller = DefaultTimelineViewportController(
             scope = this,
             host = host,
             prefetchSlots = 0,
             dayBatchSize = 1,
-            thumbnailBatchSize = 4,
         )
 
         controller.onViewportObservation(
@@ -91,62 +85,13 @@ class TimelineViewportControllerTest {
         )
         awaitUntil {
             host.dayLoadRequests == listOf(listOf(dayId)) &&
-                host.thumbnailLoadRequests == listOf(listOf(1000L)) &&
                 host.loadedItemsStatusCounts == listOf(1) &&
-                host.requireSession().timelineState.snapshot?.loadedDayIds == setOf(dayId) &&
-                host.requireSession().timelineState.thumbnailPreviews.containsKey(1000L)
+                host.requireSession().timelineState.snapshot?.loadedDayIds == setOf(dayId)
         }
 
         assertEquals(listOf(listOf(dayId)), host.dayLoadRequests)
-        assertEquals(listOf(listOf(1000L)), host.thumbnailLoadRequests)
         assertEquals(listOf(1), host.loadedItemsStatusCounts)
         assertEquals(setOf(dayId), host.requireSession().timelineState.snapshot?.loadedDayIds)
-        assertTrue(host.requireSession().timelineState.thumbnailPreviews.containsKey(1000L))
-    }
-
-    @Test
-    fun `thumbnail batching skips already handled file ids`() = runBlocking {
-        val days = (10..15).map { TimelineDay(dayId = it, count = 1) }
-        val itemsByDay = days.associate { day ->
-            day.dayId to listOf(mediaItem(fileId = (day.dayId - 9).toLong(), dayId = day.dayId))
-        }
-        val host = FakeTimelineViewportHost(
-            initialSession = TimelineViewportSession(
-                credentials = credentials(),
-                timelineState = TimelineUiState(
-                    snapshot = timelineSnapshot(
-                        days = days,
-                        itemsByDay = itemsByDay,
-                        loadedDayIds = days.mapTo(mutableSetOf()) { it.dayId },
-                    ),
-                    thumbnailPreviews = mapOf(1L to thumbnail(1L)),
-                    thumbnailLoadingFileIds = setOf(2L),
-                    thumbnailFailedFileIds = setOf(3L),
-                ),
-            ),
-        ).apply {
-            thumbnailLoader = { _, fileIds, _ ->
-                fileIds.map(::thumbnail)
-            }
-        }
-        val controller = DefaultTimelineViewportController(
-            scope = this,
-            host = host,
-            prefetchSlots = 0,
-            thumbnailBatchSize = 2,
-        )
-
-        controller.onViewportObservation(
-            TimelineViewportObservation(
-                firstVisibleSlotIndex = 0,
-                lastVisibleSlotIndex = 5,
-                loadingMode = TimelineViewportLoadingMode.Immediate,
-            ),
-        )
-        awaitUntil { host.thumbnailLoadRequests == listOf(listOf(4L, 5L)) }
-
-        assertEquals(listOf(listOf(4L, 5L)), host.thumbnailLoadRequests)
-        assertTrue(host.dayLoadRequests.isEmpty())
     }
 
     @Test
@@ -214,10 +159,7 @@ class TimelineViewportControllerTest {
     ) : TimelineViewportHost {
         var session: TimelineViewportSession? = initialSession
         var dayLoader: suspend (AccountCredentials, List<Int>) -> List<MediaItem> = { _, _ -> emptyList() }
-        var thumbnailLoader: suspend (AccountCredentials, List<Long>, Map<Long, String?>) -> List<ThumbnailPreview> =
-            { _, _, _ -> emptyList() }
         val dayLoadRequests = mutableListOf<List<Int>>()
-        val thumbnailLoadRequests = mutableListOf<List<Long>>()
         val loadedItemsStatusCounts = mutableListOf<Int>()
 
         override fun currentSession(): TimelineViewportSession? = session
@@ -239,15 +181,6 @@ class TimelineViewportControllerTest {
         ): List<MediaItem> {
             dayLoadRequests += dayIds
             return dayLoader(credentials, dayIds)
-        }
-
-        override suspend fun loadThumbnails(
-            credentials: AccountCredentials,
-            fileIds: List<Long>,
-            etagsByFileId: Map<Long, String?>,
-        ): List<ThumbnailPreview> {
-            thumbnailLoadRequests += fileIds
-            return thumbnailLoader(credentials, fileIds, etagsByFileId)
         }
 
         fun requireSession(): TimelineViewportSession {
@@ -298,15 +231,6 @@ class TimelineViewportControllerTest {
             isFavorite = false,
             isHidden = false,
             assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-        )
-    }
-
-    private fun thumbnail(fileId: Long): ThumbnailPreview {
-        return ThumbnailPreview(
-            fileId = fileId,
-            requestId = fileId.toInt(),
-            mimeType = "image/jpeg",
-            bytes = byteArrayOf(fileId.toByte()),
         )
     }
 

@@ -6,26 +6,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import android.content.Context
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.data.thumbnail.ThumbnailRequest
 
 @Composable
 internal fun AuthenticatedImage(
     url: String,
     credentials: AccountCredentials,
-    data: Any? = null,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current
-    val request = remember(context, url, credentials, data) {
+    val request = remember(context, url, credentials) {
         authenticatedImageRequest(
             context = context,
             url = url,
             credentials = credentials,
-            data = data,
         )
     }
 
@@ -37,14 +37,34 @@ internal fun AuthenticatedImage(
     )
 }
 
+@Composable
+internal fun ThumbnailImage(
+    request: ThumbnailRequest,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    val context = LocalContext.current
+    val imageRequest = remember(context, request) {
+        ImageRequest.Builder(context)
+            .data(request)
+            .build()
+    }
+
+    AsyncImage(
+        model = imageRequest,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+    )
+}
+
 internal fun authenticatedImageRequest(
     context: Context,
     url: String,
     credentials: AccountCredentials,
-    data: Any? = null,
 ) = NextcloudTransport.authenticatedImageRequest(
     context = context,
     url = url,
     credentials = credentials,
-    data = data,
 )

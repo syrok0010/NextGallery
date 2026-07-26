@@ -1,8 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,9 +14,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
@@ -28,10 +25,9 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
+import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
+import com.syrok0010.nextgallery.ui.common.ThumbnailImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -61,11 +57,7 @@ internal fun TimelineDayHeader(dayId: Int) {
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElement: Boolean,
-    thumbnailPreview: ThumbnailPreview?,
-    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val item = slot.mediaItem
@@ -76,11 +68,7 @@ internal fun TimelineSlotTile(
         MediaTile(
             item = item,
             credentials = credentials,
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            enableSharedElement = enableSharedElement,
-            thumbnailPreview = thumbnailPreview,
-            onBoundsChanged = onBoundsChanged,
+            registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
     }
@@ -91,60 +79,42 @@ private fun PlaceholderMediaTile() {
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     )
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    enableSharedElement: Boolean,
-    thumbnailPreview: ThumbnailPreview?,
-    onBoundsChanged: (fileId: Long, bounds: Rect?) -> Unit,
+    registerTimelineTile: (fileId: Long, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
-    val imageUrls = remember(item.assetRef, credentials.serverUrl) {
-        MemoriesAssetUrlFactory.urlsFor(
-            assetRef = item.assetRef,
-            serverUrl = credentials.serverUrl,
-        )
+    val coordinatesHolder = remember(item.fileId) {
+        TimelineTileCoordinates()
     }
-
-    val sharedModifier = if (enableSharedElement) with(sharedTransitionScope) {
-        Modifier.sharedElement(
-            sharedContentState = rememberSharedContentState(key = item.sharedElementKey),
-            animatedVisibilityScope = animatedVisibilityScope,
-        )
-    } else {
-        Modifier
-    }
-
-    DisposableEffect(item.fileId) {
-        onDispose {
-            onBoundsChanged(item.fileId, null)
-        }
+    DisposableEffect(item.fileId, registerTimelineTile) {
+        val unregister = registerTimelineTile(item.fileId, coordinatesHolder::boundsInRoot)
+        onDispose(unregister)
     }
 
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .onGloballyPositioned { coordinates ->
-                onBoundsChanged(item.fileId, coordinates.boundsInRoot())
+                coordinatesHolder.coordinates = coordinates
             }
-            .then(sharedModifier)
-            .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
     ) {
-        AuthenticatedImage(
-            url = imageUrls.thumbnailUrl,
-            credentials = credentials,
-            data = thumbnailPreview?.bytes,
+        ThumbnailImage(
+            request = remember(credentials, item.fileId, item.etag) {
+                thumbnailRequest(
+                    credentials = credentials,
+                    fileId = item.fileId,
+                    etag = item.etag,
+                )
+            },
             contentDescription = item.displayName,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
@@ -167,5 +137,12 @@ private fun MediaTile(
     }
 }
 
-internal val MediaItem.sharedElementKey: String
-    get() = "media-$fileId"
+private class TimelineTileCoordinates {
+    var coordinates: LayoutCoordinates? = null
+
+    fun boundsInRoot(): Rect? {
+        return coordinates
+            ?.takeIf(LayoutCoordinates::isAttached)
+            ?.boundsInRoot()
+    }
+}

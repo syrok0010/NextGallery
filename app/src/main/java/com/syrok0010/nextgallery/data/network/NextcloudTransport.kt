@@ -83,15 +83,10 @@ class NextcloudTransport(
             context: Context,
             url: String,
             credentials: AccountCredentials,
-            data: Any? = null,
         ): ImageRequest {
             return ImageRequest.Builder(context)
-                .data(data ?: url)
-                .apply {
-                    if (data == null) {
-                        httpHeaders(authenticatedNetworkHeaders(credentials))
-                    }
-                }
+                .data(url)
+                .httpHeaders(authenticatedNetworkHeaders(credentials))
                 .build()
         }
 

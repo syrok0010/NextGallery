@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,7 +17,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
 import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
@@ -28,8 +25,6 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 internal fun HomeScreen(
     viewerTransitionCoordinator: ViewerTransitionCoordinator,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     viewModel: AuthenticatedViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -37,21 +32,9 @@ internal fun HomeScreen(
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return
     }
-    val viewerItems = state.timeline.snapshot
-        ?.slots
-        ?.mapIndexedNotNull { slotIndex, slot ->
-            slot.mediaItem?.let { item ->
-                ViewerMediaItem(
-                    item = item,
-                    slotIndex = slotIndex,
-                )
-            }
-        }
-        .orEmpty()
-    val items = viewerItems.map { it.item }
-    val slotIndexByFileId = viewerItems.associate { it.item.fileId to it.slotIndex }
+    val viewerTimeline = rememberViewerTimeline(state.timeline.snapshot)
     val visibleViewerFileId = viewerTransitionCoordinator.viewerFileId?.takeIf { fileId ->
-        items.any { it.fileId == fileId }
+        viewerTimeline.slotIndexByFileId.containsKey(fileId)
     }
 
     NextGalleryScaffold(
@@ -81,14 +64,13 @@ internal fun HomeScreen(
                     state = state.timeline,
                     message = state.message,
                     credentials = credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    enableSharedElements = visibleViewerFileId == null,
                     onViewportObservation = viewModel::observeTimelineViewport,
                     revealFileId = viewerTransitionCoordinator.revealFileId,
                     onFileRevealed = viewerTransitionCoordinator::onTimelineFileRevealed,
-                    onTileBoundsChanged = viewerTransitionCoordinator::onTileBoundsChanged,
-                    onSelect = { item -> viewerTransitionCoordinator.open(item.fileId) },
+                    registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
+                    onSelect = { item ->
+                        viewerTransitionCoordinator.open(item.fileId)
+                    },
                 )
             }
 
@@ -105,13 +87,10 @@ internal fun HomeScreen(
             if (visibleViewerFileId != null) {
                 MediaDetailScreen(
                     initialFileId = visibleViewerFileId,
-                    items = items,
-                    slotIndexByFileId = slotIndexByFileId,
-                    tileBoundsByFileId = viewerTransitionCoordinator.visibleTimelineTileBoundsByFileId,
-                    thumbnailPreviews = state.timeline.thumbnailPreviews,
+                    items = viewerTimeline.items,
+                    slotIndexByFileId = viewerTimeline.slotIndexByFileId,
+                    tileBoundsForFileId = viewerTransitionCoordinator::timelineTileBounds,
                     credentials = credentials,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
                     onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.fileId) },
                     onCurrentItemChange = { currentItem ->
                         viewerTransitionCoordinator.onCurrentItemChanged(currentItem.fileId)
@@ -122,8 +101,3 @@ internal fun HomeScreen(
         }
     }
 }
-
-private data class ViewerMediaItem(
-    val item: MediaItem,
-    val slotIndex: Int,
-)

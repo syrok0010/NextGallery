@@ -1,7 +1,6 @@
 package com.syrok0010.nextgallery.ui
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
@@ -9,7 +8,6 @@ import androidx.compose.ui.geometry.Rect
 internal interface ViewerTransitionCoordinator {
     val viewerFileId: Long?
     val revealFileId: Long?
-    val visibleTimelineTileBoundsByFileId: Map<Long, Rect>
 
     fun onSessionChanged(session: SessionUiState)
 
@@ -21,7 +19,12 @@ internal interface ViewerTransitionCoordinator {
 
     fun onTimelineFileRevealed()
 
-    fun onTileBoundsChanged(fileId: Long, bounds: Rect?)
+    fun registerTimelineTile(
+        fileId: Long,
+        boundsProvider: () -> Rect?,
+    ): () -> Unit
+
+    fun timelineTileBounds(fileId: Long): Rect?
 
     fun onAppBoundsChanged(bounds: Rect)
 }
@@ -33,11 +36,8 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
     override var revealFileId: Long? by mutableStateOf(null)
         private set
 
-    private var appBounds: Rect? by mutableStateOf(null)
-    private val timelineTileBoundsByFileId = mutableStateMapOf<Long, Rect>()
-
-    override val visibleTimelineTileBoundsByFileId: Map<Long, Rect>
-        get() = timelineTileBoundsByFileId.filterValues(::isVisibleInAppBounds)
+    private var appBounds: Rect? = null
+    private val timelineTileBoundsProvidersByFileId = mutableMapOf<Long, () -> Rect?>()
 
     override fun onSessionChanged(session: SessionUiState) {
         if (session is SessionUiState.SignedIn) {
@@ -47,7 +47,7 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
         viewerFileId = null
         revealFileId = null
         appBounds = null
-        timelineTileBoundsByFileId.clear()
+        timelineTileBoundsProvidersByFileId.clear()
     }
 
     override fun open(fileId: Long) {
@@ -69,14 +69,20 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
         revealFileId = null
     }
 
-    override fun onTileBoundsChanged(fileId: Long, bounds: Rect?) {
-        if (bounds == null) {
-            timelineTileBoundsByFileId.remove(fileId)
-        } else {
-            timelineTileBoundsByFileId[fileId] = bounds
+    override fun registerTimelineTile(
+        fileId: Long,
+        boundsProvider: () -> Rect?,
+    ): () -> Unit {
+        timelineTileBoundsProvidersByFileId[fileId] = boundsProvider
+        return {
+            timelineTileBoundsProvidersByFileId.remove(fileId)
         }
+    }
 
-        viewerFileId?.let(::syncRevealTarget)
+    override fun timelineTileBounds(fileId: Long): Rect? {
+        return timelineTileBoundsProvidersByFileId[fileId]
+            ?.invoke()
+            ?.takeIf(::isVisibleInAppBounds)
     }
 
     override fun onAppBoundsChanged(bounds: Rect) {
@@ -85,16 +91,11 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
     }
 
     private fun syncRevealTarget(fileId: Long) {
-        revealFileId = if (isTimelineTileVisible(fileId)) {
+        revealFileId = if (timelineTileBounds(fileId) != null) {
             null
         } else {
             fileId
         }
-    }
-
-    private fun isTimelineTileVisible(fileId: Long): Boolean {
-        val tileBounds = timelineTileBoundsByFileId[fileId] ?: return false
-        return isVisibleInAppBounds(tileBounds)
     }
 
     private fun isVisibleInAppBounds(tileBounds: Rect): Boolean {
