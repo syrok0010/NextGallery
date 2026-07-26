@@ -24,6 +24,15 @@ android {
     }
 
     buildTypes {
+        val debug = getByName("debug")
+
+        create("automation") {
+            initWith(debug)
+            applicationIdSuffix = ".automation"
+            versionNameSuffix = "-automation"
+            matchingFallbacks += "debug"
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -32,6 +41,8 @@ android {
             )
         }
     }
+    testBuildType = "automation"
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -75,4 +86,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    add("automationImplementation", libs.androidx.compose.ui.test.manifest)
+    add("automationImplementation", libs.androidx.compose.ui.tooling)
 }

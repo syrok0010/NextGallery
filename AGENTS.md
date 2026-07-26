@@ -22,3 +22,7 @@
 ### Domain docs
 
 Проект single-context: продуктовые документы в `docs/product/`, исследования в `docs/research/`, решения в `docs/adr/`. См. `docs/agents/domain.md`.
+
+### Тесты на устройстве
+
+На общем физическом устройстве instrumentation запускается через отдельный automation-вариант, чтобы не удалить данные «горячего» debug-приложения. См. `docs/agents/testing.md`.
