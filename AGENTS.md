@@ -26,3 +26,7 @@
 ### Тесты на устройстве
 
 На общем физическом устройстве instrumentation запускается через отдельный automation-вариант, чтобы не удалить данные «горячего» debug-приложения. См. `docs/agents/testing.md`.
+
+### Android-разработка
+
+При изменении Android-кода, UI или тестов работай через контейнерный SDK и headless-эмулятор по циклу из `docs/agents/android-development.md`.
