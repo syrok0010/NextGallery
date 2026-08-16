@@ -9,7 +9,7 @@ import com.syrok0010.nextgallery.data.memories.MemoriesRepository
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.data.local.LocalMediaSource
-import com.syrok0010.nextgallery.data.local.LocalTimelineProjector
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionUiState
@@ -85,7 +85,7 @@ class AuthenticatedViewModel(
                 ): List<com.syrok0010.nextgallery.data.memories.MediaItem> {
                     val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
                     remoteSnapshot = remoteSnapshot?.let { snapshot ->
-                        com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler.mergeLoadedItems(
+                        TimelineSnapshotAssembler.mergeLoadedItems(
                             snapshot = snapshot,
                             items = items,
                             loadedDayIds = dayIds.toSet(),
@@ -305,7 +305,7 @@ class AuthenticatedViewModel(
     }
 
     private fun projectTimeline(snapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot) =
-        LocalTimelineProjector.project(snapshot, localItems)
+        TimelineSnapshotAssembler.addSourceItems(snapshot, localItems)
 
     private fun updateLocalPrompt(
         prompt: LocalMediaPrompt,

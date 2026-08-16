@@ -53,21 +53,24 @@ data class MediaItemEntity(
 )
 
 @Entity(
-    tableName = "remote_media_identities",
+    tableName = "media_identities",
+    primaryKeys = ["source", "sourceKey"],
     indices = [Index(value = ["mediaId"], unique = true)],
 )
-data class RemoteMediaIdentityEntity(
-    @PrimaryKey val fileId: Long,
+data class MediaIdentityEntity(
+    val source: String,
+    val sourceKey: String,
     val mediaId: String,
 )
 
-@Entity(
-    tableName = "local_media_identities",
-    indices = [Index(value = ["mediaId"], unique = true)],
-)
-data class LocalMediaIdentityEntity(
-    @PrimaryKey val contentUri: String,
-    val mediaId: String,
+enum class MediaSource {
+    Memories,
+    Local,
+}
+
+data class MediaSourceIdentity(
+    val source: MediaSource,
+    val sourceKey: String,
 )
 
 @Entity(tableName = "loaded_days")

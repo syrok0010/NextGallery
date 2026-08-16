@@ -115,6 +115,26 @@ class TimelineSnapshotAssemblerTest {
         assertEquals(setOf(19870), updated.loadedDayIds)
     }
 
+    @Test
+    fun `adding source items keeps remote placeholders and orders all loaded media`() {
+        val snapshot = TimelineSnapshotAssembler.assemble(
+            config = memoriesConfig(),
+            days = listOf(TimelineDay(dayId = 19870, count = 2)),
+        )
+        val localItem = mediaItem(fileId = 7, dayId = 19871).copy(
+            mediaId = MediaId("local-7"),
+            takenAtEpochSeconds = 1_717_300_000L,
+            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7"),
+        )
+
+        val updated = TimelineSnapshotAssembler.addSourceItems(snapshot, listOf(localItem))
+
+        assertEquals(listOf(19871, 19870), updated.days.map { it.dayId })
+        assertEquals(listOf(MediaId("local-7")), updated.items.map { it.mediaId })
+        assertEquals(2, updated.slots.count { it.mediaItem == null })
+        assertEquals(3, updated.totalMediaCountHint)
+    }
+
     private fun memoriesConfig(): MemoriesConfig {
         return MemoriesConfig(
             version = "7.5.2",

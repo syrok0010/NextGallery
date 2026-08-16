@@ -51,6 +51,25 @@ class TimelineCacheRepositoryIdentityTest {
     }
 
     @Test
+    fun sourceIdentityIsStableAndScopedBySource() = runBlocking {
+        database.close()
+        val generatedIds = listOf(MediaId("remote-id"), MediaId("local-id")).iterator()
+        openRepository(mediaIdFactory = generatedIds::next)
+        val remote = MediaSourceIdentity(MediaSource.Memories, "42")
+        val local = MediaSourceIdentity(MediaSource.Local, "42")
+
+        val first = repository.resolveMediaIds(listOf(remote, local))
+
+        database.close()
+        openRepository(mediaIdFactory = { error("Existing identities must not generate new MediaIds") })
+
+        val second = repository.resolveMediaIds(listOf(remote, local))
+
+        assertEquals(first, second)
+        assertEquals(2, first.values.toSet().size)
+    }
+
+    @Test
     fun remoteMediaIdSurvivesDatabaseReopenAndNetworkRefresh() = runBlocking {
         val firstMediaId = repository.resolveRemoteMediaIds(
             fileIds = listOf(FILE_ID),

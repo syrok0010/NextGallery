@@ -12,21 +12,16 @@ data class MemoriesImageUrlSet(
 
 object MemoriesAssetUrlFactory {
     fun urlsFor(
-        assetRef: MediaAssetRef,
+        assetRef: MediaAssetRef.MemoriesFile,
         serverUrl: String,
     ): MemoriesImageUrlSet {
         val normalizedServerUrl = NextcloudTransport.normalizeServerOrigin(serverUrl)
-        return when (assetRef) {
-            is MediaAssetRef.MemoriesFile -> {
-                val fileId = assetRef.photoFileId
-                MemoriesImageUrlSet(
-                    thumbnailUrl = buildPreviewUrl(normalizedServerUrl, fileId, 512),
-                    detailPreviewUrl = buildPreviewUrl(normalizedServerUrl, fileId, 1600),
-                    originalUrl = "$normalizedServerUrl/apps/memories/api/stream/$fileId",
-                )
-            }
-            is MediaAssetRef.LocalContent -> error("Local content URI is not a Memories asset")
-        }
+        val fileId = assetRef.photoFileId
+        return MemoriesImageUrlSet(
+            thumbnailUrl = buildPreviewUrl(normalizedServerUrl, fileId, 512),
+            detailPreviewUrl = buildPreviewUrl(normalizedServerUrl, fileId, 1600),
+            originalUrl = "$normalizedServerUrl/apps/memories/api/stream/$fileId",
+        )
     }
 
     private fun buildPreviewUrl(

@@ -64,8 +64,9 @@ class MemoriesDtoMappingTest {
         val photo = json.decodeFromString<List<MemoriesPhotoDto>>(fixture("day-photos.json"))[1]
 
         val item = photo.toMediaItem(MediaId("resolved-media"))
+        val memoriesAsset = item.assetRef as MediaAssetRef.MemoriesFile
         val imageUrls = MemoriesAssetUrlFactory.urlsFor(
-            assetRef = item.assetRef,
+            assetRef = memoriesAsset,
             serverUrl = "https://cloud.example.com/",
         )
 

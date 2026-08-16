@@ -70,14 +70,10 @@ import coil3.Image
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
-import com.syrok0010.nextgallery.ui.common.ThumbnailImage
-import com.syrok0010.nextgallery.ui.common.ContentUriImage
-import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
+import com.syrok0010.nextgallery.ui.common.MediaAssetImage
+import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
+import com.syrok0010.nextgallery.ui.common.mediaImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
@@ -403,9 +399,12 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
-                MediaPreview(
+                MediaAssetImage(
                     item = item,
                     credentials = credentials,
+                    purpose = MediaImagePurpose.DetailPreview,
+                    contentDescription = item.displayName,
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
 
@@ -425,15 +424,8 @@ private fun MediaViewerPage(
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
             val originalRequest = remember(context, item.assetRef, credentials) {
-                val builder = when (val assetRef = item.assetRef) {
-                    is MediaAssetRef.MemoriesFile -> {
-                        val imageUrls = MemoriesAssetUrlFactory.urlsFor(assetRef, credentials.serverUrl)
-                        authenticatedImageRequest(context, imageUrls.originalUrl, credentials).newBuilder(context)
-                    }
-                    is MediaAssetRef.LocalContent -> coil3.request.ImageRequest.Builder(context)
-                        .data(assetRef.contentUri)
-                }
-                builder
+                mediaImageRequest(context, item, credentials, MediaImagePurpose.Original)
+                    .newBuilder(context)
                     .listener(
                         onSuccess = { _, result ->
                             onHdrChange(result.image.hasGainmapCompat())
@@ -466,9 +458,12 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    MediaPreview(
+                    MediaAssetImage(
                         item = item,
                         credentials = credentials,
+                        purpose = MediaImagePurpose.DetailPreview,
+                        contentDescription = item.displayName,
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
                     )
                 }
@@ -483,43 +478,6 @@ private fun MediaViewerPage(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun MediaPreview(
-    item: MediaItem,
-    credentials: AccountCredentials,
-    contentScale: ContentScale,
-) {
-    when (val assetRef = item.assetRef) {
-        is MediaAssetRef.MemoriesFile -> {
-            val thumbnail = remember(credentials, item.fileId, item.etag) {
-                thumbnailRequest(credentials, item.fileId, item.etag)
-            }
-            val imageUrls = remember(assetRef, credentials.serverUrl) {
-                MemoriesAssetUrlFactory.urlsFor(assetRef, credentials.serverUrl)
-            }
-            ThumbnailImage(
-                request = thumbnail,
-                contentDescription = item.displayName,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = contentScale,
-            )
-            AuthenticatedImage(
-                url = imageUrls.detailPreviewUrl,
-                credentials = credentials,
-                contentDescription = item.displayName,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = contentScale,
-            )
-        }
-        is MediaAssetRef.LocalContent -> ContentUriImage(
-            contentUri = assetRef.contentUri,
-            contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = contentScale,
-        )
     }
 }
 
