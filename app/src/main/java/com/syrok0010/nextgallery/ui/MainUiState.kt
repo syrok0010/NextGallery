@@ -3,7 +3,6 @@ package com.syrok0010.nextgallery.ui
 import com.syrok0010.nextgallery.data.auth.LoginSession
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
 
 sealed interface SessionUiState {
     data object SignedOut : SessionUiState
@@ -22,20 +21,6 @@ data class TimelineUiState(
     val loadingDayIds: Set<Int> = emptySet(),
     val failedDayIds: Set<Int> = emptySet(),
     val loadMoreError: UiText? = null,
-)
-
-enum class LocalMediaPrompt {
-    None,
-    Explanation,
-    PartialRequiresFull,
-    OpenSettings,
-}
-
-data class LocalMediaUiState(
-    val permissionMode: LocalMediaPermissionMode = LocalMediaPermissionMode.Denied,
-    val prompt: LocalMediaPrompt = LocalMediaPrompt.None,
-    val isLoading: Boolean = false,
-    val itemCount: Int = 0,
 )
 
 internal fun TimelineUiState.withRefreshedSnapshot(refreshedSnapshot: TimelineSnapshot): TimelineUiState {

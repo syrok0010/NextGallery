@@ -1,14 +1,9 @@
 package com.syrok0010.nextgallery.data.local
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 enum class LocalMediaPermissionMode {
@@ -44,6 +39,11 @@ object LocalMediaPermissionPolicy {
         )
         else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
+
+    fun shouldExplainAutomatically(
+        mode: LocalMediaPermissionMode,
+        explanationAlreadyShown: Boolean,
+    ): Boolean = mode != LocalMediaPermissionMode.Full && !explanationAlreadyShown
 }
 
 class LocalMediaPermissionCoordinator(
@@ -70,33 +70,17 @@ class LocalMediaPermissionCoordinator(
     fun requestedPermissions(): Array<String> =
         LocalMediaPermissionPolicy.requestedPermissions(Build.VERSION.SDK_INT)
 
-    fun shouldExplainAutomatically(): Boolean = !preferences.getBoolean(KEY_AUTO_EXPLAINED, false)
+    fun shouldExplainAutomatically(): Boolean = LocalMediaPermissionPolicy.shouldExplainAutomatically(
+        mode = currentMode(),
+        explanationAlreadyShown = preferences.getBoolean(KEY_AUTO_EXPLAINED, false),
+    )
 
     fun markAutomaticExplanationShown() {
         preferences.edit().putBoolean(KEY_AUTO_EXPLAINED, true).apply()
     }
 
-    fun markRequestCompleted() {
-        preferences.edit().putBoolean(KEY_REQUESTED, true).apply()
-    }
-
-    fun requiresSettings(activity: Activity): Boolean {
-        if (!preferences.getBoolean(KEY_REQUESTED, false) || currentMode() != LocalMediaPermissionMode.Denied) {
-            return false
-        }
-        return requestedPermissions()
-            .filterNot { it == Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED }
-            .none { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
-    }
-
-    fun settingsIntent(): Intent = Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.fromParts("package", context.packageName, null),
-    )
-
     private companion object {
         const val PREFERENCES_NAME = "local-media-permission"
         const val KEY_AUTO_EXPLAINED = "auto-explained"
-        const val KEY_REQUESTED = "requested"
     }
 }

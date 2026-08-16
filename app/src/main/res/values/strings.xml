@@ -5,8 +5,6 @@
     <string name="action_logout">Выйти</string>
     <string name="action_allow_local_media">Продолжить</string>
     <string name="action_not_now">Не сейчас</string>
-    <string name="action_open_settings">Открыть настройки</string>
-    <string name="action_show_device_media">Фото с устройства</string>
     <string name="action_open_browser">Открыть браузер</string>
     <string name="action_refresh">Обновить</string>
     <string name="action_restart_login">Начать заново</string>
@@ -32,9 +30,6 @@
     <string name="login_title">Подключение к Nextcloud</string>
     <string name="local_media_permission_title">Фото и видео с устройства</string>
     <string name="local_media_permission_explanation">NextGallery может добавить в общую ленту все фото и видео с устройства. Сначала Android попросит полный доступ к изображениям и видео. Можно пропустить: облачная лента продолжит работать.</string>
-    <string name="local_media_partial_title">Нужен полный доступ</string>
-    <string name="local_media_partial_explanation">Сейчас Android разрешил доступ только к выбранным файлам. Первый local-only срез работает только с полной медиатекой; выбранные файлы не будут показаны как будто это вся библиотека.</string>
-    <string name="local_media_settings_explanation">Android больше не показывает запрос доступа для приложения. Чтобы добавить локальные фото и видео, открой настройки NextGallery и разреши полный доступ.</string>
     <string name="media_cloud_copy">Облачная копия</string>
     <string name="media_video_badge">VIDEO</string>
     <string name="status_creating_login_flow">Начинаю вход</string>

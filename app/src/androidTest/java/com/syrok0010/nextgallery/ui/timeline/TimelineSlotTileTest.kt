@@ -16,6 +16,8 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.ui.AppMessageUiState
+import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -94,6 +96,26 @@ class TimelineSlotTileTest {
             .assertDoesNotExist()
         composeRule.onNodeWithContentDescription("local.jpg")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun timelineDoesNotOfferDeviceMediaAction() {
+        composeRule.setContent {
+            MaterialTheme {
+                TimelinePanel(
+                    state = TimelineUiState(),
+                    message = AppMessageUiState(),
+                    credentials = CREDENTIALS,
+                    onViewportObservation = {},
+                    revealMediaId = null,
+                    onMediaRevealed = {},
+                    registerTimelineTile = { _, _ -> noOpUnregister },
+                    onSelect = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Фото с устройства").assertDoesNotExist()
     }
 
     private fun showSlot(mediaItem: MediaItem?) {

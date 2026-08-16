@@ -1,8 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -15,9 +12,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -41,23 +41,35 @@ internal fun HomeScreen(
     permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
 ) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    val activity = context.findActivity()
+    var showPermissionExplanation by rememberSaveable { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
-        viewModel.onLocalMediaPermissionRequestCompleted()
+        viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
     }
-    val settingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        viewModel.refreshLocalPermission()
+    LaunchedEffect(state.credentials) {
+        showPermissionExplanation = false
+        if (state.credentials != null) {
+            viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
+        }
     }
-    DisposableEffect(lifecycleOwner) {
+    LaunchedEffect(state.credentials, state.localMediaPermissionMode) {
+        if (
+            state.credentials != null &&
+            state.localMediaPermissionMode != null &&
+            permissionCoordinator.shouldExplainAutomatically()
+        ) {
+            permissionCoordinator.markAutomaticExplanationShown()
+            showPermissionExplanation = true
+        }
+    }
+    DisposableEffect(lifecycleOwner, state.credentials) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshLocalPermission()
+                if (state.credentials != null) {
+                    viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -103,12 +115,6 @@ internal fun HomeScreen(
                     revealMediaId = viewerTransitionCoordinator.revealMediaId,
                     onMediaRevealed = viewerTransitionCoordinator::onTimelineMediaRevealed,
                     registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
-                    localMediaActionEnabled = !state.localMedia.isLoading,
-                    onShowLocalMedia = {
-                        viewModel.showLocalMedia(
-                            requiresSettings = activity?.let(permissionCoordinator::requiresSettings) == true,
-                        )
-                    },
                     onSelect = { item ->
                         viewerTransitionCoordinator.open(item.mediaId)
                     },
@@ -140,22 +146,14 @@ internal fun HomeScreen(
                 )
             }
 
-            LocalMediaPermissionDialog(
-                prompt = state.localMedia.prompt,
-                onDismiss = viewModel::dismissLocalMediaPrompt,
+            LocalMediaPermissionExplanationDialog(
+                visible = showPermissionExplanation,
+                onDismiss = { showPermissionExplanation = false },
                 onRequestPermission = {
+                    showPermissionExplanation = false
                     permissionLauncher.launch(permissionCoordinator.requestedPermissions())
-                },
-                onOpenSettings = {
-                    settingsLauncher.launch(permissionCoordinator.settingsIntent())
                 },
             )
         }
     }
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }

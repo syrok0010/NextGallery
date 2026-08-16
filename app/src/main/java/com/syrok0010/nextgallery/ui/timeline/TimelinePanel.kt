@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,8 +40,6 @@ internal fun TimelinePanel(
     revealMediaId: MediaId?,
     onMediaRevealed: () -> Unit,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
-    localMediaActionEnabled: Boolean,
-    onShowLocalMedia: () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val timeline = state.snapshot
@@ -140,14 +137,6 @@ internal fun TimelinePanel(
                     )
                 }
             }
-        }
-
-        TextButton(
-            onClick = onShowLocalMedia,
-            enabled = localMediaActionEnabled,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        ) {
-            Text(stringResource(R.string.action_show_device_media))
         }
 
         StatusBlock(message)

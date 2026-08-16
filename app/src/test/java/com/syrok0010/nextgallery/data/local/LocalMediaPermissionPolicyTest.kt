@@ -65,4 +65,15 @@ class LocalMediaPermissionPolicyTest {
             LocalMediaPermissionPolicy.requestedPermissions(Build.VERSION_CODES.S_V2),
         )
     }
+
+    @Test
+    fun `partial access after an explained request does not offer another permission action`() {
+        assertEquals(
+            false,
+            LocalMediaPermissionPolicy.shouldExplainAutomatically(
+                mode = LocalMediaPermissionMode.Partial,
+                explanationAlreadyShown = true,
+            ),
+        )
+    }
 }
