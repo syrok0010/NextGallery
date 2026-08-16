@@ -6,6 +6,28 @@ x-android-image: &android-image
     context: .
     dockerfile: Dockerfile
 
+x-emulator: &emulator
+  <<: *android-image
+  entrypoint: ["/opt/nextgallery/bin/emulator-entrypoint.sh"]
+  devices:
+    - /dev/kvm:/dev/kvm
+  group_add:
+    - "${KVM_GID:-104}"
+  ports:
+    - "10.9.0.1:5555:5555"
+  cpus: 4.0
+  mem_limit: 4g
+  shm_size: 256m
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  healthcheck:
+    test: ["CMD-SHELL", "adb -s emulator-5556 shell getprop sys.boot_completed 2>/dev/null | grep -q '^1$'"]
+    interval: 5s
+    timeout: 5s
+    start_period: 30s
+    retries: 36
+  restart: "no"
+
 services:
   builder:
     <<: *android-image
@@ -19,27 +41,20 @@ services:
       ANDROID_SDK_ROOT: /opt/android-sdk
       GRADLE_USER_HOME: /home/android/.gradle
 
-  emulator:
-    <<: *android-image
-    entrypoint: ["/opt/nextgallery/bin/emulator-entrypoint.sh"]
-    devices:
-      - /dev/kvm:/dev/kvm
-    group_add:
-      - "${KVM_GID:-104}"
-    ports:
-      - "10.9.0.1:5555:5555"
-    cpus: 4.0
-    mem_limit: 4g
-    shm_size: 256m
-    tmpfs:
-      - /tmp:size=512m,mode=1777
-    healthcheck:
-      test: ["CMD-SHELL", "adb -s emulator-5556 shell getprop sys.boot_completed 2>/dev/null | grep -q '^1$'"]
-      interval: 5s
-      timeout: 5s
-      start_period: 30s
-      retries: 36
-    restart: "no"
+  emulator-smoke:
+    <<: *emulator
+    profiles: ["smoke"]
+    environment:
+      EMULATOR_WIPE_DATA: "1"
+
+  emulator-dev:
+    <<: *emulator
+    profiles: ["dev"]
+    environment:
+      EMULATOR_WIPE_DATA: "0"
+    volumes:
+      - avd-data:/home/android/.android/avd
 
 volumes:
   gradle-cache:
+  avd-data:

@@ -30,35 +30,9 @@ fi
 
 mkdir -p "$artifacts_dir"
 
-booted=
-for _ in $(seq 1 90); do
-  adb connect "$adb_target" >/dev/null 2>&1 || true
-  if [[ "$(adb -s "$adb_target" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then
-    booted=1
-    break
-  fi
-  sleep 2
-done
-
-if [[ -z "$booted" ]]; then
-  printf 'Эмулятор не загрузился за 180 секунд.\n' >&2
-  exit 1
-fi
-
-sleep 10
-dump_ui /data/local/tmp/nextgallery-preflight.xml "$artifacts_dir/preflight.xml"
-
-if grep -q "System UI isn.t responding" "$artifacts_dir/preflight.xml"; then
-  if ! grep -q 'text="Wait"' "$artifacts_dir/preflight.xml"; then
-    printf 'System UI ANR не содержит ожидаемой кнопки Wait.\n' >&2
-    exit 1
-  fi
-
-  # Экран эмулятора зафиксирован как 720x1280; центр кнопки Wait — ниже
-  # центра системного ANR-диалога.
-  adb -s "$adb_target" shell input tap 360 827
-  sleep 10
-fi
+ANDROID_ADB_TARGET="$adb_target" \
+ANDROID_ARTIFACTS_DIR="$artifacts_dir" \
+  /workspace/dev/android/container-emulator-ready.sh
 
 adb -s "$adb_target" install -r "$apk"
 adb -s "$adb_target" shell am force-stop com.syrok0010.nextgallery.automation

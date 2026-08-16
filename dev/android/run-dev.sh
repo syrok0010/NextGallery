@@ -12,12 +12,11 @@ export KVM_GID=${KVM_GID:-$(stat -c '%g' /dev/kvm)}
 cd "$repo_root"
 
 docker compose -f "$compose_file" build builder
-docker compose -f "$compose_file" run --rm builder \
-  ./gradlew --no-daemon --console=plain :app:testAutomationUnitTest :app:assembleAutomation
-docker compose -f "$compose_file" --profile dev stop emulator-dev
-docker compose -f "$compose_file" --profile smoke up -d emulator-smoke
+docker compose -f "$compose_file" --profile smoke stop emulator-smoke
+docker compose -f "$compose_file" --profile dev up -d emulator-dev
 docker compose -f "$compose_file" run --rm \
-  -e ANDROID_ADB_TARGET=emulator-smoke:5555 \
+  -e ANDROID_ADB_TARGET=emulator-dev:5555 \
+  -e ANDROID_ARTIFACTS_DIR=/workspace/build/android-dev \
   builder \
-  /workspace/dev/android/container-smoke.sh
-docker compose -f "$compose_file" --profile smoke ps
+  /workspace/dev/android/container-emulator-ready.sh
+docker compose -f "$compose_file" --profile dev ps
