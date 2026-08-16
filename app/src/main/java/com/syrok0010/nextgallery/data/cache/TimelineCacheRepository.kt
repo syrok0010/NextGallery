@@ -53,7 +53,10 @@ class TimelineCacheRepository(
         val now = System.currentTimeMillis()
 
         database.withTransaction {
-            dao.upsertMetadata(snapshot.config.toCacheMetadataEntity(normalizedServerUrl, now))
+            dao.upsertMetadata(
+                requireNotNull(snapshot.config) { "Only a Memories timeline can be cached" }
+                    .toCacheMetadataEntity(normalizedServerUrl, now),
+            )
             dao.deleteTimelineDays()
             dao.upsertTimelineDays(snapshot.days.mapIndexed { index, day -> day.toEntity(index) })
 
@@ -90,7 +93,7 @@ class TimelineCacheRepository(
 
     suspend fun resolveRemoteMediaIds(fileIds: Collection<Long>): Map<Long, MediaId> {
         val identities = fileIds.associateWith { fileId ->
-            MediaSourceIdentity(MediaSource.Memories, fileId.toString())
+            MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
         }
         val mediaIds = resolveMediaIds(identities.values)
         return identities.mapValues { (_, identity) -> mediaIds.getValue(identity) }
@@ -98,7 +101,7 @@ class TimelineCacheRepository(
 
     suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId> {
         val identities = contentUris.associateWith { contentUri ->
-            MediaSourceIdentity(MediaSource.Local, contentUri)
+            MediaSourceIdentity(MediaSourceKind.Local, contentUri)
         }
         val mediaIds = resolveMediaIds(identities.values)
         return identities.mapValues { (_, identity) -> mediaIds.getValue(identity) }
@@ -119,7 +122,7 @@ class TimelineCacheRepository(
                     )
                 }
                 .associate { entity ->
-                    MediaSourceIdentity(MediaSource.valueOf(entity.source), entity.sourceKey) to MediaId(entity.mediaId)
+                    MediaSourceIdentity(MediaSourceKind.valueOf(entity.source), entity.sourceKey) to MediaId(entity.mediaId)
                 }
             val missingIdentities = distinctIdentities
                 .filterNot(existingIds::containsKey)

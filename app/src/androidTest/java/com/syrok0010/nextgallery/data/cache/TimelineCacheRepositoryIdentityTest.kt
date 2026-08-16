@@ -55,8 +55,8 @@ class TimelineCacheRepositoryIdentityTest {
         database.close()
         val generatedIds = listOf(MediaId("remote-id"), MediaId("local-id")).iterator()
         openRepository(mediaIdFactory = generatedIds::next)
-        val remote = MediaSourceIdentity(MediaSource.Memories, "42")
-        val local = MediaSourceIdentity(MediaSource.Local, "42")
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val local = MediaSourceIdentity(MediaSourceKind.Local, "42")
 
         val first = repository.resolveMediaIds(listOf(remote, local))
 
@@ -127,7 +127,7 @@ class TimelineCacheRepositoryIdentityTest {
 
     private fun mediaItem(mediaId: MediaId) = MediaItem(
         mediaId = mediaId,
-        fileId = FILE_ID,
+        remoteFileId = FILE_ID,
         dayId = DAY_ID,
         day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "IMG_0042.jpg",

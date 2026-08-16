@@ -63,7 +63,7 @@ class AuthenticatedViewModel(
                         val transformed = transform(state.timeline)
                         state.copy(
                             timeline = transformed.copy(
-                                snapshot = remoteSnapshot?.let(::projectTimeline) ?: transformed.snapshot,
+                                snapshot = combinedTimeline() ?: transformed.snapshot,
                             ),
                         )
                     }
@@ -278,7 +278,7 @@ class AuthenticatedViewModel(
                     localItems = items
                     _state.update { state ->
                         state.copy(
-                            timeline = state.timeline.copy(snapshot = remoteSnapshot?.let(::projectTimeline)),
+                            timeline = state.timeline.copy(snapshot = combinedTimeline()),
                             localMedia = state.localMedia.copy(isLoading = false, itemCount = items.size),
                         )
                     }
@@ -306,6 +306,10 @@ class AuthenticatedViewModel(
 
     private fun projectTimeline(snapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot) =
         TimelineSnapshotAssembler.addSourceItems(snapshot, localItems)
+
+    private fun combinedTimeline(): com.syrok0010.nextgallery.data.memories.TimelineSnapshot? =
+        remoteSnapshot?.let(::projectTimeline)
+            ?: localItems.takeIf { it.isNotEmpty() }?.let(TimelineSnapshotAssembler::assembleLocal)
 
     private fun updateLocalPrompt(
         prompt: LocalMediaPrompt,

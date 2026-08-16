@@ -45,7 +45,7 @@ class LocalMediaSource(
             val dayId = Math.floorDiv(timestamp, SECONDS_PER_DAY).toInt()
             MediaItem(
                 mediaId = checkNotNull(mediaIds[row.contentUri]),
-                fileId = row.contentUri.hashCode().toLong(),
+                remoteFileId = null,
                 dayId = dayId,
                 day = LocalDate.ofEpochDay(dayId.toLong()),
                 displayName = row.displayName,

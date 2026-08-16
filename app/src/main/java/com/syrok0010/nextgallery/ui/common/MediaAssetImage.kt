@@ -62,12 +62,12 @@ private fun mediaImageRequests(
         when (purpose) {
             MediaImagePurpose.TimelineThumbnail -> listOf(
                 ImageRequest.Builder(context)
-                    .data(thumbnailRequest(credentials, item.fileId, item.etag))
+                    .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
                     .build(),
             )
             MediaImagePurpose.DetailPreview -> listOf(
                 ImageRequest.Builder(context)
-                    .data(thumbnailRequest(credentials, item.fileId, item.etag))
+                    .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
                     .build(),
                 NextcloudTransport.authenticatedImageRequest(context, urls.detailPreviewUrl, credentials),
             )

@@ -116,7 +116,7 @@ class TimelineSlotTileTest {
 
     private fun mediaItem(isVideo: Boolean): MediaItem = MediaItem(
         mediaId = MediaId("remote-42"),
-        fileId = 42,
+        remoteFileId = 42,
         dayId = DAY_ID,
         day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "remote.jpg",

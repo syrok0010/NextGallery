@@ -63,13 +63,13 @@ data class MediaIdentityEntity(
     val mediaId: String,
 )
 
-enum class MediaSource {
+enum class MediaSourceKind {
     Memories,
     Local,
 }
 
 data class MediaSourceIdentity(
-    val source: MediaSource,
+    val source: MediaSourceKind,
     val sourceKey: String,
 )
 

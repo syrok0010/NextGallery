@@ -59,7 +59,7 @@ fun MediaItem.toEntity(): MediaItemEntity {
     val mediaAssetRef = assetRef as? MediaAssetRef.MemoriesFile
         ?: error("Local items are not stored in the remote timeline cache")
     return MediaItemEntity(
-        fileId = fileId,
+        fileId = mediaAssetRef.photoFileId,
         mediaId = mediaId.value,
         dayId = dayId,
         displayName = displayName,
@@ -84,7 +84,7 @@ fun MediaItem.toEntity(): MediaItemEntity {
 fun MediaItemEntity.toMediaItem(): MediaItem {
     return MediaItem(
         mediaId = MediaId(mediaId),
-        fileId = fileId,
+        remoteFileId = fileId,
         dayId = dayId,
         day = LocalDate.ofEpochDay(dayId.toLong()),
         displayName = displayName,

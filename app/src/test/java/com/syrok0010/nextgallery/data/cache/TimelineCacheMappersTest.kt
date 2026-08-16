@@ -12,7 +12,7 @@ class TimelineCacheMappersTest {
     fun `cache mapping preserves memories asset reference instead of derived urls`() {
         val item = MediaItem(
             mediaId = MediaId("persistent-media-id"),
-            fileId = 42L,
+            remoteFileId = 42L,
             dayId = 19870,
             day = LocalDate.ofEpochDay(19870),
             displayName = "IMG_0042.jpg",

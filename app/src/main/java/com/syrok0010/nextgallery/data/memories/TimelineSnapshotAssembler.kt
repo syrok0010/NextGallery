@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.data.memories
 
 object TimelineSnapshotAssembler {
     fun assemble(
-        config: MemoriesConfig,
+        config: MemoriesConfig?,
         days: List<TimelineDay>,
         mediaItems: List<MediaItem> = emptyList(),
         loadedDayIds: Set<Int> = emptySet(),
@@ -17,6 +17,15 @@ object TimelineSnapshotAssembler {
             totalDayCount = days.size,
             totalMediaCountHint = days.sumOf { it.count },
         )
+    }
+
+    fun assembleLocal(items: List<MediaItem>): TimelineSnapshot {
+        val empty = assemble(
+            config = null,
+            days = emptyList(),
+            loadedDayIds = items.mapTo(mutableSetOf()) { it.dayId },
+        )
+        return addSourceItems(empty, items)
     }
 
     fun mergeLoadedItems(

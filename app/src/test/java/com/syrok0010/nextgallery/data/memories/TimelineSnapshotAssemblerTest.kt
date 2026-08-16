@@ -50,7 +50,7 @@ class TimelineSnapshotAssemblerTest {
         )
 
         assertEquals(2, snapshot.slots.size)
-        assertEquals(42L, snapshot.slots[0].mediaItem?.fileId)
+        assertEquals(42L, snapshot.slots[0].mediaItem?.remoteFileId)
         assertNull(snapshot.slots[1].mediaItem)
         assertEquals(setOf(19870), snapshot.loadedDayIds)
     }
@@ -68,7 +68,7 @@ class TimelineSnapshotAssemblerTest {
         )
 
         assertEquals(2, snapshot.slots.size)
-        assertEquals(listOf(42L, 43L), snapshot.items.map { it.fileId })
+        assertEquals(listOf(42L, 43L), snapshot.items.map { it.remoteFileId })
         assertEquals(1, snapshot.totalMediaCountHint)
     }
 
@@ -92,7 +92,7 @@ class TimelineSnapshotAssemblerTest {
         )
 
         assertEquals(firstKey, updated.slots.first().key)
-        assertEquals(listOf(42L, 43L), updated.items.map { it.fileId })
+        assertEquals(listOf(42L, 43L), updated.items.map { it.remoteFileId })
         assertEquals(setOf(19870, 19869), updated.loadedDayIds)
     }
 
@@ -111,7 +111,7 @@ class TimelineSnapshotAssemblerTest {
             loadedDayIds = setOf(19870),
         )
 
-        assertEquals(listOf(43L), updated.items.map { it.fileId })
+        assertEquals(listOf(43L), updated.items.map { it.remoteFileId })
         assertEquals(setOf(19870), updated.loadedDayIds)
     }
 
@@ -135,6 +135,22 @@ class TimelineSnapshotAssemblerTest {
         assertEquals(3, updated.totalMediaCountHint)
     }
 
+    @Test
+    fun `local items form a usable snapshot without memories metadata`() {
+        val localItem = mediaItem(fileId = 7, dayId = 19871).copy(
+            mediaId = MediaId("local-7"),
+            remoteFileId = null,
+            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7"),
+        )
+
+        val snapshot = TimelineSnapshotAssembler.assembleLocal(listOf(localItem))
+
+        assertEquals(listOf(localItem), snapshot.items)
+        assertEquals(setOf(19871), snapshot.loadedDayIds)
+        assertEquals("", snapshot.memoriesVersion)
+        assertEquals(null, snapshot.timelinePath)
+    }
+
     private fun memoriesConfig(): MemoriesConfig {
         return MemoriesConfig(
             version = "7.5.2",
@@ -151,7 +167,7 @@ class TimelineSnapshotAssemblerTest {
     private fun mediaItem(fileId: Long, dayId: Int): MediaItem {
         return MediaItem(
             mediaId = MediaId("remote-$fileId"),
-            fileId = fileId,
+            remoteFileId = fileId,
             dayId = dayId,
             day = LocalDate.ofEpochDay(dayId.toLong()),
             displayName = "file-$fileId",

@@ -70,7 +70,7 @@ class MemoriesDtoMappingTest {
             serverUrl = "https://cloud.example.com/",
         )
 
-        assertEquals(43L, item.fileId)
+        assertEquals(43L, item.remoteFileId)
         assertEquals(MediaId("resolved-media"), item.mediaId)
         assertEquals("VID_0043.mp4", item.displayName)
         assertEquals("video/mp4", item.mimeType)
