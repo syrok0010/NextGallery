@@ -48,9 +48,18 @@ if grep -q "System UI isn.t responding" "$artifacts_dir/preflight.xml"; then
     exit 1
   fi
 
-  # Экран эмулятора зафиксирован как 720x1280; центр кнопки Wait — ниже
-  # центра системного ANR-диалога.
-  adb -s "$adb_target" shell input tap 360 827
+  wait_bounds=$(grep -o 'text="Wait"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' \
+    "$artifacts_dir/preflight.xml" | head -n 1)
+  bounds_pattern='bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"'
+  if [[ "$wait_bounds" =~ $bounds_pattern ]]; then
+    wait_x=$(( (BASH_REMATCH[1] + BASH_REMATCH[3]) / 2 ))
+    wait_y=$(( (BASH_REMATCH[2] + BASH_REMATCH[4]) / 2 ))
+  else
+    printf 'Не удалось определить координаты кнопки Wait.\n' >&2
+    exit 1
+  fi
+
+  adb -s "$adb_target" shell input tap "$wait_x" "$wait_y"
   sleep 10
 fi
 

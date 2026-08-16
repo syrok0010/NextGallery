@@ -3,9 +3,25 @@
 Контур собирает NextGallery и запускает один Android 16 (API 36) x86_64
 эмулятор в Docker с аппаратным ускорением KVM. Android SDK, JDK 21 и system
 image находятся внутри Docker-образа; на хост передается только `/dev/kvm`.
-Гостю выделено 2 ГБ RAM, четыре CPU и экран 720x1280; контейнер ограничен
-4 ГБ RAM, включая память QEMU и SwiftShader. Vulkan отключен, чтобы снизить
-графический overhead headless-запуска.
+Гостю запрошено 2 ГБ RAM и четыре CPU; для выбранного экрана эмулятор повышает
+RAM до 2,5 ГБ. Контейнер ограничен 5 ГБ RAM, включая память QEMU и SwiftShader.
+Vulkan доступен через SwiftShader.
+
+Рабочий экран — 1080x2340 при 450 dpi. Он сохраняет размер интерфейса и
+соотношение сторон Samsung Galaxy S24 Ultra с фактическими параметрами
+1440x3120 при 600 dpi: оба профиля дают 384x832 dp. Уменьшенный framebuffer
+требует меньше RAM и CPU. Для проверки полного физического разрешения:
+
+```bash
+EMULATOR_SCREEN_SIZE=1440x3120 \
+EMULATOR_SCREEN_DENSITY=600 \
+  ./dev/android/run-dev.sh
+```
+
+GPU backend также можно переопределить через `EMULATOR_GPU_MODE`. На этом
+headless-хосте `host` видит Intel UHD 730 для Vulkan, но GLES требует X11/GLX и
+не может создать framebuffer без display; рабочий backend по умолчанию —
+`swiftshader`.
 
 ## Постоянный dev-эмулятор
 

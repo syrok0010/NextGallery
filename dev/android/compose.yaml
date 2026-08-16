@@ -16,7 +16,7 @@ x-emulator: &emulator
   ports:
     - "10.9.0.1:5555:5555"
   cpus: 4.0
-  mem_limit: 4g
+  mem_limit: 5g
   shm_size: 256m
   tmpfs:
     - /tmp:size=512m,mode=1777
@@ -46,12 +46,20 @@ services:
     profiles: ["smoke"]
     environment:
       EMULATOR_WIPE_DATA: "1"
+      EMULATOR_GPU_MODE: "${EMULATOR_GPU_MODE:-swiftshader}"
+      EMULATOR_SCREEN_SIZE: "${EMULATOR_SCREEN_SIZE:-1080x2340}"
+      EMULATOR_SCREEN_DENSITY: "${EMULATOR_SCREEN_DENSITY:-450}"
+      EMULATOR_DISABLE_VULKAN: "${EMULATOR_DISABLE_VULKAN:-0}"
 
   emulator-dev:
     <<: *emulator
     profiles: ["dev"]
     environment:
       EMULATOR_WIPE_DATA: "0"
+      EMULATOR_GPU_MODE: "${EMULATOR_GPU_MODE:-swiftshader}"
+      EMULATOR_SCREEN_SIZE: "${EMULATOR_SCREEN_SIZE:-1080x2340}"
+      EMULATOR_SCREEN_DENSITY: "${EMULATOR_SCREEN_DENSITY:-450}"
+      EMULATOR_DISABLE_VULKAN: "${EMULATOR_DISABLE_VULKAN:-0}"
     volumes:
       - avd-data:/home/android/.android/avd
 
