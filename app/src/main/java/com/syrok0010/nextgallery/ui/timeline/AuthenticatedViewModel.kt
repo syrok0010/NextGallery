@@ -6,9 +6,15 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
+import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.data.local.LocalMediaSource
+import com.syrok0010.nextgallery.data.local.LocalTimelineProjector
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionUiState
+import com.syrok0010.nextgallery.ui.LocalMediaPrompt
+import com.syrok0010.nextgallery.ui.LocalMediaUiState
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import com.syrok0010.nextgallery.ui.withRefreshedSnapshot
@@ -25,15 +31,20 @@ data class AuthenticatedUiState(
     val timeline: TimelineUiState = TimelineUiState(),
     val isBusy: Boolean = false,
     val message: AppMessageUiState = AppMessageUiState(),
+    val localMedia: LocalMediaUiState = LocalMediaUiState(),
 )
 
 class AuthenticatedViewModel(
     private val sessionStore: SessionStore,
     private val credentialsStore: CredentialsStore,
     private val memoriesRepository: MemoriesRepository,
+    private val localMediaPermissionCoordinator: LocalMediaPermissionCoordinator,
+    private val localMediaSource: LocalMediaSource,
 ) : ViewModel() {
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
+    private var remoteSnapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot? = null
+    private var localItems: List<com.syrok0010.nextgallery.data.memories.MediaItem> = emptyList()
 
     private val timelineViewportController: TimelineViewportController =
         DefaultTimelineViewportController(
@@ -49,7 +60,12 @@ class AuthenticatedViewModel(
 
                 override fun updateTimeline(transform: (TimelineUiState) -> TimelineUiState) {
                     _state.update { state ->
-                        state.copy(timeline = transform(state.timeline))
+                        val transformed = transform(state.timeline)
+                        state.copy(
+                            timeline = transformed.copy(
+                                snapshot = remoteSnapshot?.let(::projectTimeline) ?: transformed.snapshot,
+                            ),
+                        )
                     }
                 }
 
@@ -66,7 +82,17 @@ class AuthenticatedViewModel(
                 override suspend fun loadTimelineDays(
                     credentials: AccountCredentials,
                     dayIds: List<Int>,
-                ) = memoriesRepository.loadTimelineDays(credentials, dayIds)
+                ): List<com.syrok0010.nextgallery.data.memories.MediaItem> {
+                    val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
+                    remoteSnapshot = remoteSnapshot?.let { snapshot ->
+                        com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler.mergeLoadedItems(
+                            snapshot = snapshot,
+                            items = items,
+                            loadedDayIds = dayIds.toSet(),
+                        )
+                    }
+                    return items
+                }
             },
         )
 
@@ -78,6 +104,43 @@ class AuthenticatedViewModel(
 
     fun refresh() {
         state.value.credentials?.let(::loadTimeline)
+        refreshLocalPermission()
+    }
+
+    fun showLocalMedia(requiresSettings: Boolean) {
+        val mode = localMediaPermissionCoordinator.currentMode()
+        when (mode) {
+            LocalMediaPermissionMode.Full -> loadLocalMedia()
+            LocalMediaPermissionMode.Partial -> updateLocalPrompt(LocalMediaPrompt.PartialRequiresFull, mode)
+            LocalMediaPermissionMode.Denied -> updateLocalPrompt(
+                if (requiresSettings) LocalMediaPrompt.OpenSettings else LocalMediaPrompt.Explanation,
+                mode,
+            )
+        }
+    }
+
+    fun dismissLocalMediaPrompt() {
+        updateLocalPrompt(LocalMediaPrompt.None)
+    }
+
+    fun onLocalMediaPermissionRequestCompleted() {
+        localMediaPermissionCoordinator.markRequestCompleted()
+        refreshLocalPermission()
+    }
+
+    fun refreshLocalPermission() {
+        val mode = localMediaPermissionCoordinator.currentMode()
+        when (mode) {
+            LocalMediaPermissionMode.Full -> loadLocalMedia()
+            LocalMediaPermissionMode.Partial -> {
+                removeLocalMedia()
+                updateLocalPrompt(LocalMediaPrompt.PartialRequiresFull, mode)
+            }
+            LocalMediaPermissionMode.Denied -> {
+                removeLocalMedia()
+                updateLocalPrompt(state.value.localMedia.prompt, mode)
+            }
+        }
     }
 
     fun logout() {
@@ -108,6 +171,8 @@ class AuthenticatedViewModel(
     private fun onSessionChanged(session: SessionUiState) {
         when (session) {
             SessionUiState.SignedOut -> {
+                remoteSnapshot = null
+                localItems = emptyList()
                 _state.value = AuthenticatedUiState()
             }
 
@@ -120,6 +185,22 @@ class AuthenticatedViewModel(
                     credentials = session.credentials,
                     message = AppMessageUiState(status = uiText(R.string.status_loading_memories_timeline)),
                 )
+                val permissionMode = localMediaPermissionCoordinator.currentMode()
+                val prompt = if (
+                    permissionMode != LocalMediaPermissionMode.Full &&
+                    localMediaPermissionCoordinator.shouldExplainAutomatically()
+                ) {
+                    localMediaPermissionCoordinator.markAutomaticExplanationShown()
+                    LocalMediaPrompt.Explanation
+                } else if (permissionMode == LocalMediaPermissionMode.Partial) {
+                    LocalMediaPrompt.PartialRequiresFull
+                } else {
+                    LocalMediaPrompt.None
+                }
+                _state.update { it.copy(localMedia = LocalMediaUiState(permissionMode, prompt)) }
+                if (permissionMode == LocalMediaPermissionMode.Full) {
+                    loadLocalMedia()
+                }
                 loadTimeline(session.credentials)
             }
         }
@@ -138,10 +219,11 @@ class AuthenticatedViewModel(
             val canShowCachedTimeline = state.value.credentials == credentials && state.value.timeline.snapshot == null
             if (canShowCachedTimeline) {
                 memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
+                    remoteSnapshot = cachedSnapshot
                     showedCachedTimeline = true
                     _state.update { state ->
                         state.copy(
-                            timeline = TimelineUiState(snapshot = cachedSnapshot),
+                            timeline = TimelineUiState(snapshot = projectTimeline(cachedSnapshot)),
                             message = AppMessageUiState(
                                 status = uiText(
                                     R.string.status_loaded_timeline_index,
@@ -156,10 +238,11 @@ class AuthenticatedViewModel(
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
                 .onSuccess { snapshot ->
+                    remoteSnapshot = snapshot
                     _state.update { state ->
                         state.copy(
                             credentials = credentials,
-                            timeline = state.timeline.withRefreshedSnapshot(snapshot),
+                            timeline = state.timeline.withRefreshedSnapshot(projectTimeline(snapshot)),
                             isBusy = false,
                             message = AppMessageUiState(
                                 status = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
@@ -178,6 +261,58 @@ class AuthenticatedViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    private fun loadLocalMedia() {
+        viewModelScope.launch {
+            _state.update { state ->
+                state.copy(localMedia = state.localMedia.copy(
+                    permissionMode = LocalMediaPermissionMode.Full,
+                    prompt = LocalMediaPrompt.None,
+                    isLoading = true,
+                ))
+            }
+            runCatching { localMediaSource.readAll() }
+                .onSuccess { items ->
+                    localItems = items
+                    _state.update { state ->
+                        state.copy(
+                            timeline = state.timeline.copy(snapshot = remoteSnapshot?.let(::projectTimeline)),
+                            localMedia = state.localMedia.copy(isLoading = false, itemCount = items.size),
+                        )
+                    }
+                }
+                .onFailure {
+                    _state.update { state ->
+                        state.copy(
+                            localMedia = state.localMedia.copy(isLoading = false),
+                            message = AppMessageUiState(error = uiText(R.string.error_load_local_media_failed)),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun removeLocalMedia() {
+        localItems = emptyList()
+        _state.update { state ->
+            state.copy(
+                timeline = state.timeline.copy(snapshot = remoteSnapshot),
+                localMedia = state.localMedia.copy(itemCount = 0, isLoading = false),
+            )
+        }
+    }
+
+    private fun projectTimeline(snapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot) =
+        LocalTimelineProjector.project(snapshot, localItems)
+
+    private fun updateLocalPrompt(
+        prompt: LocalMediaPrompt,
+        mode: LocalMediaPermissionMode = state.value.localMedia.permissionMode,
+    ) {
+        _state.update { state ->
+            state.copy(localMedia = state.localMedia.copy(permissionMode = mode, prompt = prompt))
         }
     }
 

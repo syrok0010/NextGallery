@@ -39,6 +39,18 @@ class TimelineCacheRepositoryIdentityTest {
     }
 
     @Test
+    fun localContentUriKeepsMediaIdAcrossRepositoryInstances() = runBlocking {
+        val first = repository.resolveLocalMediaIds(listOf(LOCAL_CONTENT_URI))
+
+        database.close()
+        openRepository(mediaIdFactory = { error("Existing local identity must not generate a new MediaId") })
+
+        val second = repository.resolveLocalMediaIds(listOf(LOCAL_CONTENT_URI))
+
+        assertEquals(first[LOCAL_CONTENT_URI], second[LOCAL_CONTENT_URI])
+    }
+
+    @Test
     fun remoteMediaIdSurvivesDatabaseReopenAndNetworkRefresh() = runBlocking {
         val firstMediaId = repository.resolveRemoteMediaIds(
             fileIds = listOf(FILE_ID),
@@ -117,6 +129,7 @@ class TimelineCacheRepositoryIdentityTest {
     )
 
     private companion object {
+        const val LOCAL_CONTENT_URI = "content://media/external/images/media/42"
         const val DATABASE_NAME = "timeline-cache-identity-test.db"
         const val DAY_ID = 19_870
         const val FILE_ID = 42L

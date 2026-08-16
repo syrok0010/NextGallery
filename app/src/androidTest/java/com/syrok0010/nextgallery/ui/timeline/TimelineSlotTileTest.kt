@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
@@ -77,6 +78,22 @@ class TimelineSlotTileTest {
             "Cloud indicator $cloudBounds overlaps video badge $videoBounds",
             cloudBounds.bottom < videoBounds.top,
         )
+    }
+
+    @Test
+    fun localOnlyPhotoHasNoCloudIndicatorAndRemainsOpenable() {
+        val localItem = mediaItem(isVideo = false).copy(
+            mediaId = MediaId("local-42"),
+            displayName = "local.jpg",
+            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/42"),
+        )
+
+        showSlot(mediaItem = localItem)
+
+        composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("local.jpg")
+            .assertIsDisplayed()
     }
 
     private fun showSlot(mediaItem: MediaItem?) {

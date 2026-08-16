@@ -33,10 +33,13 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
+import com.syrok0010.nextgallery.data.memories.hasRemoteCopy
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.ThumbnailImage
+import com.syrok0010.nextgallery.ui.common.ContentUriImage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -120,23 +123,33 @@ private fun MediaTile(
                 coordinatesHolder.coordinates = coordinates
             }
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .cloudCopySemantics(cloudCopyDescription)
+            .then(if (item.hasRemoteCopy) Modifier.cloudCopySemantics(cloudCopyDescription) else Modifier)
             .clickable(onClick = onClick),
     ) {
-        ThumbnailImage(
-            request = remember(credentials, item.fileId, item.etag) {
-                thumbnailRequest(
-                    credentials = credentials,
-                    fileId = item.fileId,
-                    etag = item.etag,
-                )
-            },
-            contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
+        when (val assetRef = item.assetRef) {
+            is MediaAssetRef.MemoriesFile -> ThumbnailImage(
+                request = remember(credentials, item.fileId, item.etag) {
+                    thumbnailRequest(
+                        credentials = credentials,
+                        fileId = item.fileId,
+                        etag = item.etag,
+                    )
+                },
+                contentDescription = item.displayName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            is MediaAssetRef.LocalContent -> ContentUriImage(
+                contentUri = assetRef.contentUri,
+                contentDescription = item.displayName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
 
-        RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
+        if (item.hasRemoteCopy) {
+            RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
+        }
 
         if (item.isVideo) {
             Text(

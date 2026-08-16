@@ -11,10 +11,11 @@ import androidx.room.RoomDatabase
         TimelineDayEntity::class,
         MediaItemEntity::class,
         RemoteMediaIdentityEntity::class,
+        LocalMediaIdentityEntity::class,
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class TimelineCacheDatabase : RoomDatabase() {

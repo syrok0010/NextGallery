@@ -25,6 +25,7 @@ object MemoriesAssetUrlFactory {
                     originalUrl = "$normalizedServerUrl/apps/memories/api/stream/$fileId",
                 )
             }
+            is MediaAssetRef.LocalContent -> error("Local content URI is not a Memories asset")
         }
     }
 

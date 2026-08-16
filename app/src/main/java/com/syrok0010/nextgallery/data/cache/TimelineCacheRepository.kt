@@ -111,6 +111,29 @@ class TimelineCacheRepository(
         }
     }
 
+    suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId> {
+        if (contentUris.isEmpty()) {
+            return emptyMap()
+        }
+
+        val distinctUris = contentUris.toSet()
+        return database.withTransaction {
+            val existingIds = dao.localMediaIdentities(distinctUris)
+                .associate { it.contentUri to MediaId(it.mediaId) }
+            val missingIdentities = distinctUris
+                .filterNot(existingIds::containsKey)
+                .associateWith { mediaIdFactory() }
+            if (missingIdentities.isNotEmpty()) {
+                dao.upsertLocalMediaIdentities(
+                    missingIdentities.map { (contentUri, mediaId) ->
+                        LocalMediaIdentityEntity(contentUri = contentUri, mediaId = mediaId.value)
+                    },
+                )
+            }
+            existingIds + missingIdentities
+        }
+    }
+
     suspend fun loadThumbnailKeys(
         fileIds: List<Long>,
         width: Int,
@@ -198,6 +221,7 @@ class TimelineCacheRepository(
             dao.deleteAllLoadedDays()
             dao.deleteAllMediaItems()
             dao.deleteAllRemoteMediaIdentities()
+            dao.deleteAllLocalMediaIdentities()
             dao.deleteAllTimelineDays()
             dao.deleteMetadata()
         }

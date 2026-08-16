@@ -68,3 +68,25 @@ internal fun authenticatedImageRequest(
     url = url,
     credentials = credentials,
 )
+
+@Composable
+internal fun ContentUriImage(
+    contentUri: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    val context = LocalContext.current
+    val request = remember(context, contentUri) {
+        ImageRequest.Builder(context)
+            .data(contentUri)
+            .build()
+    }
+
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+    )
+}

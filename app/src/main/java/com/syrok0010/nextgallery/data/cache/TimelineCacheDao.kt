@@ -22,6 +22,9 @@ interface TimelineCacheDao {
     @Query("SELECT * FROM remote_media_identities WHERE fileId IN (:fileIds)")
     suspend fun remoteMediaIdentities(fileIds: Collection<Long>): List<RemoteMediaIdentityEntity>
 
+    @Query("SELECT * FROM local_media_identities WHERE contentUri IN (:contentUris)")
+    suspend fun localMediaIdentities(contentUris: Collection<String>): List<LocalMediaIdentityEntity>
+
     @Query("SELECT dayId FROM loaded_days")
     suspend fun loadedDayIds(): List<Int>
 
@@ -54,6 +57,9 @@ interface TimelineCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertRemoteMediaIdentities(entities: List<RemoteMediaIdentityEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLocalMediaIdentities(entities: List<LocalMediaIdentityEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLoadedDays(entities: List<LoadedDayEntity>)
@@ -96,6 +102,9 @@ interface TimelineCacheDao {
 
     @Query("DELETE FROM remote_media_identities")
     suspend fun deleteAllRemoteMediaIdentities()
+
+    @Query("DELETE FROM local_media_identities")
+    suspend fun deleteAllLocalMediaIdentities()
 
     @Query("DELETE FROM loaded_days")
     suspend fun deleteAllLoadedDays()

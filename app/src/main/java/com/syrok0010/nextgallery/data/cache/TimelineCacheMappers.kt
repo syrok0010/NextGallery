@@ -56,7 +56,8 @@ fun TimelineDayEntity.toTimelineDay(): TimelineDay {
 }
 
 fun MediaItem.toEntity(): MediaItemEntity {
-    val mediaAssetRef = assetRef
+    val mediaAssetRef = assetRef as? MediaAssetRef.MemoriesFile
+        ?: error("Local items are not stored in the remote timeline cache")
     return MediaItemEntity(
         fileId = fileId,
         mediaId = mediaId.value,
@@ -75,12 +76,8 @@ fun MediaItem.toEntity(): MediaItemEntity {
         videoDurationSeconds = videoDurationSeconds,
         isFavorite = isFavorite,
         isHidden = isHidden,
-        assetSource = when (mediaAssetRef) {
-            is MediaAssetRef.MemoriesFile -> MEMORIES_ASSET_SOURCE
-        },
-        assetSourcePhotoFileId = when (mediaAssetRef) {
-            is MediaAssetRef.MemoriesFile -> mediaAssetRef.photoFileId
-        },
+        assetSource = MEMORIES_ASSET_SOURCE,
+        assetSourcePhotoFileId = mediaAssetRef.photoFileId,
     )
 }
 

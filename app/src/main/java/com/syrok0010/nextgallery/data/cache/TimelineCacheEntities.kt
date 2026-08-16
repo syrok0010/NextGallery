@@ -61,6 +61,15 @@ data class RemoteMediaIdentityEntity(
     val mediaId: String,
 )
 
+@Entity(
+    tableName = "local_media_identities",
+    indices = [Index(value = ["mediaId"], unique = true)],
+)
+data class LocalMediaIdentityEntity(
+    @PrimaryKey val contentUri: String,
+    val mediaId: String,
+)
+
 @Entity(tableName = "loaded_days")
 data class LoadedDayEntity(
     @PrimaryKey val dayId: Int,

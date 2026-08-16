@@ -70,4 +70,11 @@ sealed interface MediaAssetRef {
     data class MemoriesFile(
         val photoFileId: Long,
     ) : MediaAssetRef
+
+    data class LocalContent(
+        val contentUri: String,
+    ) : MediaAssetRef
 }
+
+val MediaItem.hasRemoteCopy: Boolean
+    get() = assetRef is MediaAssetRef.MemoriesFile
