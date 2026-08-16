@@ -29,4 +29,4 @@
 
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов работай через контейнерный SDK и headless-эмулятор по циклу из `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов сначала выбери контур по среде: headless-агент на `syrok-server` или HITL на ноутбуке с личным телефоном. См. `docs/agents/android-development.md`.
