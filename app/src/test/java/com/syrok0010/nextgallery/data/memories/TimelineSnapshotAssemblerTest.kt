@@ -8,6 +8,50 @@ import org.junit.Test
 
 class TimelineSnapshotAssemblerTest {
     @Test
+    fun `materialized snapshot excludes index-only slots`() {
+        val materialized = mediaItem(fileId = 42, dayId = 19870).copy(
+            auid = "auid-42",
+            takenAtEpochSeconds = 1_717_100_000L,
+        )
+
+        val snapshot = TimelineSnapshotAssembler.assembleMaterialized(
+            config = memoriesConfig(),
+            mediaItems = listOf(materialized),
+            loadedDayIds = setOf(19870, 19869),
+        )
+
+        assertEquals(listOf(materialized), snapshot.items)
+        assertEquals(listOf(TimelineDay(dayId = 19870, count = 1)), snapshot.days)
+        assertEquals(1, snapshot.slots.size)
+        assertEquals(setOf(19870), snapshot.loadedDayIds)
+        assertEquals(1, snapshot.totalDayCount)
+        assertEquals(1, snapshot.totalMediaCountHint)
+    }
+
+    @Test
+    fun `materialized snapshot excludes cloud objects without deduplication or position metadata`() {
+        val complete = mediaItem(fileId = 42, dayId = 19870).copy(
+            auid = "auid-42",
+            takenAtEpochSeconds = 1_717_100_000L,
+        )
+        val withoutAlias = mediaItem(fileId = 43, dayId = 19870).copy(
+            takenAtEpochSeconds = 1_717_000_000L,
+        )
+        val withoutTimestamp = mediaItem(fileId = 44, dayId = 19870).copy(
+            buid = "buid-44",
+        )
+
+        val snapshot = TimelineSnapshotAssembler.assembleMaterialized(
+            config = memoriesConfig(),
+            mediaItems = listOf(complete, withoutAlias, withoutTimestamp),
+            loadedDayIds = setOf(19870),
+        )
+
+        assertEquals(listOf(complete), snapshot.items)
+        assertEquals(listOf(TimelineDay(dayId = 19870, count = 1)), snapshot.days)
+    }
+
+    @Test
     fun `assemble creates empty snapshot when timeline has no days`() {
         val snapshot = TimelineSnapshotAssembler.assemble(
             config = memoriesConfig(),
