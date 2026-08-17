@@ -6,11 +6,12 @@ import android.provider.MediaStore
 import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-data class LocalMediaRow(
+data class LocalMediaMetadata(
     val contentUri: String,
     val displayName: String,
     val mimeType: String?,
@@ -24,50 +25,50 @@ data class LocalMediaRow(
     val isVideo: Boolean,
 )
 
-fun interface LocalMediaGateway {
-    suspend fun readAll(): List<LocalMediaRow>
+fun interface LocalMediaReader {
+    suspend fun readAll(): List<LocalMediaMetadata>
 }
 
 class LocalMediaSource(
-    private val gateway: LocalMediaGateway,
-    private val resolveMediaIds: suspend (Collection<String>) -> Map<String, com.syrok0010.nextgallery.domain.media.MediaId>,
+    private val reader: LocalMediaReader,
+    private val resolveMediaIds: suspend (Collection<String>) -> Map<String, MediaId>,
 ) {
     constructor(
-        gateway: LocalMediaGateway,
+        reader: LocalMediaReader,
         cacheRepository: TimelineCacheRepository,
-    ) : this(gateway, cacheRepository::resolveLocalMediaIds)
+    ) : this(reader, cacheRepository::resolveLocalMediaIds)
 
     suspend fun readAll(): List<MediaItem> {
-        val rows = gateway.readAll()
-        val mediaIds = resolveMediaIds(rows.map { it.contentUri })
-        return rows.mapNotNull { row ->
-            val timestamp = row.timelineEpochSeconds() ?: return@mapNotNull null
+        val metadata = reader.readAll()
+        val mediaIds = resolveMediaIds(metadata.map { it.contentUri })
+        return metadata.mapNotNull { item ->
+            val timestamp = item.timelineEpochSeconds() ?: return@mapNotNull null
             val dayId = Math.floorDiv(timestamp, SECONDS_PER_DAY).toInt()
             MediaItem(
-                mediaId = checkNotNull(mediaIds[row.contentUri]),
+                mediaId = checkNotNull(mediaIds[item.contentUri]),
                 remoteFileId = null,
                 dayId = dayId,
                 day = LocalDate.ofEpochDay(dayId.toLong()),
-                displayName = row.displayName,
-                mimeType = row.mimeType,
-                width = row.width,
-                height = row.height,
+                displayName = item.displayName,
+                mimeType = item.mimeType,
+                width = item.width,
+                height = item.height,
                 etag = null,
                 livePhotoId = null,
                 auid = null,
                 buid = null,
                 sharedBy = null,
                 takenAtEpochSeconds = timestamp,
-                isVideo = row.isVideo,
-                videoDurationSeconds = row.durationMillis?.takeIf { it > 0 }?.div(1_000),
+                isVideo = item.isVideo,
+                videoDurationSeconds = item.durationMillis?.takeIf { it > 0 }?.div(1_000),
                 isFavorite = false,
                 isHidden = false,
-                assetRef = MediaAssetRef.LocalContent(row.contentUri),
+                assetRef = MediaAssetRef.LocalContent(item.contentUri),
             )
         }.sortedWith(compareByDescending<MediaItem> { it.takenAtEpochSeconds }.thenByDescending { it.mediaId.value })
     }
 
-    private fun LocalMediaRow.timelineEpochSeconds(): Long? =
+    private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
         dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
             ?: dateModifiedSeconds?.takeIf { it > 0 }
             ?: dateAddedSeconds?.takeIf { it > 0 }
@@ -77,14 +78,14 @@ class LocalMediaSource(
     }
 }
 
-class AndroidMediaStoreGateway(
+class AndroidMediaStoreReader(
     private val contentResolver: ContentResolver,
-) : LocalMediaGateway {
-    override suspend fun readAll(): List<LocalMediaRow> = withContext(Dispatchers.IO) {
+) : LocalMediaReader {
+    override suspend fun readAll(): List<LocalMediaMetadata> = withContext(Dispatchers.IO) {
         readAllBlocking()
     }
 
-    private fun readAllBlocking(): List<LocalMediaRow> {
+    private fun readAllBlocking(): List<LocalMediaMetadata> {
         val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
@@ -104,7 +105,7 @@ class AndroidMediaStoreGateway(
             MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
             MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
         )
-        val rows = mutableListOf<LocalMediaRow>()
+        val metadata = mutableListOf<LocalMediaMetadata>()
 
         contentResolver.query(
             collection,
@@ -132,7 +133,7 @@ class AndroidMediaStoreGateway(
                     if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     id,
                 )
-                rows += LocalMediaRow(
+                metadata += LocalMediaMetadata(
                     contentUri = uri.toString(),
                     displayName = cursor.getString(nameColumn) ?: id.toString(),
                     mimeType = cursor.nullableString(mimeColumn),
@@ -147,7 +148,7 @@ class AndroidMediaStoreGateway(
                 )
             }
         }
-        return rows
+        return metadata
     }
 
     private fun android.database.Cursor.nullableString(column: Int): String? =

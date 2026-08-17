@@ -6,6 +6,8 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.data.local.LocalMediaSource
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
@@ -39,8 +41,8 @@ class AuthenticatedViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
-    private var remoteSnapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot? = null
-    private var localItems: List<com.syrok0010.nextgallery.data.memories.MediaItem> = emptyList()
+    private var remoteSnapshot: TimelineSnapshot? = null
+    private var localItems: List<MediaItem> = emptyList()
 
     private val timelineViewportController: TimelineViewportController =
         DefaultTimelineViewportController(
@@ -78,7 +80,7 @@ class AuthenticatedViewModel(
                 override suspend fun loadTimelineDays(
                     credentials: AccountCredentials,
                     dayIds: List<Int>,
-                ): List<com.syrok0010.nextgallery.data.memories.MediaItem> {
+                ): List<MediaItem> {
                     val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
                     remoteSnapshot = remoteSnapshot?.let { snapshot ->
                         TimelineSnapshotAssembler.mergeLoadedItems(
@@ -250,10 +252,10 @@ class AuthenticatedViewModel(
         }
     }
 
-    private fun projectTimeline(snapshot: com.syrok0010.nextgallery.data.memories.TimelineSnapshot) =
+    private fun projectTimeline(snapshot: TimelineSnapshot) =
         TimelineSnapshotAssembler.addSourceItems(snapshot, localItems)
 
-    private fun combinedTimeline(): com.syrok0010.nextgallery.data.memories.TimelineSnapshot? =
+    private fun combinedTimeline(): TimelineSnapshot? =
         remoteSnapshot?.let(::projectTimeline)
             ?: localItems.takeIf { it.isNotEmpty() }?.let(TimelineSnapshotAssembler::assembleLocal)
 

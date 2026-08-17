@@ -8,7 +8,7 @@ import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
-import com.syrok0010.nextgallery.data.local.AndroidMediaStoreGateway
+import com.syrok0010.nextgallery.data.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.data.local.LocalMediaSource
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
@@ -37,10 +37,10 @@ val appModule = module {
     single { ThumbnailFileStore(androidContext()) }
     single { TimelineCacheRepository(get(), get()) }
     single { LocalMediaPermissionCoordinator(androidContext()) }
-    single { AndroidMediaStoreGateway(androidContext().contentResolver) }
+    single { AndroidMediaStoreReader(androidContext().contentResolver) }
     single {
         LocalMediaSource(
-            gateway = get<AndroidMediaStoreGateway>(),
+            reader = get<AndroidMediaStoreReader>(),
             cacheRepository = get<TimelineCacheRepository>(),
         )
     }

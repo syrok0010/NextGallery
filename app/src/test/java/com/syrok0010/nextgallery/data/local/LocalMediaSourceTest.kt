@@ -16,7 +16,7 @@ class LocalMediaSourceTest {
             row("content://images/3", taken = 0, modified = 0, added = 175),
         )
         val source = LocalMediaSource(
-            gateway = LocalMediaGateway { rows },
+            reader = LocalMediaReader { rows },
             resolveMediaIds = { uris -> uris.associateWith { MediaId("stable:$it") } },
         )
 
@@ -35,7 +35,7 @@ class LocalMediaSourceTest {
     @Test
     fun `drops rows without any usable timeline date`() = runBlocking {
         val source = LocalMediaSource(
-            gateway = LocalMediaGateway { listOf(row("content://images/1")) },
+            reader = LocalMediaReader { listOf(row("content://images/1")) },
             resolveMediaIds = { uris -> uris.associateWith { MediaId("stable:$it") } },
         )
 
@@ -48,7 +48,7 @@ class LocalMediaSourceTest {
         modified: Long? = null,
         added: Long? = null,
         video: Boolean = false,
-    ) = LocalMediaRow(
+    ) = LocalMediaMetadata(
         contentUri = uri,
         displayName = uri.substringAfterLast('/'),
         mimeType = if (video) "video/mp4" else "image/jpeg",
