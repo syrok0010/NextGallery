@@ -21,6 +21,7 @@ class AndroidMediaStoreReader(
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.ORIENTATION,
             MediaStore.MediaColumns.SIZE,
             MediaStore.Images.ImageColumns.DATE_TAKEN,
             MediaStore.MediaColumns.DATE_MODIFIED,
@@ -54,6 +55,7 @@ class AndroidMediaStoreReader(
             val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
             val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
+            val orientationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.ORIENTATION)
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             val takenColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATE_TAKEN)
             val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
@@ -69,12 +71,17 @@ class AndroidMediaStoreReader(
                     if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     id,
                 )
+                val width = cursor.nullableInt(widthColumn)
+                val height = cursor.nullableInt(heightColumn)
+                val orientation = cursor.nullableInt(orientationColumn)
+                val orientedWidth = if (orientation.rotatesDimensions()) height else width
+                val orientedHeight = if (orientation.rotatesDimensions()) width else height
                 batch += LocalMediaMetadata(
                     contentUri = uri.toString(),
                     displayName = cursor.getString(nameColumn) ?: id.toString(),
                     mimeType = cursor.nullableString(mimeColumn),
-                    width = cursor.nullableInt(widthColumn),
-                    height = cursor.nullableInt(heightColumn),
+                    width = orientedWidth,
+                    height = orientedHeight,
                     sizeBytes = cursor.nullableLong(sizeColumn),
                     dateTakenMillis = cursor.nullableLong(takenColumn),
                     dateModifiedSeconds = cursor.nullableLong(modifiedColumn),
@@ -117,4 +124,6 @@ class AndroidMediaStoreReader(
 
     private fun android.database.Cursor.nullableLong(column: Int): Long? =
         if (isNull(column)) null else getLong(column)
+
+    private fun Int?.rotatesDimensions(): Boolean = this == 90 || this == 270
 }

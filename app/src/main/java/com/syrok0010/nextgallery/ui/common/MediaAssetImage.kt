@@ -52,7 +52,7 @@ internal fun mediaImageRequest(
     purpose: MediaImagePurpose,
 ): ImageRequest = mediaImageRequests(context, item, credentials, purpose).last()
 
-private fun mediaImageRequests(
+internal fun mediaImageRequests(
     context: Context,
     item: MediaItem,
     credentials: AccountCredentials,
@@ -77,11 +77,21 @@ private fun mediaImageRequests(
             )
         }
     }
-    is MediaAssetRef.LocalContent -> listOf(
-        ImageRequest.Builder(context)
-            .data(assetRef.contentUri)
-            .memoryCacheKey("${assetRef.coilCacheKey()}:$purpose")
-            .diskCacheKey("${assetRef.coilCacheKey()}:$purpose")
-            .build(),
-    )
+    is MediaAssetRef.LocalContent -> {
+        val cacheKey = assetRef.coilCacheKey()
+        listOf(
+            ImageRequest.Builder(context)
+                .data(assetRef.contentUri)
+                .memoryCacheKey("$cacheKey:$purpose")
+                .diskCacheKey("$cacheKey:$purpose")
+                .apply {
+                    if (purpose != MediaImagePurpose.TimelineThumbnail) {
+                        placeholderMemoryCacheKey(
+                            "$cacheKey:${MediaImagePurpose.TimelineThumbnail}",
+                        )
+                    }
+                }
+                .build(),
+        )
+    }
 }

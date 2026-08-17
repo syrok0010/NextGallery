@@ -39,6 +39,14 @@ class AndroidMediaStoreReaderTest {
             batches.flatMap { it.metadata }.map { it.contentUri },
         )
         assertEquals(listOf(false, true, false), batches.flatMap { it.metadata }.map { it.isVideo })
+        assertEquals(
+            listOf(3_024, 4_032, 3_024),
+            batches.flatMap { it.metadata }.map { it.width },
+        )
+        assertEquals(
+            listOf(4_032, 3_024, 4_032),
+            batches.flatMap { it.metadata }.map { it.height },
+        )
         assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_PENDING} = 0"))
         assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_TRASHED} = 0"))
         assertTrue(provider.observedSortOrder.orEmpty().contains("CASE"))
@@ -103,6 +111,11 @@ class AndroidMediaStoreReaderTest {
                     }
                     MediaStore.MediaColumns.WIDTH -> 4_032
                     MediaStore.MediaColumns.HEIGHT -> 3_024
+                    MediaStore.MediaColumns.ORIENTATION -> when (id) {
+                        30L -> 90
+                        10L -> 270
+                        else -> 0
+                    }
                     MediaStore.MediaColumns.SIZE -> 1_000L + id
                     MediaStore.Images.ImageColumns.DATE_TAKEN -> 1_700_000_000_000L + id
                     MediaStore.MediaColumns.DATE_MODIFIED -> 1_700_000_000L + id
