@@ -41,8 +41,7 @@ class AuthenticatedViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
-    private var remoteSnapshot: TimelineSnapshot? = null
-    private var localItems: List<MediaItem> = emptyList()
+    private var timelineSources = TimelineSources()
 
     private val timelineViewportController: TimelineViewportController =
         DefaultTimelineViewportController(
@@ -61,7 +60,7 @@ class AuthenticatedViewModel(
                         val transformed = transform(state.timeline)
                         state.copy(
                             timeline = transformed.copy(
-                                snapshot = combinedTimeline() ?: transformed.snapshot,
+                                snapshot = timelineSources.projectedSnapshot() ?: transformed.snapshot,
                             ),
                         )
                     }
@@ -82,13 +81,19 @@ class AuthenticatedViewModel(
                     dayIds: List<Int>,
                 ): List<MediaItem> {
                     val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
-                    remoteSnapshot = remoteSnapshot?.let { snapshot ->
-                        TimelineSnapshotAssembler.mergeLoadedItems(
-                            snapshot = snapshot,
-                            items = items,
-                            loadedDayIds = dayIds.toSet(),
-                        )
-                    }
+                    updateTimelineSources(
+                        transform = { sources ->
+                            sources.copy(
+                                remote = sources.remote?.let { snapshot ->
+                                    TimelineSnapshotAssembler.mergeLoadedItems(
+                                        snapshot = snapshot,
+                                        items = items,
+                                        loadedDayIds = dayIds.toSet(),
+                                    )
+                                },
+                            )
+                        },
+                    )
                     return items
                 }
             },
@@ -141,8 +146,7 @@ class AuthenticatedViewModel(
     private fun onSessionChanged(session: SessionUiState) {
         when (session) {
             SessionUiState.SignedOut -> {
-                remoteSnapshot = null
-                localItems = emptyList()
+                timelineSources = TimelineSources()
                 _state.value = AuthenticatedUiState()
             }
 
@@ -173,11 +177,12 @@ class AuthenticatedViewModel(
             val canShowCachedTimeline = state.value.credentials == credentials && state.value.timeline.snapshot == null
             if (canShowCachedTimeline) {
                 memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
-                    remoteSnapshot = cachedSnapshot
                     showedCachedTimeline = true
-                    _state.update { state ->
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(remote = cachedSnapshot) },
+                    ) { state, projectedSnapshot ->
                         state.copy(
-                            timeline = TimelineUiState(snapshot = projectTimeline(cachedSnapshot)),
+                            timeline = TimelineUiState(snapshot = projectedSnapshot),
                             message = AppMessageUiState(
                                 status = uiText(
                                     R.string.status_loaded_timeline_index,
@@ -192,11 +197,12 @@ class AuthenticatedViewModel(
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
                 .onSuccess { snapshot ->
-                    remoteSnapshot = snapshot
-                    _state.update { state ->
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(remote = snapshot) },
+                    ) { state, projectedSnapshot ->
                         state.copy(
                             credentials = credentials,
-                            timeline = state.timeline.withRefreshedSnapshot(projectTimeline(snapshot)),
+                            timeline = state.timeline.withRefreshedSnapshot(projectedSnapshot ?: snapshot),
                             isBusy = false,
                             message = AppMessageUiState(
                                 status = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
@@ -225,12 +231,9 @@ class AuthenticatedViewModel(
             }
             runCatching { localMediaSource.readAll() }
                 .onSuccess { items ->
-                    localItems = items
-                    _state.update { state ->
-                        state.copy(
-                            timeline = state.timeline.copy(snapshot = combinedTimeline()),
-                        )
-                    }
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(local = items) },
+                    )
                 }
                 .onFailure {
                     _state.update { state ->
@@ -243,24 +246,39 @@ class AuthenticatedViewModel(
     }
 
     private fun removeLocalMedia(permissionMode: LocalMediaPermissionMode) {
-        localItems = emptyList()
-        _state.update { state ->
+        updateTimelineSources(
+            transform = { sources -> sources.copy(local = emptyList()) },
+        ) { state, projectedSnapshot ->
             state.copy(
-                timeline = state.timeline.copy(snapshot = remoteSnapshot),
+                timeline = state.timeline.copy(snapshot = projectedSnapshot),
                 localMediaPermissionMode = permissionMode,
             )
         }
     }
 
-    private fun projectTimeline(snapshot: TimelineSnapshot) =
-        TimelineSnapshotAssembler.addSourceItems(snapshot, localItems)
-
-    private fun combinedTimeline(): TimelineSnapshot? =
-        remoteSnapshot?.let(::projectTimeline)
-            ?: localItems.takeIf { it.isNotEmpty() }?.let(TimelineSnapshotAssembler::assembleLocal)
+    private fun updateTimelineSources(
+        transform: (TimelineSources) -> TimelineSources,
+        updateState: (AuthenticatedUiState, TimelineSnapshot?) -> AuthenticatedUiState = { state, snapshot ->
+            state.copy(timeline = state.timeline.copy(snapshot = snapshot))
+        },
+    ) {
+        timelineSources = transform(timelineSources)
+        val projectedSnapshot = timelineSources.projectedSnapshot()
+        _state.update { state -> updateState(state, projectedSnapshot) }
+    }
 
     override fun onCleared() {
         timelineViewportController.cancel()
         super.onCleared()
     }
+}
+
+private data class TimelineSources(
+    val remote: TimelineSnapshot? = null,
+    val local: List<MediaItem> = emptyList(),
+) {
+    fun projectedSnapshot(): TimelineSnapshot? =
+        remote?.let { TimelineSnapshotAssembler.addSourceItems(it, local) }
+            ?: local.takeIf { it.isNotEmpty() }
+                ?.let(TimelineSnapshotAssembler::assembleLocal)
 }
