@@ -121,13 +121,11 @@ data class UnifiedTimelineProjectionResult(
     val conflicts: List<MediaIdentityConflict>,
 )
 
-private fun MediaItem.identityCandidate(): MediaIdentityCandidate = MediaIdentityCandidate(
+private fun MediaItem.identityCandidate(): MediaIdentityCandidate = mediaIdentityCandidate(
     source = sourceIdentity(),
     publishedMediaId = mediaId,
-    aliases = buildSet {
-        auid?.takeIf(String::isNotBlank)?.let { add(MediaAlias(MediaAliasKind.Auid, it)) }
-        buid?.takeIf(String::isNotBlank)?.let { add(MediaAlias(MediaAliasKind.Buid, it)) }
-    },
+    auid = auid,
+    buid = buid,
 )
 
 private fun MediaItem.withResolvedIdentity(resolution: MediaIdentityResolution): MediaItem =

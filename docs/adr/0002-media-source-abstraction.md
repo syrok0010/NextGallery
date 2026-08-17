@@ -118,6 +118,8 @@ MediaDay
 
 `MediaId` генерируется как непрозрачный идентификатор и сохраняется в Room вместе с привязками к source-specific identifiers. Он стабилен между обычными запусками приложения; потеря identity при разрешенном на текущем dev-этапе destructive reset базы допустима. `AUID`/`BUID` не используются как сам `MediaId`, потому что являются приблизительными, могут отсутствовать и могут конфликтовать.
 
+Точные source identifiers (`LocalContent`, `MemoriesFile`) и приблизительные aliases (`Auid`, `Buid`) хранятся в одной typed-таблице `media_identifiers` с отображением `(kind, value) → MediaId`. Source-проекции не копируют `MediaId`: persistent local и Memories metadata получают актуальный identity через join с этой таблицей. Благодаря этому переназначение remote identity на уже опубликованный local `MediaId` выполняется в одном месте и не требует синхронно обновлять несколько копий значения.
+
 `MediaItem` публикуется только после того, как identity registry восстановил существующий или
 создал новый persistent `MediaId`; временные session-only идентификаторы не используются.
 

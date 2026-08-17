@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.data.local
 
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
+import com.syrok0010.nextgallery.data.memories.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
@@ -44,6 +45,7 @@ class LocalMediaSourceTest {
                 )
             },
             projectionStore = store,
+            identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
             batchSize = 2,
         )
@@ -83,6 +85,7 @@ class LocalMediaSourceTest {
                 )
             },
             projectionStore = store,
+            identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
         )
 
@@ -120,6 +123,7 @@ class LocalMediaSourceTest {
                 )
             },
             projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
         )
 
@@ -145,6 +149,7 @@ class LocalMediaSourceTest {
                 )
             },
             projectionStore = store,
+            identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver(changes::receiveAsFlow),
             changeDebounce = 25.milliseconds,
         )
@@ -178,9 +183,6 @@ class LocalMediaSourceTest {
         var items = initialItems
 
         override suspend fun loadLocalMediaProjection(): List<MediaItem> = items
-
-        override suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId> =
-            contentUris.associateWith { MediaId("stable:$it") }
 
         override suspend fun saveLocalMediaBatch(items: List<MediaItem>) {
             val updates = items.associateBy(MediaItem::localContentUri)

@@ -7,31 +7,35 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
-        CacheMetadataEntity::class,
+        MemoriesCacheMetadataEntity::class,
         TimelineDayEntity::class,
-        MediaItemEntity::class,
-        MediaIdentityEntity::class,
-        MediaIdentityAliasEntity::class,
+        MemoriesMediaEntity::class,
+        MediaIdentifierEntity::class,
         MediaIdentityConflictEntity::class,
         LocalMediaEntity::class,
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
-abstract class TimelineCacheDatabase : RoomDatabase() {
-    abstract fun timelineCacheDao(): TimelineCacheDao
+abstract class NextGalleryDatabase : RoomDatabase() {
+    abstract fun memoriesTimelineDao(): MemoriesTimelineDao
+    abstract fun mediaIdentityDao(): MediaIdentityDao
+    abstract fun localMediaDao(): LocalMediaDao
+    abstract fun thumbnailCacheDao(): ThumbnailCacheDao
 
     companion object {
-        fun create(context: Context): TimelineCacheDatabase {
+        fun create(context: Context): NextGalleryDatabase {
             return Room.databaseBuilder(
                 context,
-                TimelineCacheDatabase::class.java,
-                "timeline-cache.db",
+                NextGalleryDatabase::class.java,
+                DATABASE_NAME,
             )
                 .fallbackToDestructiveMigration(true)
                 .build()
         }
+
+        private const val DATABASE_NAME = "next-gallery.db"
     }
 }

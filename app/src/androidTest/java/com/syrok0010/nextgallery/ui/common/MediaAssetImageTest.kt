@@ -12,10 +12,6 @@ import coil3.request.SuccessResult
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.InMemoryMediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
 import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
@@ -128,15 +124,13 @@ class MediaAssetImageTest {
             remoteFileId = 42,
             auid = "shared-auid",
         )
-        val remoteSnapshot = TimelineSnapshotAssembler.assemble(
-            config = null,
-            days = listOf(TimelineDay(remote.dayId, 1)),
-            mediaItems = listOf(remote),
-            loadedDayIds = setOf(remote.dayId),
+        val item = remote.copy(
+            mediaId = local.mediaId,
+            assetRef = MediaAssetRef.LocalFirst(
+                local = localAsset,
+                remote = remote.assetRef as MediaAssetRef.MemoriesFile,
+            ),
         )
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
-        projection.replaceLocalItems(listOf(local))
-        val item = requireNotNull(projection.replaceRemoteSnapshot(remoteSnapshot).snapshot).items.single()
         val requestedData = CopyOnWriteArrayList<Any>()
         val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val imageLoader = ImageLoader.Builder(context)

@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.di
 
 import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.data.cache.ThumbnailFileStore
-import com.syrok0010.nextgallery.data.cache.TimelineCacheDatabase
+import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
 import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.cache.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
@@ -39,26 +39,27 @@ val appModule = module {
 
     single { NextcloudTransport(get()) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
-    single { TimelineCacheDatabase.create(androidContext()) }
+    single { NextGalleryDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }
-    single { TimelineCacheRepository(get(), get()) }
     single { RoomMediaIdentityRegistry(get()) }
     single<MediaIdentityRegistry> { get<RoomMediaIdentityRegistry>() }
+    single { TimelineCacheRepository(get(), get(), get()) }
     factory { UnifiedTimelineProjection(get()) }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single { AndroidMediaStoreReader(androidContext().contentResolver) }
     single { AndroidMediaStoreChangeObserver(androidContext().contentResolver) }
-    single<LocalMediaProjectionStore> { LocalMediaProjectionRepository(get(), get()) }
+    single<LocalMediaProjectionStore> { LocalMediaProjectionRepository(get()) }
     single {
         LocalMediaSource(
             reader = get<AndroidMediaStoreReader>(),
             projectionStore = get<LocalMediaProjectionStore>(),
+            identityRegistry = get<MediaIdentityRegistry>(),
             changeObserver = get<AndroidMediaStoreChangeObserver>(),
         )
     }
     single { NextcloudLoginRepository(get()) }
     single { MemoriesMultipreviewClient(get(), get()) }
-    single { MemoriesRepository(get(), get(), get()) }
+    single { MemoriesRepository(get(), get(), get(), get()) }
     single { ThumbnailBatchLoader(get()) }
     single { SessionStore(get()) }
 

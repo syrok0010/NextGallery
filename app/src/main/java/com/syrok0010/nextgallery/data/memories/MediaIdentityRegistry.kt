@@ -22,8 +22,22 @@ data class MediaIdentityConflict(
 
 data class MediaIdentityCandidate(
     val source: MediaSourceIdentity,
-    val publishedMediaId: MediaId,
+    val publishedMediaId: MediaId? = null,
     val aliases: Set<MediaAlias>,
+)
+
+internal fun mediaIdentityCandidate(
+    source: MediaSourceIdentity,
+    publishedMediaId: MediaId? = null,
+    auid: String?,
+    buid: String?,
+) = MediaIdentityCandidate(
+    source = source,
+    publishedMediaId = publishedMediaId,
+    aliases = buildSet {
+        auid?.takeIf(String::isNotBlank)?.let { add(MediaAlias(MediaAliasKind.Auid, it)) }
+        buid?.takeIf(String::isNotBlank)?.let { add(MediaAlias(MediaAliasKind.Buid, it)) }
+    },
 )
 
 data class MediaIdentityResolution(
@@ -31,33 +45,9 @@ data class MediaIdentityResolution(
     val conflicts: List<MediaIdentityConflict>,
 )
 
-fun interface MediaIdentityRegistry {
+interface MediaIdentityRegistry {
     suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution
-}
-
-class InMemoryMediaIdentityRegistry(
-    private val mediaIdFactory: () -> MediaId = MediaId::generate,
-) : MediaIdentityRegistry {
-    private val sourceMediaIds = mutableMapOf<MediaSourceIdentity, MediaId>()
-    private val aliasMediaIds = mutableMapOf<MediaAlias, MediaId>()
-
-    override suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution {
-        val reconciliation = reconcileMediaIdentities(
-            candidates = candidates,
-            initialSourceMediaIds = sourceMediaIds,
-            initialAliasMediaIds = aliasMediaIds,
-            initialLocalMediaIds = sourceMediaIds
-                .filterKeys { it.source == MediaSourceKind.Local }
-                .values
-                .toSet(),
-            mediaIdFactory = mediaIdFactory,
-        )
-        sourceMediaIds.clear()
-        sourceMediaIds.putAll(reconciliation.sourceMediaIds)
-        aliasMediaIds.clear()
-        aliasMediaIds.putAll(reconciliation.aliasMediaIds)
-        return reconciliation.resolution
-    }
+    suspend fun removeSource(source: MediaSourceKind)
 }
 
 internal data class MediaIdentityReconciliation(
@@ -82,7 +72,9 @@ internal fun reconcileMediaIdentities(
     val reassignments = mutableListOf<Pair<MediaId, MediaId>>()
 
     candidates.sortedBy { it.source.source != MediaSourceKind.Local }.forEach { candidate ->
-        val publishedMediaId = sourceMediaIds[candidate.source] ?: candidate.publishedMediaId
+        val publishedMediaId = sourceMediaIds[candidate.source]
+            ?: candidate.publishedMediaId
+            ?: mediaIdFactory()
         val matchedMediaIds = candidate.aliases.mapNotNull(aliasMediaIds::get).toSet()
         if (matchedMediaIds.size > 1) {
             conflicts += MediaIdentityConflict(

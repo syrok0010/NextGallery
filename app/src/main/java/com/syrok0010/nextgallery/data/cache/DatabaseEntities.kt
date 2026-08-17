@@ -1,11 +1,13 @@
 package com.syrok0010.nextgallery.data.cache
 
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 
-@Entity(tableName = "cache_metadata")
-data class CacheMetadataEntity(
+@Entity(tableName = "memories_cache_metadata")
+data class MemoriesCacheMetadataEntity(
     @PrimaryKey val id: Int = CACHE_METADATA_ID,
     val serverUrl: String,
     val memoriesVersion: String,
@@ -19,7 +21,7 @@ data class CacheMetadataEntity(
     val cachedAtEpochMillis: Long,
 )
 
-@Entity(tableName = "timeline_days")
+@Entity(tableName = "memories_timeline_days")
 data class TimelineDayEntity(
     @PrimaryKey val dayId: Int,
     val count: Int,
@@ -27,12 +29,11 @@ data class TimelineDayEntity(
 )
 
 @Entity(
-    tableName = "media_items",
+    tableName = "memories_media",
     indices = [Index(value = ["dayId"])],
 )
-data class MediaItemEntity(
+data class MemoriesMediaEntity(
     @PrimaryKey val fileId: Long,
-    val mediaId: String,
     val dayId: Int,
     val displayName: String,
     val mimeType: String?,
@@ -48,28 +49,27 @@ data class MediaItemEntity(
     val videoDurationSeconds: Long?,
     val isFavorite: Boolean,
     val isHidden: Boolean,
-    val assetSource: String,
-    val assetSourcePhotoFileId: Long,
 )
 
-@Entity(
-    tableName = "media_identities",
-    primaryKeys = ["source", "sourceKey"],
-    indices = [Index(value = ["mediaId"])],
-)
-data class MediaIdentityEntity(
-    val source: String,
-    val sourceKey: String,
+data class IdentifiedMemoriesMedia(
+    @Embedded val media: MemoriesMediaEntity,
     val mediaId: String,
 )
 
+enum class MediaIdentifierKind {
+    MemoriesFile,
+    LocalContent,
+    Auid,
+    Buid,
+}
+
 @Entity(
-    tableName = "media_identity_aliases",
+    tableName = "media_identifiers",
     primaryKeys = ["kind", "value"],
     indices = [Index(value = ["mediaId"])],
 )
-data class MediaIdentityAliasEntity(
-    val kind: String,
+data class MediaIdentifierEntity(
+    val kind: MediaIdentifierKind,
     val value: String,
     val mediaId: String,
 )
@@ -79,7 +79,7 @@ data class MediaIdentityAliasEntity(
     primaryKeys = ["source", "sourceKey"],
 )
 data class MediaIdentityConflictEntity(
-    val source: String,
+    val source: MediaSourceKind,
     val sourceKey: String,
     val auid: String?,
     val buid: String?,
@@ -92,7 +92,6 @@ data class MediaIdentityConflictEntity(
 )
 data class LocalMediaEntity(
     @PrimaryKey val contentUri: String,
-    val mediaId: String,
     val displayName: String,
     val mimeType: String?,
     val width: Int?,
@@ -105,7 +104,12 @@ data class LocalMediaEntity(
     val buid: String?,
 )
 
-@Entity(tableName = "loaded_days")
+data class IdentifiedLocalMedia(
+    @Embedded val media: LocalMediaEntity,
+    val mediaId: String,
+)
+
+@Entity(tableName = "memories_loaded_days")
 data class LoadedDayEntity(
     @PrimaryKey val dayId: Int,
     val loadedAtEpochMillis: Long,

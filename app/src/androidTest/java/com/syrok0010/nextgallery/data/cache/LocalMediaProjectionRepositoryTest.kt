@@ -5,9 +5,12 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
+import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -19,8 +22,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LocalMediaProjectionRepositoryTest {
     private lateinit var context: Context
-    private lateinit var database: TimelineCacheDatabase
+    private lateinit var database: NextGalleryDatabase
     private lateinit var cacheRepository: TimelineCacheRepository
+    private lateinit var identityRegistry: RoomMediaIdentityRegistry
     private lateinit var repository: LocalMediaProjectionRepository
 
     @Before
@@ -48,6 +52,8 @@ class LocalMediaProjectionRepositoryTest {
             mediaId = MediaId("persistent-7"),
             modifiedAtEpochSeconds = 1_700_000_007L,
         )
+        registerLocalIdentity(newest)
+        registerLocalIdentity(removed)
         repository.saveLocalMediaBatch(listOf(newest, removed))
 
         database.close()
@@ -63,7 +69,7 @@ class LocalMediaProjectionRepositoryTest {
     @Test
     fun clearingCloudCacheKeepsDeviceProjectionAndIdentity() = runBlocking {
         val contentUri = "content://media/external/images/media/42"
-        val persistentMediaId = repository.resolveLocalMediaIds(listOf(contentUri)).getValue(contentUri)
+        val persistentMediaId = resolveLocalMediaId(contentUri)
         val item = localItem(
             contentUri = contentUri,
             mediaId = persistentMediaId,
@@ -76,23 +82,50 @@ class LocalMediaProjectionRepositoryTest {
         assertEquals(listOf(item), repository.loadLocalMediaProjection())
         assertEquals(
             persistentMediaId,
-            repository.resolveLocalMediaIds(listOf(item.localContentUri())).getValue(item.localContentUri()),
+            resolveLocalMediaId(item.localContentUri()),
         )
     }
 
     private fun openRepository() {
         database = Room.databaseBuilder(
             context,
-            TimelineCacheDatabase::class.java,
+            NextGalleryDatabase::class.java,
             DATABASE_NAME,
         ).build()
+        identityRegistry = RoomMediaIdentityRegistry(
+            database = database,
+            mediaIdFactory = { MediaId("unexpected-new-id") },
+        )
         cacheRepository = TimelineCacheRepository(
             database = database,
             thumbnailFileStore = ThumbnailFileStore(context),
-            mediaIdFactory = { MediaId("unexpected-new-id") },
+            identityRegistry = identityRegistry,
         )
-        repository = LocalMediaProjectionRepository(database, cacheRepository)
+        repository = LocalMediaProjectionRepository(database)
     }
+
+    private suspend fun registerLocalIdentity(item: MediaItem) {
+        identityRegistry.resolve(
+            listOf(
+                MediaIdentityCandidate(
+                    source = item.localContentUri().localSourceIdentity(),
+                    publishedMediaId = item.mediaId,
+                    aliases = emptySet(),
+                ),
+            ),
+        )
+    }
+
+    private suspend fun resolveLocalMediaId(contentUri: String): MediaId = identityRegistry.resolve(
+        listOf(
+            MediaIdentityCandidate(
+                source = contentUri.localSourceIdentity(),
+                aliases = emptySet(),
+            ),
+        ),
+    ).mediaIds.getValue(contentUri.localSourceIdentity())
+
+    private fun String.localSourceIdentity() = MediaSourceIdentity(MediaSourceKind.Local, this)
 
     private fun localItem(
         contentUri: String,

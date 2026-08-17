@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class UnifiedTimelineProjectionPersistenceTest {
     private lateinit var context: Context
-    private lateinit var database: TimelineCacheDatabase
+    private lateinit var database: NextGalleryDatabase
 
     @Before
     fun setUp() {
@@ -92,7 +92,7 @@ class UnifiedTimelineProjectionPersistenceTest {
     }
 
     private fun openDatabase() {
-        database = Room.databaseBuilder(context, TimelineCacheDatabase::class.java, DATABASE_NAME).build()
+        database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
     }
 
     private fun remoteSnapshot(item: MediaItem) = TimelineSnapshotAssembler.assemble(
