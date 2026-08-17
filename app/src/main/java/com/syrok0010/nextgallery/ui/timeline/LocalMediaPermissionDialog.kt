@@ -9,12 +9,9 @@ import com.syrok0010.nextgallery.R
 
 @Composable
 internal fun LocalMediaPermissionExplanationDialog(
-    visible: Boolean,
     onDismiss: () -> Unit,
     onRequestPermission: () -> Unit,
 ) {
-    if (!visible) return
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.local_media_permission_title)) },

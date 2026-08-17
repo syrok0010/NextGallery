@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.ui.timeline
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,12 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -30,9 +23,6 @@ import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 internal fun HomeScreen(
@@ -41,40 +31,12 @@ internal fun HomeScreen(
     permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
 ) {
     val state by viewModel.state.collectAsState()
-    var showPermissionExplanation by rememberSaveable { mutableStateOf(false) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) {
-        viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
-    }
-    LaunchedEffect(state.credentials) {
-        showPermissionExplanation = false
-        if (state.credentials != null) {
-            viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
-        }
-    }
-    LaunchedEffect(state.credentials, state.localMediaPermissionMode) {
-        if (
-            state.credentials != null &&
-            state.localMediaPermissionMode != null &&
-            permissionCoordinator.shouldExplainAutomatically()
-        ) {
-            permissionCoordinator.markAutomaticExplanationShown()
-            showPermissionExplanation = true
-        }
-    }
-    DisposableEffect(lifecycleOwner, state.credentials) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (state.credentials != null) {
-                    viewModel.onLocalMediaPermissionChanged(permissionCoordinator.currentMode())
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    LocalMediaPermissionFlow(
+        isSignedIn = state.credentials != null,
+        permissionMode = state.localMediaPermissionMode,
+        permissionCoordinator = permissionCoordinator,
+        onPermissionModeChanged = viewModel::onLocalMediaPermissionChanged,
+    )
     val credentials = state.credentials ?: run {
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return
@@ -145,15 +107,6 @@ internal fun HomeScreen(
                     onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
                 )
             }
-
-            LocalMediaPermissionExplanationDialog(
-                visible = showPermissionExplanation,
-                onDismiss = { showPermissionExplanation = false },
-                onRequestPermission = {
-                    showPermissionExplanation = false
-                    permissionLauncher.launch(permissionCoordinator.requestedPermissions())
-                },
-            )
         }
     }
 }
