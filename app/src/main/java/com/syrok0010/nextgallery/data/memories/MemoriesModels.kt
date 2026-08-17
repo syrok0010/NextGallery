@@ -75,7 +75,12 @@ sealed interface MediaAssetRef {
         val contentUri: String,
         val modifiedAtEpochSeconds: Long?,
     ) : MediaAssetRef
+
+    data class LocalFirst(
+        val local: LocalContent,
+        val remote: MemoriesFile,
+    ) : MediaAssetRef
 }
 
 val MediaItem.hasRemoteCopy: Boolean
-    get() = assetRef is MediaAssetRef.MemoriesFile
+    get() = assetRef is MediaAssetRef.MemoriesFile || assetRef is MediaAssetRef.LocalFirst

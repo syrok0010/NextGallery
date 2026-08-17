@@ -9,6 +9,8 @@ import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 
 class TimelineCacheRepository(
     private val database: TimelineCacheDatabase,

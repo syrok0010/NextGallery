@@ -89,6 +89,8 @@ class LocalMediaSourceTest {
         val finalState = source.updates(emptyFlow()).take(2).toList().last()
 
         assertEquals(listOf(300L, 250L, 175L), finalState.items.map { it.takenAtEpochSeconds })
+        assertEquals("fc04c0511168c77b574e1114c979c5b8", finalState.items[0].auid)
+        assertEquals("93f49276c1fbb6e6f65519f19343f9ea", finalState.items[0].buid)
         assertEquals(listOf(false, true, false), finalState.items.map { it.isVideo })
         assertEquals(2L, finalState.items[1].videoDurationSeconds)
         assertEquals(
@@ -98,6 +100,33 @@ class LocalMediaSourceTest {
             ),
             finalState.items[1].assetRef,
         )
+    }
+
+    @Test
+    fun `Memories timeline date does not replace raw DATE_TAKEN in AUID`() = runBlocking {
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flowOf(
+                    LocalMediaBatch(
+                        metadata = listOf(
+                            metadata(
+                                uri = "content://images/1",
+                                taken = 1_000,
+                                memoriesTimelineEpochSeconds = 200,
+                            ),
+                        ),
+                        progress = LocalMediaIndexProgress(indexedCount = 1, totalCount = 1),
+                    ),
+                )
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+        )
+
+        val item = source.updates(emptyFlow()).take(2).toList().last().items.single()
+
+        assertEquals(200L, item.takenAtEpochSeconds)
+        assertEquals("33d6548e48d4318ceb0e3916a79afc84", item.auid)
     }
 
     @Test
@@ -170,6 +199,7 @@ class LocalMediaSourceTest {
         modified: Long? = null,
         added: Long? = null,
         video: Boolean = false,
+        memoriesTimelineEpochSeconds: Long? = null,
     ) = LocalMediaMetadata(
         contentUri = uri,
         displayName = uri.substringAfterLast('/'),
@@ -178,6 +208,7 @@ class LocalMediaSourceTest {
         height = 200,
         sizeBytes = 1_000,
         dateTakenMillis = taken,
+        memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds,
         dateModifiedSeconds = modified,
         dateAddedSeconds = added,
         durationMillis = if (video) 2_500 else null,

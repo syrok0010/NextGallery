@@ -23,6 +23,8 @@ data class LocalMediaMetadata(
     val height: Int?,
     val sizeBytes: Long?,
     val dateTakenMillis: Long?,
+    val memoriesTimelineEpochSeconds: Long? = null,
+    val imageUniqueId: String? = null,
     val dateModifiedSeconds: Long?,
     val dateAddedSeconds: Long?,
     val durationMillis: Long?,
@@ -129,6 +131,12 @@ class LocalMediaSource(
         val mediaIds = projectionStore.resolveLocalMediaIds(timestampByUri.keys)
         return metadata.mapNotNull { item ->
             val timestamp = timestampByUri[item.contentUri] ?: return@mapNotNull null
+            val aliases = MemoriesMediaIdentity.calculate(
+                baseName = item.displayName,
+                sizeBytes = item.sizeBytes ?: 0,
+                dateTakenMillis = item.dateTakenMillis ?: 0,
+                imageUniqueId = item.imageUniqueId,
+            )
             LocalMediaProjectionItem(
                 mediaId = checkNotNull(mediaIds[item.contentUri]),
                 contentUri = item.contentUri,
@@ -140,12 +148,15 @@ class LocalMediaSource(
                 modifiedAtEpochSeconds = item.dateModifiedSeconds,
                 isVideo = item.isVideo,
                 videoDurationSeconds = item.durationMillis?.takeIf { it > 0 }?.div(1_000),
+                auid = aliases.auid,
+                buid = aliases.buid,
             ).toMediaItem()
         }.sortedForTimeline()
     }
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
-        dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
+        memoriesTimelineEpochSeconds
+            ?: dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
             ?: dateModifiedSeconds?.takeIf { it > 0 }
             ?: dateAddedSeconds?.takeIf { it > 0 }
 

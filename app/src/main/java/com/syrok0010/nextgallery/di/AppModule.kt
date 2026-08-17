@@ -4,10 +4,13 @@ import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.data.cache.ThumbnailFileStore
 import com.syrok0010.nextgallery.data.cache.TimelineCacheDatabase
 import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
+import com.syrok0010.nextgallery.data.cache.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
+import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.data.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.data.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
@@ -39,6 +42,9 @@ val appModule = module {
     single { TimelineCacheDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }
     single { TimelineCacheRepository(get(), get()) }
+    single { RoomMediaIdentityRegistry(get()) }
+    single<MediaIdentityRegistry> { get<RoomMediaIdentityRegistry>() }
+    single { UnifiedTimelineProjection(get()) }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single { AndroidMediaStoreReader(androidContext().contentResolver) }
     single { AndroidMediaStoreChangeObserver(androidContext().contentResolver) }

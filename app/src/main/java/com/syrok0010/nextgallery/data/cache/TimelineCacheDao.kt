@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 
 @Dao
 interface TimelineCacheDao {
@@ -21,6 +22,15 @@ interface TimelineCacheDao {
 
     @Query("SELECT * FROM media_identities WHERE source = :source AND sourceKey IN (:sourceKeys)")
     suspend fun mediaIdentities(source: MediaSourceKind, sourceKeys: Collection<String>): List<MediaIdentityEntity>
+
+    @Query("SELECT * FROM media_identities WHERE mediaId IN (:mediaIds)")
+    suspend fun mediaIdentitiesForMediaIds(mediaIds: Collection<String>): List<MediaIdentityEntity>
+
+    @Query("SELECT * FROM media_identity_aliases WHERE value IN (:values)")
+    suspend fun mediaIdentityAliases(values: Collection<String>): List<MediaIdentityAliasEntity>
+
+    @Query("SELECT * FROM media_identity_conflicts")
+    suspend fun mediaIdentityConflicts(): List<MediaIdentityConflictEntity>
 
     @Query("SELECT * FROM local_media_projection ORDER BY takenAtEpochSeconds DESC, mediaId DESC")
     suspend fun localMediaProjection(): List<LocalMediaEntity>
@@ -57,6 +67,21 @@ interface TimelineCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMediaIdentities(entities: List<MediaIdentityEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMediaIdentityAliases(entities: List<MediaIdentityAliasEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMediaIdentityConflicts(entities: List<MediaIdentityConflictEntity>)
+
+    @Query("UPDATE media_identities SET mediaId = :toMediaId WHERE mediaId = :fromMediaId")
+    suspend fun reassignMediaIdentities(fromMediaId: String, toMediaId: String)
+
+    @Query("UPDATE media_identity_aliases SET mediaId = :toMediaId WHERE mediaId = :fromMediaId")
+    suspend fun reassignMediaIdentityAliases(fromMediaId: String, toMediaId: String)
+
+    @Query("DELETE FROM media_identity_conflicts WHERE source = :source AND sourceKey = :sourceKey")
+    suspend fun deleteMediaIdentityConflict(source: MediaSourceKind, sourceKey: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLocalMediaProjection(entities: List<LocalMediaEntity>)

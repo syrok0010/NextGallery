@@ -55,12 +55,35 @@ data class MediaItemEntity(
 @Entity(
     tableName = "media_identities",
     primaryKeys = ["source", "sourceKey"],
-    indices = [Index(value = ["mediaId"], unique = true)],
+    indices = [Index(value = ["mediaId"])],
 )
 data class MediaIdentityEntity(
     val source: String,
     val sourceKey: String,
     val mediaId: String,
+)
+
+@Entity(
+    tableName = "media_identity_aliases",
+    primaryKeys = ["kind", "value"],
+    indices = [Index(value = ["mediaId"])],
+)
+data class MediaIdentityAliasEntity(
+    val kind: String,
+    val value: String,
+    val mediaId: String,
+)
+
+@Entity(
+    tableName = "media_identity_conflicts",
+    primaryKeys = ["source", "sourceKey"],
+)
+data class MediaIdentityConflictEntity(
+    val source: String,
+    val sourceKey: String,
+    val auid: String?,
+    val buid: String?,
+    val conflictingMediaIds: String,
 )
 
 @Entity(
@@ -78,16 +101,8 @@ data class LocalMediaEntity(
     val modifiedAtEpochSeconds: Long?,
     val isVideo: Boolean,
     val videoDurationSeconds: Long?,
-)
-
-enum class MediaSourceKind {
-    Memories,
-    Local,
-}
-
-data class MediaSourceIdentity(
-    val source: MediaSourceKind,
-    val sourceKey: String,
+    val auid: String?,
+    val buid: String?,
 )
 
 @Entity(tableName = "loaded_days")

@@ -11,6 +11,8 @@ import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After

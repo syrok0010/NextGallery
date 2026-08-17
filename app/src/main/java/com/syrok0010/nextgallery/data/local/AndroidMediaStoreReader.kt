@@ -2,7 +2,11 @@ package com.syrok0010.nextgallery.data.local
 
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.media.ExifInterface
 import android.provider.MediaStore
+import androidx.core.net.toUri
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -76,6 +80,8 @@ class AndroidMediaStoreReader(
                 val orientation = cursor.nullableInt(orientationColumn)
                 val orientedWidth = if (orientation.rotatesDimensions()) height else width
                 val orientedHeight = if (orientation.rotatesDimensions()) width else height
+                val dateTakenMillis = cursor.nullableLong(takenColumn)
+                val exif = if (isVideo) null else readExif(uri.toString())
                 batch += LocalMediaMetadata(
                     contentUri = uri.toString(),
                     displayName = cursor.getString(nameColumn) ?: id.toString(),
@@ -83,7 +89,12 @@ class AndroidMediaStoreReader(
                     width = orientedWidth,
                     height = orientedHeight,
                     sizeBytes = cursor.nullableLong(sizeColumn),
-                    dateTakenMillis = cursor.nullableLong(takenColumn),
+                    dateTakenMillis = dateTakenMillis,
+                    memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(
+                        exifDateTime = exif?.getAttribute(ExifInterface.TAG_DATETIME),
+                        dateTakenMillis = dateTakenMillis,
+                    ),
+                    imageUniqueId = exif?.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
                     dateModifiedSeconds = cursor.nullableLong(modifiedColumn),
                     dateAddedSeconds = cursor.nullableLong(addedColumn),
                     durationMillis = cursor.nullableLong(durationColumn),
@@ -126,4 +137,26 @@ class AndroidMediaStoreReader(
         if (isNull(column)) null else getLong(column)
 
     private fun Int?.rotatesDimensions(): Boolean = this == 90 || this == 270
+
+    private fun readExif(contentUri: String): ExifInterface? = runCatching {
+        contentResolver.openFileDescriptor(contentUri.toUri(), "r")?.use { descriptor ->
+            ExifInterface(descriptor.fileDescriptor)
+        }
+    }.getOrNull()
+
+    private fun memoriesTimelineEpochSeconds(
+        exifDateTime: String?,
+        dateTakenMillis: Long?,
+    ): Long? {
+        if (exifDateTime != null) {
+            runCatching {
+                SimpleDateFormat("yyyy:MM:dd HH:mm:ss").apply {
+                    timeZone = TimeZone.getTimeZone("GMT")
+                }.parse(exifDateTime)?.time?.div(1_000)
+            }.getOrNull()?.let { return it }
+        }
+        return dateTakenMillis?.takeIf { it > 0 }?.let { timestamp ->
+            (timestamp + TimeZone.getDefault().getOffset(timestamp)) / 1_000
+        }
+    }
 }

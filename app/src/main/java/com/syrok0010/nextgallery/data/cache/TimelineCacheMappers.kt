@@ -123,6 +123,8 @@ fun MediaItem.toLocalMediaEntity(): LocalMediaEntity {
         modifiedAtEpochSeconds = localContent.modifiedAtEpochSeconds,
         isVideo = isVideo,
         videoDurationSeconds = videoDurationSeconds,
+        auid = auid,
+        buid = buid,
     )
 }
 
@@ -137,4 +139,6 @@ fun LocalMediaEntity.toMediaItem(): MediaItem = LocalMediaProjectionItem(
     modifiedAtEpochSeconds = modifiedAtEpochSeconds,
     isVideo = isVideo,
     videoDurationSeconds = videoDurationSeconds,
+    auid = auid,
+    buid = buid,
 ).toMediaItem()
