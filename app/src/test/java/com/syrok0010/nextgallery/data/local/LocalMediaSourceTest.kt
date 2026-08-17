@@ -2,7 +2,12 @@ package com.syrok0010.nextgallery.data.local
 
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.InMemoryMediaIdentityRegistry
+import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
+import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
+import com.syrok0010.nextgallery.data.memories.MediaIdentityResolution
 import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 import kotlin.time.Duration.Companion.milliseconds
@@ -23,6 +28,43 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LocalMediaSourceTest {
+    @Test
+    fun `incremental indexing reconciles each local identity only once`() = runBlocking {
+        val batchCount = 20
+        val batchSize = 200
+        val registry = CountingMediaIdentityRegistry()
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flowOf(
+                    *Array(batchCount) { batchIndex ->
+                        val indexedCount = (batchIndex + 1) * batchSize
+                        LocalMediaBatch(
+                            metadata = List(batchSize) { itemIndex ->
+                                val index = batchIndex * batchSize + itemIndex
+                                metadata("content://images/$index", taken = index * 1_000L + 1_000L)
+                            },
+                            progress = LocalMediaIndexProgress(
+                                indexedCount = indexedCount,
+                                totalCount = batchCount * batchSize,
+                            ),
+                        )
+                    },
+                )
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = registry,
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            batchSize = batchSize,
+        )
+        val projection = UnifiedTimelineProjection()
+
+        source.updates(emptyFlow()).take(batchCount + 1).collect { state ->
+            projection.replaceLocalItems(state.items)
+        }
+
+        assertEquals(batchCount * batchSize, registry.resolvedCandidateCount)
+    }
+
     @Test
     fun `cached projection is published before fresh MediaStore batches`() = runBlocking {
         val cached = localItem("content://images/cached", 100)
@@ -192,6 +234,20 @@ class LocalMediaSourceTest {
 
         override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) {
             items = items.filter { it.localContentUri() in contentUris }
+        }
+    }
+
+    private class CountingMediaIdentityRegistry : MediaIdentityRegistry {
+        private val delegate = InMemoryMediaIdentityRegistry()
+        var resolvedCandidateCount = 0
+
+        override suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution {
+            resolvedCandidateCount += candidates.size
+            return delegate.resolve(candidates)
+        }
+
+        override suspend fun removeSource(source: MediaSourceKind) {
+            delegate.removeSource(source)
         }
     }
 

@@ -18,7 +18,7 @@ class UnifiedTimelineProjectionTest {
             mediaItems = listOf(remote),
             loadedDayIds = setOf(remote.dayId),
         )
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        val projection = UnifiedTimelineProjection()
         projection.replaceLocalItems(listOf(local))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot)
@@ -39,7 +39,7 @@ class UnifiedTimelineProjectionTest {
     fun `local-only and cloud-only copies remain separate media objects with correct cloud presence`() = runBlocking {
         val local = localItem(MediaId("local-only"), auid = "local-auid")
         val remote = remoteItem(MediaId("cloud-only"), auid = "cloud-auid")
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        val projection = UnifiedTimelineProjection()
         projection.replaceLocalItems(listOf(local))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
@@ -66,7 +66,7 @@ class UnifiedTimelineProjectionTest {
             buid = "shared-buid",
         )
 
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        val projection = UnifiedTimelineProjection()
         projection.replaceLocalItems(listOf(local))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
@@ -99,7 +99,7 @@ class UnifiedTimelineProjectionTest {
             mediaItems = listOf(conflictingRemote),
             loadedDayIds = setOf(conflictingRemote.dayId),
         )
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        val projection = UnifiedTimelineProjection()
         projection.replaceLocalItems(listOf(first, second))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot)
@@ -126,14 +126,13 @@ class UnifiedTimelineProjectionTest {
             buid = "second-buid",
             contentUri = "content://images/2",
         )
-        val registry = InMemoryMediaIdentityRegistry { MediaId("conflict-separate") }
-        val projection = UnifiedTimelineProjection(registry)
+        val projection = UnifiedTimelineProjection()
         projection.replaceLocalItems(listOf(first, second))
         projection.replaceRemoteSnapshot(
             remoteSnapshot(remoteItem(MediaId("remote"), "first-auid", buid = null)),
         )
         val conflictingSnapshot = remoteSnapshot(
-            remoteItem(MediaId("local-first"), "first-auid", buid = "second-buid"),
+            remoteItem(MediaId("conflict-separate"), "first-auid", buid = "second-buid"),
         )
 
         val firstConflict = projection.replaceRemoteSnapshot(conflictingSnapshot)
@@ -158,7 +157,7 @@ class UnifiedTimelineProjectionTest {
             config = memoriesConfig(),
             days = listOf(TimelineDay(remote.dayId, 1)),
         )
-        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        val projection = UnifiedTimelineProjection()
 
         projection.replaceLocalItems(listOf(local))
         assertEquals(listOf(local.mediaId), requireNotNull(projection.snapshot).items.map { it.mediaId })

@@ -5,12 +5,17 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
+import com.syrok0010.nextgallery.data.memories.MediaAlias
+import com.syrok0010.nextgallery.data.memories.MediaAliasKind
+import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
 import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -43,7 +48,7 @@ class UnifiedTimelineProjectionPersistenceTest {
             mediaId = MediaId("published-local"),
             assetRef = MediaAssetRef.LocalContent("content://images/42", 1_700_000_000),
         )
-        UnifiedTimelineProjection(RoomMediaIdentityRegistry(database)).replaceLocalItems(listOf(local))
+        RoomMediaIdentityRegistry(database).resolve(listOf(local.identityCandidate()))
 
         database.close()
         openDatabase()
@@ -52,8 +57,11 @@ class UnifiedTimelineProjectionPersistenceTest {
             mediaId = MediaId("generated-remote"),
             assetRef = MediaAssetRef.MemoriesFile(42),
         )
-        val afterRestart = UnifiedTimelineProjection(RoomMediaIdentityRegistry(database))
-            .replaceRemoteSnapshot(remoteSnapshot(remote))
+        val registry = RoomMediaIdentityRegistry(database)
+        val resolvedRemote = registry.resolve(listOf(remote.identityCandidate()))
+        val identifiedRemote = remote.copy(mediaId = resolvedRemote.mediaIds.getValue(remote.sourceIdentity()))
+        val afterRestart = UnifiedTimelineProjection()
+            .replaceRemoteSnapshot(remoteSnapshot(identifiedRemote))
 
         assertEquals(MediaId("published-local"), requireNotNull(afterRestart.snapshot).items.single().mediaId)
     }
@@ -78,9 +86,9 @@ class UnifiedTimelineProjectionPersistenceTest {
             auid = "first-auid",
             buid = "second-buid",
         )
-        val projection = UnifiedTimelineProjection(RoomMediaIdentityRegistry(database))
-        projection.replaceLocalItems(listOf(first, second))
-        projection.replaceRemoteSnapshot(remoteSnapshot(remote))
+        val registry = RoomMediaIdentityRegistry(database)
+        registry.resolve(listOf(first.identityCandidate(), second.identityCandidate()))
+        registry.resolve(listOf(remote.identityCandidate()))
 
         database.close()
         openDatabase()
@@ -128,6 +136,21 @@ class UnifiedTimelineProjectionPersistenceTest {
         isHidden = false,
         assetRef = assetRef,
     )
+
+    private fun MediaItem.identityCandidate() = MediaIdentityCandidate(
+        source = sourceIdentity(),
+        publishedMediaId = mediaId,
+        aliases = buildSet {
+            auid?.let { add(MediaAlias(MediaAliasKind.Auid, it)) }
+            buid?.let { add(MediaAlias(MediaAliasKind.Buid, it)) }
+        },
+    )
+
+    private fun MediaItem.sourceIdentity(): MediaSourceIdentity = when (val asset = assetRef) {
+        is MediaAssetRef.LocalContent -> MediaSourceIdentity(MediaSourceKind.Local, asset.contentUri)
+        is MediaAssetRef.MemoriesFile -> MediaSourceIdentity(MediaSourceKind.Memories, asset.photoFileId.toString())
+        is MediaAssetRef.LocalFirst -> error("Persistence test expects source copies")
+    }
 
     private companion object {
         const val DATABASE_NAME = "unified-timeline-projection-test.db"

@@ -5,9 +5,7 @@ import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class UnifiedTimelineProjection(
-    private val identityRegistry: MediaIdentityRegistry,
-) {
+class UnifiedTimelineProjection {
     private val mutex = Mutex()
     private var sources = TimelineSources()
 
@@ -64,7 +62,15 @@ class UnifiedTimelineProjection(
     ): UnifiedTimelineProjectionResult {
         val remoteItems = remoteSnapshot?.items.orEmpty()
         val candidates = (localItems + remoteItems).map(MediaItem::identityCandidate)
-        val identity = identityRegistry.resolve(candidates)
+        val identity = reconcileMediaIdentities(
+            candidates = candidates,
+            initialSourceMediaIds = emptyMap(),
+            initialAliasMediaIds = emptyMap(),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = {
+                error("Timeline sources must resolve persistent MediaIds before projection")
+            },
+        ).resolution
         val resolvedLocal = localItems.map { item -> item.withResolvedIdentity(identity) }
         val resolvedRemote = remoteItems.map { item -> item.withResolvedIdentity(identity) }
         val localByMediaId = resolvedLocal.associateBy { it.mediaId }
