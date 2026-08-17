@@ -134,10 +134,9 @@ class MediaAssetImageTest {
             mediaItems = listOf(remote),
             loadedDayIds = setOf(remote.dayId),
         )
-        val item = requireNotNull(
-            UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
-                .project(remoteSnapshot, listOf(local)).snapshot,
-        ).items.single()
+        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        projection.replaceLocalItems(listOf(local))
+        val item = requireNotNull(projection.replaceRemoteSnapshot(remoteSnapshot).snapshot).items.single()
         val requestedData = CopyOnWriteArrayList<Any>()
         val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         val imageLoader = ImageLoader.Builder(context)

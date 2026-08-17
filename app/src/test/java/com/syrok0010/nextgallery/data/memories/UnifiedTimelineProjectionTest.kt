@@ -19,8 +19,9 @@ class UnifiedTimelineProjectionTest {
             loadedDayIds = setOf(remote.dayId),
         )
         val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        projection.replaceLocalItems(listOf(local))
 
-        val result = projection.project(remoteSnapshot, listOf(local))
+        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
 
         val item = requireNotNull(result.snapshot).items.single()
         assertEquals(MediaId("local-published"), item.mediaId)
@@ -39,8 +40,9 @@ class UnifiedTimelineProjectionTest {
         val local = localItem(MediaId("local-only"), auid = "local-auid")
         val remote = remoteItem(MediaId("cloud-only"), auid = "cloud-auid")
         val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        projection.replaceLocalItems(listOf(local))
 
-        val result = projection.project(remoteSnapshot(remote), listOf(local))
+        val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
         val projectedItems = requireNotNull(result.snapshot).items
         assertEquals(listOf(MediaId("cloud-only"), MediaId("local-only")), projectedItems.map { it.mediaId })
@@ -64,8 +66,10 @@ class UnifiedTimelineProjectionTest {
             buid = "shared-buid",
         )
 
-        val result = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
-            .project(remoteSnapshot(remote), listOf(local))
+        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        projection.replaceLocalItems(listOf(local))
+
+        val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
         assertEquals(listOf(MediaId("local-published")), requireNotNull(result.snapshot).items.map { it.mediaId })
     }
@@ -96,8 +100,9 @@ class UnifiedTimelineProjectionTest {
             loadedDayIds = setOf(conflictingRemote.dayId),
         )
         val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+        projection.replaceLocalItems(listOf(first, second))
 
-        val result = projection.project(remoteSnapshot, listOf(first, second))
+        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
 
         assertEquals(3, requireNotNull(result.snapshot).items.size)
         assertEquals(MediaId("remote-separate"), result.snapshot.items.first().mediaId)
@@ -123,16 +128,16 @@ class UnifiedTimelineProjectionTest {
         )
         val registry = InMemoryMediaIdentityRegistry { MediaId("conflict-separate") }
         val projection = UnifiedTimelineProjection(registry)
-        projection.project(
+        projection.replaceLocalItems(listOf(first, second))
+        projection.replaceRemoteSnapshot(
             remoteSnapshot(remoteItem(MediaId("remote"), "first-auid", buid = null)),
-            listOf(first, second),
         )
         val conflictingSnapshot = remoteSnapshot(
             remoteItem(MediaId("local-first"), "first-auid", buid = "second-buid"),
         )
 
-        val firstConflict = projection.project(conflictingSnapshot, listOf(first, second))
-        val repeatedConflict = projection.project(conflictingSnapshot, listOf(first, second))
+        val firstConflict = projection.replaceRemoteSnapshot(conflictingSnapshot)
+        val repeatedConflict = projection.replaceRemoteSnapshot(conflictingSnapshot)
 
         assertEquals(MediaId("conflict-separate"), requireNotNull(firstConflict.snapshot).items.first().mediaId)
         assertEquals(
@@ -143,6 +148,31 @@ class UnifiedTimelineProjectionTest {
             firstConflict.snapshot.items.map { it.mediaId },
             requireNotNull(repeatedConflict.snapshot).items.map { it.mediaId },
         )
+    }
+
+    @Test
+    fun `sequential source updates retain local media and clear resets the projection`() = runBlocking {
+        val local = localItem(mediaId = MediaId("local-published"), auid = "shared-auid")
+        val remote = remoteItem(mediaId = MediaId("remote-generated"), auid = "shared-auid")
+        val remoteIndex = TimelineSnapshotAssembler.assemble(
+            config = memoriesConfig(),
+            days = listOf(TimelineDay(remote.dayId, 1)),
+        )
+        val projection = UnifiedTimelineProjection(InMemoryMediaIdentityRegistry())
+
+        projection.replaceLocalItems(listOf(local))
+        assertEquals(listOf(local.mediaId), requireNotNull(projection.snapshot).items.map { it.mediaId })
+
+        projection.replaceRemoteSnapshot(remoteIndex)
+        val merged = projection.mergeRemoteItems(listOf(remote), setOf(remote.dayId))
+
+        val item = requireNotNull(merged.snapshot).items.single()
+        assertEquals(local.mediaId, item.mediaId)
+        assertEquals(local.assetRef, (item.assetRef as MediaAssetRef.LocalFirst).local)
+        assertEquals(setOf(remote.dayId), merged.snapshot.loadedDayIds)
+
+        projection.clear()
+        assertEquals(null, projection.snapshot)
     }
 
     private fun localItem(

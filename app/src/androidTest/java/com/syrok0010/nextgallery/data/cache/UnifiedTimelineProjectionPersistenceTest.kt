@@ -43,7 +43,7 @@ class UnifiedTimelineProjectionPersistenceTest {
             mediaId = MediaId("published-local"),
             assetRef = MediaAssetRef.LocalContent("content://images/42", 1_700_000_000),
         )
-        UnifiedTimelineProjection(RoomMediaIdentityRegistry(database)).project(null, listOf(local))
+        UnifiedTimelineProjection(RoomMediaIdentityRegistry(database)).replaceLocalItems(listOf(local))
 
         database.close()
         openDatabase()
@@ -53,7 +53,7 @@ class UnifiedTimelineProjectionPersistenceTest {
             assetRef = MediaAssetRef.MemoriesFile(42),
         )
         val afterRestart = UnifiedTimelineProjection(RoomMediaIdentityRegistry(database))
-            .project(remoteSnapshot(remote), emptyList())
+            .replaceRemoteSnapshot(remoteSnapshot(remote))
 
         assertEquals(MediaId("published-local"), requireNotNull(afterRestart.snapshot).items.single().mediaId)
     }
@@ -78,8 +78,9 @@ class UnifiedTimelineProjectionPersistenceTest {
             auid = "first-auid",
             buid = "second-buid",
         )
-        UnifiedTimelineProjection(RoomMediaIdentityRegistry(database))
-            .project(remoteSnapshot(remote), listOf(first, second))
+        val projection = UnifiedTimelineProjection(RoomMediaIdentityRegistry(database))
+        projection.replaceLocalItems(listOf(first, second))
+        projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
         database.close()
         openDatabase()

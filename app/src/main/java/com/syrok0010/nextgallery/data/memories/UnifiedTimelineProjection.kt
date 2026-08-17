@@ -2,11 +2,63 @@ package com.syrok0010.nextgallery.data.memories
 
 import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class UnifiedTimelineProjection(
     private val identityRegistry: MediaIdentityRegistry,
 ) {
-    suspend fun project(
+    private val mutex = Mutex()
+    private var sources = TimelineSources()
+
+    @Volatile
+    private var currentSnapshot: TimelineSnapshot? = null
+
+    val snapshot: TimelineSnapshot?
+        get() = currentSnapshot
+
+    suspend fun replaceRemoteSnapshot(snapshot: TimelineSnapshot?): UnifiedTimelineProjectionResult =
+        updateSources { sources -> sources.copy(remote = snapshot) }
+
+    suspend fun mergeRemoteItems(
+        items: List<MediaItem>,
+        loadedDayIds: Set<Int>,
+    ): UnifiedTimelineProjectionResult = updateSources { sources ->
+        sources.copy(
+            remote = sources.remote?.let { snapshot ->
+                TimelineSnapshotAssembler.mergeLoadedItems(
+                    snapshot = snapshot,
+                    items = items,
+                    loadedDayIds = loadedDayIds,
+                )
+            },
+        )
+    }
+
+    suspend fun replaceLocalItems(items: List<MediaItem>): UnifiedTimelineProjectionResult =
+        updateSources { sources -> sources.copy(local = items) }
+
+    suspend fun clear() {
+        mutex.withLock {
+            sources = TimelineSources()
+            currentSnapshot = null
+        }
+    }
+
+    private suspend fun updateSources(
+        transform: (TimelineSources) -> TimelineSources,
+    ): UnifiedTimelineProjectionResult = mutex.withLock {
+        val updatedSources = transform(sources)
+        val result = project(
+            remoteSnapshot = updatedSources.remote,
+            localItems = updatedSources.local,
+        )
+        sources = updatedSources
+        currentSnapshot = result.snapshot
+        result
+    }
+
+    private suspend fun project(
         remoteSnapshot: TimelineSnapshot?,
         localItems: List<MediaItem>,
     ): UnifiedTimelineProjectionResult {
@@ -58,6 +110,11 @@ class UnifiedTimelineProjection(
         )
     }
 }
+
+private data class TimelineSources(
+    val remote: TimelineSnapshot? = null,
+    val local: List<MediaItem> = emptyList(),
+)
 
 data class UnifiedTimelineProjectionResult(
     val snapshot: TimelineSnapshot?,

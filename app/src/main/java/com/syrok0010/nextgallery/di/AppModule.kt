@@ -44,7 +44,7 @@ val appModule = module {
     single { TimelineCacheRepository(get(), get()) }
     single { RoomMediaIdentityRegistry(get()) }
     single<MediaIdentityRegistry> { get<RoomMediaIdentityRegistry>() }
-    single { UnifiedTimelineProjection(get()) }
+    factory { UnifiedTimelineProjection(get()) }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single { AndroidMediaStoreReader(androidContext().contentResolver) }
     single { AndroidMediaStoreChangeObserver(androidContext().contentResolver) }
