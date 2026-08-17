@@ -31,6 +31,7 @@
     <string name="local_media_permission_title">Фото и видео с устройства</string>
     <string name="local_media_permission_explanation">NextGallery может добавить в общую ленту все фото и видео с устройства. Сначала Android попросит полный доступ к изображениям и видео. Можно пропустить: облачная лента продолжит работать.</string>
     <string name="media_cloud_copy">Облачная копия</string>
+    <string name="media_local_copy">Локальная копия</string>
     <string name="media_video_badge">VIDEO</string>
     <string name="status_creating_login_flow">Начинаю вход</string>
     <string name="status_loaded_items">Загружено %1$d элементов</string>

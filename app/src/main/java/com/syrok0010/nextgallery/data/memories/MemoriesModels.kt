@@ -84,3 +84,6 @@ sealed interface MediaAssetRef {
 
 val MediaItem.hasRemoteCopy: Boolean
     get() = assetRef is MediaAssetRef.MemoriesFile || assetRef is MediaAssetRef.LocalFirst
+
+val MediaItem.hasLocalCopy: Boolean
+    get() = assetRef is MediaAssetRef.LocalContent || assetRef is MediaAssetRef.LocalFirst
