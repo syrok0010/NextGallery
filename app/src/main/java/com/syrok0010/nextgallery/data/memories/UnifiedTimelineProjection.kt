@@ -47,19 +47,19 @@ class UnifiedTimelineProjection {
         transform: (TimelineSources) -> TimelineSources,
     ): UnifiedTimelineProjectionResult = mutex.withLock {
         val updatedSources = transform(sources)
-        val result = project(
+        val update = project(
             remoteSnapshot = updatedSources.remote,
             localItems = updatedSources.local,
         )
-        sources = updatedSources
-        currentSnapshot = result.snapshot
-        result
+        sources = update.sources
+        currentSnapshot = update.result.snapshot
+        update.result
     }
 
     private suspend fun project(
         remoteSnapshot: TimelineSnapshot?,
         localItems: List<MediaItem>,
-    ): UnifiedTimelineProjectionResult {
+    ): ProjectedTimelineUpdate {
         val remoteItems = remoteSnapshot?.items.orEmpty()
         val candidates = (localItems + remoteItems).map(MediaItem::identityCandidate)
         val identity = reconcileMediaIdentities(
@@ -80,9 +80,15 @@ class UnifiedTimelineProjection {
             .distinctBy { it.mediaId }
             .filterNot { it.mediaId in remoteMediaIds }
 
-        val snapshot = if (remoteSnapshot != null) {
-            val resolvedSnapshot = remoteSnapshot.copy(
-                slots = remoteSnapshot.slots.map { slot ->
+        val resolvedRemoteSnapshot = remoteSnapshot?.copy(
+            slots = remoteSnapshot.slots.map { slot ->
+                val original = slot.mediaItem ?: return@map slot
+                slot.copy(mediaItem = checkNotNull(remoteBySource[original.sourceIdentity()]))
+            },
+        )
+        val snapshot = if (resolvedRemoteSnapshot != null) {
+            val mergedSnapshot = resolvedRemoteSnapshot.copy(
+                slots = resolvedRemoteSnapshot.slots.map { slot ->
                     val original = slot.mediaItem ?: return@map slot
                     val remote = checkNotNull(remoteBySource[original.sourceIdentity()])
                     val local = localByMediaId[remote.mediaId]
@@ -100,8 +106,8 @@ class UnifiedTimelineProjection {
                     )
                 },
             )
-            TimelineSnapshotAssembler.addSourceItems(resolvedSnapshot, localOnly).copy(
-                loadedDayIds = resolvedSnapshot.loadedDayIds + localOnly.map { it.dayId },
+            TimelineSnapshotAssembler.addSourceItems(mergedSnapshot, localOnly).copy(
+                loadedDayIds = mergedSnapshot.loadedDayIds + localOnly.map { it.dayId },
             )
         } else {
             resolvedLocal
@@ -110,9 +116,15 @@ class UnifiedTimelineProjection {
                 ?.let(TimelineSnapshotAssembler::assembleLocal)
         }
 
-        return UnifiedTimelineProjectionResult(
-            snapshot = snapshot,
-            conflicts = identity.conflicts,
+        return ProjectedTimelineUpdate(
+            sources = TimelineSources(
+                remote = resolvedRemoteSnapshot,
+                local = resolvedLocal,
+            ),
+            result = UnifiedTimelineProjectionResult(
+                snapshot = snapshot,
+                conflicts = identity.conflicts,
+            ),
         )
     }
 }
@@ -120,6 +132,11 @@ class UnifiedTimelineProjection {
 private data class TimelineSources(
     val remote: TimelineSnapshot? = null,
     val local: List<MediaItem> = emptyList(),
+)
+
+private data class ProjectedTimelineUpdate(
+    val sources: TimelineSources,
+    val result: UnifiedTimelineProjectionResult,
 )
 
 data class UnifiedTimelineProjectionResult(

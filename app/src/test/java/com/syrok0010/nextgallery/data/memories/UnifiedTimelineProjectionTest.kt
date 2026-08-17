@@ -174,6 +174,69 @@ class UnifiedTimelineProjectionTest {
         assertEquals(null, projection.snapshot)
     }
 
+    @Test
+    fun `permission revoke keeps merged media cloud-only and restore reuses its MediaId`() = runBlocking {
+        val mergedLocal = localItem(
+            mediaId = MediaId("local-published"),
+            auid = "shared-auid",
+        )
+        val localOnly = localItem(
+            mediaId = MediaId("local-only"),
+            auid = "local-only-auid",
+            buid = "local-only-buid",
+            contentUri = "content://images/7",
+        )
+        val remote = remoteItem(
+            mediaId = MediaId("remote-generated"),
+            auid = "shared-auid",
+        )
+        val projection = UnifiedTimelineProjection()
+        projection.replaceRemoteSnapshot(remoteSnapshot(remote))
+
+        val withPermission = projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        val merged = requireNotNull(withPermission.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
+        assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
+        assertTrue(withPermission.snapshot.items.any { it.mediaId == localOnly.mediaId })
+
+        val withoutPermission = projection.replaceLocalItems(emptyList())
+        val cloudOnly = requireNotNull(withoutPermission.snapshot).items.single()
+        assertEquals(mergedLocal.mediaId, cloudOnly.mediaId)
+        assertTrue(cloudOnly.assetRef is MediaAssetRef.MemoriesFile)
+
+        val restored = projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        val restoredMerged = requireNotNull(restored.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
+        assertTrue(restoredMerged.assetRef is MediaAssetRef.LocalFirst)
+        assertTrue(restored.snapshot.items.any { it.mediaId == localOnly.mediaId })
+    }
+
+    @Test
+    fun `remote refresh updates cloud metadata without dropping independently reconciled local media`() = runBlocking {
+        val mergedLocal = localItem(MediaId("local-published"), auid = "shared-auid")
+        val localOnly = localItem(
+            mediaId = MediaId("local-only"),
+            auid = "local-only-auid",
+            buid = "local-only-buid",
+            contentUri = "content://images/7",
+        )
+        val initialRemote = remoteItem(MediaId("remote-generated"), auid = "shared-auid")
+        val refreshedRemote = initialRemote.copy(
+            displayName = "cloud-name-refreshed.jpg",
+            etag = "etag-refreshed",
+        )
+        val projection = UnifiedTimelineProjection()
+        projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        projection.replaceRemoteSnapshot(remoteSnapshot(initialRemote))
+
+        val refreshed = projection.replaceRemoteSnapshot(remoteSnapshot(refreshedRemote))
+
+        val items = requireNotNull(refreshed.snapshot).items.associateBy(MediaItem::mediaId)
+        val merged = items.getValue(mergedLocal.mediaId)
+        assertEquals("cloud-name-refreshed.jpg", merged.displayName)
+        assertEquals("etag-refreshed", merged.etag)
+        assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
+        assertEquals(localOnly.assetRef, items.getValue(localOnly.mediaId).assetRef)
+    }
+
     private fun localItem(
         mediaId: MediaId,
         auid: String,
