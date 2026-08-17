@@ -6,7 +6,6 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.graphics.Bitmap
-import android.media.ExifInterface
 import android.net.Uri
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -14,6 +13,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
