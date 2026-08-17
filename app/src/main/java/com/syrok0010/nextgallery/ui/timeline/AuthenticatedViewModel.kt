@@ -17,9 +17,12 @@ import com.syrok0010.nextgallery.ui.SessionUiState
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import com.syrok0010.nextgallery.ui.withRefreshedSnapshot
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -42,6 +45,8 @@ class AuthenticatedViewModel(
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
     private var timelineSources = TimelineSources()
+    private val localReconcileRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private var localMediaJob: Job? = null
 
     private val timelineViewportController: TimelineViewportController =
         DefaultTimelineViewportController(
@@ -146,6 +151,7 @@ class AuthenticatedViewModel(
     private fun onSessionChanged(session: SessionUiState) {
         when (session) {
             SessionUiState.SignedOut -> {
+                stopLocalMedia()
                 timelineSources = TimelineSources()
                 _state.value = AuthenticatedUiState()
             }
@@ -225,27 +231,44 @@ class AuthenticatedViewModel(
     }
 
     private fun loadLocalMedia() {
-        viewModelScope.launch {
-            _state.update { state ->
-                state.copy(localMediaPermissionMode = LocalMediaPermissionMode.Full)
-            }
-            runCatching { localMediaSource.readAll() }
-                .onSuccess { items ->
-                    updateTimelineSources(
-                        transform = { sources -> sources.copy(local = items) },
+        _state.update { state ->
+            state.copy(localMediaPermissionMode = LocalMediaPermissionMode.Full)
+        }
+        if (localMediaJob?.isActive == true) {
+            localReconcileRequests.tryEmit(Unit)
+            return
+        }
+        localMediaJob = localMediaSource.updates(localReconcileRequests)
+            .onEach { indexState ->
+                updateTimelineSources(
+                    transform = { sources -> sources.copy(local = indexState.items) },
+                ) { state, projectedSnapshot ->
+                    state.copy(
+                        timeline = state.timeline.copy(snapshot = projectedSnapshot),
+                        message = AppMessageUiState(
+                            status = indexState.progress?.let { progress ->
+                                uiText(
+                                    R.string.status_indexing_local_media,
+                                    progress.indexedCount,
+                                    progress.totalCount,
+                                )
+                            } ?: uiText(R.string.status_loaded_items, indexState.items.size),
+                        ),
                     )
                 }
-                .onFailure {
-                    _state.update { state ->
-                        state.copy(
-                            message = AppMessageUiState(error = uiText(R.string.error_load_local_media_failed)),
-                        )
-                    }
+            }
+            .catch {
+                _state.update { state ->
+                    state.copy(
+                        message = AppMessageUiState(error = uiText(R.string.error_load_local_media_failed)),
+                    )
                 }
-        }
+            }
+            .launchIn(viewModelScope)
     }
 
     private fun removeLocalMedia(permissionMode: LocalMediaPermissionMode) {
+        stopLocalMedia()
         updateTimelineSources(
             transform = { sources -> sources.copy(local = emptyList()) },
         ) { state, projectedSnapshot ->
@@ -254,6 +277,11 @@ class AuthenticatedViewModel(
                 localMediaPermissionMode = permissionMode,
             )
         }
+    }
+
+    private fun stopLocalMedia() {
+        localMediaJob?.cancel()
+        localMediaJob = null
     }
 
     private fun updateTimelineSources(

@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.data.thumbnail
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -48,6 +49,18 @@ class ThumbnailKeyTest {
         assertEquals(42L, request.key.fileId)
         assertEquals(512, request.key.width)
         assertEquals("etag", request.key.etag)
+    }
+
+    @Test
+    fun `local cache key changes when MediaStore copy is modified`() {
+        val original = MediaAssetRef.LocalContent(
+            contentUri = "content://media/external/images/media/42",
+            modifiedAtEpochSeconds = 1_700_000_000,
+        )
+        val modified = original.copy(modifiedAtEpochSeconds = 1_700_000_001)
+
+        assertEquals(original.coilCacheKey(), original.copy().coilCacheKey())
+        assertNotEquals(original.coilCacheKey(), modified.coilCacheKey())
     }
 
     private fun thumbnailKey(

@@ -14,6 +14,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
+import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
 
 internal enum class MediaImagePurpose {
     TimelineThumbnail,
@@ -79,6 +80,8 @@ private fun mediaImageRequests(
     is MediaAssetRef.LocalContent -> listOf(
         ImageRequest.Builder(context)
             .data(assetRef.contentUri)
+            .memoryCacheKey("${assetRef.coilCacheKey()}:$purpose")
+            .diskCacheKey("${assetRef.coilCacheKey()}:$purpose")
             .build(),
     )
 }

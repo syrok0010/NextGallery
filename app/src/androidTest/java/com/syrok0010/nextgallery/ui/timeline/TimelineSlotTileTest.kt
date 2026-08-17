@@ -87,7 +87,10 @@ class TimelineSlotTileTest {
         val localItem = mediaItem(isVideo = false).copy(
             mediaId = MediaId("local-42"),
             displayName = "local.jpg",
-            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/42"),
+            assetRef = MediaAssetRef.LocalContent(
+                contentUri = "content://media/external/images/media/42",
+                modifiedAtEpochSeconds = null,
+            ),
         )
 
         showSlot(mediaItem = localItem)

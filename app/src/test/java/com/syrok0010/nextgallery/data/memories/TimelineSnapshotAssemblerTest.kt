@@ -124,7 +124,10 @@ class TimelineSnapshotAssemblerTest {
         val localItem = mediaItem(fileId = 7, dayId = 19871).copy(
             mediaId = MediaId("local-7"),
             takenAtEpochSeconds = 1_717_300_000L,
-            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7"),
+            assetRef = MediaAssetRef.LocalContent(
+                contentUri = "content://media/external/images/media/7",
+                modifiedAtEpochSeconds = null,
+            ),
         )
 
         val updated = TimelineSnapshotAssembler.addSourceItems(snapshot, listOf(localItem))
@@ -140,7 +143,10 @@ class TimelineSnapshotAssemblerTest {
         val localItem = mediaItem(fileId = 7, dayId = 19871).copy(
             mediaId = MediaId("local-7"),
             remoteFileId = null,
-            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7"),
+            assetRef = MediaAssetRef.LocalContent(
+                contentUri = "content://media/external/images/media/7",
+                modifiedAtEpochSeconds = null,
+            ),
         )
 
         val snapshot = TimelineSnapshotAssembler.assembleLocal(listOf(localItem))

@@ -1,15 +1,19 @@
 package com.syrok0010.nextgallery.data.local
 
-import android.content.ContentResolver
-import android.content.ContentUris
-import android.provider.MediaStore
-import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 
 data class LocalMediaMetadata(
     val contentUri: String,
@@ -25,47 +29,119 @@ data class LocalMediaMetadata(
     val isVideo: Boolean,
 )
 
+data class LocalMediaBatch(
+    val metadata: List<LocalMediaMetadata>,
+    val progress: LocalMediaIndexProgress,
+)
+
+data class LocalMediaIndexProgress(
+    val indexedCount: Int,
+    val totalCount: Int,
+)
+
+data class LocalMediaIndexState(
+    val items: List<MediaItem>,
+    val progress: LocalMediaIndexProgress?,
+)
+
 fun interface LocalMediaReader {
-    suspend fun readAll(): List<LocalMediaMetadata>
+    fun readBatches(batchSize: Int): Flow<LocalMediaBatch>
 }
 
+fun interface LocalMediaChangeObserver {
+    fun changes(): Flow<Unit>
+}
+
+interface LocalMediaProjectionStore {
+    suspend fun loadLocalMediaProjection(): List<MediaItem>
+    suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId>
+    suspend fun saveLocalMediaBatch(items: List<MediaItem>)
+    suspend fun finishLocalMediaReconciliation(contentUris: Set<String>)
+}
+
+@OptIn(FlowPreview::class)
 class LocalMediaSource(
     private val reader: LocalMediaReader,
-    private val resolveMediaIds: suspend (Collection<String>) -> Map<String, MediaId>,
+    private val projectionStore: LocalMediaProjectionStore,
+    private val changeObserver: LocalMediaChangeObserver,
+    private val batchSize: Int = DEFAULT_BATCH_SIZE,
+    private val changeDebounce: Duration = DEFAULT_CHANGE_DEBOUNCE,
 ) {
-    constructor(
-        reader: LocalMediaReader,
-        cacheRepository: TimelineCacheRepository,
-    ) : this(reader, cacheRepository::resolveLocalMediaIds)
+    fun updates(reconcileRequests: Flow<Unit>): Flow<LocalMediaIndexState> = channelFlow {
+        var publishedItems = projectionStore.loadLocalMediaProjection()
+        send(LocalMediaIndexState(items = publishedItems, progress = null))
 
-    suspend fun readAll(): List<MediaItem> {
-        val metadata = reader.readAll()
-        val mediaIds = resolveMediaIds(metadata.map { it.contentUri })
+        suspend fun reconcile() {
+            val freshItems = linkedMapOf<String, MediaItem>()
+            var completed = false
+
+            reader.readBatches(batchSize).collect { batch ->
+                val mappedItems = mapMetadata(batch.metadata)
+                projectionStore.saveLocalMediaBatch(mappedItems)
+                mappedItems.forEach { item -> freshItems[item.localContentUri()] = item }
+
+                if (batch.progress.indexedCount >= batch.progress.totalCount) {
+                    projectionStore.finishLocalMediaReconciliation(freshItems.keys)
+                    publishedItems = freshItems.values.toList().sortedForTimeline()
+                    send(LocalMediaIndexState(items = publishedItems, progress = null))
+                    completed = true
+                } else {
+                    val freshUris = freshItems.keys
+                    publishedItems = (freshItems.values + publishedItems.filterNot { it.localContentUri() in freshUris })
+                        .sortedForTimeline()
+                    send(
+                        LocalMediaIndexState(
+                            items = publishedItems,
+                            progress = batch.progress,
+                        ),
+                    )
+                }
+            }
+
+            if (!completed) {
+                projectionStore.finishLocalMediaReconciliation(emptySet())
+                publishedItems = emptyList()
+                send(LocalMediaIndexState(items = emptyList(), progress = null))
+            }
+        }
+
+        val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            changeObserver.changes().debounce(changeDebounce).collect {
+                reconcileTriggers.trySend(Unit)
+            }
+        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            reconcileRequests.collect {
+                reconcileTriggers.trySend(Unit)
+            }
+        }
+        reconcileTriggers.trySend(Unit)
+        for (ignored in reconcileTriggers) {
+            reconcile()
+        }
+    }
+
+    private suspend fun mapMetadata(metadata: List<LocalMediaMetadata>): List<MediaItem> {
+        val timestampByUri = metadata.mapNotNull { item ->
+            item.timelineEpochSeconds()?.let { timestamp -> item.contentUri to timestamp }
+        }.toMap()
+        val mediaIds = projectionStore.resolveLocalMediaIds(timestampByUri.keys)
         return metadata.mapNotNull { item ->
-            val timestamp = item.timelineEpochSeconds() ?: return@mapNotNull null
-            val dayId = Math.floorDiv(timestamp, SECONDS_PER_DAY).toInt()
-            MediaItem(
+            val timestamp = timestampByUri[item.contentUri] ?: return@mapNotNull null
+            LocalMediaProjectionItem(
                 mediaId = checkNotNull(mediaIds[item.contentUri]),
-                remoteFileId = null,
-                dayId = dayId,
-                day = LocalDate.ofEpochDay(dayId.toLong()),
+                contentUri = item.contentUri,
                 displayName = item.displayName,
                 mimeType = item.mimeType,
                 width = item.width,
                 height = item.height,
-                etag = null,
-                livePhotoId = null,
-                auid = null,
-                buid = null,
-                sharedBy = null,
                 takenAtEpochSeconds = timestamp,
+                modifiedAtEpochSeconds = item.dateModifiedSeconds,
                 isVideo = item.isVideo,
                 videoDurationSeconds = item.durationMillis?.takeIf { it > 0 }?.div(1_000),
-                isFavorite = false,
-                isHidden = false,
-                assetRef = MediaAssetRef.LocalContent(item.contentUri),
-            )
-        }.sortedWith(compareByDescending<MediaItem> { it.takenAtEpochSeconds }.thenByDescending { it.mediaId.value })
+            ).toMediaItem()
+        }.sortedForTimeline()
     }
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
@@ -73,90 +149,14 @@ class LocalMediaSource(
             ?: dateModifiedSeconds?.takeIf { it > 0 }
             ?: dateAddedSeconds?.takeIf { it > 0 }
 
+    private fun List<MediaItem>.sortedForTimeline(): List<MediaItem> =
+        sortedWith(compareByDescending<MediaItem> { it.takenAtEpochSeconds }.thenByDescending { it.mediaId.value })
+
+    private fun MediaItem.localContentUri(): String =
+        (assetRef as MediaAssetRef.LocalContent).contentUri
+
     private companion object {
-        const val SECONDS_PER_DAY = 86_400L
+        const val DEFAULT_BATCH_SIZE = 200
+        val DEFAULT_CHANGE_DEBOUNCE = 500.milliseconds
     }
-}
-
-class AndroidMediaStoreReader(
-    private val contentResolver: ContentResolver,
-) : LocalMediaReader {
-    override suspend fun readAll(): List<LocalMediaMetadata> = withContext(Dispatchers.IO) {
-        readAllBlocking()
-    }
-
-    private fun readAllBlocking(): List<LocalMediaMetadata> {
-        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.MEDIA_TYPE,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.WIDTH,
-            MediaStore.MediaColumns.HEIGHT,
-            MediaStore.MediaColumns.SIZE,
-            MediaStore.Images.ImageColumns.DATE_TAKEN,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATE_ADDED,
-            MediaStore.Video.VideoColumns.DURATION,
-        )
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
-        val selectionArgs = arrayOf(
-            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
-        )
-        val metadata = mutableListOf<LocalMediaMetadata>()
-
-        contentResolver.query(
-            collection,
-            projection,
-            selection,
-            selectionArgs,
-            "${MediaStore.Images.ImageColumns.DATE_TAKEN} DESC, ${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
-        )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-            val typeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
-            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-            val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
-            val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
-            val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
-            val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
-            val takenColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATE_TAKEN)
-            val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
-            val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.VideoColumns.DURATION)
-
-            while (cursor.moveToNext()) {
-                val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                val id = cursor.getLong(idColumn)
-                val uri = ContentUris.withAppendedId(
-                    if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    id,
-                )
-                metadata += LocalMediaMetadata(
-                    contentUri = uri.toString(),
-                    displayName = cursor.getString(nameColumn) ?: id.toString(),
-                    mimeType = cursor.nullableString(mimeColumn),
-                    width = cursor.nullableInt(widthColumn),
-                    height = cursor.nullableInt(heightColumn),
-                    sizeBytes = cursor.nullableLong(sizeColumn),
-                    dateTakenMillis = cursor.nullableLong(takenColumn),
-                    dateModifiedSeconds = cursor.nullableLong(modifiedColumn),
-                    dateAddedSeconds = cursor.nullableLong(addedColumn),
-                    durationMillis = cursor.nullableLong(durationColumn),
-                    isVideo = isVideo,
-                )
-            }
-        }
-        return metadata
-    }
-
-    private fun android.database.Cursor.nullableString(column: Int): String? =
-        if (isNull(column)) null else getString(column)
-
-    private fun android.database.Cursor.nullableInt(column: Int): Int? =
-        if (isNull(column)) null else getInt(column)
-
-    private fun android.database.Cursor.nullableLong(column: Int): Long? =
-        if (isNull(column)) null else getLong(column)
 }
