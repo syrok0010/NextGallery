@@ -43,11 +43,11 @@ class MemoriesRepository(
             loadedDayIds = loadedDayIds,
         )
 
-        val refreshedCachedSnapshot = runCatching {
-            cacheRepository.saveTimelineSnapshot(credentials, snapshot)
-            cacheRepository.loadTimelineSnapshot(credentials)
-        }.getOrNull()
-        return refreshedCachedSnapshot ?: snapshot
+        runCatching { cacheRepository.saveTimelineSnapshot(credentials, snapshot) }
+        // The online index is authoritative here. Re-reading the materialized
+        // cache would intentionally drop index-only remote slots before the UI
+        // gets a chance to render the complete online timeline.
+        return snapshot
     }
 
     suspend fun loadTimelineDays(
