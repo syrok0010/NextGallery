@@ -322,10 +322,22 @@ internal fun MediaDetailScreen(
         if (chromeVisible && !enterInProgress && !dismissInProgress && currentItem != null) {
             ViewerChrome(
                 item = currentItem,
-                page = pagerState.currentPage,
-                pageCount = items.size,
                 onBack = { closeViewer(currentItem, true) },
                 modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
+
+        if (!enterInProgress && !dismissInProgress && items.isNotEmpty()) {
+            Filmstrip(
+                items = items,
+                currentPage = pagerState.currentPage,
+                credentials = credentials,
+                onPageSelected = { page ->
+                    coroutineScope.launch {
+                        pagerState.scrollToPage(page)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }
@@ -477,8 +489,6 @@ private fun MediaViewerPage(
 @Composable
 private fun ViewerChrome(
     item: MediaItem,
-    page: Int,
-    pageCount: Int,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -517,12 +527,6 @@ private fun ViewerChrome(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-
-            Text(
-                text = stringResource(R.string.viewer_position, page + 1, pageCount),
-                color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
     }
 }
