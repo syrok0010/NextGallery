@@ -8,8 +8,11 @@ import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.credentials.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.data.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
+import com.syrok0010.nextgallery.data.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.data.local.LocalMediaSource
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.ThumbnailBatchLoader
@@ -38,10 +41,13 @@ val appModule = module {
     single { TimelineCacheRepository(get(), get()) }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single { AndroidMediaStoreReader(androidContext().contentResolver) }
+    single { AndroidMediaStoreChangeObserver(androidContext().contentResolver) }
+    single<LocalMediaProjectionStore> { LocalMediaProjectionRepository(get(), get()) }
     single {
         LocalMediaSource(
             reader = get<AndroidMediaStoreReader>(),
-            cacheRepository = get<TimelineCacheRepository>(),
+            projectionStore = get<LocalMediaProjectionStore>(),
+            changeObserver = get<AndroidMediaStoreChangeObserver>(),
         )
     }
     single { NextcloudLoginRepository(get()) }

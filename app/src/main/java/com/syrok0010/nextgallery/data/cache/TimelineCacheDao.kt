@@ -20,7 +20,10 @@ interface TimelineCacheDao {
     suspend fun mediaItems(): List<MediaItemEntity>
 
     @Query("SELECT * FROM media_identities WHERE source = :source AND sourceKey IN (:sourceKeys)")
-    suspend fun mediaIdentities(source: String, sourceKeys: Collection<String>): List<MediaIdentityEntity>
+    suspend fun mediaIdentities(source: MediaSourceKind, sourceKeys: Collection<String>): List<MediaIdentityEntity>
+
+    @Query("SELECT * FROM local_media_projection ORDER BY takenAtEpochSeconds DESC, mediaId DESC")
+    suspend fun localMediaProjection(): List<LocalMediaEntity>
 
     @Query("SELECT dayId FROM loaded_days")
     suspend fun loadedDayIds(): List<Int>
@@ -54,6 +57,9 @@ interface TimelineCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMediaIdentities(entities: List<MediaIdentityEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLocalMediaProjection(entities: List<LocalMediaEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLoadedDays(entities: List<LoadedDayEntity>)
@@ -94,8 +100,14 @@ interface TimelineCacheDao {
     @Query("DELETE FROM media_items")
     suspend fun deleteAllMediaItems()
 
-    @Query("DELETE FROM media_identities")
-    suspend fun deleteAllMediaIdentities()
+    @Query("DELETE FROM media_identities WHERE source = :source")
+    suspend fun deleteMediaIdentities(source: MediaSourceKind)
+
+    @Query("DELETE FROM local_media_projection WHERE contentUri NOT IN (:contentUris)")
+    suspend fun deleteLocalMediaNotIn(contentUris: Collection<String>)
+
+    @Query("DELETE FROM local_media_projection")
+    suspend fun deleteAllLocalMedia()
 
     @Query("DELETE FROM loaded_days")
     suspend fun deleteAllLoadedDays()

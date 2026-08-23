@@ -117,7 +117,7 @@ class TimelineCacheRepository(
                 .values
                 .flatMap { sourceIdentities ->
                     dao.mediaIdentities(
-                        source = sourceIdentities.first().source.name,
+                        source = sourceIdentities.first().source,
                         sourceKeys = sourceIdentities.map { it.sourceKey },
                     )
                 }
@@ -228,7 +228,7 @@ class TimelineCacheRepository(
             dao.deleteAllThumbnailRows()
             dao.deleteAllLoadedDays()
             dao.deleteAllMediaItems()
-            dao.deleteAllMediaIdentities()
+            dao.deleteMediaIdentities(MediaSourceKind.Memories)
             dao.deleteAllTimelineDays()
             dao.deleteMetadata()
         }

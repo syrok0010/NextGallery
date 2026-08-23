@@ -69,6 +69,7 @@ import coil3.BitmapImage
 import coil3.Image
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
@@ -458,14 +459,16 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    MediaAssetImage(
-                        item = item,
-                        credentials = credentials,
-                        purpose = MediaImagePurpose.DetailPreview,
-                        contentDescription = item.displayName,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                    )
+                    if (item.assetRef is MediaAssetRef.MemoriesFile) {
+                        MediaAssetImage(
+                            item = item,
+                            credentials = credentials,
+                            purpose = MediaImagePurpose.DetailPreview,
+                            contentDescription = item.displayName,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
                 }
 
                 ZoomableAsyncImage(

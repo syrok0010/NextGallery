@@ -73,6 +73,7 @@ sealed interface MediaAssetRef {
 
     data class LocalContent(
         val contentUri: String,
+        val modifiedAtEpochSeconds: Long?,
     ) : MediaAssetRef
 }
 

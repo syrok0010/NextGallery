@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MemoriesConfig
 import com.syrok0010.nextgallery.data.memories.TimelineDay
+import com.syrok0010.nextgallery.data.local.LocalMediaProjectionItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import java.time.LocalDate
 
@@ -107,3 +108,33 @@ fun MediaItemEntity.toMediaItem(): MediaItem {
         },
     )
 }
+
+fun MediaItem.toLocalMediaEntity(): LocalMediaEntity {
+    val localContent = assetRef as? MediaAssetRef.LocalContent
+        ?: error("Only local media can be stored in the local projection")
+    return LocalMediaEntity(
+        contentUri = localContent.contentUri,
+        mediaId = mediaId.value,
+        displayName = displayName,
+        mimeType = mimeType,
+        width = width,
+        height = height,
+        takenAtEpochSeconds = requireNotNull(takenAtEpochSeconds),
+        modifiedAtEpochSeconds = localContent.modifiedAtEpochSeconds,
+        isVideo = isVideo,
+        videoDurationSeconds = videoDurationSeconds,
+    )
+}
+
+fun LocalMediaEntity.toMediaItem(): MediaItem = LocalMediaProjectionItem(
+    mediaId = MediaId(mediaId),
+    contentUri = contentUri,
+    displayName = displayName,
+    mimeType = mimeType,
+    width = width,
+    height = height,
+    takenAtEpochSeconds = takenAtEpochSeconds,
+    modifiedAtEpochSeconds = modifiedAtEpochSeconds,
+    isVideo = isVideo,
+    videoDurationSeconds = videoDurationSeconds,
+).toMediaItem()

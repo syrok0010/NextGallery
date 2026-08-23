@@ -63,6 +63,23 @@ data class MediaIdentityEntity(
     val mediaId: String,
 )
 
+@Entity(
+    tableName = "local_media_projection",
+    indices = [Index(value = ["takenAtEpochSeconds"])],
+)
+data class LocalMediaEntity(
+    @PrimaryKey val contentUri: String,
+    val mediaId: String,
+    val displayName: String,
+    val mimeType: String?,
+    val width: Int?,
+    val height: Int?,
+    val takenAtEpochSeconds: Long,
+    val modifiedAtEpochSeconds: Long?,
+    val isVideo: Boolean,
+    val videoDurationSeconds: Long?,
+)
+
 enum class MediaSourceKind {
     Memories,
     Local,

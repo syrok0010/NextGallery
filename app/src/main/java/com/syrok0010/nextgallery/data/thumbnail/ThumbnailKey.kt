@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.data.thumbnail
 
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 
 data class ThumbnailKey(
@@ -55,3 +56,10 @@ internal fun AccountCredentials.thumbnailAccountScope(): String {
 }
 
 const val DEFAULT_THUMBNAIL_SIZE = 512
+
+internal fun MediaAssetRef.LocalContent.coilCacheKey(): String = buildString {
+    append("nextgallery-local-media:")
+    append(contentUri)
+    append(':')
+    append(modifiedAtEpochSeconds ?: "unknown")
+}
