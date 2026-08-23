@@ -28,6 +28,31 @@ object TimelineSnapshotAssembler {
         return addSourceItems(empty, items)
     }
 
+    fun assembleMaterialized(
+        config: MemoriesConfig,
+        mediaItems: List<MediaItem>,
+        loadedDayIds: Set<Int>,
+    ): TimelineSnapshot {
+        val materializedItems = mediaItems.filter { it.hasMaterializedRemoteMetadata() }
+        val itemsByDay = materializedItems.groupBy { it.dayId }
+        val days = itemsByDay
+            .map { (dayId, items) -> TimelineDay(dayId = dayId, count = items.size) }
+            .sortedByDescending(TimelineDay::dayId)
+        val materializedDayIds = days.mapTo(mutableSetOf(), TimelineDay::dayId)
+
+        return assemble(
+            config = config,
+            days = days,
+            mediaItems = materializedItems,
+            loadedDayIds = loadedDayIds.intersect(materializedDayIds),
+        )
+    }
+
+    private fun MediaItem.hasMaterializedRemoteMetadata(): Boolean =
+        remoteFileId != null &&
+            takenAtEpochSeconds != null &&
+            (!auid.isNullOrBlank() || !buid.isNullOrBlank())
+
     fun mergeLoadedItems(
         snapshot: TimelineSnapshot,
         items: List<MediaItem>,

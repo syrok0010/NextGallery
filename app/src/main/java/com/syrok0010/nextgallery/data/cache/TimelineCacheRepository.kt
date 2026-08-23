@@ -25,17 +25,11 @@ class TimelineCacheRepository(
             return null
         }
 
-        val days = timelineDao.timelineDays().map { it.toTimelineDay() }
-        if (days.isEmpty()) {
-            return null
-        }
-
         val mediaItems = timelineDao.mediaItems().map { it.toMediaItem() }
         val loadedDayIds = timelineDao.loadedDayIds().toSet()
 
-        return TimelineSnapshotAssembler.assemble(
+        return TimelineSnapshotAssembler.assembleMaterialized(
             config = metadata.toMemoriesConfig(),
-            days = days,
             mediaItems = mediaItems,
             loadedDayIds = loadedDayIds,
         )
