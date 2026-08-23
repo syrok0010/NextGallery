@@ -57,7 +57,7 @@ class FilmstripTest {
         dayId: Int,
     ) = MediaItem(
         mediaId = MediaId(id),
-        remoteFileId = id.hashCode().toLong(),
+        remoteFileId = null,
         dayId = dayId,
         day = LocalDate.ofEpochDay(dayId.toLong()),
         displayName = "$id.jpg",
@@ -74,6 +74,9 @@ class FilmstripTest {
         videoDurationSeconds = null,
         isFavorite = false,
         isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(id.hashCode().toLong()),
+        assetRef = MediaAssetRef.LocalContent(
+            contentUri = "content://filmstrip/$id",
+            modifiedAtEpochSeconds = 1_728_000_000L,
+        ),
     )
 }
