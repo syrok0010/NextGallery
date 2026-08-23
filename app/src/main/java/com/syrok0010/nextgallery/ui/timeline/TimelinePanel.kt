@@ -51,6 +51,11 @@ internal fun TimelinePanel(
         gridItems.toSlotGridIndexes()
     }
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
+    PreserveTimelineScrollAnchor(
+        gridItems = gridItems,
+        gridState = gridState,
+        isScrollNavigationActive = isDraggingScrollIndicator || revealMediaId != null,
+    )
 
     LaunchedEffect(gridItems) {
         if (timeline == null) {
