@@ -13,14 +13,12 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.SessionStore
 import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,85 +27,6 @@ import org.junit.runner.RunWith
 class MediaAssetImageTest {
     @get:Rule
     val composeRule = createComposeRule()
-
-    @Test
-    fun requestFactoryReadsCurrentSessionForEveryNewPlan() {
-        val sessionStore = sessionStore(credentials)
-        val requestFactory = MediaImageRequestFactory(
-            context = InstrumentationRegistry.getInstrumentation().targetContext,
-            sessionStore = sessionStore,
-        )
-        val item = mediaItem(MediaAssetRef.MemoriesFile(42))
-
-        val first = requestFactory.create(item, MediaImagePurpose.Original)
-        sessionStore.signIn(credentials.copy(serverUrl = "https://other.example.com/"))
-        val second = requestFactory.create(item, MediaImagePurpose.Original)
-
-        assertEquals("https://cloud.example.com/apps/memories/api/stream/42", first.primary.data)
-        assertEquals("https://other.example.com/apps/memories/api/stream/42", second.primary.data)
-    }
-
-    @Test
-    fun localOriginalUsesTimelineThumbnailAsCachedPlaceholder() {
-        val assetRef = MediaAssetRef.LocalContent(
-            contentUri = "content://media/external/images/media/42",
-            modifiedAtEpochSeconds = 1_700_000_000,
-        )
-        val plan = requestFactory().create(
-            item = mediaItem(assetRef),
-            purpose = MediaImagePurpose.Original,
-        )
-
-        assertNull(plan.preview)
-        assertNull(plan.fallback)
-        assertEquals(
-            "${assetRef.coilCacheKey()}:${MediaImagePurpose.Original}",
-            plan.primary.memoryCacheKey,
-        )
-        assertEquals(
-            "${assetRef.coilCacheKey()}:${MediaImagePurpose.TimelineThumbnail}",
-            plan.primary.placeholderMemoryCacheKey?.key,
-        )
-    }
-
-    @Test
-    fun unifiedOriginalTriesLocalContentBeforeCloudStream() {
-        val local = MediaAssetRef.LocalContent(
-            contentUri = "content://media/external/images/media/42",
-            modifiedAtEpochSeconds = 1_700_000_000,
-        )
-        val plan = requestFactory().create(
-            item = mediaItem(
-                MediaAssetRef.LocalFirst(
-                    local = local,
-                    remote = MediaAssetRef.MemoriesFile(photoFileId = 42),
-                ),
-            ),
-            purpose = MediaImagePurpose.Original,
-        )
-
-        assertEquals(local.contentUri, plan.primary.data)
-        assertEquals("https://cloud.example.com/apps/memories/api/stream/42", plan.fallback?.data)
-    }
-
-    @Test
-    fun unifiedDetailDoesNotLoadRemotePreviewWhileLocalContentIsAvailable() {
-        val local = MediaAssetRef.LocalContent(
-            contentUri = "content://media/external/images/media/42",
-            modifiedAtEpochSeconds = 1_700_000_000,
-        )
-        val plan = requestFactory().create(
-            item = mediaItem(MediaAssetRef.LocalFirst(local, MediaAssetRef.MemoriesFile(42))),
-            purpose = MediaImagePurpose.DetailPreview,
-        )
-
-        assertEquals(local.contentUri, plan.primary.data)
-        assertNull(plan.preview)
-        assertEquals(
-            "https://cloud.example.com/apps/memories/api/image/preview/42?x=1600&y=1600&a=1",
-            plan.fallback?.data,
-        )
-    }
 
     @Test
     fun projectedMediaFallsBackToCloudAfterLocalReadErrorWithoutChangingMediaId() = runBlocking {

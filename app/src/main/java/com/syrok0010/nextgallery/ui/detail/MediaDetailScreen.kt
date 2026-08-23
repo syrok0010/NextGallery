@@ -6,9 +6,12 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.os.Build
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -319,14 +322,25 @@ internal fun MediaDetailScreen(
             }
         }
 
-        if (chromeVisible && !enterInProgress && !dismissInProgress && currentItem != null) {
-            ViewerChrome(
-                item = currentItem,
-                page = pagerState.currentPage,
-                pageCount = items.size,
-                onBack = { closeViewer(currentItem, true) },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
+        if (!enterInProgress && !dismissInProgress && currentItem != null && items.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = chromeVisible,
+                enter = fadeIn(animationSpec = tween(ViewerChromeFadeDurationMillis)),
+                exit = fadeOut(animationSpec = tween(ViewerChromeFadeDurationMillis)),
+            ) {
+                ViewerChrome(
+                    item = currentItem,
+                    onBack = { closeViewer(currentItem, true) },
+                    filmstrip = {
+                        Filmstrip(
+                            items = items,
+                            currentPage = pagerState.currentPage,
+                            onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
@@ -477,19 +491,19 @@ private fun MediaViewerPage(
 @Composable
 private fun ViewerChrome(
     item: MediaItem,
-    page: Int,
-    pageCount: Int,
     onBack: () -> Unit,
+    filmstrip: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.48f))
-    ) {
+    Box(modifier = modifier) {
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            filmstrip()
+        }
         Row(
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.48f))
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -517,12 +531,6 @@ private fun ViewerChrome(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-
-            Text(
-                text = stringResource(R.string.viewer_position, page + 1, pageCount),
-                color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
     }
 }
@@ -802,6 +810,7 @@ private fun Image.hasGainmapCompat(): Boolean {
 }
 
 private const val ViewerSequencePrefetchSlots = 80
+private const val ViewerChromeFadeDurationMillis = 180
 private const val ViewerDismissScaleDistancePx = 1_400f
 private const val ViewerDismissBackgroundDistancePx = 420f
 private const val ViewerBackgroundEnterDelayMillis = 210
