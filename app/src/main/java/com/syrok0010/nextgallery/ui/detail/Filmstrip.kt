@@ -1,6 +1,6 @@
 package com.syrok0010.nextgallery.ui.detail
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -44,9 +43,12 @@ import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-internal val FilmstripTileSize = 56.dp
-internal val FilmstripTileSpacing = 6.dp
-internal const val FilmstripTileActiveScale = 1.15f
+internal val FilmstripTileWidth = 34.dp
+internal val FilmstripTileHeight = 60.dp
+internal val FilmstripActiveTileWidth = 39.dp
+internal val FilmstripActiveTileHeight = 69.dp
+internal val FilmstripTileSpacing = 2.dp
+internal val FilmstripRowHeight = 90.dp
 
 internal const val FilmstripTestTag = "filmstrip"
 internal fun filmstripTileTestTag(index: Int) = "filmstrip_tile_$index"
@@ -58,7 +60,7 @@ internal fun Filmstrip(
     credentials: AccountCredentials,
     onPageSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    lazyListState: LazyListState = rememberLazyListState(),
+    lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
 ) {
     if (items.isEmpty()) return
 
@@ -118,21 +120,21 @@ internal fun Filmstrip(
                 }
             },
     ) {
-        val horizontalPadding = ((maxWidth - FilmstripTileSize) / 2f).coerceAtLeast(0.dp)
+        val horizontalPadding = ((maxWidth - FilmstripActiveTileWidth) / 2f).coerceAtLeast(0.dp)
 
         LazyRow(
             state = lazyListState,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp),
+                .height(FilmstripRowHeight),
             contentPadding = PaddingValues(
                 start = horizontalPadding,
                 end = horizontalPadding,
-                top = 8.dp,
-                bottom = 8.dp,
+                top = 16.dp,
+                bottom = 4.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(FilmstripTileSpacing),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
             userScrollEnabled = false, // We control scrolling via pointerInput drag & click
         ) {
             itemsIndexed(
@@ -140,19 +142,19 @@ internal fun Filmstrip(
                 key = { _, item -> "filmstrip:${item.mediaId.value}" },
             ) { index, item ->
                 val isSelected = index == currentPage
-                val scale by animateFloatAsState(
-                    targetValue = if (isSelected) FilmstripTileActiveScale else 1.0f,
-                    label = "filmstrip_tile_scale",
+                val tileWidth by animateDpAsState(
+                    targetValue = if (isSelected) FilmstripActiveTileWidth else FilmstripTileWidth,
+                    label = "filmstrip_tile_width",
+                )
+                val tileHeight by animateDpAsState(
+                    targetValue = if (isSelected) FilmstripActiveTileHeight else FilmstripTileHeight,
+                    label = "filmstrip_tile_height",
                 )
 
                 Box(
                     modifier = Modifier
-                        .size(FilmstripTileSize)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(width = tileWidth, height = tileHeight)
+                        .clip(RoundedCornerShape(4.dp))
                         .testTag(filmstripTileTestTag(index))
                         .clickable {
                             onPageSelected(index)
@@ -166,7 +168,7 @@ internal fun Filmstrip(
                         credentials = credentials,
                         purpose = MediaImagePurpose.TimelineThumbnail,
                         contentDescription = item.displayName,
-                        modifier = Modifier.size(FilmstripTileSize),
+                        modifier = Modifier.size(width = tileWidth, height = tileHeight),
                         contentScale = ContentScale.Crop,
                     )
                 }
