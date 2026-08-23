@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,9 @@ import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
+import com.syrok0010.nextgallery.ui.SessionStore
+import com.syrok0010.nextgallery.ui.SessionUiState
+import org.koin.compose.koinInject
 
 internal enum class MediaImagePurpose {
     TimelineThumbnail,
@@ -37,20 +41,36 @@ internal data class MediaImageRequestPlan(
     val preview: ImageRequest? = null,
 )
 
+internal class MediaImageRequestFactory(
+    private val context: Context,
+    private val sessionStore: SessionStore,
+) {
+    @Composable
+    fun rememberPlan(item: MediaItem, purpose: MediaImagePurpose): MediaImageRequestPlan {
+        val session by sessionStore.session.collectAsState()
+        return remember(context, item, purpose, session) {
+            mediaImageRequestPlan(
+                context = context,
+                item = item,
+                credentials = (session as? SessionUiState.SignedIn)?.credentials,
+                purpose = purpose,
+            )
+        }
+    }
+}
+
 @Composable
 internal fun MediaAssetImage(
     item: MediaItem,
-    credentials: AccountCredentials,
     purpose: MediaImagePurpose,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     imageLoader: ImageLoader = SingletonImageLoader.get(LocalContext.current),
+    requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val context = LocalContext.current
-    val plan = remember(context, item, credentials, purpose) {
-        mediaImageRequestPlan(context, item, credentials, purpose)
-    }
+    val plan = requestFactory.rememberPlan(item, purpose)
     val request = rememberFallbackImageRequest(context, plan)
 
     Box(modifier = modifier) {
@@ -97,18 +117,30 @@ internal fun rememberFallbackImageRequest(
     }
 }
 
-internal fun mediaImageRequestPlan(
+private fun mediaImageRequestPlan(
     context: Context,
     item: MediaItem,
-    credentials: AccountCredentials,
+    credentials: AccountCredentials?,
     purpose: MediaImagePurpose,
 ): MediaImageRequestPlan = when (val assetRef = item.assetRef) {
-    is MediaAssetRef.MemoriesFile -> remoteRequestPlan(context, item, assetRef, credentials, purpose)
+    is MediaAssetRef.MemoriesFile -> remoteRequestPlan(
+        context,
+        item,
+        assetRef,
+        requireNotNull(credentials) { "Remote media requires an authenticated session" },
+        purpose,
+    )
     is MediaAssetRef.LocalContent -> MediaImageRequestPlan(
         primary = localRequest(context, assetRef, purpose),
     )
     is MediaAssetRef.LocalFirst -> {
-        val remote = remoteRequestPlan(context, item, assetRef.remote, credentials, purpose)
+        val remote = remoteRequestPlan(
+            context,
+            item,
+            assetRef.remote,
+            requireNotNull(credentials) { "Remote fallback requires an authenticated session" },
+            purpose,
+        )
         MediaImageRequestPlan(
             primary = localRequest(context, assetRef.local, purpose),
             fallback = remote.primary,
