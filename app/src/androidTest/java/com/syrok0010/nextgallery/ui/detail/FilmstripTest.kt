@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
@@ -34,7 +33,6 @@ class FilmstripTest {
             Filmstrip(
                 items = items,
                 currentPage = currentPage.intValue,
-                credentials = credentials,
                 onPageSelected = { index ->
                     selectedPage = index
                     currentPage.intValue = index
@@ -78,12 +76,4 @@ class FilmstripTest {
         isHidden = false,
         assetRef = MediaAssetRef.MemoriesFile(id.hashCode().toLong()),
     )
-
-    private companion object {
-        val credentials = AccountCredentials(
-            serverUrl = "https://cloud.example.com/",
-            loginName = "user",
-            appPassword = "secret",
-        )
-    }
 }

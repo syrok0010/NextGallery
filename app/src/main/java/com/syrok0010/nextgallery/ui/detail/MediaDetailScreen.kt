@@ -335,12 +335,7 @@ internal fun MediaDetailScreen(
                         Filmstrip(
                             items = items,
                             currentPage = pagerState.currentPage,
-                            credentials = credentials,
-                            onPageSelected = { page ->
-                                coroutineScope.launch {
-                                    pagerState.scrollToPage(page)
-                                }
-                            },
+                            onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         )
                     },
                     modifier = Modifier.fillMaxSize(),

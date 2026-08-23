@@ -36,7 +36,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
 import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
@@ -57,7 +56,6 @@ internal fun filmstripTileTestTag(index: Int) = "filmstrip_tile_$index"
 internal fun Filmstrip(
     items: List<MediaItem>,
     currentPage: Int,
-    credentials: AccountCredentials,
     onPageSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
     lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
@@ -165,7 +163,6 @@ internal fun Filmstrip(
                 ) {
                     MediaAssetImage(
                         item = item,
-                        credentials = credentials,
                         purpose = MediaImagePurpose.TimelineThumbnail,
                         contentDescription = item.displayName,
                         modifier = Modifier.size(width = tileWidth, height = tileHeight),
