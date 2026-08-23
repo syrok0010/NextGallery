@@ -49,7 +49,7 @@ class TimelineUiStateTest {
     private fun mediaItem(fileId: Long, etag: String): MediaItem {
         return MediaItem(
             mediaId = MediaId("remote-$fileId"),
-            fileId = fileId,
+            remoteFileId = fileId,
             dayId = DAY_ID,
             day = LocalDate.ofEpochDay(DAY_ID.toLong()),
             displayName = "file-$fileId",

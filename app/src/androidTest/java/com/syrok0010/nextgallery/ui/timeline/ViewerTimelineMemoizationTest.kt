@@ -96,7 +96,7 @@ class ViewerTimelineMemoizationTest {
     private fun mediaItem(mediaId: MediaId, fileId: Long): MediaItem {
         return MediaItem(
             mediaId = mediaId,
-            fileId = fileId,
+            remoteFileId = fileId,
             dayId = DAY_ID,
             day = LocalDate.ofEpochDay(DAY_ID.toLong()),
             displayName = "file-$fileId",

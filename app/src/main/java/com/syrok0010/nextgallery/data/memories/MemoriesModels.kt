@@ -15,15 +15,15 @@ data class MemoriesConfig(
 )
 
 data class TimelineSnapshot(
-    val config: MemoriesConfig,
+    val config: MemoriesConfig?,
     val days: List<TimelineDay>,
     val slots: List<TimelineSlot>,
     val loadedDayIds: Set<Int>,
     val totalDayCount: Int,
     val totalMediaCountHint: Int,
 ) {
-    val memoriesVersion: String = config.version
-    val timelinePath: String? = config.timelinePath
+    val memoriesVersion: String = config?.version.orEmpty()
+    val timelinePath: String? = config?.timelinePath
     val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
 }
 
@@ -46,7 +46,7 @@ data class TimelineSlotKey(
 
 data class MediaItem(
     val mediaId: MediaId,
-    val fileId: Long,
+    val remoteFileId: Long?,
     val dayId: Int,
     val day: LocalDate,
     val displayName: String,
@@ -70,4 +70,11 @@ sealed interface MediaAssetRef {
     data class MemoriesFile(
         val photoFileId: Long,
     ) : MediaAssetRef
+
+    data class LocalContent(
+        val contentUri: String,
+    ) : MediaAssetRef
 }
+
+val MediaItem.hasRemoteCopy: Boolean
+    get() = assetRef is MediaAssetRef.MemoriesFile

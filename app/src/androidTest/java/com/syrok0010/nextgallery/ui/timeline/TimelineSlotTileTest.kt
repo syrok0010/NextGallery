@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
@@ -15,6 +16,8 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.ui.AppMessageUiState
+import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -79,6 +82,42 @@ class TimelineSlotTileTest {
         )
     }
 
+    @Test
+    fun localOnlyPhotoHasNoCloudIndicatorAndRemainsOpenable() {
+        val localItem = mediaItem(isVideo = false).copy(
+            mediaId = MediaId("local-42"),
+            displayName = "local.jpg",
+            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/42"),
+        )
+
+        showSlot(mediaItem = localItem)
+
+        composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("local.jpg")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun timelineDoesNotOfferDeviceMediaAction() {
+        composeRule.setContent {
+            MaterialTheme {
+                TimelinePanel(
+                    state = TimelineUiState(),
+                    message = AppMessageUiState(),
+                    credentials = CREDENTIALS,
+                    onViewportObservation = {},
+                    revealMediaId = null,
+                    onMediaRevealed = {},
+                    registerTimelineTile = { _, _ -> noOpUnregister },
+                    onSelect = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Фото с устройства").assertDoesNotExist()
+    }
+
     private fun showSlot(mediaItem: MediaItem?) {
         composeRule.setContent {
             MaterialTheme {
@@ -99,7 +138,7 @@ class TimelineSlotTileTest {
 
     private fun mediaItem(isVideo: Boolean): MediaItem = MediaItem(
         mediaId = MediaId("remote-42"),
-        fileId = 42,
+        remoteFileId = 42,
         dayId = DAY_ID,
         day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "remote.jpg",

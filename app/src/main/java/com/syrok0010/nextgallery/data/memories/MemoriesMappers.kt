@@ -25,7 +25,7 @@ fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
 
     return MediaItem(
         mediaId = mediaId,
-        fileId = fileid,
+        remoteFileId = fileid,
         dayId = dayid,
         day = LocalDate.ofEpochDay(dayid.toLong()),
         displayName = basename ?: "file-$fileid",

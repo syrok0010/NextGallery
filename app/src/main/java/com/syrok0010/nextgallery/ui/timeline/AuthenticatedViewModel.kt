@@ -6,6 +6,11 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
+import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.data.local.LocalMediaSource
+import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionUiState
@@ -25,15 +30,18 @@ data class AuthenticatedUiState(
     val timeline: TimelineUiState = TimelineUiState(),
     val isBusy: Boolean = false,
     val message: AppMessageUiState = AppMessageUiState(),
+    val localMediaPermissionMode: LocalMediaPermissionMode? = null,
 )
 
 class AuthenticatedViewModel(
     private val sessionStore: SessionStore,
     private val credentialsStore: CredentialsStore,
     private val memoriesRepository: MemoriesRepository,
+    private val localMediaSource: LocalMediaSource,
 ) : ViewModel() {
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
+    private var timelineSources = TimelineSources()
 
     private val timelineViewportController: TimelineViewportController =
         DefaultTimelineViewportController(
@@ -49,7 +57,12 @@ class AuthenticatedViewModel(
 
                 override fun updateTimeline(transform: (TimelineUiState) -> TimelineUiState) {
                     _state.update { state ->
-                        state.copy(timeline = transform(state.timeline))
+                        val transformed = transform(state.timeline)
+                        state.copy(
+                            timeline = transformed.copy(
+                                snapshot = timelineSources.projectedSnapshot() ?: transformed.snapshot,
+                            ),
+                        )
                     }
                 }
 
@@ -66,7 +79,23 @@ class AuthenticatedViewModel(
                 override suspend fun loadTimelineDays(
                     credentials: AccountCredentials,
                     dayIds: List<Int>,
-                ) = memoriesRepository.loadTimelineDays(credentials, dayIds)
+                ): List<MediaItem> {
+                    val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
+                    updateTimelineSources(
+                        transform = { sources ->
+                            sources.copy(
+                                remote = sources.remote?.let { snapshot ->
+                                    TimelineSnapshotAssembler.mergeLoadedItems(
+                                        snapshot = snapshot,
+                                        items = items,
+                                        loadedDayIds = dayIds.toSet(),
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    return items
+                }
             },
         )
 
@@ -78,6 +107,15 @@ class AuthenticatedViewModel(
 
     fun refresh() {
         state.value.credentials?.let(::loadTimeline)
+    }
+
+    fun onLocalMediaPermissionChanged(mode: LocalMediaPermissionMode) {
+        when (mode) {
+            LocalMediaPermissionMode.Full -> loadLocalMedia()
+            LocalMediaPermissionMode.Partial,
+            LocalMediaPermissionMode.Denied,
+            -> removeLocalMedia(mode)
+        }
     }
 
     fun logout() {
@@ -108,6 +146,7 @@ class AuthenticatedViewModel(
     private fun onSessionChanged(session: SessionUiState) {
         when (session) {
             SessionUiState.SignedOut -> {
+                timelineSources = TimelineSources()
                 _state.value = AuthenticatedUiState()
             }
 
@@ -139,9 +178,11 @@ class AuthenticatedViewModel(
             if (canShowCachedTimeline) {
                 memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
                     showedCachedTimeline = true
-                    _state.update { state ->
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(remote = cachedSnapshot) },
+                    ) { state, projectedSnapshot ->
                         state.copy(
-                            timeline = TimelineUiState(snapshot = cachedSnapshot),
+                            timeline = TimelineUiState(snapshot = projectedSnapshot),
                             message = AppMessageUiState(
                                 status = uiText(
                                     R.string.status_loaded_timeline_index,
@@ -156,10 +197,12 @@ class AuthenticatedViewModel(
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
                 .onSuccess { snapshot ->
-                    _state.update { state ->
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(remote = snapshot) },
+                    ) { state, projectedSnapshot ->
                         state.copy(
                             credentials = credentials,
-                            timeline = state.timeline.withRefreshedSnapshot(snapshot),
+                            timeline = state.timeline.withRefreshedSnapshot(projectedSnapshot ?: snapshot),
                             isBusy = false,
                             message = AppMessageUiState(
                                 status = uiText(R.string.status_loaded_timeline_index, snapshot.totalMediaCountHint),
@@ -181,8 +224,61 @@ class AuthenticatedViewModel(
         }
     }
 
+    private fun loadLocalMedia() {
+        viewModelScope.launch {
+            _state.update { state ->
+                state.copy(localMediaPermissionMode = LocalMediaPermissionMode.Full)
+            }
+            runCatching { localMediaSource.readAll() }
+                .onSuccess { items ->
+                    updateTimelineSources(
+                        transform = { sources -> sources.copy(local = items) },
+                    )
+                }
+                .onFailure {
+                    _state.update { state ->
+                        state.copy(
+                            message = AppMessageUiState(error = uiText(R.string.error_load_local_media_failed)),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun removeLocalMedia(permissionMode: LocalMediaPermissionMode) {
+        updateTimelineSources(
+            transform = { sources -> sources.copy(local = emptyList()) },
+        ) { state, projectedSnapshot ->
+            state.copy(
+                timeline = state.timeline.copy(snapshot = projectedSnapshot),
+                localMediaPermissionMode = permissionMode,
+            )
+        }
+    }
+
+    private fun updateTimelineSources(
+        transform: (TimelineSources) -> TimelineSources,
+        updateState: (AuthenticatedUiState, TimelineSnapshot?) -> AuthenticatedUiState = { state, snapshot ->
+            state.copy(timeline = state.timeline.copy(snapshot = snapshot))
+        },
+    ) {
+        timelineSources = transform(timelineSources)
+        val projectedSnapshot = timelineSources.projectedSnapshot()
+        _state.update { state -> updateState(state, projectedSnapshot) }
+    }
+
     override fun onCleared() {
         timelineViewportController.cancel()
         super.onCleared()
     }
+}
+
+private data class TimelineSources(
+    val remote: TimelineSnapshot? = null,
+    val local: List<MediaItem> = emptyList(),
+) {
+    fun projectedSnapshot(): TimelineSnapshot? =
+        remote?.let { TimelineSnapshotAssembler.addSourceItems(it, local) }
+            ?: local.takeIf { it.isNotEmpty() }
+                ?.let(TimelineSnapshotAssembler::assembleLocal)
 }

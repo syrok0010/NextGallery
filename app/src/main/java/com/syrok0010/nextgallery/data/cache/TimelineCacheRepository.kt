@@ -53,7 +53,10 @@ class TimelineCacheRepository(
         val now = System.currentTimeMillis()
 
         database.withTransaction {
-            dao.upsertMetadata(snapshot.config.toCacheMetadataEntity(normalizedServerUrl, now))
+            dao.upsertMetadata(
+                requireNotNull(snapshot.config) { "Only a Memories timeline can be cached" }
+                    .toCacheMetadataEntity(normalizedServerUrl, now),
+            )
             dao.deleteTimelineDays()
             dao.upsertTimelineDays(snapshot.days.mapIndexed { index, day -> day.toEntity(index) })
 
@@ -89,21 +92,49 @@ class TimelineCacheRepository(
     }
 
     suspend fun resolveRemoteMediaIds(fileIds: Collection<Long>): Map<Long, MediaId> {
-        if (fileIds.isEmpty()) {
-            return emptyMap()
+        val identities = fileIds.associateWith { fileId ->
+            MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
         }
+        val mediaIds = resolveMediaIds(identities.values)
+        return identities.mapValues { (_, identity) -> mediaIds.getValue(identity) }
+    }
 
-        val distinctFileIds = fileIds.toSet()
+    suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId> {
+        val identities = contentUris.associateWith { contentUri ->
+            MediaSourceIdentity(MediaSourceKind.Local, contentUri)
+        }
+        val mediaIds = resolveMediaIds(identities.values)
+        return identities.mapValues { (_, identity) -> mediaIds.getValue(identity) }
+    }
+
+    suspend fun resolveMediaIds(identities: Collection<MediaSourceIdentity>): Map<MediaSourceIdentity, MediaId> {
+        if (identities.isEmpty()) return emptyMap()
+
+        val distinctIdentities = identities.toSet()
         return database.withTransaction {
-            val existingIds = dao.remoteMediaIdentities(distinctFileIds)
-                .associate { it.fileId to MediaId(it.mediaId) }
-            val missingIdentities = distinctFileIds
+            val existingIds = distinctIdentities
+                .groupBy { it.source }
+                .values
+                .flatMap { sourceIdentities ->
+                    dao.mediaIdentities(
+                        source = sourceIdentities.first().source.name,
+                        sourceKeys = sourceIdentities.map { it.sourceKey },
+                    )
+                }
+                .associate { entity ->
+                    MediaSourceIdentity(MediaSourceKind.valueOf(entity.source), entity.sourceKey) to MediaId(entity.mediaId)
+                }
+            val missingIdentities = distinctIdentities
                 .filterNot(existingIds::containsKey)
                 .associateWith { mediaIdFactory() }
             if (missingIdentities.isNotEmpty()) {
-                dao.upsertRemoteMediaIdentities(
-                    missingIdentities.map { (fileId, mediaId) ->
-                        RemoteMediaIdentityEntity(fileId = fileId, mediaId = mediaId.value)
+                dao.upsertMediaIdentities(
+                    missingIdentities.map { (identity, mediaId) ->
+                        MediaIdentityEntity(
+                            source = identity.source.name,
+                            sourceKey = identity.sourceKey,
+                            mediaId = mediaId.value,
+                        )
                     },
                 )
             }
@@ -197,7 +228,7 @@ class TimelineCacheRepository(
             dao.deleteAllThumbnailRows()
             dao.deleteAllLoadedDays()
             dao.deleteAllMediaItems()
-            dao.deleteAllRemoteMediaIdentities()
+            dao.deleteAllMediaIdentities()
             dao.deleteAllTimelineDays()
             dao.deleteMetadata()
         }

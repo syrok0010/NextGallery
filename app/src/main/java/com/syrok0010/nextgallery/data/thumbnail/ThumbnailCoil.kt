@@ -10,6 +10,7 @@ import coil3.fetch.SourceFetchResult
 import coil3.key.Keyer
 import coil3.memory.MemoryCache
 import coil3.request.Options
+import coil3.video.VideoFrameDecoder
 import com.syrok0010.nextgallery.data.cache.ThumbnailFileStore
 import java.io.File
 import okio.Path.Companion.toPath
@@ -23,6 +24,7 @@ internal fun createNextGalleryImageLoader(
         .components {
             add(ThumbnailRequestKeyer)
             add(ThumbnailFetcher.Factory(thumbnailBatchLoader, thumbnailFileStore))
+            add(VideoFrameDecoder.Factory())
         }
         .memoryCache {
             MemoryCache.Builder()

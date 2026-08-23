@@ -17,17 +17,26 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
 import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @Composable
 internal fun HomeScreen(
     viewerTransitionCoordinator: ViewerTransitionCoordinator,
     viewModel: AuthenticatedViewModel = koinViewModel(),
+    permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
 ) {
     val state by viewModel.state.collectAsState()
+    LocalMediaPermissionFlow(
+        isSignedIn = state.credentials != null,
+        permissionMode = state.localMediaPermissionMode,
+        permissionCoordinator = permissionCoordinator,
+        onPermissionModeChanged = viewModel::onLocalMediaPermissionChanged,
+    )
     val credentials = state.credentials ?: run {
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return

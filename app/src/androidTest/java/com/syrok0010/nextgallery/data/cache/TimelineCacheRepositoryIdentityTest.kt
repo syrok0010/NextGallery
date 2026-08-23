@@ -39,6 +39,37 @@ class TimelineCacheRepositoryIdentityTest {
     }
 
     @Test
+    fun localContentUriKeepsMediaIdAcrossRepositoryInstances() = runBlocking {
+        val first = repository.resolveLocalMediaIds(listOf(LOCAL_CONTENT_URI))
+
+        database.close()
+        openRepository(mediaIdFactory = { error("Existing local identity must not generate a new MediaId") })
+
+        val second = repository.resolveLocalMediaIds(listOf(LOCAL_CONTENT_URI))
+
+        assertEquals(first[LOCAL_CONTENT_URI], second[LOCAL_CONTENT_URI])
+    }
+
+    @Test
+    fun sourceIdentityIsStableAndScopedBySource() = runBlocking {
+        database.close()
+        val generatedIds = listOf(MediaId("remote-id"), MediaId("local-id")).iterator()
+        openRepository(mediaIdFactory = generatedIds::next)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val local = MediaSourceIdentity(MediaSourceKind.Local, "42")
+
+        val first = repository.resolveMediaIds(listOf(remote, local))
+
+        database.close()
+        openRepository(mediaIdFactory = { error("Existing identities must not generate new MediaIds") })
+
+        val second = repository.resolveMediaIds(listOf(remote, local))
+
+        assertEquals(first, second)
+        assertEquals(2, first.values.toSet().size)
+    }
+
+    @Test
     fun remoteMediaIdSurvivesDatabaseReopenAndNetworkRefresh() = runBlocking {
         val firstMediaId = repository.resolveRemoteMediaIds(
             fileIds = listOf(FILE_ID),
@@ -96,7 +127,7 @@ class TimelineCacheRepositoryIdentityTest {
 
     private fun mediaItem(mediaId: MediaId) = MediaItem(
         mediaId = mediaId,
-        fileId = FILE_ID,
+        remoteFileId = FILE_ID,
         dayId = DAY_ID,
         day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "IMG_0042.jpg",
@@ -117,6 +148,7 @@ class TimelineCacheRepositoryIdentityTest {
     )
 
     private companion object {
+        const val LOCAL_CONTENT_URI = "content://media/external/images/media/42"
         const val DATABASE_NAME = "timeline-cache-identity-test.db"
         const val DAY_ID = 19_870
         const val FILE_ID = 42L

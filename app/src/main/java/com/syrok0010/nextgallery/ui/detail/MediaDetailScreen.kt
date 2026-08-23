@@ -70,12 +70,10 @@ import coil3.Image
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
 import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.common.AuthenticatedImage
-import com.syrok0010.nextgallery.ui.common.ThumbnailImage
-import com.syrok0010.nextgallery.ui.common.authenticatedImageRequest
+import com.syrok0010.nextgallery.ui.common.MediaAssetImage
+import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
+import com.syrok0010.nextgallery.ui.common.mediaImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
@@ -352,20 +350,6 @@ private fun MediaViewerPage(
     onZoomedOutChange: (Boolean) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
 ) {
-    val imageUrls = remember(item.assetRef, credentials.serverUrl) {
-        MemoriesAssetUrlFactory.urlsFor(
-            assetRef = item.assetRef,
-            serverUrl = credentials.serverUrl,
-        )
-    }
-    val thumbnail = remember(credentials, item.fileId, item.etag) {
-        thumbnailRequest(
-            credentials = credentials,
-            fileId = item.fileId,
-            etag = item.etag,
-        )
-    }
-
     val shouldUpdateSurfaceBounds = isCurrentPage &&
         dragOffset == Offset.Zero &&
         predictiveBackProgress == 0f &&
@@ -415,16 +399,10 @@ private fun MediaViewerPage(
                         }
                     },
             ) {
-                ThumbnailImage(
-                    request = thumbnail,
-                    contentDescription = item.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
-
-                AuthenticatedImage(
-                    url = imageUrls.detailPreviewUrl,
+                MediaAssetImage(
+                    item = item,
                     credentials = credentials,
+                    purpose = MediaImagePurpose.DetailPreview,
                     contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
@@ -445,12 +423,8 @@ private fun MediaViewerPage(
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
-            val originalRequest = remember(context, imageUrls.originalUrl, credentials) {
-                authenticatedImageRequest(
-                    context = context,
-                    url = imageUrls.originalUrl,
-                    credentials = credentials,
-                )
+            val originalRequest = remember(context, item.assetRef, credentials) {
+                mediaImageRequest(context, item, credentials, MediaImagePurpose.Original)
                     .newBuilder(context)
                     .listener(
                         onSuccess = { _, result ->
@@ -484,8 +458,10 @@ private fun MediaViewerPage(
                             }
                         },
                 ) {
-                    ThumbnailImage(
-                        request = thumbnail,
+                    MediaAssetImage(
+                        item = item,
+                        credentials = credentials,
+                        purpose = MediaImagePurpose.DetailPreview,
                         contentDescription = item.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,

@@ -215,7 +215,7 @@ class TimelineViewportControllerTest {
     private fun mediaItem(fileId: Long, dayId: Int): MediaItem {
         return MediaItem(
             mediaId = MediaId("remote-$fileId"),
-            fileId = fileId,
+            remoteFileId = fileId,
             dayId = dayId,
             day = LocalDate.ofEpochDay(dayId.toLong()),
             displayName = "file-$fileId",
