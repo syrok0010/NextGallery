@@ -35,6 +35,54 @@ class TimelineScrollAnchorTest {
     val composeRule = createComposeRule()
 
     @Test
+    fun addingRemoteMediaDuringInitialLoadKeepsViewportAtTimelineTop() {
+        val local = mediaItem("local", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000L)
+        val remoteOnly = mediaItem(
+            "remote-only",
+            dayId = 20_001,
+            takenAtEpochSeconds = 1_728_086_400L,
+        )
+        val gridItemsState = mutableStateOf(gridItems(listOf(local)))
+        val gridStateRef = AtomicReference<LazyGridState>()
+
+        composeRule.setContent {
+            val gridState = rememberLazyGridState()
+            val gridItems = gridItemsState.value
+            SideEffect { gridStateRef.set(gridState) }
+            PreserveTimelineScrollAnchor(
+                gridItems = gridItems,
+                gridState = gridState,
+                isScrollNavigationActive = false,
+            )
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(1),
+                state = gridState,
+                modifier = Modifier.size(width = 320.dp, height = 400.dp),
+            ) {
+                items(items = gridItems, key = TimelineGridItem::key) { item ->
+                    Box(
+                        modifier = Modifier.height(
+                            if (item is TimelineGridItem.DayHeader) 32.dp else 96.dp,
+                        ),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.runOnIdle {
+            gridItemsState.value = gridItems(listOf(remoteOnly, local))
+        }
+        composeRule.waitUntil {
+            gridStateRef.get().layoutInfo.visibleItemsInfo.firstOrNull()?.key ==
+                "day-header:${remoteOnly.dayId}"
+        }
+
+        assertEquals(0, gridStateRef.get().firstVisibleItemIndex)
+        assertEquals(0, gridStateRef.get().firstVisibleItemScrollOffset)
+    }
+
+    @Test
     fun addingMediaAboveViewportKeepsVisibleMediaAtTheSameOffset() {
         val initialMedia = mediaRange()
         val anchor = initialMedia[4]

@@ -12,6 +12,41 @@ import org.junit.Test
 
 class TimelineScrollAnchorControllerTest {
     @Test
+    fun `adding remote media during initial load keeps viewport at timeline top`() {
+        val controller = TimelineScrollAnchorController()
+        val local = mediaItem("local", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
+        val initialItems = gridItems(local)
+        val remoteOnly = mediaItem(
+            "remote-only",
+            dayId = 20_001,
+            takenAtEpochSeconds = 1_728_086_400,
+        )
+
+        val restoration = controller.restorationForUpdate(
+            previousGridItems = initialItems,
+            newGridItems = gridItems(remoteOnly, local),
+            visibleItems = listOf(
+                TimelineVisibleGridItem(
+                    gridIndex = 0,
+                    key = initialItems[0].key,
+                    viewportOffsetPx = 0,
+                ),
+                TimelineVisibleGridItem(
+                    gridIndex = 1,
+                    key = "media:${local.mediaId.value}",
+                    viewportOffsetPx = 32,
+                ),
+            ),
+            isRestorationAllowed = true,
+        )
+
+        requireNotNull(restoration)
+        assertNull(restoration.mediaId)
+        assertEquals(0, restoration.gridIndex)
+        assertEquals(0, restoration.scrollOffsetPx)
+    }
+
+    @Test
     fun `adding media above viewport restores the same media and pixel offset`() {
         val controller = TimelineScrollAnchorController()
         val anchor = mediaItem("anchor", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)

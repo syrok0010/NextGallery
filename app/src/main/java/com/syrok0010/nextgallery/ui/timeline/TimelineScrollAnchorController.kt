@@ -9,7 +9,7 @@ internal data class TimelineVisibleGridItem(
 )
 
 internal data class TimelineScrollRestoration(
-    val mediaId: MediaId,
+    val mediaId: MediaId?,
     val gridIndex: Int,
     val scrollOffsetPx: Int,
 )
@@ -23,6 +23,13 @@ internal class TimelineScrollAnchorController {
     ): TimelineScrollRestoration? {
         if (!isRestorationAllowed) {
             return null
+        }
+        if (visibleItems.isAtTimelineStart()) {
+            return TimelineScrollRestoration(
+                mediaId = null,
+                gridIndex = 0,
+                scrollOffsetPx = 0,
+            )
         }
 
         val previousItemsByKey = previousGridItems.associateBy(TimelineGridItem::key)
@@ -65,6 +72,9 @@ internal class TimelineScrollAnchorController {
         )
     }
 }
+
+private fun List<TimelineVisibleGridItem>.isAtTimelineStart(): Boolean =
+    any { item -> item.gridIndex == 0 && item.viewportOffsetPx >= 0 }
 
 private data class TimelineScrollAnchor(
     val mediaId: MediaId,
