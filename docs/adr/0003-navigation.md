@@ -6,53 +6,46 @@
 
 ## Контекст
 
-Проект стартует на Jetpack Compose. Автор хочет изучать современную Android-разработку и открыт к bleeding edge, если это упрощает жизнь.
+Приложению нужна Compose-first навигация, где авторизация определяет корневой экран, а viewer остаётся связан с живым timeline и shared transition.
 
-Navigation3 уже существует как современный вариант навигации для Compose. По состоянию на 2026-06-02 последняя stable-версия Navigation3 в AndroidX release notes - `1.1.2`; `1.2.0-alpha03` не берем, потому что это alpha.
+## Критерии выбора
 
-Release notes:
+- Back stack принадлежит приложению, а не отдельным composable.
+- Signed-out и authenticated root states взаимоисключаемы.
+- Viewer сохраняет timeline/grid под собой.
+- Route identity использует `MediaId`, а не source identifiers.
 
-- https://developer.android.com/jetpack/androidx/releases/navigation3
+## Альтернативы
+
+### Navigation Compose
+
+Зрелый вариант, но проект выбрал современную модель явного back stack Navigation3.
+
+### Отдельный route для каждого состояния viewer
+
+Упрощает URL-подобную модель, но разрывает координатор grid/viewer transition и live timeline state.
 
 ## Решение
 
-Использовать Navigation3 stable:
+Использовать стабильную Navigation3 через `NavKey`, `rememberNavBackStack` и `NavDisplay`.
 
-```text
-androidx.navigation3:navigation3-runtime:1.1.2
-androidx.navigation3:navigation3-ui:1.1.2
-```
-
-Для MVP использовать `NavKey`, `rememberNavBackStack` и `NavDisplay`. Текущий root route-набор:
+Корневые routes:
 
 ```text
 Login
 Authenticated
 ```
 
-## Почему не classic Navigation Compose по умолчанию
+`SessionUiState` синхронизирует root back stack. Viewer отображается поверх authenticated timeline и адресуется по `MediaId`; `ViewerTransitionCoordinator` связывает tile bounds, reveal и закрытие viewer.
 
-Проект учебный и современный. Если Navigation3 уже дает более чистую модель back stack для Compose, есть смысл изучать сразу ее.
+Версия Navigation3 определяется version catalog, а не дублируется в ADR.
 
-Но выбор должен быть инженерным, а не модным: если API мешает быстро собрать tracer bullet, стабильный простой путь важнее.
+## Последствия
 
-## Первые экраны
-
-MVP-1:
-
-```text
-ConnectServerScreen
-LoginProgressScreen
-TimelineScreen
-MediaDetailScreen
-SettingsScreen
-```
-
-На текущем tracer bullet login, timeline и viewer живут внутри соответствующего root route.
-Viewer показывается поверх timeline для симметричного перехода, а его target state адресуется по
-`MediaId`.
+- Logout атомарно возвращает приложение к signed-out root.
+- Timeline state не уничтожается отдельным detail route во время просмотра.
+- Deep links и самостоятельная route-модель viewer потребуют отдельного решения.
 
 ## Открытые вопросы
 
-- Как Navigation3 лучше хранить состояние detail/timeline scroll position?
-- Нужны ли deep links на media item в MVP-1?
+- Нужны ли deep links на медиаобъект?

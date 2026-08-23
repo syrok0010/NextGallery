@@ -1,143 +1,73 @@
-# ADR 0010: MVP-1 warm-start cache policy
+# ADR 0010: Warm-start cache policy
 
 ## Статус
 
-Принято.
+Принято и расширено для unified timeline.
 
 ## Контекст
 
-MVP-1 строится как remote-first клиент для Nextcloud/Memories. Пользователь должен быстро видеть familiar timeline после запуска приложения, но проект пока не обещает полноценный offline mode и не строит sync engine.
-
-Текущая реализация уже загружает:
-
-- Memories timeline index через `/apps/memories/api/days`;
-- day details metadata через `/apps/memories/api/days/{ids}`;
-- thumbnail bytes через `/apps/memories/api/image/multipreview`.
-
-Без локального cache после перезапуска приложение снова ждет сеть даже для уже просмотренной части timeline. При этом в проекте действует dev-допущение: приложение установлено только на одном устройстве автора, миграции и backward compatibility локальной схемы пока не требуются, destructive reset локального cache допустим.
+Приложение должно быстро показать доступную часть медиатеки до завершения сети и MediaStore reconciliation, но пока не обещает полный offline archive или sync engine.
 
 ## Критерии выбора
 
-- Ускорить warm start timeline после перезапуска.
-- Не обещать offline mode, download queue или sync status.
-- Сохранить путь к будущему sync/local media без миграции с временного JSON cache.
-- Не хранить credentials вместе с cache.
-- Не проектировать multi-account cache namespace в MVP-1.
-- Разрешить destructive reset cache schema на MVP/dev этапе.
-- Не усложнять UI скрытыми TTL-правилами.
+- Cached local и remote projections публикуются независимо.
+- MediaStore и Nextcloud/Memories остаются sources of truth.
+- Cache loss не уничтожает пользовательские оригиналы.
+- Credentials хранятся отдельно.
+- Logout удаляет всё cloud-состояние и сохраняет device-scoped local index.
+- Local thumbnails не дублируются в собственном файловом cache.
+- Room schema можно разрушительно сбрасывать на текущем dev-этапе.
 
 ## Альтернативы
 
-### Memory-only cache
+### Memory-only
 
-Плюсы:
+Не даёт warm start после перезапуска.
 
-- Почти нет storage-кода.
-- Нет схемы и invalidation.
+### JSON snapshot
 
-Минусы:
+Прост для одного состояния, но неудобен для day details, local batches, identity joins и thumbnail index.
 
-- Не решает warm start после перезапуска.
-- Не выполняет MVP-пункт про базовый локальный cache metadata и thumbnails.
+### Room + отдельные thumbnail files
 
-Вывод: недостаточно.
-
-### JSON-файл для metadata
-
-Плюсы:
-
-- Быстро реализовать.
-- Хорошо подходит для snapshot-style cache.
-- Не требует Room schema.
-
-Минусы:
-
-- Потом придется переносить данные в DB для sync/local media.
-- Сложнее делать выборки по `dayId`, `fileId`, loaded days и thumbnail index.
-- Менее полезный задел для будущего timeline cache.
-
-Вывод: приемлемо для прототипа, но слабее как фундамент.
-
-### Room для metadata и thumbnail index
-
-Плюсы:
-
-- Хороший задел на будущий sync/local media.
-- Удобные выборки по day/file/cache key.
-- Timeline cache получает явный storage seam.
-- Можно хранить metadata отдельно от binary thumbnail bytes.
-
-Минусы:
-
-- Больше кода на старте: entities, DAO, database, mappers.
-- Схема появляется раньше.
-- Нужно явно договориться, что migration guarantees пока нет.
-
-Вывод: выбрать Room, но разрешить destructive reset schema на MVP/dev этапе.
+Даёт запросы и lifecycle по типам данных, не помещая binary bytes в database.
 
 ## Решение
 
-Использовать **warm-start cache**, не offline mode.
+Использовать одну `NextGalleryDatabase` с отдельными DAO/lifecycle для:
 
-Кешируем в MVP-1:
+- Memories timeline index и materialized day metadata;
+- MediaStore projection;
+- persistent media identity и conflicts;
+- remote thumbnail index.
 
-- timeline index из `/apps/memories/api/days`;
-- day details metadata из `/apps/memories/api/days/{ids}`;
-- thumbnail bytes из `/apps/memories/api/image/multipreview`.
+Remote thumbnail bytes хранятся в `ThumbnailFileStore`. Local images читаются через MediaStore `content://`, а Coil cache key учитывает URI и `DATE_MODIFIED`.
 
-Не кешируем в MVP-1:
+На старте cached local projection и cached Memories metadata публикуются без ожидания refresh. MediaStore reconciliation и Memories refresh независимо обновляют `UnifiedTimelineProjection`.
 
-- detail previews `1600x1600`;
-- originals/download/stream;
-- video transcode/livephoto;
-- albums/people/tags/places.
+Offline remote timeline включает только materialized objects с достаточными metadata. Index-only slots скрываются; отсутствие cached thumbnail оставляет объект в timeline как placeholder.
 
-Storage:
+Не кешируются как отдельная продуктовая гарантия:
 
-- metadata/index хранить в Room;
-- использовать одну `NextGalleryDatabase`, но разделять Room DAO по lifecycle данных: Memories timeline, local MediaStore projection, media identity и remote thumbnails;
-- thumbnail bytes хранить отдельными файлами в cache directory;
-- в Room хранить thumbnail index: `fileId`, width, height, mime type, cache key/path и `cachedAt`;
-- credentials остаются в secure credentials store, не в cache DB.
-- cache проектировать для текущего единственного аккаунта; multi-account не планируется для MVP-1.
+- detail previews и originals;
+- video transcodes и live-photo streams;
+- albums, people, tags и places;
+- полный remote archive.
 
-Policy:
+Logout очищает credentials, Memories metadata, remote thumbnails и remote identity bindings. Device-scoped MediaStore projection и local `MediaId` сохраняются, но signed-out UI их не показывает.
 
-- на старте, если есть cached timeline для текущего аккаунта, показать его сразу;
-- параллельно запустить network refresh `/config + /days`;
-- cached loaded days показывать сразу;
-- если пользователь скроллит к дню, которого нет в cache, грузить day details из сети и сохранять;
-- если день уже есть в cache, не перезагружать его автоматически в MVP-1;
-- manual refresh обновляет timeline index из сети;
-- если при refresh у дня изменился `count`, cached day details для этого дня можно удалить или пометить stale;
-- logout удаляет credentials, cloud metadata, remote thumbnail files и account-scoped связи;
-- logout сохраняет device-scoped MediaStore index и persistent `MediaId`, но signed-out UI не показывает локальную библиотеку;
-- после следующего входа сохраненная локальная проекция заново объединяется с cloud timeline подключенного аккаунта;
-- schema changes могут делать destructive reset cache DB, пока действует dev-допущение;
-- TTL в MVP-1 не вводить.
-
-Для unified timeline с локальными фото при отсутствии сети:
-
-- облачный медиаобъект показывается, только если в cache есть его metadata, достаточные для identity, дедупликации и положения в timeline;
-- отсутствие cached thumbnail не скрывает объект: тайл показывает placeholder с признаком облачной копии;
-- index-only remote slots без metadata не показываются, потому что их нельзя дедуплицировать с локальными копиями или точно встроить в общий порядок;
-- после восстановления сети загруженные metadata и thumbnails дополняют timeline.
-
-Локальные thumbnails не копируются в `ThumbnailFileStore`: image loader читает их по MediaStore `content://` URI и использует собственные memory/disk caches. `ThumbnailFileStore` остается хранилищем remote previews, которым нужны authenticated requests и warm-start cache. Ключ локального thumbnail учитывает identity локальной копии и `DATE_MODIFIED`, чтобы изменение файла инвалидировало изображение.
+Single-account граница описана в product vision: cache обслуживает одно подключение и очищается целиком перед новым Login Flow.
 
 ## Последствия
 
-- Приложение сможет быстро показывать последнюю известную timeline после перезапуска.
-- Cache loss допустим: source of truth остается Nextcloud/Memories.
-- Room появляется как долговечный storage seam раньше sync engine, но без migration guarantees.
-- Thumbnail bytes не раздувают Room DB.
-- Приложение не создает отдельную файловую копию каждого локального thumbnail и не вводит вторую eviction policy поверх MediaStore/image loader.
-- Offline mode остается отдельным будущим решением.
-- Offline unified timeline может показывать только ранее материализованную часть облачного архива, но не содержит постоянных неидентифицируемых placeholders и ложных дублей с локальными фото.
+- Повторный запуск быстро показывает последнюю материализованную часть медиатеки.
+- Offline timeline может быть неполным и не является обещанием offline mode.
+- Room служит durable projection, но migrations пока не гарантируются.
+- Remote thumbnail cache требует отдельной eviction policy.
+- Возврат media permission позволяет повторно связать local copies с прежними `MediaId`.
 
 ## Открытые вопросы
 
-- Когда заменить destructive reset на реальные Room migrations.
-- Какой eviction policy выбрать для thumbnail files после MVP-1.
-- Нужно ли кешировать detail previews, когда detail screen станет богаче.
-- Если multi-account появится после MVP-1, понадобится отдельное решение о per-account cache namespace.
+- Когда ввести Room migrations вместо destructive reset.
+- Какая eviction policy нужна remote thumbnails.
+- Какие данные должны получить явную offline pin/download policy.

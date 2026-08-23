@@ -2,16 +2,21 @@
 
 Проект использует single-context документацию.
 
-Перед архитектурными изменениями читать:
+Перед изменением продуктового поведения читать:
 
 - `docs/product/vision.md`
 - `docs/product/mvp.md`
-- `docs/adr/`
+
+Перед изменением доменной модели или терминов читать `CONTEXT.md`.
+
+Перед архитектурным изменением выбрать затронутое решение по индексу `docs/README.md` и прочитать соответствующий ADR. Все ADR сразу не загружать.
 
 Перед работой с Nextcloud/Memories API читать:
 
 - `docs/research/api-nextcloud.md`
 - `docs/research/api-memories.md`
+
+Перед изменением session, credentials, logout или cloud cache читать раздел `Продуктовые границы` в `docs/product/vision.md` и ближайший ADR.
 
 Документация пишется по-русски, если пользователь не попросил иначе.
 

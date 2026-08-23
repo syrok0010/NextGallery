@@ -6,113 +6,44 @@
 
 ## Контекст
 
-Memories API разделяет timeline на два уровня:
-
-```text
-GET /apps/memories/api/days       -> индекс дней: dayid, count
-GET /apps/memories/api/days/{ids} -> metadata элементов выбранных дней
-```
-
-Галерея должна быстро показывать структуру сетки при скролле, а metadata и thumbnails могут догружаться позже. Текущая реализация грубо загружала первые N дней сразу, из-за чего начальная загрузка зависела от количества элементов в первых днях и не использовала `/days` как полноценный индекс.
+Memories разделяет timeline index (`/days`) и metadata выбранных дней (`/days/{ids}`). Grid должен быстро получить форму большого архива, а details и thumbnails — загружаться по viewport.
 
 ## Критерии выбора
 
-- Сетка должна появляться быстро после загрузки `/days`.
-- Повторно загружать уже загруженные дни нельзя без необходимости.
-- Ошибка дозагрузки не должна ломать уже показанную timeline.
-- Решение должно оставаться понятным без Paging 3 и Room, пока cache/offline policy не выбрана.
-- Архитектура должна оставить путь к thumbnail batching и metadata cache.
+- Index появляется без загрузки всех day details.
+- Уже загруженные дни не запрашиваются повторно без причины.
+- Ошибка hydration не сбрасывает показанный timeline.
+- Metadata loading не управляет lifecycle thumbnail requests.
+- Решение сохраняет scroll anchor и работает с unified local/remote projection.
 
 ## Альтернативы
 
-### Append-only загрузка дней
+### Append-only список
 
-Загружать несколько дней, добавлять реальные `MediaItem` в конец списка и при скролле догружать следующие.
-
-Плюсы:
-
-- Проще состояние.
-- Меньше placeholder-логики.
-
-Минусы:
-
-- Сетка растет кусками и хуже похожа на привычную галерею.
-- Пользователь не видит структуру архива до загрузки details.
-- Scroll position хуже отражает размер timeline.
-
-Вывод: слишком упрощает UX для галереи.
+Проще, но не представляет размер архива и хуже поддерживает быстрое перемещение по timeline.
 
 ### Paging 3
 
-Использовать Jetpack Paging как источник данных для grid.
-
-Плюсы:
-
-- Готовая инфраструктура paging/loading/error.
-- Хорошая интеграция с Compose.
-
-Минусы:
-
-- Memories API не page-number/page-token, а day-index + day-details.
-- Понадобится адаптерный слой, который будет сложнее текущего домена.
-- Рано тащить Paging до решения cache/offline policy.
-
-Вывод: отложить до появления реальной потребности.
-
-### Virtual slots по `/days`
-
-После `/days` построить `TimelineSlot` для каждого ожидаемого элемента. Пока metadata нет, slot рисуется как placeholder. При загрузке `/days/{ids}` slot получает `MediaItem`.
-
-Плюсы:
-
-- Grid появляется почти сразу после индекса дней.
-- Metadata loading отделен от thumbnail loading.
-- Ошибка дозагрузки не сбрасывает уже показанную сетку.
-- Есть естественная единица будущего cache: day details.
-
-Минусы:
-
-- State сложнее, чем простой `List<MediaItem>`.
-- Для очень больших архивов создается много slot-объектов.
-- Если один день содержит тысячи элементов, `/days/{id}` все равно возвращает большой ответ.
-- Detail screen может открывать только уже загруженный `MediaItem`.
+Даёт готовую paging infrastructure, но Memories использует day index/details, а не page token; adapter добавил бы больше состояния, чем убрал.
 
 ## Решение
 
-Использовать virtual slots:
+`TimelineSnapshot` содержит `TimelineDay` и virtual `TimelineSlot`. До загрузки metadata slot остаётся placeholder; materialized item получает ключ по persistent `MediaId`.
 
-```text
-/days -> TimelineDay(dayId, count) -> TimelineSlot(dayId, indexInDay, mediaItem = null)
-/days/{ids} -> MediaItem -> заполнение slots выбранных дней
-```
+`TimelineViewportController` получает видимый диапазон, расширяет prefetch window и загружает отсутствующие day IDs через `MemoriesRepository`. `AuthenticatedViewModel` объединяет результат с `UnifiedTimelineProjection`.
 
-`MainViewModel` держит:
+Thumbnail lifecycle принадлежит Coil и композиции видимых tiles. Общий fetcher независимо объединяет cache misses в multipreview batches.
 
-- `TimelineSnapshot`;
-- `timelineLoadingDayIds`;
-- `timelineFailedDayIds`;
-- `timelineLoadMoreError`.
-
-UI через `LazyGridState` сообщает видимый диапазон slot indexes. ViewModel расширяет диапазон prefetch window, выбирает еще не загруженные и не загружаемые day ids, затем грузит небольшой batch.
+Warm-start metadata и правила offline materialization определены ADR 0010.
 
 ## Последствия
 
-- `/days` становится индексом timeline.
-- Начальная загрузка больше не загружает первые N дней сразу.
-- Grid показывает placeholders до прихода metadata.
-- Placeholder имеет позиционный ключ `dayId/indexInDay`; после гидратации tile адресуется по
-  persistent `MediaId`.
-- Повторная загрузка day details блокируется через `loadedDayIds` и `timelineLoadingDayIds`.
-- При ошибке дозагрузки main timeline остается на экране, ошибка показывается отдельно.
+- Grid может показать структуру remote archive сразу после index.
+- Placeholder имеет позиционный ключ, materialized tile — identity key.
+- Ошибка загрузки дня отображается отдельно от уже доступной медиатеки.
+- Большой день по-прежнему загружается одним server response.
+- Scrollbar navigation и viewer prefetch используют ту же slot coordinate system.
 
 ## Открытые вопросы
 
-- Нужен ли лимит/особая стратегия для дней с тысячами элементов.
-- Когда подключать metadata cache.
-
-## Дополнение: граница загрузки thumbnail
-
-Viewport-controller загружает только day details. Thumbnail-запрос запускает Coil при композиции
-tile в `LazyGrid`; общий Fetcher объединяет близкие по времени cache miss в
-`image/multipreview`. Поэтому состав видимых элементов остаётся ответственностью LazyGrid, а
-batching транспортного endpoint не требует отдельной карты thumbnail-состояния во ViewModel.
+- Нужна ли отдельная стратегия для дней с тысячами элементов.

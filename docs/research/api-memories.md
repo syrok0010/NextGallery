@@ -4,9 +4,7 @@
 
 Memories API должен быть основным API для фотодоменной модели, потому что он уже оперирует timeline, днями, preview, EXIF, альбомами, тегами, people/places и видео как фотопродукт, а не как файловое дерево.
 
-Это выглядит более легким и "воздушным" путем для native-клиента, чем строить всю фотомодель вручную поверх WebDAV.
-
-Репозиторий Memories не выглядит как активно развиваемый продуктовый фронт, но поддерживается обновлениями совместимости. Для NextGallery это приемлемый уровень риска: исходный код Memories можно использовать как практический ориентир, а интеграцию проектировать так, чтобы изолировать возможные изменения API внутри `MemoriesMediaSource`.
+Это легче для native-клиента, чем строить фотомодель вручную поверх WebDAV. API считается внутренним контрактом Memories, поэтому DTO и transport rules изолируются внутри data layer.
 
 ## Что найдено в локальном clone Memories
 
@@ -172,7 +170,7 @@ len bytes image bytes
 - `stackraw`;
 - `imageInfo`.
 
-Для NextGallery это хороший кандидат на входную DTO-модель, но не на доменную модель. Доменная модель должна быть собственной:
+NextGallery использует собственную DTO и преобразует её в доменную модель:
 
 ```text
 RemoteMediaDto -> MediaItem
@@ -203,23 +201,16 @@ RemoteMediaDto -> MediaItem
 - Проверка с app password на живом сервере прошла успешно для базового MVP-1 flow, но degraded network и изменяющийся архив еще не проверены.
 - Нужно проверить версионирование API: есть ли compatibility guarantees.
 
-## Решение на сейчас
+## Текущее применение
 
-Для MVP-1 считать Memories API предпочтительным фотодоменным remote source.
+Memories API является основным фотодоменным remote source.
 
 WebDAV fallback не входит в MVP-1, пока нет конкретного пробела Memories API в проверяемом пользовательском сценарии.
 
-При этом код должен оставаться устроенным так, чтобы fallback можно было добавить позже:
+Текущая граница источников:
 
 ```text
-RemoteMediaSource
-  MemoriesMediaSource
-  NextcloudWebDavMediaSource
+MemoriesRepository -> identified remote projection
+LocalMediaSource   -> identified local projection
+UnifiedTimelineProjection -> published timeline
 ```
-
-## Следующие исследовательские задачи
-
-- Проверить degraded network сценарии: медленная сеть, потеря сети во время lazy loading, thumbnail loading и viewer loading.
-- Проверить изменяющийся архив: добавление/удаление фото на сервере, изменение `count` у дня и invalidation cached day details.
-- Проверить fallback одиночного `/image/preview/{id}` для элементов, пропущенных в `/image/multipreview` response.
-- Изучить текущий Android-клиент Memories глубже: auth, cache, local media, sync hints.

@@ -1,11 +1,11 @@
-# Документация проекта
+# Документация NextGallery
 
 Документы пока пишутся по-русски, потому что на текущем этапе это рабочие материалы автора проекта. Если проект станет публично активным, можно будет добавить английские версии ключевых документов.
 
 ## Продукт
 
 - [Видение](product/vision.md) - что строим, для кого и какие принципы держим.
-- [MVP](product/mvp.md) - первый полезный вертикальный сценарий и границы следующих этапов.
+- [Текущее состояние и этапы](product/mvp.md) - реализованная основа, продуктовые границы и roadmap.
 
 ## Исследования
 
@@ -14,20 +14,13 @@
 
 ## ADR
 
-- [ADR 0001: Базовая архитектура приложения](adr/0001-architecture.md)
-- [ADR 0002: Абстракция источников медиа](adr/0002-media-source-abstraction.md)
+- [ADR 0001: Целевая архитектура и вертикальные срезы](adr/0001-architecture.md)
+- [ADR 0002: Граница источников и identity медиа](adr/0002-media-source-abstraction.md)
 - [ADR 0003: Навигация](adr/0003-navigation.md)
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
 - [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
 - [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
 - [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
-- [ADR 0008: UI по вертикальным slice](adr/0008-ui-vertical-slices.md)
-- [ADR 0009: Типизированный UI session state](adr/0009-typed-ui-session-state.md)
-- [ADR 0010: MVP-1 warm-start cache policy](adr/0010-mvp-cache-policy.md)
+- [ADR 0009: Типизированная session boundary](adr/0009-typed-ui-session-state.md)
+- [ADR 0010: Warm-start cache policy](adr/0010-mvp-cache-policy.md)
 - [ADR 0011: Стек просмотра фото](adr/0011-photo-viewer-stack.md)
-
-## Ближайшие решения
-
-- Проверить degraded network сценарии для remote-first MVP: lazy loading, thumbnails и viewer на медленной/пропадающей сети.
-- Проверить поведение изменяющегося архива: добавление/удаление фото, изменение `count` у дня и invalidation warm-start cache.
-- WebDAV fallback не включать в MVP-1, пока Memories API закрывает проверенный пользовательский flow.

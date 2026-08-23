@@ -8,7 +8,7 @@
 Инструментальные тесты запускаются только для build type `automation`:
 
 ```bash
-./gradlew connectedAutomationAndroidTest
+./gradlew --no-daemon --console=plain :app:connectedAutomationAndroidTest
 ```
 
 Automation-вариант имеет application ID `com.syrok0010.nextgallery.automation` и отдельное
@@ -21,5 +21,5 @@ target package «горячего» debug-приложения и может п�
 Локальные JVM-тесты не обращаются к устройству и запускаются как обычно:
 
 ```bash
-./gradlew testDebugUnitTest
+./gradlew --no-daemon --console=plain :app:testAutomationUnitTest
 ```
