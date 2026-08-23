@@ -14,9 +14,9 @@ internal interface ViewerTransitionCoordinator {
 
     fun open(mediaId: MediaId)
 
-    fun close(mediaId: MediaId)
+    fun close(mediaId: MediaId, isTimelineTargetAvailable: Boolean)
 
-    fun onCurrentItemChanged(mediaId: MediaId)
+    fun onCurrentItemChanged(mediaId: MediaId, isTimelineTargetAvailable: Boolean)
 
     fun onTimelineMediaRevealed()
 
@@ -38,6 +38,7 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
         private set
 
     private var appBounds: Rect? = null
+    private var currentTimelineTargetAvailable = false
     private val timelineTileBoundsProvidersByMediaId = mutableMapOf<MediaId, () -> Rect?>()
 
     override fun onSessionChanged(session: SessionUiState) {
@@ -48,22 +49,26 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
         viewerMediaId = null
         revealMediaId = null
         appBounds = null
+        currentTimelineTargetAvailable = false
         timelineTileBoundsProvidersByMediaId.clear()
     }
 
     override fun open(mediaId: MediaId) {
         viewerMediaId = mediaId
         revealMediaId = null
+        currentTimelineTargetAvailable = true
     }
 
-    override fun close(mediaId: MediaId) {
+    override fun close(mediaId: MediaId, isTimelineTargetAvailable: Boolean) {
         viewerMediaId = null
-        syncRevealTarget(mediaId)
+        currentTimelineTargetAvailable = isTimelineTargetAvailable
+        syncRevealTarget(mediaId, isTimelineTargetAvailable)
     }
 
-    override fun onCurrentItemChanged(mediaId: MediaId) {
+    override fun onCurrentItemChanged(mediaId: MediaId, isTimelineTargetAvailable: Boolean) {
         viewerMediaId = mediaId
-        syncRevealTarget(mediaId)
+        currentTimelineTargetAvailable = isTimelineTargetAvailable
+        syncRevealTarget(mediaId, isTimelineTargetAvailable)
     }
 
     override fun onTimelineMediaRevealed() {
@@ -88,11 +93,13 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
 
     override fun onAppBoundsChanged(bounds: Rect) {
         appBounds = bounds
-        viewerMediaId?.let(::syncRevealTarget)
+        viewerMediaId?.let { mediaId ->
+            syncRevealTarget(mediaId, currentTimelineTargetAvailable)
+        }
     }
 
-    private fun syncRevealTarget(mediaId: MediaId) {
-        revealMediaId = if (timelineTileBounds(mediaId) != null) {
+    private fun syncRevealTarget(mediaId: MediaId, isTimelineTargetAvailable: Boolean) {
+        revealMediaId = if (!isTimelineTargetAvailable || timelineTileBounds(mediaId) != null) {
             null
         } else {
             mediaId
