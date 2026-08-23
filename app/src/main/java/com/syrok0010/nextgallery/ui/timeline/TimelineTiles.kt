@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
 import com.syrok0010.nextgallery.data.memories.hasLocalCopy
@@ -43,6 +42,8 @@ import com.syrok0010.nextgallery.data.memories.hasRemoteCopy
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
 import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
+import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
+import org.koin.compose.koinInject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -71,9 +72,9 @@ internal fun TimelineDayHeader(dayId: Int) {
 @Composable
 internal fun TimelineSlotTile(
     slot: TimelineSlot,
-    credentials: AccountCredentials,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
+    requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val item = slot.mediaItem
     val cloudCopyDescription = stringResource(R.string.media_cloud_copy)
@@ -84,9 +85,9 @@ internal fun TimelineSlotTile(
     } else {
         MediaTile(
             item = item,
-            credentials = credentials,
             cloudCopyDescription = cloudCopyDescription,
             localCopyDescription = localCopyDescription,
+            requestFactory = requestFactory,
             registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
@@ -112,9 +113,9 @@ private fun PlaceholderMediaTile(cloudCopyDescription: String) {
 @Composable
 private fun MediaTile(
     item: MediaItem,
-    credentials: AccountCredentials,
     cloudCopyDescription: String,
     localCopyDescription: String,
+    requestFactory: MediaImageRequestFactory,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -142,11 +143,11 @@ private fun MediaTile(
     ) {
         MediaAssetImage(
             item = item,
-            credentials = credentials,
             purpose = MediaImagePurpose.TimelineThumbnail,
             contentDescription = item.displayName,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
+            requestFactory = requestFactory,
         )
 
         if (item.hasLocalCopy || item.hasRemoteCopy) {

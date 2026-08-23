@@ -22,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.AppMessageUiState
@@ -35,7 +34,6 @@ import com.syrok0010.nextgallery.ui.uiText
 internal fun TimelinePanel(
     state: TimelineUiState,
     message: AppMessageUiState,
-    credentials: AccountCredentials,
     onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealMediaId: MediaId?,
     onMediaRevealed: () -> Unit,
@@ -156,7 +154,6 @@ internal fun TimelinePanel(
                 TimelineGrid(
                     gridItems = gridItems,
                     gridState = gridState,
-                    credentials = credentials,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
                 )

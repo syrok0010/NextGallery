@@ -12,17 +12,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
+import org.koin.compose.koinInject
 
 @Composable
 internal fun TimelineGrid(
     gridItems: List<TimelineGridItem>,
     gridState: LazyGridState,
-    credentials: AccountCredentials,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
+    requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 116.dp),
@@ -46,9 +47,9 @@ internal fun TimelineGrid(
                 is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
                 is TimelineGridItem.Slot -> TimelineSlotTile(
                     slot = item.slot,
-                    credentials = credentials,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
+                    requestFactory = requestFactory,
                 )
             }
         }

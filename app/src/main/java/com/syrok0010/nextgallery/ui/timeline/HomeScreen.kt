@@ -38,7 +38,7 @@ internal fun HomeScreen(
         permissionCoordinator = permissionCoordinator,
         onPermissionModeChanged = viewModel::onLocalMediaPermissionChanged,
     )
-    val credentials = state.credentials ?: run {
+    state.credentials ?: run {
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return
     }
@@ -76,7 +76,6 @@ internal fun HomeScreen(
                 TimelinePanel(
                     state = state.timeline,
                     message = state.message,
-                    credentials = credentials,
                     onViewportObservation = viewModel::observeTimelineViewport,
                     revealMediaId = viewerTransitionCoordinator.revealMediaId,
                     onMediaRevealed = viewerTransitionCoordinator::onTimelineMediaRevealed,
@@ -102,7 +101,6 @@ internal fun HomeScreen(
                     initialMediaId = visibleViewerMediaId,
                     sequence = viewerSequence,
                     tileBoundsForMediaId = viewerTransitionCoordinator::timelineTileBounds,
-                    credentials = credentials,
                     onBack = { currentItem ->
                         viewerTransitionCoordinator.close(
                             mediaId = currentItem.mediaId,

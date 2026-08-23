@@ -22,6 +22,7 @@ import com.syrok0010.nextgallery.data.thumbnail.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionViewModel
 import com.syrok0010.nextgallery.ui.auth.LoginViewModel
+import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
 import com.syrok0010.nextgallery.ui.timeline.AuthenticatedViewModel
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
@@ -62,6 +63,7 @@ val appModule = module {
     single { MemoriesRepository(get(), get(), get(), get()) }
     single { ThumbnailBatchLoader(get()) }
     single { SessionStore(get()) }
+    single { MediaImageRequestFactory(androidContext(), get()) }
 
     viewModelOf(::SessionViewModel)
     viewModelOf(::LoginViewModel)

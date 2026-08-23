@@ -68,13 +68,12 @@ import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
 import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
-import com.syrok0010.nextgallery.ui.common.mediaImageRequestPlan
+import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
 import com.syrok0010.nextgallery.ui.common.rememberFallbackImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -82,13 +81,13 @@ import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
 import java.time.format.DateTimeFormatter
+import org.koin.compose.koinInject
 
 @Composable
 internal fun MediaDetailScreen(
     initialMediaId: MediaId,
     sequence: ViewerSequence,
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
-    credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
@@ -304,7 +303,6 @@ internal fun MediaDetailScreen(
                     } else {
                         null
                     },
-                    credentials = credentials,
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onHdrChange = { hasHdr ->
                         hdrByMediaId[item.mediaId] = hasHdr
@@ -345,12 +343,12 @@ private fun MediaViewerPage(
     settleTarget: ViewerBoundsTransform?,
     settleProgress: Float,
     predictiveTarget: ViewerBoundsTransform?,
-    credentials: AccountCredentials,
     onToggleChrome: () -> Unit,
     onHdrChange: (Boolean) -> Unit,
     onZoomedOutChange: (Boolean) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
 ) {
+    val requestFactory: MediaImageRequestFactory = koinInject()
     val shouldUpdateSurfaceBounds = isCurrentPage &&
         dragOffset == Offset.Zero &&
         predictiveBackProgress == 0f &&
@@ -402,7 +400,6 @@ private fun MediaViewerPage(
             ) {
                 MediaAssetImage(
                     item = item,
-                    credentials = credentials,
                     purpose = MediaImagePurpose.DetailPreview,
                     contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),
@@ -424,9 +421,7 @@ private fun MediaViewerPage(
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
-            val originalPlan = remember(context, item, credentials) {
-                mediaImageRequestPlan(context, item, credentials, MediaImagePurpose.Original)
-            }
+            val originalPlan = requestFactory.rememberPlan(item, MediaImagePurpose.Original)
             val originalRequest = rememberFallbackImageRequest(
                 context = context,
                 plan = originalPlan,
@@ -458,7 +453,6 @@ private fun MediaViewerPage(
                     if (item.assetRef is MediaAssetRef.MemoriesFile) {
                         MediaAssetImage(
                             item = item,
-                            credentials = credentials,
                             purpose = MediaImagePurpose.DetailPreview,
                             contentDescription = item.displayName,
                             modifier = Modifier.fillMaxSize(),

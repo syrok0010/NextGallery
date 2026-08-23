@@ -10,10 +10,12 @@ import coil3.intercept.Interceptor
 import coil3.request.ErrorResult
 import coil3.request.SuccessResult
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
 import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.ui.SessionStore
 import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
@@ -29,19 +31,30 @@ class MediaAssetImageTest {
     val composeRule = createComposeRule()
 
     @Test
+    fun requestFactoryReadsCurrentSessionForEveryNewPlan() {
+        val sessionStore = sessionStore(credentials)
+        val requestFactory = MediaImageRequestFactory(
+            context = InstrumentationRegistry.getInstrumentation().targetContext,
+            sessionStore = sessionStore,
+        )
+        val item = mediaItem(MediaAssetRef.MemoriesFile(42))
+
+        val first = requestFactory.create(item, MediaImagePurpose.Original)
+        sessionStore.signIn(credentials.copy(serverUrl = "https://other.example.com/"))
+        val second = requestFactory.create(item, MediaImagePurpose.Original)
+
+        assertEquals("https://cloud.example.com/apps/memories/api/stream/42", first.primary.data)
+        assertEquals("https://other.example.com/apps/memories/api/stream/42", second.primary.data)
+    }
+
+    @Test
     fun localOriginalUsesTimelineThumbnailAsCachedPlaceholder() {
         val assetRef = MediaAssetRef.LocalContent(
             contentUri = "content://media/external/images/media/42",
             modifiedAtEpochSeconds = 1_700_000_000,
         )
-        val plan = mediaImageRequestPlan(
-            context = InstrumentationRegistry.getInstrumentation().targetContext,
+        val plan = requestFactory().create(
             item = mediaItem(assetRef),
-            credentials = AccountCredentials(
-                serverUrl = "https://cloud.example.com/",
-                loginName = "user",
-                appPassword = "secret",
-            ),
             purpose = MediaImagePurpose.Original,
         )
 
@@ -63,18 +76,12 @@ class MediaAssetImageTest {
             contentUri = "content://media/external/images/media/42",
             modifiedAtEpochSeconds = 1_700_000_000,
         )
-        val plan = mediaImageRequestPlan(
-            context = InstrumentationRegistry.getInstrumentation().targetContext,
+        val plan = requestFactory().create(
             item = mediaItem(
                 MediaAssetRef.LocalFirst(
                     local = local,
                     remote = MediaAssetRef.MemoriesFile(photoFileId = 42),
                 ),
-            ),
-            credentials = AccountCredentials(
-                serverUrl = "https://cloud.example.com/",
-                loginName = "user",
-                appPassword = "secret",
             ),
             purpose = MediaImagePurpose.Original,
         )
@@ -89,14 +96,8 @@ class MediaAssetImageTest {
             contentUri = "content://media/external/images/media/42",
             modifiedAtEpochSeconds = 1_700_000_000,
         )
-        val plan = mediaImageRequestPlan(
-            context = InstrumentationRegistry.getInstrumentation().targetContext,
+        val plan = requestFactory().create(
             item = mediaItem(MediaAssetRef.LocalFirst(local, MediaAssetRef.MemoriesFile(42))),
-            credentials = AccountCredentials(
-                serverUrl = "https://cloud.example.com/",
-                loginName = "user",
-                appPassword = "secret",
-            ),
             purpose = MediaImagePurpose.DetailPreview,
         )
 
@@ -152,10 +153,10 @@ class MediaAssetImageTest {
             composeRule.setContent {
                 MediaAssetImage(
                     item = item,
-                    credentials = credentials,
                     purpose = MediaImagePurpose.Original,
                     contentDescription = null,
                     imageLoader = imageLoader,
+                    requestFactory = requestFactory(),
                 )
             }
             composeRule.waitUntil(timeoutMillis = 5_000) { requestedData.size >= 2 }
@@ -195,6 +196,20 @@ class MediaAssetImageTest {
         isHidden = false,
         assetRef = assetRef,
     )
+
+    private fun requestFactory(): MediaImageRequestFactory = MediaImageRequestFactory(
+        context = InstrumentationRegistry.getInstrumentation().targetContext,
+        sessionStore = sessionStore(credentials),
+    )
+
+    private fun sessionStore(initialCredentials: AccountCredentials): SessionStore =
+        SessionStore(
+            object : CredentialsStore {
+                override fun load(): AccountCredentials = initialCredentials
+                override fun save(credentials: AccountCredentials) = Unit
+                override fun clear() = Unit
+            },
+        )
 
     private companion object {
         val credentials = AccountCredentials(

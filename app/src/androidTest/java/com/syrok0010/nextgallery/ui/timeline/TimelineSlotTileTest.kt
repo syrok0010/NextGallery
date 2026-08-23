@@ -10,7 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
@@ -18,6 +20,8 @@ import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.TimelineUiState
+import com.syrok0010.nextgallery.ui.SessionStore
+import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
 import java.time.LocalDate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -155,7 +159,6 @@ class TimelineSlotTileTest {
                 TimelinePanel(
                     state = TimelineUiState(),
                     message = AppMessageUiState(),
-                    credentials = CREDENTIALS,
                     onViewportObservation = {},
                     revealMediaId = null,
                     onMediaRevealed = {},
@@ -178,9 +181,18 @@ class TimelineSlotTileTest {
                         indexInDay = 0,
                         mediaItem = mediaItem,
                     ),
-                    credentials = CREDENTIALS,
                     registerTimelineTile = { _, _ -> noOpUnregister },
                     onSelect = {},
+                    requestFactory = MediaImageRequestFactory(
+                        InstrumentationRegistry.getInstrumentation().targetContext,
+                        SessionStore(
+                            object : CredentialsStore {
+                                override fun load(): AccountCredentials = CREDENTIALS
+                                override fun save(credentials: AccountCredentials) = Unit
+                                override fun clear() = Unit
+                            },
+                        ),
+                    ),
                 )
             }
         }
