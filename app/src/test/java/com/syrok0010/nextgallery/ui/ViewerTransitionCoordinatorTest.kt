@@ -13,7 +13,7 @@ class ViewerTransitionCoordinatorTest {
 
         coordinator.onAppBoundsChanged(appBounds)
         coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(secondMediaId)
+        coordinator.onCurrentItemChanged(secondMediaId, isTimelineTargetAvailable = true)
 
         coordinator.open(firstMediaId)
 
@@ -28,7 +28,7 @@ class ViewerTransitionCoordinatorTest {
         coordinator.onAppBoundsChanged(appBounds)
         coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
 
-        coordinator.onCurrentItemChanged(secondMediaId)
+        coordinator.onCurrentItemChanged(secondMediaId, isTimelineTargetAvailable = true)
 
         assertEquals(secondMediaId, coordinator.viewerMediaId)
         assertEquals(secondMediaId, coordinator.revealMediaId)
@@ -41,9 +41,9 @@ class ViewerTransitionCoordinatorTest {
         coordinator.onAppBoundsChanged(appBounds)
         coordinator.registerTimelineTile(firstMediaId) { visibleTileBounds }
         coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(secondMediaId)
+        coordinator.onCurrentItemChanged(secondMediaId, isTimelineTargetAvailable = true)
 
-        coordinator.onCurrentItemChanged(firstMediaId)
+        coordinator.onCurrentItemChanged(firstMediaId, isTimelineTargetAvailable = true)
 
         assertEquals(firstMediaId, coordinator.viewerMediaId)
         assertNull(coordinator.revealMediaId)
@@ -55,9 +55,9 @@ class ViewerTransitionCoordinatorTest {
 
         coordinator.onAppBoundsChanged(appBounds)
         coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
-        coordinator.onCurrentItemChanged(secondMediaId)
+        coordinator.onCurrentItemChanged(secondMediaId, isTimelineTargetAvailable = true)
 
-        coordinator.close(secondMediaId)
+        coordinator.close(secondMediaId, isTimelineTargetAvailable = true)
 
         assertNull(coordinator.viewerMediaId)
         assertEquals(secondMediaId, coordinator.revealMediaId)
@@ -76,6 +76,19 @@ class ViewerTransitionCoordinatorTest {
         currentBounds = offscreenTileBounds
 
         assertNull(coordinator.timelineTileBounds(firstMediaId))
+    }
+
+    @Test
+    fun `orphan current does not leave a reveal target`() {
+        val coordinator = DefaultViewerTransitionCoordinator()
+
+        coordinator.onAppBoundsChanged(appBounds)
+        coordinator.onCurrentItemChanged(firstMediaId, isTimelineTargetAvailable = false)
+
+        coordinator.close(firstMediaId, isTimelineTargetAvailable = false)
+
+        assertNull(coordinator.viewerMediaId)
+        assertNull(coordinator.revealMediaId)
     }
 
     @Test

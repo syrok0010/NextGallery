@@ -86,17 +86,15 @@ import java.time.format.DateTimeFormatter
 @Composable
 internal fun MediaDetailScreen(
     initialMediaId: MediaId,
-    items: List<MediaItem>,
-    slotIndexByMediaId: Map<MediaId, Int>,
+    sequence: ViewerSequence,
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     credentials: AccountCredentials,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
 ) {
-    val initialPage = remember(initialMediaId, items) {
-        items.indexOfFirst { it.mediaId == initialMediaId }.coerceAtLeast(0)
-    }
+    val items = sequence.items
+    val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     val openingMediaId = remember { initialMediaId }
     var chromeVisible by remember { mutableStateOf(true) }
@@ -229,10 +227,10 @@ internal fun MediaDetailScreen(
     LaunchedEffect(pagerState.currentPage, items) {
         val item = items.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
         onCurrentItemChange(item)
-        val slotIndex = slotIndexByMediaId[item.mediaId] ?: return@LaunchedEffect
+        val slotIndex = sequence.timelineSlotIndex(item.mediaId) ?: return@LaunchedEffect
         onVisibleTimelineRange(
-            (slotIndex - ViewerTimelinePrefetchSlots).coerceAtLeast(0),
-            slotIndex + ViewerTimelinePrefetchSlots,
+            (slotIndex - ViewerSequencePrefetchSlots).coerceAtLeast(0),
+            slotIndex + ViewerSequencePrefetchSlots,
         )
     }
 
@@ -284,6 +282,7 @@ internal fun MediaDetailScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
                 beyondViewportPageCount = 1,
+                key = sequence::pageKey,
             ) { page ->
                 val item = items[page]
                 MediaViewerPage(
@@ -808,7 +807,7 @@ private fun Image.hasGainmapCompat(): Boolean {
     return bitmap.hasGainmap()
 }
 
-private const val ViewerTimelinePrefetchSlots = 80
+private const val ViewerSequencePrefetchSlots = 80
 private const val ViewerDismissScaleDistancePx = 1_400f
 private const val ViewerDismissBackgroundDistancePx = 420f
 private const val ViewerBackgroundEnterDelayMillis = 210

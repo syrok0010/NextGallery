@@ -80,11 +80,7 @@ Day details metadata заполняет virtual slots реальными `MediaI
 
 ### Viewer sequence
 
-Упорядоченная последовательность media items, по которой пользователь листает фото в просмотрщике.
-
-В MVP viewer sequence берется из текущего remote timeline: `TimelineSnapshot.slots.mapNotNull { mediaItem }`. Route просмотра остается адресованным по `fileId`, а позиция внутри viewer sequence вычисляется из текущего timeline snapshot.
-
-Если при листании пользователь приближается к краю загруженных metadata, просмотрщик может использовать существующую lazy loading механику timeline, а не отдельный album/download pipeline.
+Упорядоченная live-проекция загруженных медиаобъектов unified timeline, по которой пользователь листает фото и видео в просмотрщике. Текущий медиаобъект закреплен по `MediaId`: при исчезновении из timeline он временно остается в последовательности до перехода на соседа или закрытия просмотрщика.
 
 ### Video viewer placeholder
 

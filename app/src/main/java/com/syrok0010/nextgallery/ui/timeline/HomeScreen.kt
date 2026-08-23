@@ -21,6 +21,7 @@ import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.ui.NextGalleryScaffold
 import com.syrok0010.nextgallery.ui.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.ui.detail.MediaDetailScreen
+import com.syrok0010.nextgallery.ui.detail.rememberViewerSequence
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -41,9 +42,12 @@ internal fun HomeScreen(
         NextGalleryScaffold(showTopBar = false) { _ -> }
         return
     }
-    val viewerTimeline = rememberViewerTimeline(state.timeline.snapshot)
+    val viewerSequence = rememberViewerSequence(
+        snapshot = state.timeline.snapshot,
+        currentMediaId = viewerTransitionCoordinator.viewerMediaId,
+    )
     val visibleViewerMediaId = viewerTransitionCoordinator.viewerMediaId?.takeIf { mediaId ->
-        viewerTimeline.slotIndexByMediaId.containsKey(mediaId)
+        mediaId in viewerSequence
     }
 
     NextGalleryScaffold(
@@ -96,13 +100,22 @@ internal fun HomeScreen(
             if (visibleViewerMediaId != null) {
                 MediaDetailScreen(
                     initialMediaId = visibleViewerMediaId,
-                    items = viewerTimeline.items,
-                    slotIndexByMediaId = viewerTimeline.slotIndexByMediaId,
+                    sequence = viewerSequence,
                     tileBoundsForMediaId = viewerTransitionCoordinator::timelineTileBounds,
                     credentials = credentials,
-                    onBack = { currentItem -> viewerTransitionCoordinator.close(currentItem.mediaId) },
+                    onBack = { currentItem ->
+                        viewerTransitionCoordinator.close(
+                            mediaId = currentItem.mediaId,
+                            isTimelineTargetAvailable =
+                                viewerSequence.timelineSlotIndex(currentItem.mediaId) != null,
+                        )
+                    },
                     onCurrentItemChange = { currentItem ->
-                        viewerTransitionCoordinator.onCurrentItemChanged(currentItem.mediaId)
+                        viewerTransitionCoordinator.onCurrentItemChanged(
+                            mediaId = currentItem.mediaId,
+                            isTimelineTargetAvailable =
+                                viewerSequence.timelineSlotIndex(currentItem.mediaId) != null,
+                        )
                     },
                     onVisibleTimelineRange = viewModel::loadVisibleTimelineRange,
                 )
