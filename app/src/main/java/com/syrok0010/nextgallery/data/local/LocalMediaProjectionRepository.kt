@@ -1,36 +1,30 @@
 package com.syrok0010.nextgallery.data.local
 
-import com.syrok0010.nextgallery.data.cache.LocalMediaEntity
-import com.syrok0010.nextgallery.data.cache.TimelineCacheDatabase
-import com.syrok0010.nextgallery.data.cache.TimelineCacheRepository
+import com.syrok0010.nextgallery.data.cache.IdentifiedLocalMedia
+import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
 import com.syrok0010.nextgallery.data.cache.toLocalMediaEntity
 import com.syrok0010.nextgallery.data.cache.toMediaItem
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
 
 class LocalMediaProjectionRepository(
-    database: TimelineCacheDatabase,
-    private val identityRepository: TimelineCacheRepository,
+    database: NextGalleryDatabase,
 ) : LocalMediaProjectionStore {
-    private val dao = database.timelineCacheDao()
+    private val dao = database.localMediaDao()
 
     override suspend fun loadLocalMediaProjection(): List<MediaItem> =
-        dao.localMediaProjection().map(LocalMediaEntity::toMediaItem)
-
-    override suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId> =
-        identityRepository.resolveLocalMediaIds(contentUris)
+        dao.projection().map(IdentifiedLocalMedia::toMediaItem)
 
     override suspend fun saveLocalMediaBatch(items: List<MediaItem>) {
         if (items.isNotEmpty()) {
-            dao.upsertLocalMediaProjection(items.map(MediaItem::toLocalMediaEntity))
+            dao.upsert(items.map(MediaItem::toLocalMediaEntity))
         }
     }
 
     override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) {
         if (contentUris.isEmpty()) {
-            dao.deleteAllLocalMedia()
+            dao.deleteAll()
         } else {
-            dao.deleteLocalMediaNotIn(contentUris)
+            dao.deleteNotIn(contentUris)
         }
     }
 }

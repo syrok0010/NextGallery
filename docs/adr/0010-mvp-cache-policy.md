@@ -95,6 +95,7 @@ MVP-1 строится как remote-first клиент для Nextcloud/Memorie
 Storage:
 
 - metadata/index хранить в Room;
+- использовать одну `NextGalleryDatabase`, но разделять Room DAO по lifecycle данных: Memories timeline, local MediaStore projection, media identity и remote thumbnails;
 - thumbnail bytes хранить отдельными файлами в cache directory;
 - в Room хранить thumbnail index: `fileId`, width, height, mime type, cache key/path и `cachedAt`;
 - credentials остаются в secure credentials store, не в cache DB.

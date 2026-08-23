@@ -74,7 +74,8 @@ import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
 import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
-import com.syrok0010.nextgallery.ui.common.mediaImageRequest
+import com.syrok0010.nextgallery.ui.common.mediaImageRequestPlan
+import com.syrok0010.nextgallery.ui.common.rememberFallbackImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
@@ -424,19 +425,15 @@ private fun MediaViewerPage(
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
-            val originalRequest = remember(context, item.assetRef, credentials) {
-                mediaImageRequest(context, item, credentials, MediaImagePurpose.Original)
-                    .newBuilder(context)
-                    .listener(
-                        onSuccess = { _, result ->
-                            onHdrChange(result.image.hasGainmapCompat())
-                        },
-                        onError = { _, _ ->
-                            onHdrChange(false)
-                        },
-                    )
-                    .build()
+            val originalPlan = remember(context, item, credentials) {
+                mediaImageRequestPlan(context, item, credentials, MediaImagePurpose.Original)
             }
+            val originalRequest = rememberFallbackImageRequest(
+                context = context,
+                plan = originalPlan,
+                onSuccess = { image -> onHdrChange(image.hasGainmapCompat()) },
+                onError = { onHdrChange(false) },
+            )
 
             LaunchedEffect(item.mediaId, zoomableState) {
                 snapshotFlow { zoomableState.zoomFraction ?: 0f }

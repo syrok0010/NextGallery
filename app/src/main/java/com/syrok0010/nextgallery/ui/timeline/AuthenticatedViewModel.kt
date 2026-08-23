@@ -5,12 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.credentials.CredentialsStore
-import com.syrok0010.nextgallery.data.memories.MemoriesRepository
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.data.local.LocalMediaSource
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.ui.AppMessageUiState
 import com.syrok0010.nextgallery.ui.SessionStore
 import com.syrok0010.nextgallery.ui.SessionUiState
@@ -41,10 +40,10 @@ class AuthenticatedViewModel(
     private val credentialsStore: CredentialsStore,
     private val memoriesRepository: MemoriesRepository,
     private val localMediaSource: LocalMediaSource,
+    private val unifiedTimelineProjection: UnifiedTimelineProjection,
 ) : ViewModel() {
     private val _state = MutableStateFlow(AuthenticatedUiState())
     val state: StateFlow<AuthenticatedUiState> = _state.asStateFlow()
-    private var timelineSources = TimelineSources()
     private val localReconcileRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var localMediaJob: Job? = null
 
@@ -65,7 +64,7 @@ class AuthenticatedViewModel(
                         val transformed = transform(state.timeline)
                         state.copy(
                             timeline = transformed.copy(
-                                snapshot = timelineSources.projectedSnapshot() ?: transformed.snapshot,
+                                snapshot = unifiedTimelineProjection.snapshot ?: transformed.snapshot,
                             ),
                         )
                     }
@@ -86,19 +85,13 @@ class AuthenticatedViewModel(
                     dayIds: List<Int>,
                 ): List<MediaItem> {
                     val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
-                    updateTimelineSources(
-                        transform = { sources ->
-                            sources.copy(
-                                remote = sources.remote?.let { snapshot ->
-                                    TimelineSnapshotAssembler.mergeLoadedItems(
-                                        snapshot = snapshot,
-                                        items = items,
-                                        loadedDayIds = dayIds.toSet(),
-                                    )
-                                },
-                            )
-                        },
+                    val projectedSnapshot = unifiedTimelineProjection.mergeRemoteItems(
+                        items = items,
+                        loadedDayIds = dayIds.toSet(),
                     )
+                    _state.update { state ->
+                        state.copy(timeline = state.timeline.copy(snapshot = projectedSnapshot.snapshot))
+                    }
                     return items
                 }
             },
@@ -148,11 +141,11 @@ class AuthenticatedViewModel(
         )
     }
 
-    private fun onSessionChanged(session: SessionUiState) {
+    private suspend fun onSessionChanged(session: SessionUiState) {
         when (session) {
             SessionUiState.SignedOut -> {
                 stopLocalMedia()
-                timelineSources = TimelineSources()
+                unifiedTimelineProjection.clear()
                 _state.value = AuthenticatedUiState()
             }
 
@@ -184,9 +177,10 @@ class AuthenticatedViewModel(
             if (canShowCachedTimeline) {
                 memoriesRepository.loadCachedTimeline(credentials)?.let { cachedSnapshot ->
                     showedCachedTimeline = true
-                    updateTimelineSources(
-                        transform = { sources -> sources.copy(remote = cachedSnapshot) },
-                    ) { state, projectedSnapshot ->
+                    val projectedSnapshot = unifiedTimelineProjection
+                        .replaceRemoteSnapshot(cachedSnapshot)
+                        .snapshot
+                    _state.update { state ->
                         state.copy(
                             timeline = TimelineUiState(snapshot = projectedSnapshot),
                             message = AppMessageUiState(
@@ -203,9 +197,10 @@ class AuthenticatedViewModel(
 
             runCatching { memoriesRepository.loadInitialTimeline(credentials) }
                 .onSuccess { snapshot ->
-                    updateTimelineSources(
-                        transform = { sources -> sources.copy(remote = snapshot) },
-                    ) { state, projectedSnapshot ->
+                    val projectedSnapshot = unifiedTimelineProjection
+                        .replaceRemoteSnapshot(snapshot)
+                        .snapshot
+                    _state.update { state ->
                         state.copy(
                             credentials = credentials,
                             timeline = state.timeline.withRefreshedSnapshot(projectedSnapshot ?: snapshot),
@@ -240,9 +235,10 @@ class AuthenticatedViewModel(
         }
         localMediaJob = localMediaSource.updates(localReconcileRequests)
             .onEach { indexState ->
-                updateTimelineSources(
-                    transform = { sources -> sources.copy(local = indexState.items) },
-                ) { state, projectedSnapshot ->
+                val projectedSnapshot = unifiedTimelineProjection
+                    .replaceLocalItems(indexState.items)
+                    .snapshot
+                _state.update { state ->
                     state.copy(
                         timeline = state.timeline.copy(snapshot = projectedSnapshot),
                         message = AppMessageUiState(
@@ -269,13 +265,16 @@ class AuthenticatedViewModel(
 
     private fun removeLocalMedia(permissionMode: LocalMediaPermissionMode) {
         stopLocalMedia()
-        updateTimelineSources(
-            transform = { sources -> sources.copy(local = emptyList()) },
-        ) { state, projectedSnapshot ->
-            state.copy(
-                timeline = state.timeline.copy(snapshot = projectedSnapshot),
-                localMediaPermissionMode = permissionMode,
-            )
+        viewModelScope.launch {
+            val projectedSnapshot = unifiedTimelineProjection
+                .replaceLocalItems(emptyList())
+                .snapshot
+            _state.update { state ->
+                state.copy(
+                    timeline = state.timeline.copy(snapshot = projectedSnapshot),
+                    localMediaPermissionMode = permissionMode,
+                )
+            }
         }
     }
 
@@ -284,29 +283,8 @@ class AuthenticatedViewModel(
         localMediaJob = null
     }
 
-    private fun updateTimelineSources(
-        transform: (TimelineSources) -> TimelineSources,
-        updateState: (AuthenticatedUiState, TimelineSnapshot?) -> AuthenticatedUiState = { state, snapshot ->
-            state.copy(timeline = state.timeline.copy(snapshot = snapshot))
-        },
-    ) {
-        timelineSources = transform(timelineSources)
-        val projectedSnapshot = timelineSources.projectedSnapshot()
-        _state.update { state -> updateState(state, projectedSnapshot) }
-    }
-
     override fun onCleared() {
         timelineViewportController.cancel()
         super.onCleared()
     }
-}
-
-private data class TimelineSources(
-    val remote: TimelineSnapshot? = null,
-    val local: List<MediaItem> = emptyList(),
-) {
-    fun projectedSnapshot(): TimelineSnapshot? =
-        remote?.let { TimelineSnapshotAssembler.addSourceItems(it, local) }
-            ?: local.takeIf { it.isNotEmpty() }
-                ?.let(TimelineSnapshotAssembler::assembleLocal)
 }

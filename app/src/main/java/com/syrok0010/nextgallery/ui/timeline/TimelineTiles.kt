@@ -1,8 +1,11 @@
 package com.syrok0010.nextgallery.ui.timeline
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,12 +32,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.hasRemoteCopy
 import com.syrok0010.nextgallery.data.memories.TimelineSlot
+import com.syrok0010.nextgallery.data.memories.hasLocalCopy
+import com.syrok0010.nextgallery.data.memories.hasRemoteCopy
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.common.MediaAssetImage
 import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
@@ -72,6 +77,7 @@ internal fun TimelineSlotTile(
 ) {
     val item = slot.mediaItem
     val cloudCopyDescription = stringResource(R.string.media_cloud_copy)
+    val localCopyDescription = stringResource(R.string.media_local_copy)
 
     if (item == null) {
         PlaceholderMediaTile(cloudCopyDescription = cloudCopyDescription)
@@ -80,6 +86,7 @@ internal fun TimelineSlotTile(
             item = item,
             credentials = credentials,
             cloudCopyDescription = cloudCopyDescription,
+            localCopyDescription = localCopyDescription,
             registerTimelineTile = registerTimelineTile,
             onClick = { onSelect(item) },
         )
@@ -92,9 +99,13 @@ private fun PlaceholderMediaTile(cloudCopyDescription: String) {
         modifier = Modifier
             .aspectRatio(1f)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .cloudCopySemantics(cloudCopyDescription),
+            .copyAvailabilitySemantics(cloudCopyDescription),
     ) {
-        RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
+        RemoteCloudIndicator(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(5.dp),
+        )
     }
 }
 
@@ -103,6 +114,7 @@ private fun MediaTile(
     item: MediaItem,
     credentials: AccountCredentials,
     cloudCopyDescription: String,
+    localCopyDescription: String,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -113,6 +125,10 @@ private fun MediaTile(
         val unregister = registerTimelineTile(item.mediaId, coordinatesHolder::boundsInRoot)
         onDispose(unregister)
     }
+    val copyDescription = buildList {
+        if (item.hasLocalCopy) add(localCopyDescription)
+        if (item.hasRemoteCopy) add(cloudCopyDescription)
+    }.joinToString()
 
     Box(
         modifier = Modifier
@@ -121,7 +137,7 @@ private fun MediaTile(
                 coordinatesHolder.coordinates = coordinates
             }
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (item.hasRemoteCopy) Modifier.cloudCopySemantics(cloudCopyDescription) else Modifier)
+            .then(if (copyDescription.isNotEmpty()) Modifier.copyAvailabilitySemantics(copyDescription) else Modifier)
             .clickable(onClick = onClick),
     ) {
         MediaAssetImage(
@@ -133,8 +149,20 @@ private fun MediaTile(
             contentScale = ContentScale.Crop,
         )
 
-        if (item.hasRemoteCopy) {
-            RemoteCloudIndicator(modifier = Modifier.align(Alignment.TopEnd))
+        if (item.hasLocalCopy || item.hasRemoteCopy) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (item.hasLocalCopy) {
+                    LocalDeviceIndicator()
+                }
+                if (item.hasRemoteCopy) {
+                    RemoteCloudIndicator()
+                }
+            }
         }
 
         if (item.isVideo) {
@@ -156,23 +184,46 @@ private fun MediaTile(
 
 @Composable
 private fun RemoteCloudIndicator(modifier: Modifier = Modifier) {
+    MediaCopyIndicator(
+        iconRes = R.drawable.ic_cloud,
+        testTag = "remote-cloud-indicator",
+        modifier = modifier,
+        foregroundOffsetY = 0.5.dp,
+    )
+}
+
+@Composable
+private fun LocalDeviceIndicator(modifier: Modifier = Modifier) {
+    MediaCopyIndicator(
+        iconRes = R.drawable.ic_phone,
+        testTag = "local-device-indicator",
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun MediaCopyIndicator(
+    @DrawableRes iconRes: Int,
+    testTag: String,
+    modifier: Modifier = Modifier,
+    foregroundOffsetY: Dp = 0.dp,
+) {
     Box(
         modifier = modifier
-            .padding(5.dp)
             .size(16.dp)
-            .testTag("remote-cloud-indicator"),
+            .testTag(testTag),
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_cloud),
+            painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 0.5.dp)
+                .offset(y = foregroundOffsetY)
                 .size(14.dp),
             tint = Color.Black.copy(alpha = 0.58f),
         )
         Icon(
-            painter = painterResource(R.drawable.ic_cloud),
+            painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier
                 .align(Alignment.Center)
@@ -182,7 +233,7 @@ private fun RemoteCloudIndicator(modifier: Modifier = Modifier) {
     }
 }
 
-private fun Modifier.cloudCopySemantics(description: String): Modifier =
+private fun Modifier.copyAvailabilitySemantics(description: String): Modifier =
     semantics {
         stateDescription = description
     }

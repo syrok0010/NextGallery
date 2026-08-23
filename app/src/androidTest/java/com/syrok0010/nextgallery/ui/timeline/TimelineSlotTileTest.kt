@@ -36,6 +36,8 @@ class TimelineSlotTileTest {
 
         composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
             .assertIsDisplayed()
+        composeRule.onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
+            .assertDoesNotExist()
         composeRule.onNode(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
@@ -83,7 +85,7 @@ class TimelineSlotTileTest {
     }
 
     @Test
-    fun localOnlyPhotoHasNoCloudIndicatorAndRemainsOpenable() {
+    fun localOnlyPhotoShowsLocalIndicatorAndRemainsOpenable() {
         val localItem = mediaItem(isVideo = false).copy(
             mediaId = MediaId("local-42"),
             displayName = "local.jpg",
@@ -97,8 +99,53 @@ class TimelineSlotTileTest {
 
         composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
             .assertDoesNotExist()
+        composeRule.onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                LOCAL_COPY_DESCRIPTION,
+            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
+        ).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("local.jpg")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun localAndRemotePhotoShowsAdjacentIndicatorsInTopRightCorner() {
+        val remote = mediaItem(isVideo = false)
+        val merged = remote.copy(
+            mediaId = MediaId("local-42"),
+            assetRef = MediaAssetRef.LocalFirst(
+                local = MediaAssetRef.LocalContent(
+                    contentUri = "content://media/external/images/media/42",
+                    modifiedAtEpochSeconds = null,
+                ),
+                remote = remote.assetRef as MediaAssetRef.MemoriesFile,
+            ),
+        )
+
+        showSlot(mediaItem = merged)
+
+        val localBounds = composeRule
+            .onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val cloudBounds = composeRule
+            .onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+
+        assertTrue(localBounds.right <= cloudBounds.left)
+        assertTrue(localBounds.top == cloudBounds.top)
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                "$LOCAL_COPY_DESCRIPTION, $CLOUD_COPY_DESCRIPTION",
+            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
+        ).assertIsDisplayed()
     }
 
     @Test
@@ -164,7 +211,9 @@ class TimelineSlotTileTest {
     private companion object {
         const val DAY_ID = 20_660
         const val CLOUD_INDICATOR_TAG = "remote-cloud-indicator"
+        const val LOCAL_INDICATOR_TAG = "local-device-indicator"
         const val CLOUD_COPY_DESCRIPTION = "Облачная копия"
+        const val LOCAL_COPY_DESCRIPTION = "Локальная копия"
         const val VIDEO_BADGE = "VIDEO"
         val CREDENTIALS = AccountCredentials(
             serverUrl = "https://cloud.example.com",

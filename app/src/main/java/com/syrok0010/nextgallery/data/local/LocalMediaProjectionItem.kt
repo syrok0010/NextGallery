@@ -16,6 +16,8 @@ internal data class LocalMediaProjectionItem(
     val modifiedAtEpochSeconds: Long?,
     val isVideo: Boolean,
     val videoDurationSeconds: Long?,
+    val auid: String?,
+    val buid: String?,
 ) {
     fun toMediaItem(): MediaItem {
         val dayId = Math.floorDiv(takenAtEpochSeconds, SECONDS_PER_DAY).toInt()
@@ -30,8 +32,8 @@ internal data class LocalMediaProjectionItem(
             height = height,
             etag = null,
             livePhotoId = null,
-            auid = null,
-            buid = null,
+            auid = auid,
+            buid = buid,
             sharedBy = null,
             takenAtEpochSeconds = takenAtEpochSeconds,
             isVideo = isVideo,

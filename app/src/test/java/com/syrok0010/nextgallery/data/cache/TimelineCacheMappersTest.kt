@@ -9,7 +9,7 @@ import org.junit.Test
 
 class TimelineCacheMappersTest {
     @Test
-    fun `cache mapping preserves memories asset reference instead of derived urls`() {
+    fun `cache mapping restores memories asset reference from file identity`() {
         val item = MediaItem(
             mediaId = MediaId("persistent-media-id"),
             remoteFileId = 42L,
@@ -32,12 +32,13 @@ class TimelineCacheMappersTest {
             assetRef = MediaAssetRef.MemoriesFile(photoFileId = 42L),
         )
 
-        val entity = item.toEntity()
-        val restored = entity.toMediaItem()
+        val entity = item.toMemoriesMediaEntity()
+        val restored = IdentifiedMemoriesMedia(
+            media = entity,
+            mediaId = item.mediaId.value,
+        ).toMediaItem()
 
-        assertEquals("memories", entity.assetSource)
-        assertEquals(42L, entity.assetSourcePhotoFileId)
-        assertEquals("persistent-media-id", entity.mediaId)
+        assertEquals(42L, entity.fileId)
         assertEquals(item, restored)
     }
 }

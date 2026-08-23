@@ -3,7 +3,14 @@ package com.syrok0010.nextgallery.data.local
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
+import androidx.core.net.toUri
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -76,6 +83,7 @@ class AndroidMediaStoreReader(
                 val orientation = cursor.nullableInt(orientationColumn)
                 val orientedWidth = if (orientation.rotatesDimensions()) height else width
                 val orientedHeight = if (orientation.rotatesDimensions()) width else height
+                val dateTakenMillis = cursor.nullableLong(takenColumn)
                 batch += LocalMediaMetadata(
                     contentUri = uri.toString(),
                     displayName = cursor.getString(nameColumn) ?: id.toString(),
@@ -83,7 +91,9 @@ class AndroidMediaStoreReader(
                     width = orientedWidth,
                     height = orientedHeight,
                     sizeBytes = cursor.nullableLong(sizeColumn),
-                    dateTakenMillis = cursor.nullableLong(takenColumn),
+                    dateTakenMillis = dateTakenMillis,
+                    memoriesTimelineEpochSeconds = null,
+                    imageUniqueId = null,
                     dateModifiedSeconds = cursor.nullableLong(modifiedColumn),
                     dateAddedSeconds = cursor.nullableLong(addedColumn),
                     durationMillis = cursor.nullableLong(durationColumn),
@@ -93,7 +103,7 @@ class AndroidMediaStoreReader(
                 if (batch.size == batchSize) {
                     emit(
                         LocalMediaBatch(
-                            metadata = batch.toList(),
+                            metadata = batch.enrichExif(),
                             progress = LocalMediaIndexProgress(indexedCount, cursor.count),
                         ),
                     )
@@ -103,7 +113,7 @@ class AndroidMediaStoreReader(
             if (batch.isNotEmpty() || cursor.count == 0) {
                 emit(
                     LocalMediaBatch(
-                        metadata = batch.toList(),
+                        metadata = batch.enrichExif(),
                         progress = LocalMediaIndexProgress(indexedCount, cursor.count),
                     ),
                 )
@@ -116,6 +126,26 @@ class AndroidMediaStoreReader(
         )
     }.flowOn(Dispatchers.IO)
 
+    private suspend fun List<LocalMediaMetadata>.enrichExif(): List<LocalMediaMetadata> =
+        chunked(EXIF_CONCURRENCY).flatMap { chunk ->
+            coroutineScope {
+                chunk.map { metadata ->
+                    async(Dispatchers.IO) { metadata.withExif() }
+                }.awaitAll()
+            }
+        }
+
+    private fun LocalMediaMetadata.withExif(): LocalMediaMetadata {
+        val exif = if (isVideo) null else readExif(contentUri)
+        return copy(
+            memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(
+                exifDateTime = exif?.getAttribute(ExifInterface.TAG_DATETIME),
+                dateTakenMillis = dateTakenMillis,
+            ),
+            imageUniqueId = exif?.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
+        )
+    }
+
     private fun android.database.Cursor.nullableString(column: Int): String? =
         if (isNull(column)) null else getString(column)
 
@@ -126,4 +156,30 @@ class AndroidMediaStoreReader(
         if (isNull(column)) null else getLong(column)
 
     private fun Int?.rotatesDimensions(): Boolean = this == 90 || this == 270
+
+    private fun readExif(contentUri: String): ExifInterface? = runCatching {
+        contentResolver.openFileDescriptor(contentUri.toUri(), "r")?.use { descriptor ->
+            ExifInterface(descriptor.fileDescriptor)
+        }
+    }.getOrNull()
+
+    private fun memoriesTimelineEpochSeconds(
+        exifDateTime: String?,
+        dateTakenMillis: Long?,
+    ): Long? {
+        if (exifDateTime != null) {
+            runCatching {
+                SimpleDateFormat("yyyy:MM:dd HH:mm:ss").apply {
+                    timeZone = TimeZone.getTimeZone("GMT")
+                }.parse(exifDateTime)?.time?.div(1_000)
+            }.getOrNull()?.let { return it }
+        }
+        return dateTakenMillis?.takeIf { it > 0 }?.let { timestamp ->
+            (timestamp + TimeZone.getDefault().getOffset(timestamp)) / 1_000
+        }
+    }
+
+    private companion object {
+        const val EXIF_CONCURRENCY = 8
+    }
 }

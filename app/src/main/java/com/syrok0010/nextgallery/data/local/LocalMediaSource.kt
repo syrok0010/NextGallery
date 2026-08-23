@@ -1,8 +1,11 @@
 package com.syrok0010.nextgallery.data.local
 
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
+import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
 import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.data.memories.mediaIdentityCandidate
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 import java.time.LocalDate
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -23,6 +26,8 @@ data class LocalMediaMetadata(
     val height: Int?,
     val sizeBytes: Long?,
     val dateTakenMillis: Long?,
+    val memoriesTimelineEpochSeconds: Long? = null,
+    val imageUniqueId: String? = null,
     val dateModifiedSeconds: Long?,
     val dateAddedSeconds: Long?,
     val durationMillis: Long?,
@@ -54,7 +59,6 @@ fun interface LocalMediaChangeObserver {
 
 interface LocalMediaProjectionStore {
     suspend fun loadLocalMediaProjection(): List<MediaItem>
-    suspend fun resolveLocalMediaIds(contentUris: Collection<String>): Map<String, MediaId>
     suspend fun saveLocalMediaBatch(items: List<MediaItem>)
     suspend fun finishLocalMediaReconciliation(contentUris: Set<String>)
 }
@@ -63,6 +67,7 @@ interface LocalMediaProjectionStore {
 class LocalMediaSource(
     private val reader: LocalMediaReader,
     private val projectionStore: LocalMediaProjectionStore,
+    private val identityRegistry: MediaIdentityRegistry,
     private val changeObserver: LocalMediaChangeObserver,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
     private val changeDebounce: Duration = DEFAULT_CHANGE_DEBOUNCE,
@@ -123,29 +128,46 @@ class LocalMediaSource(
     }
 
     private suspend fun mapMetadata(metadata: List<LocalMediaMetadata>): List<MediaItem> {
-        val timestampByUri = metadata.mapNotNull { item ->
-            item.timelineEpochSeconds()?.let { timestamp -> item.contentUri to timestamp }
-        }.toMap()
-        val mediaIds = projectionStore.resolveLocalMediaIds(timestampByUri.keys)
-        return metadata.mapNotNull { item ->
-            val timestamp = timestampByUri[item.contentUri] ?: return@mapNotNull null
+        val drafts = metadata.mapNotNull { item ->
+            val timestamp = item.timelineEpochSeconds() ?: return@mapNotNull null
+            val aliases = MemoriesMediaIdentity.calculate(
+                baseName = item.displayName,
+                sizeBytes = item.sizeBytes ?: 0,
+                dateTakenMillis = item.dateTakenMillis ?: 0,
+                imageUniqueId = item.imageUniqueId,
+            )
+            LocalMediaDraft(item, timestamp, aliases)
+        }
+        val candidates = drafts.map { draft ->
+            mediaIdentityCandidate(
+                source = draft.metadata.sourceIdentity(),
+                auid = draft.aliases.auid,
+                buid = draft.aliases.buid,
+            )
+        }
+        val resolution = identityRegistry.resolve(candidates)
+        return drafts.map { draft ->
+            val item = draft.metadata
             LocalMediaProjectionItem(
-                mediaId = checkNotNull(mediaIds[item.contentUri]),
+                mediaId = resolution.mediaIds.getValue(item.sourceIdentity()),
                 contentUri = item.contentUri,
                 displayName = item.displayName,
                 mimeType = item.mimeType,
                 width = item.width,
                 height = item.height,
-                takenAtEpochSeconds = timestamp,
+                takenAtEpochSeconds = draft.timelineEpochSeconds,
                 modifiedAtEpochSeconds = item.dateModifiedSeconds,
                 isVideo = item.isVideo,
                 videoDurationSeconds = item.durationMillis?.takeIf { it > 0 }?.div(1_000),
+                auid = draft.aliases.auid,
+                buid = draft.aliases.buid,
             ).toMediaItem()
         }.sortedForTimeline()
     }
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
-        dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
+        memoriesTimelineEpochSeconds
+            ?: dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
             ?: dateModifiedSeconds?.takeIf { it > 0 }
             ?: dateAddedSeconds?.takeIf { it > 0 }
 
@@ -155,8 +177,19 @@ class LocalMediaSource(
     private fun MediaItem.localContentUri(): String =
         (assetRef as MediaAssetRef.LocalContent).contentUri
 
+    private fun LocalMediaMetadata.sourceIdentity() = MediaSourceIdentity(
+        source = MediaSourceKind.Local,
+        sourceKey = contentUri,
+    )
+
     private companion object {
         const val DEFAULT_BATCH_SIZE = 200
         val DEFAULT_CHANGE_DEBOUNCE = 500.milliseconds
     }
 }
+
+private data class LocalMediaDraft(
+    val metadata: LocalMediaMetadata,
+    val timelineEpochSeconds: Long,
+    val aliases: MediaAliases,
+)

@@ -5,11 +5,19 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.MatrixCursor
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.exifinterface.media.ExifInterface
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.util.TimeZone
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -47,12 +55,47 @@ class AndroidMediaStoreReaderTest {
             listOf(4_032, 3_024, 4_032),
             batches.flatMap { it.metadata }.map { it.height },
         )
+        val firstDateTaken = 1_700_000_000_030L
+        assertEquals(
+            (firstDateTaken + TimeZone.getDefault().getOffset(firstDateTaken)) / 1_000,
+            batches.first().metadata.first().memoriesTimelineEpochSeconds,
+        )
         assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_PENDING} = 0"))
         assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_TRASHED} = 0"))
         assertTrue(provider.observedSortOrder.orEmpty().contains("CASE"))
     }
 
-    private class FixtureMediaProvider : ContentProvider() {
+    @Test
+    fun readsMemoriesDateAndImageUniqueIdFromExif() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val jpeg = File(context.cacheDir, "media-reader-exif-fixture.jpg")
+        FileOutputStream(jpeg).use { output ->
+            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).run {
+                compress(Bitmap.CompressFormat.JPEG, 100, output)
+                recycle()
+            }
+        }
+        ExifInterface(jpeg.absolutePath).apply {
+            setAttribute(ExifInterface.TAG_DATETIME, "2024:01:02 03:04:05")
+            setAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID, "camera-unique-42")
+            saveAttributes()
+        }
+
+        try {
+            val reader = AndroidMediaStoreReader(ContentResolver.wrap(FixtureMediaProvider(jpeg)))
+
+            val firstImage = reader.readBatches(batchSize = 3).toList().single().metadata.first()
+
+            assertEquals(1_704_164_645L, firstImage.memoriesTimelineEpochSeconds)
+            assertEquals("camera-unique-42", firstImage.imageUniqueId)
+        } finally {
+            jpeg.delete()
+        }
+    }
+
+    private class FixtureMediaProvider(
+        private val mediaFile: File? = null,
+    ) : ContentProvider() {
         var observedSelection: String? = null
         var observedSortOrder: String? = null
 
@@ -84,6 +127,10 @@ class AndroidMediaStoreReaderTest {
         )
 
         override fun getType(uri: Uri): String? = null
+        override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+            val file = mediaFile ?: throw FileNotFoundException(uri.toString())
+            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+        }
         override fun insert(uri: Uri, values: ContentValues?): Uri? = null
         override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
         override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0

@@ -5,11 +5,14 @@ import com.syrok0010.nextgallery.data.credentials.AccountCredentials
 import com.syrok0010.nextgallery.data.network.NextcloudTransport
 import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import com.syrok0010.nextgallery.data.thumbnail.thumbnailAccountScope
+import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.domain.media.MediaSourceKind
 
 class MemoriesRepository(
     private val transport: NextcloudTransport,
     private val multipreviewClient: MemoriesMultipreviewClient,
     private val cacheRepository: TimelineCacheRepository,
+    private val identityRegistry: MediaIdentityRegistry,
 ) {
     suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? {
         return runCatching { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
@@ -28,12 +31,7 @@ class MemoriesRepository(
         val preloadedPhotoDtos = dayDtos
             .flatMap { it.detail }
             .distinctBy { it.fileid }
-        val preloadedMediaIds = cacheRepository.resolveRemoteMediaIds(
-            fileIds = preloadedPhotoDtos.map { it.fileid },
-        )
-        val preloadedItems = preloadedPhotoDtos.map { photo ->
-            photo.toMediaItem(preloadedMediaIds.getValue(photo.fileid))
-        }
+        val preloadedItems = preloadedPhotoDtos.toIdentifiedMediaItems()
         val loadedDayIds = dayDtos
             .filter { it.count == 0 || it.detail.isNotEmpty() }
             .mapTo(mutableSetOf()) { it.dayid }
@@ -63,12 +61,7 @@ class MemoriesRepository(
         val api = transport.memoriesApi(credentials)
         val photoDtos = api.dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
-        val mediaIds = cacheRepository.resolveRemoteMediaIds(
-            fileIds = photoDtos.map { it.fileid },
-        )
-        val items = photoDtos.map { photo ->
-            photo.toMediaItem(mediaIds.getValue(photo.fileid))
-        }
+        val items = photoDtos.toIdentifiedMediaItems()
 
         runCatching {
             cacheRepository.saveDayDetails(items, dayIds.toSet())
@@ -135,4 +128,22 @@ class MemoriesRepository(
         runCatching { cacheRepository.clear() }
     }
 
+    private suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> {
+        val candidates = map { photo ->
+            mediaIdentityCandidate(
+                source = photo.sourceIdentity(),
+                auid = photo.auid,
+                buid = photo.buid,
+            )
+        }
+        val resolution = identityRegistry.resolve(candidates)
+        return map { photo ->
+            photo.toMediaItem(resolution.mediaIds.getValue(photo.sourceIdentity()))
+        }
+    }
+
+    private fun MemoriesPhotoDto.sourceIdentity() = MediaSourceIdentity(
+        source = MediaSourceKind.Memories,
+        sourceKey = fileid.toString(),
+    )
 }
