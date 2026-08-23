@@ -1,99 +1,47 @@
-# ADR 0009: Типизированный UI session state
+# ADR 0009: Типизированная session boundary
 
 ## Статус
 
-Принято.
+Принято; первоначальный единый MainViewModel разделён по slices.
 
 ## Контекст
 
-После разделения UI на вертикальные slice `MainUiState` оставался плоским состоянием для всего приложения. В нем одновременно жили поля login form, browser login flow, authenticated credentials, Memories timeline, batch loading и общие сообщения.
-
-Такой state начал превращаться в God State: он был удобен для быстрого tracer bullet, но допускал невозможные комбинации вроде `credentials == null` вместе с загруженным timeline, или активный `loginSession` рядом с authenticated session.
+Signed-out login workflow и authenticated timeline не должны одновременно жить в одном плоском state. По мере роста timeline единый `MainViewModel` также стал владельцем слишком разных lifecycle и был разделён.
 
 ## Критерии выбора
 
-- Сократить невозможные состояния на уровне типов.
-- Не вводить несколько ViewModel раньше, чем появятся самостоятельные lifecycle и side effects у slice.
-- Дать `auth` и `timeline` UI только их slice state, а не весь `MainUiState`.
-- Сохранить один `MainViewModel` как orchestration layer на текущем этапе.
-- Не менять runtime-поведение.
+- Signed-out и signed-in состояния взаимоисключаемы типами.
+- Root navigation наблюдает только session boundary.
+- Login и authenticated timeline имеют самостоятельные state holders.
+- Credentials не передаются через UI, которому они не нужны.
+- Single-account lifecycle остаётся явным.
 
 ## Альтернативы
 
-### Оставить плоский `MainUiState`
+### Плоский root state
 
-Плюсы:
+Допускает невозможные сочетания login, credentials и timeline и заставляет все screens наблюдать лишние изменения.
 
-- Меньше изменений сейчас.
-- Простые `.copy(...)` на верхнем уровне.
+### Один orchestration ViewModel
 
-Минусы:
-
-- Невозможные состояния остаются возможными.
-- UI slice получают лишние поля и знания о других slice.
-- При росте приложения `MainUiState` будет становиться все более shallow module.
-
-Вывод: не подходит для дальнейшего роста.
-
-### Сразу выделить несколько ViewModel
-
-Например `AuthViewModel`, `TimelineViewModel`, `DetailViewModel`.
-
-Плюсы:
-
-- Явные state holder по workflow.
-- Больше локальности для side effects.
-
-Минусы:
-
-- Сейчас это преждевременный seam: login и timeline еще сильно завязаны на общий app session.
-- Появится больше DI/lifecycle кода без достаточного leverage.
-- Detail пока не имеет самостоятельной загрузки данных.
-
-Вывод: отложить до появления самостоятельных workflow.
-
-### Типизированный session state внутри одного `MainViewModel`
-
-Разделить root state на:
-
-```text
-MainUiState
-  session: SessionUiState
-    SignedOut(LoginUiState)
-    SignedIn(credentials, TimelineUiState)
-  message: AppMessageUiState
-```
-
-Плюсы:
-
-- `SignedOut` и `SignedIn` становятся взаимоисключающими состояниями.
-- `auth` получает `LoginUiState`, `timeline` получает `TimelineUiState`.
-- `MainViewModel` остается одним orchestration module.
-- Позже `LoginUiState` или `TimelineUiState` можно поднять в отдельный state holder без переписывания UI slice.
-
-Минусы:
-
-- Обновления state требуют helper-функций вроде `updateLogin` и `updateTimeline`.
-- `MainViewModel` пока все еще содержит side effects разных workflow.
+Сохраняет единый entry point, но смешивает polling Login Flow, cache/network timeline и MediaStore lifecycle.
 
 ## Решение
 
-Использовать типизированный session state:
-
-- `SessionUiState.SignedOut(LoginUiState)` для login/connect flow.
-- `SessionUiState.SignedIn(AccountCredentials, TimelineUiState)` для authenticated app state.
-- `AppMessageUiState` для общих status/error сообщений.
-- `MainViewModel` остается единственным ViewModel на текущем этапе.
-- UI slice принимают свой state: `LoginPanel(LoginUiState, AppMessageUiState, isBusy)` и `TimelinePanel(TimelineUiState, AppMessageUiState, credentials)`.
+- `SessionStore` хранит `StateFlow<SessionUiState>`: `SignedOut` или `SignedIn(AccountCredentials)`.
+- `SessionViewModel` предоставляет session root для `NextGalleryApp`.
+- `LoginViewModel` владеет `LoginUiState` и Login Flow.
+- `AuthenticatedViewModel` владеет timeline, permission, cache и refresh workflow.
+- Login success обновляет `SessionStore`; logout очищает credentials/cloud state и переводит store в `SignedOut`.
+- Session-aware infrastructure, включая media requests, получает credentials из session boundary, а не через composable parameters.
 
 ## Последствия
 
-- Нельзя случайно передать timeline в signed-out UI state.
-- Нельзя случайно держать login session как peer authenticated credentials.
-- `MainUiState` стал root-состоянием приложения, а не списком всех полей всех экранов.
-- Следующий естественный шаг: выделить `TimelineStateHolder` или `TimelineViewModel`, когда timeline получит cache/offline policy, retry policy, thumbnail batching или background sync.
+- Root navigation не знает состояния login form или timeline.
+- Slice recomposition и lifecycle локализованы.
+- `AuthenticatedViewModel` остаётся крупным coordinator и может потребовать более глубокого timeline module при дальнейшем росте.
+- Нельзя одновременно представить несколько signed-in аккаунтов.
 
 ## Открытые вопросы
 
-- Когда именно timeline станет достаточно самостоятельным module для отдельного state holder.
-- Нужно ли выделять `AppMessageUiState` по slice, если общие сообщения начнут конфликтовать между login и timeline.
+- Какую часть timeline orchestration первой выделить из `AuthenticatedViewModel`, если добавятся upload, albums и sync.

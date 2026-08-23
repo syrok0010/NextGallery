@@ -6,12 +6,9 @@ Nextcloud API нужен как фундаментальный слой:
 
 - авторизация;
 - получение app password;
-- базовая проверка сервера;
-- fallback-доступ к файлам;
-- загрузка оригиналов;
-- WebDAV-операции, если Memories API не покрывает нужный сценарий.
+- основа для будущих WebDAV-операций, если Memories API не покрывает нужный сценарий.
 
-Для фотодоменной модели NextGallery предпочтительно использовать Memories API, если он доступен и стабилен для нужного сценария. Nextcloud/WebDAV остается обязательной базой и fallback.
+Сейчас фотодоменная модель, timeline, thumbnails и originals работают через Memories API. WebDAV fallback не реализован и добавляется только для конкретного пользовательского пробела.
 
 ## Login Flow v2
 
@@ -51,24 +48,18 @@ OCS/capabilities нужны для определения возможносте
 - какие версии Nextcloud поддерживать;
 - какие server capabilities влияют на preview/download.
 
-## Безопасность учетных данных
+## Безопасность учётных данных
 
-App password нельзя хранить в обычных preferences.
-
-Кандидаты:
-
-- Android Keystore;
-- EncryptedSharedPreferences или современная замена из AndroidX Security, если она остается рекомендуемой;
-- собственный небольшой `CredentialsStore` за интерфейсом, чтобы позже заменить реализацию.
+App password хранится через `KeystoreCredentialsStore`: JSON payload шифруется AES/GCM ключом Android Keystore, а callers зависят от интерфейса `CredentialsStore`. Решение и ограничения описаны в ADR 0006.
 
 ## Архитектурный вывод
 
-Nextcloud-интеграцию нужно изолировать:
+Текущие границы интеграции:
 
 ```text
-NextcloudAuthClient
-NextcloudCapabilitiesClient
-NextcloudWebDavClient
+NextcloudLoginRepository -> Login Flow v2
+NextcloudTransport       -> URL normalization и Basic Auth requests
+MemoriesRepository      -> фотодоменный remote API
 ```
 
 UI и доменный слой не должны знать про WebDAV XML, OCS envelopes или особенности Login Flow.
@@ -76,5 +67,4 @@ UI и доменный слой не должны знать про WebDAV XML, 
 ## Открытые вопросы
 
 - Какие версии Nextcloud целевые для MVP?
-- Нужен ли fallback без Memories уже в MVP-1 или только после первого tracer bullet?
 - Как лучше тестировать интеграцию: локальный dev server, личный production-сервер или оба?
