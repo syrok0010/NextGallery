@@ -40,6 +40,7 @@ import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.rememberFallbackImageRequest
+import com.syrok0010.nextgallery.core.media.localContentOrNull
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
@@ -54,6 +55,7 @@ internal fun MediaViewerPage(
     onToggleChrome: () -> Unit,
     onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
+    onFullscreenChanged: (Boolean) -> Unit = {},
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
@@ -88,7 +90,20 @@ internal fun MediaViewerPage(
                 }
             }
 
-            Box(
+            val localAsset = item.assetRef.localContentOrNull()
+            if (isCurrentPage && localAsset != null) {
+                VideoPlaybackSurface(
+                    item = item,
+                    contentUri = localAsset.contentUri,
+                    modifier = contentSurfaceModifier
+                        .then(pageTransformModifier)
+                        .onGloballyPositioned { coordinates ->
+                            if (trackSurfaceBounds) onSurfaceBoundsChange(coordinates.boundsInRoot())
+                        },
+                    onToggleChrome = onToggleChrome,
+                    onFullscreenChanged = onFullscreenChanged,
+                )
+            } else Box(
                 modifier = contentSurfaceModifier
                     .then(pageTransformModifier)
                     .onGloballyPositioned { coordinates ->

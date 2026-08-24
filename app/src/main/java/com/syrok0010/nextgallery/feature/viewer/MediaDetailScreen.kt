@@ -96,6 +96,9 @@ internal fun MediaDetailScreen(
                             activePageState = state
                         }
                     },
+                    onFullscreenChanged = { isFullscreen ->
+                        chromeVisible = !isFullscreen
+                    },
                     onSurfaceBoundsChange = { bounds ->
                         if (item.mediaId == currentItem?.mediaId) {
                             motion.onSurfaceBoundsChange(bounds)

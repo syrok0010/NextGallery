@@ -54,4 +54,14 @@
     <string name="value_unknown">unknown</string>
     <string name="value_unknown_short">?</string>
     <string name="error_save_credentials">Не удалось сохранить подключение. Попробуйте войти заново.</string>
+    <string name="video_playback_play">Воспроизвести видео</string>
+    <string name="video_playback_pause">Приостановить видео</string>
+    <string name="video_playback_retry">Повторить воспроизведение</string>
+    <string name="video_playback_loading">Загрузка видео…</string>
+    <string name="video_playback_error">Не удалось воспроизвести видео</string>
+    <string name="video_playback_mute">Выключить звук</string>
+    <string name="video_playback_unmute">Включить звук</string>
+    <string name="video_playback_fullscreen">Полноэкранный режим</string>
+    <string name="video_playback_exit_fullscreen">Выйти из полноэкранного режима</string>
+    <string name="video_playback_position">%1$s / %2$s</string>
 </resources>
