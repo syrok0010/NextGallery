@@ -6,6 +6,7 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -14,6 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -33,12 +36,15 @@ internal fun rememberViewerMotionState(
     tileBoundsForMediaId: (MediaId) -> Rect?,
     onClose: () -> Unit,
 ): ViewerMotionState {
+    val openingMediaId = rememberSaveable(saver = MediaIdSaver) { initialMediaId }
+    val enterPending = rememberSaveable { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
     val currentTileBounds by rememberUpdatedState { currentMediaId?.let(tileBoundsForMediaId) }
     val closeViewer = rememberUpdatedState(onClose)
     val motion = remember {
         ViewerMotionState(
-            openingMediaId = initialMediaId,
+            openingMediaId = openingMediaId,
+            enterPendingState = enterPending,
             scope = scope,
             tileBounds = { currentTileBounds() },
             onClose = closeViewer,
@@ -69,17 +75,18 @@ internal class ViewerMotionState(
     private val scope: CoroutineScope,
     private val tileBounds: () -> Rect?,
     private val onClose: State<() -> Unit>,
+    private val enterPendingState: MutableState<Boolean>,
 ) {
     var surfaceBounds by mutableStateOf<Rect?>(null)
         private set
     private var predictiveBackProgress by mutableFloatStateOf(0f)
-    private var enterPending by mutableStateOf(true)
+    private var enterPending by enterPendingState
     private var enterTarget by mutableStateOf<ViewerBoundsTransform?>(null)
     private var settleTarget by mutableStateOf<ViewerBoundsTransform?>(null)
     private val dragOffset = Animatable(Offset.Zero, Offset.VectorConverter)
-    private val enterProgress = Animatable(0f)
+    private val enterProgress = Animatable(if (enterPending) 0f else 1f)
     private val settleProgress = Animatable(0f)
-    private val backgroundOpacity = Animatable(0f)
+    private val backgroundOpacity = Animatable(if (enterPending) 0f else 1f)
 
     val trackSurfaceBounds: Boolean
         get() = dragOffset.value == Offset.Zero && predictiveBackProgress == 0f &&
@@ -111,6 +118,10 @@ internal class ViewerMotionState(
     }
 
     suspend fun showBackground() {
+        if (!enterPending) {
+            backgroundOpacity.snapTo(1f)
+            return
+        }
         backgroundOpacity.snapTo(0f)
         backgroundOpacity.animateTo(
             targetValue = 1f,
@@ -205,6 +216,11 @@ internal fun Modifier.viewerDismissGestures(
         }
     }
 }
+
+private val MediaIdSaver = Saver<MediaId, String>(
+    save = { it.value },
+    restore = { MediaId(it) },
+)
 
 private const val ViewerDismissBackgroundDistancePx = 420f
 private const val ViewerBackgroundEnterDelayMillis = 210

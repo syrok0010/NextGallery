@@ -1,8 +1,10 @@
 package com.syrok0010.nextgallery.ui
 
+import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.geometry.Rect
 import com.syrok0010.nextgallery.domain.media.MediaId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -123,6 +125,28 @@ class ViewerTransitionCoordinatorTest {
         assertNull(coordinator.viewerMediaId)
         assertNull(coordinator.revealMediaId)
         assertNull(coordinator.timelineTileBounds(firstMediaId))
+    }
+
+    @Test
+    fun `saver restores viewer state across recreation`() {
+        val coordinator = DefaultViewerTransitionCoordinator()
+        coordinator.onAppBoundsChanged(appBounds)
+        coordinator.registerTimelineTile(secondMediaId) { offscreenTileBounds }
+        coordinator.open(firstMediaId)
+        coordinator.onCurrentItemChanged(secondMediaId, isTimelineTargetAvailable = true)
+
+        val saverScope = SaverScope { true }
+        val saved = with(DefaultViewerTransitionCoordinator.Saver) {
+            saverScope.save(coordinator)
+        }
+        assertNotNull(saved)
+
+        val restored = DefaultViewerTransitionCoordinator.Saver.restore(saved!!)
+        assertNotNull(restored)
+
+        assertEquals(secondMediaId, restored?.viewerMediaId)
+        assertEquals(secondMediaId, restored?.revealMediaId)
+        assertEquals(true, restored?.currentTimelineTargetAvailable)
     }
 
     companion object {

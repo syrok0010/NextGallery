@@ -1,7 +1,11 @@
 package com.syrok0010.nextgallery.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import com.syrok0010.nextgallery.domain.media.MediaId
@@ -30,15 +34,27 @@ internal interface ViewerTransitionCoordinator {
     fun onAppBoundsChanged(bounds: Rect)
 }
 
-internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator {
-    override var viewerMediaId: MediaId? by mutableStateOf(null)
+@Composable
+internal fun rememberViewerTransitionCoordinator(): ViewerTransitionCoordinator {
+    return rememberSaveable(saver = DefaultViewerTransitionCoordinator.Saver) {
+        DefaultViewerTransitionCoordinator()
+    }
+}
+
+internal class DefaultViewerTransitionCoordinator(
+    initialViewerMediaId: MediaId? = null,
+    initialRevealMediaId: MediaId? = null,
+    initialCurrentTimelineTargetAvailable: Boolean = false,
+) : ViewerTransitionCoordinator {
+    override var viewerMediaId: MediaId? by mutableStateOf(initialViewerMediaId)
         private set
 
-    override var revealMediaId: MediaId? by mutableStateOf(null)
+    override var revealMediaId: MediaId? by mutableStateOf(initialRevealMediaId)
         private set
 
     private var appBounds: Rect? = null
-    private var currentTimelineTargetAvailable = false
+    internal var currentTimelineTargetAvailable = initialCurrentTimelineTargetAvailable
+        private set
     private val timelineTileBoundsProvidersByMediaId = mutableMapOf<MediaId, () -> Rect?>()
 
     override fun onSessionChanged(session: SessionUiState) {
@@ -109,5 +125,24 @@ internal class DefaultViewerTransitionCoordinator : ViewerTransitionCoordinator 
     private fun isVisibleInAppBounds(tileBounds: Rect): Boolean {
         val rootBounds = appBounds ?: return true
         return tileBounds.overlaps(rootBounds)
+    }
+
+    companion object {
+        val Saver: Saver<DefaultViewerTransitionCoordinator, Any> = listSaver(
+            save = { coordinator ->
+                listOf(
+                    coordinator.viewerMediaId?.value,
+                    coordinator.revealMediaId?.value,
+                    coordinator.currentTimelineTargetAvailable,
+                )
+            },
+            restore = { values ->
+                DefaultViewerTransitionCoordinator(
+                    initialViewerMediaId = (values[0] as? String)?.let(::MediaId),
+                    initialRevealMediaId = (values[1] as? String)?.let(::MediaId),
+                    initialCurrentTimelineTargetAvailable = (values[2] as? Boolean) ?: false,
+                )
+            },
+        )
     }
 }

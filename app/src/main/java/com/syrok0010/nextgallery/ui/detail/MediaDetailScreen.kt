@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -36,7 +37,7 @@ internal fun MediaDetailScreen(
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
-    var chromeVisible by remember { mutableStateOf(true) }
+    var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
     val pageZoomedOutByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }
     val hdrByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }

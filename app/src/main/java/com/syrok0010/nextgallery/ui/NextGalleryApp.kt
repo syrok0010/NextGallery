@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
@@ -16,7 +15,7 @@ import org.koin.androidx.compose.koinViewModel
 fun NextGalleryApp(viewModel: SessionViewModel = koinViewModel()) {
     val session by viewModel.session.collectAsState()
     val backStack = rememberNavBackStack(session.rootRoute())
-    val viewerTransitionCoordinator = remember { DefaultViewerTransitionCoordinator() }
+    val viewerTransitionCoordinator = rememberViewerTransitionCoordinator()
 
     LaunchedEffect(session) {
         viewerTransitionCoordinator.onSessionChanged(session)
