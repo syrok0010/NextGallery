@@ -56,8 +56,12 @@ internal class ThumbnailBatchLoader(
 
     suspend fun ensureAvailable(request: ThumbnailRequest): Boolean {
         val result = CompletableDeferred<Boolean>()
-        mailbox.send(Command.Ensure(request, result))
-        return result.await()
+        try {
+            mailbox.send(Command.Ensure(request, result))
+            return result.await()
+        } finally {
+            result.cancel()
+        }
     }
 
     private suspend fun processCommands() {
@@ -69,6 +73,7 @@ internal class ThumbnailBatchLoader(
             for (command in mailbox) {
                 when (command) {
                     is Command.Ensure -> {
+                        if (!command.result.isActive) continue
                         val existingRequest = inFlight[command.request.key]
                         if (existingRequest != null) {
                             existingRequest.waiters += command.result
@@ -88,7 +93,7 @@ internal class ThumbnailBatchLoader(
                         batch.keys += command.request.key
 
                         if (batch.keys.size >= batchSize) {
-                            startBatch(identity, batch, pending)
+                            startBatch(identity, batch, pending, inFlight)
                         } else if (batch.flushJob == null) {
                             batch.flushJob = scope.launch {
                                 delay(batchWindowMillis.milliseconds)
@@ -100,7 +105,7 @@ internal class ThumbnailBatchLoader(
                     is Command.Flush -> {
                         val batch = pending[command.identity]
                         if (batch?.id == command.batchId) {
-                            startBatch(command.identity, batch, pending)
+                            startBatch(command.identity, batch, pending, inFlight)
                         }
                     }
 
@@ -128,12 +133,25 @@ internal class ThumbnailBatchLoader(
         identity: BatchIdentity,
         batch: PendingBatch,
         pending: MutableMap<BatchIdentity, PendingBatch>,
+        inFlight: MutableMap<ThumbnailKey, InFlightRequest>,
     ) {
         if (!pending.remove(identity, batch)) {
             return
         }
         batch.flushJob?.cancel()
-        val keys = batch.keys.toList()
+        // Drop abandoned requests before dispatch. Dispatched batches finish even
+        // without waiters; keeping their in-flight entries lets new callers join.
+        val keys = batch.keys.filter { key ->
+            val request = inFlight.getValue(key)
+            request.waiters.removeAll { !it.isActive }
+            if (request.waiters.isEmpty()) {
+                inFlight.remove(key)
+                false
+            } else {
+                true
+            }
+        }
+        if (keys.isEmpty()) return
 
         scope.launch {
             val readyKeys = try {

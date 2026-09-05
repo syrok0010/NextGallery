@@ -10,17 +10,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import kotlin.time.Duration.Companion.milliseconds
 
 class ThumbnailBatchLoaderTest {
+    private val loaderScopes = mutableListOf<CoroutineScope>()
+
+    @After
+    fun stopLoaders() {
+        loaderScopes.forEach { it.cancel() }
+    }
+
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 
@@ -118,6 +129,7 @@ class ThumbnailBatchLoaderTest {
         val maximumActiveBatches = AtomicInteger()
         val fourBatchesStarted = CompletableDeferred<Unit>()
         val releaseBatches = CompletableDeferred<Unit>()
+
         val loader = loader(
             batchSize = 1,
             batchWindowMillis = 0,
@@ -149,6 +161,124 @@ class ThumbnailBatchLoaderTest {
         releaseBatches.complete(Unit)
         assertTrue(results.awaitAll().all { it })
         assertEquals(4, maximumActiveBatches.get())
+    }
+
+    @Test
+    fun `cancelled request in pending batch is not loaded and empty batch is not started`() = runBlocking {
+        val credentials = credentials()
+        val request = thumbnailRequest(credentials, fileId = 10, etag = "etag-10")
+        var batchCalls = 0
+        val loader = loader(
+            batchSize = 5,
+            batchWindowMillis = 50,
+        ) { _, _ ->
+            batchCalls += 1
+            emptySet()
+        }
+
+        val deferred = async { loader.ensureAvailable(request) }
+        delay(20.milliseconds)
+        deferred.cancelAndJoin()
+
+        // Wait past the flush deadline: checking before it cannot detect a load.
+        delay(100.milliseconds)
+        assertEquals(0, batchCalls)
+    }
+
+    @Test
+    fun `cancelling one of multiple requests in pending batch removes only cancelled request`() = runBlocking {
+        val credentials = credentials()
+        val request1 = thumbnailRequest(credentials, fileId = 11, etag = "etag-11")
+        val request2 = thumbnailRequest(credentials, fileId = 12, etag = "etag-12")
+        val loadedKeys = mutableListOf<ThumbnailKey>()
+        val loader = loader(
+            batchSize = 5,
+            batchWindowMillis = 100,
+        ) { _, keys ->
+            loadedKeys += keys
+            keys.toSet()
+        }
+
+        val deferred1 = async { loader.ensureAvailable(request1) }
+        val deferred2 = async { loader.ensureAvailable(request2) }
+        delay(20.milliseconds)
+        deferred1.cancel()
+
+        assertTrue(deferred2.await())
+        assertEquals(listOf(12L), loadedKeys.map(ThumbnailKey::fileId))
+    }
+
+    @Test
+    fun `duplicate request completes even if first requester cancels`() = runBlocking {
+        val credentials = credentials()
+        val request = thumbnailRequest(credentials, fileId = 30, etag = "etag-30")
+        val loader = loader(
+            batchSize = 5,
+            batchWindowMillis = 100,
+        ) { _, keys ->
+            keys.toSet()
+        }
+
+        val deferred1 = async { loader.ensureAvailable(request) }
+        val deferred2 = async { loader.ensureAvailable(request) }
+        delay(20.milliseconds)
+        deferred1.cancel()
+
+        assertTrue(deferred2.await())
+    }
+
+    @Test
+    fun `new requester rejoins dispatched batch after all previous waiters cancel`() = runBlocking {
+        val request = thumbnailRequest(credentials(), fileId = 40, etag = "etag-40")
+        val releaseBatch = CompletableDeferred<Unit>()
+        var batchCalls = 0
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).also(loaderScopes::add)
+        val loader = ThumbnailBatchLoader(
+            loadBatch = { _, keys ->
+                batchCalls++
+                releaseBatch.await()
+                keys.toSet()
+            },
+            scope = scope,
+            batchSize = 1,
+        )
+        try {
+            val first = async(start = CoroutineStart.UNDISPATCHED) { loader.ensureAvailable(request) }
+            assertEquals(1, batchCalls)
+            first.cancelAndJoin()
+            val next = async(start = CoroutineStart.UNDISPATCHED) { loader.ensureAvailable(request) }
+            assertEquals(1, batchCalls)
+
+            releaseBatch.complete(Unit)
+            assertTrue(next.await())
+            assertEquals(1, batchCalls)
+        } finally {
+            releaseBatch.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `abandoned requests are dropped when a pending batch fills`() = runBlocking {
+        val loadedIds = mutableListOf<Long>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).also(loaderScopes::add)
+        val loader = ThumbnailBatchLoader(
+            loadBatch = { _, keys ->
+                loadedIds += keys.map { it.fileId }
+                keys.toSet()
+            },
+            scope = scope,
+            batchSize = 2,
+            batchWindowMillis = 10_000,
+        )
+        val cancelled = async(start = CoroutineStart.UNDISPATCHED) {
+            loader.ensureAvailable(thumbnailRequest(credentials(), 50, "v1"))
+        }
+        cancelled.cancelAndJoin()
+        val remaining = async(start = CoroutineStart.UNDISPATCHED) {
+            loader.ensureAvailable(thumbnailRequest(credentials(), 51, "v1"))
+        }
+        assertTrue(withTimeout(500.milliseconds) { remaining.await() })
+        assertEquals(listOf(51L), loadedIds)
     }
 
     @Test
@@ -207,7 +337,7 @@ class ThumbnailBatchLoaderTest {
     ): ThumbnailBatchLoader {
         return ThumbnailBatchLoader(
             loadBatch = loadBatch,
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also(loaderScopes::add),
             batchWindowMillis = batchWindowMillis,
             batchSize = batchSize,
             maxConcurrentBatches = maxConcurrentBatches,
