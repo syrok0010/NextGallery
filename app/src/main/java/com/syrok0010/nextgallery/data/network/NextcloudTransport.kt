@@ -19,9 +19,9 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 class NextcloudTransport(
     private val json: Json,
+    internal val baseClient: OkHttpClient = defaultBaseClient(),
 ) {
-    private val publicClient = baseClientBuilder()
-        .build()
+    private val publicClient = baseClient
 
     fun nextcloudAuthApi(serverUrl: String): NextcloudAuthApi {
         return retrofit(
@@ -42,7 +42,7 @@ class NextcloudTransport(
     }
 
     fun authenticatedClient(credentials: AccountCredentials): OkHttpClient {
-        return baseClientBuilder()
+        return baseClient.newBuilder()
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
                 val request = applyAuthenticatedHeaders(
@@ -68,6 +68,26 @@ class NextcloudTransport(
     }
 
     companion object {
+        fun defaultBaseClient(): OkHttpClient {
+            val logging = HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            }
+
+            return OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                        .newBuilder()
+                        .header("User-Agent", "NextGallery/0.1 Android")
+                        .build()
+                    chain.proceed(request)
+                }
+                .addInterceptor(logging)
+                .build()
+        }
+
         fun normalizeServerOrigin(input: String): String {
             val trimmed = input.trim()
             val withScheme = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -121,24 +141,5 @@ class NextcloudTransport(
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-    }
-
-    private fun baseClientBuilder(): OkHttpClient.Builder {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
-
-        return OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                val request = chain.request()
-                    .newBuilder()
-                    .header("User-Agent", "NextGallery/0.1 Android")
-                    .build()
-                chain.proceed(request)
-            }
-            .addInterceptor(logging)
     }
 }

@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class NextcloudTransportTest {
@@ -56,6 +57,26 @@ class NextcloudTransportTest {
             "Basic dXNlcjpzZWNyZXQ=",
             NextcloudTransport.authorizationHeader(credentials),
         )
+    }
+
+    @Test
+    fun `authenticated client shares connection pool and dispatcher with base client`() {
+        val authenticatedClient = transport.authenticatedClient(credentials)
+
+        assertSame(transport.baseClient.connectionPool, authenticatedClient.connectionPool)
+        assertSame(transport.baseClient.dispatcher, authenticatedClient.dispatcher)
+        assertEquals(transport.baseClient.connectTimeoutMillis, authenticatedClient.connectTimeoutMillis)
+        assertEquals(transport.baseClient.readTimeoutMillis, authenticatedClient.readTimeoutMillis)
+        assertEquals(transport.baseClient.writeTimeoutMillis, authenticatedClient.writeTimeoutMillis)
+    }
+
+    @Test
+    fun `multiple authenticated clients share the same connection pool`() {
+        val client1 = transport.authenticatedClient(credentials)
+        val client2 = transport.authenticatedClient(credentials)
+
+        assertSame(client1.connectionPool, client2.connectionPool)
+        assertSame(client1.dispatcher, client2.dispatcher)
     }
 
     private fun assertAuthenticatedHeaders(request: Request) {
