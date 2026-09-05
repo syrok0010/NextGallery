@@ -61,12 +61,7 @@ class AuthenticatedViewModel(
 
                 override fun updateTimeline(transform: (TimelineUiState) -> TimelineUiState) {
                     _state.update { state ->
-                        val transformed = transform(state.timeline)
-                        state.copy(
-                            timeline = transformed.copy(
-                                snapshot = unifiedTimelineProjection.snapshot ?: transformed.snapshot,
-                            ),
-                        )
+                        state.copy(timeline = transform(state.timeline))
                     }
                 }
 
@@ -80,10 +75,10 @@ class AuthenticatedViewModel(
                     }
                 }
 
-                override suspend fun loadTimelineDays(
+                override suspend fun loadAndPublishTimelineDays(
                     credentials: AccountCredentials,
                     dayIds: List<Int>,
-                ): List<MediaItem> {
+                ) {
                     val items = memoriesRepository.loadTimelineDays(credentials, dayIds)
                     val projectedSnapshot = unifiedTimelineProjection.mergeRemoteItems(
                         items = items,
@@ -92,7 +87,6 @@ class AuthenticatedViewModel(
                     _state.update { state ->
                         state.copy(timeline = state.timeline.copy(snapshot = projectedSnapshot.snapshot))
                     }
-                    return items
                 }
             },
         )

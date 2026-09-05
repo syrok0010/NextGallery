@@ -2,8 +2,6 @@ package com.syrok0010.nextgallery.ui.timeline
 
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import com.syrok0010.nextgallery.ui.uiText
 import kotlinx.coroutines.CoroutineScope
@@ -32,10 +30,10 @@ internal interface TimelineViewportHost {
     fun currentSession(): TimelineViewportSession?
     fun updateTimeline(transform: (TimelineUiState) -> TimelineUiState)
     fun showLoadedItemsStatus(itemCount: Int)
-    suspend fun loadTimelineDays(
+    suspend fun loadAndPublishTimelineDays(
         credentials: AccountCredentials,
         dayIds: List<Int>,
-    ): List<MediaItem>
+    )
 }
 
 internal interface TimelineViewportController {
@@ -89,10 +87,6 @@ internal class DefaultTimelineViewportController(
     }
 
     private fun acceptObservation(observation: TimelineViewportObservation) {
-        processObservation(observation)
-    }
-
-    private fun processObservation(observation: TimelineViewportObservation) {
         val session = host.currentSession() ?: return
         val timelineState = session.timelineState
         val timeline = timelineState.snapshot ?: return
@@ -130,30 +124,18 @@ internal class DefaultTimelineViewportController(
         }
 
         scope.launch {
-            runCatching { host.loadTimelineDays(session.credentials, dayIds) }
-                .onSuccess { items ->
-                    var loadedItemCount: Int? = null
-
+            runCatching { host.loadAndPublishTimelineDays(session.credentials, dayIds) }
+                .onSuccess {
                     host.updateTimeline { state ->
-                        val currentTimeline = state.snapshot
-                        val updatedTimeline = currentTimeline?.let {
-                            TimelineSnapshotAssembler.mergeLoadedItems(
-                                snapshot = it,
-                                items = items,
-                                loadedDayIds = dayIds.toSet(),
-                            )
-                        }
-                        loadedItemCount = updatedTimeline?.items?.size ?: currentTimeline?.items?.size
-
                         state.copy(
-                            snapshot = updatedTimeline,
                             loadingDayIds = state.loadingDayIds - dayIds.toSet(),
                             failedDayIds = state.failedDayIds - dayIds.toSet(),
                             loadMoreError = null,
                         )
                     }
 
-                    loadedItemCount?.let(host::showLoadedItemsStatus)
+                    host.currentSession()?.timelineState?.snapshot?.items?.size
+                        ?.let(host::showLoadedItemsStatus)
                 }
                 .onFailure {
                     host.updateTimeline { state ->

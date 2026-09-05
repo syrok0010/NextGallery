@@ -12,6 +12,8 @@ import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -52,7 +54,7 @@ class TimelineViewportControllerTest {
     }
 
     @Test
-    fun `successful day hydration merges items and reports loaded count`() = runBlocking {
+    fun `successful day hydration preserves published snapshot and reports its loaded count`() = runBlocking {
         val dayId = 10
         val host = FakeTimelineViewportHost(
             initialSession = TimelineViewportSession(
@@ -93,6 +95,38 @@ class TimelineViewportControllerTest {
         assertEquals(listOf(listOf(dayId)), host.dayLoadRequests)
         assertEquals(listOf(1), host.loadedItemsStatusCounts)
         assertEquals(setOf(dayId), host.requireSession().timelineState.snapshot?.loadedDayIds)
+        assertSame(host.publishedSnapshot, host.requireSession().timelineState.snapshot)
+        assertEquals(emptySet<Int>(), host.requireSession().timelineState.loadingDayIds)
+        assertEquals(emptySet<Int>(), host.requireSession().timelineState.failedDayIds)
+    }
+
+    @Test
+    fun `failed hydration preserves snapshot and marks requested days as failed`() = runBlocking {
+        val snapshot = timelineSnapshot(days = listOf(TimelineDay(dayId = 10, count = 1)))
+        val host = FakeTimelineViewportHost(
+            initialSession = TimelineViewportSession(
+                credentials = credentials(),
+                timelineState = TimelineUiState(snapshot = snapshot),
+            ),
+        ).apply {
+            dayLoader = { _, _ -> error("Network unavailable") }
+        }
+        val controller = DefaultTimelineViewportController(
+            scope = this,
+            host = host,
+            prefetchSlots = 0,
+        )
+
+        controller.prefetchFromStart()
+        awaitUntil { host.requireSession().timelineState.failedDayIds == setOf(10) }
+
+        val state = host.requireSession().timelineState
+        assertSame(snapshot, state.snapshot)
+        assertEquals(emptySet<Int>(), state.loadingDayIds)
+        assertNotNull(state.loadMoreError)
+        assertEquals(emptyList<Int>(), host.loadedItemsStatusCounts)
+        controller.prefetchFromStart()
+        assertEquals(listOf(listOf(10)), host.dayLoadRequests)
     }
 
     @Test
@@ -160,6 +194,7 @@ class TimelineViewportControllerTest {
     ) : TimelineViewportHost {
         var session: TimelineViewportSession? = initialSession
         var dayLoader: suspend (AccountCredentials, List<Int>) -> List<MediaItem> = { _, _ -> emptyList() }
+        var publishedSnapshot: TimelineSnapshot? = null
         val dayLoadRequests = mutableListOf<List<Int>>()
         val loadedItemsStatusCounts = mutableListOf<Int>()
 
@@ -176,12 +211,18 @@ class TimelineViewportControllerTest {
             loadedItemsStatusCounts += itemCount
         }
 
-        override suspend fun loadTimelineDays(
+        override suspend fun loadAndPublishTimelineDays(
             credentials: AccountCredentials,
             dayIds: List<Int>,
-        ): List<MediaItem> {
+        ) {
             dayLoadRequests += dayIds
-            return dayLoader(credentials, dayIds)
+            val items = dayLoader(credentials, dayIds)
+            updateTimeline { state ->
+                publishedSnapshot = state.snapshot?.let {
+                    TimelineSnapshotAssembler.mergeLoadedItems(it, items, dayIds.toSet())
+                }
+                state.copy(snapshot = publishedSnapshot)
+            }
         }
 
         fun requireSession(): TimelineViewportSession {
