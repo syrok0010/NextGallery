@@ -22,6 +22,7 @@ internal fun createNextGalleryImageLoader(
 ): ImageLoader {
     return ImageLoader.Builder(context)
         .components {
+            add(LocalMediaRequestInterceptor())
             add(ThumbnailRequestKeyer)
             add(ThumbnailFetcher.Factory(thumbnailBatchLoader, thumbnailFileStore))
             add(VideoFrameDecoder.Factory())
