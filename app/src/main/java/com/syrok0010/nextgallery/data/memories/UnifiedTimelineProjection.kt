@@ -110,8 +110,12 @@ class UnifiedTimelineProjection(
                     )
                 },
             )
+            val remoteDayIds = resolvedRemoteSnapshot.days.mapTo(mutableSetOf()) { it.dayId }
+            val localOnlyDayIds = localOnly.mapNotNull { item ->
+                item.dayId.takeUnless { it in remoteDayIds }
+            }.toSet()
             TimelineSnapshotAssembler.addSourceItems(mergedSnapshot, localOnly).copy(
-                loadedDayIds = mergedSnapshot.loadedDayIds + localOnly.map { it.dayId },
+                loadedDayIds = mergedSnapshot.loadedDayIds + localOnlyDayIds,
             )
         } else {
             resolvedLocal
