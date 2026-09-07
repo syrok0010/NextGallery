@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.data.local
 
+import androidx.room.withTransaction
 import com.syrok0010.nextgallery.data.cache.IdentifiedLocalMedia
 import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
 import com.syrok0010.nextgallery.data.cache.toLocalMediaEntity
@@ -7,7 +8,7 @@ import com.syrok0010.nextgallery.data.cache.toMediaItem
 import com.syrok0010.nextgallery.data.memories.MediaItem
 
 class LocalMediaProjectionRepository(
-    database: NextGalleryDatabase,
+    private val database: NextGalleryDatabase,
 ) : LocalMediaProjectionStore {
     private val dao = database.localMediaDao()
 
@@ -21,10 +22,10 @@ class LocalMediaProjectionRepository(
     }
 
     override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) {
-        if (contentUris.isEmpty()) {
-            dao.deleteAll()
-        } else {
-            dao.deleteNotIn(contentUris)
+        database.withTransaction {
+            dao.contentUris().filterNot { it in contentUris }.chunked(500).forEach { stale ->
+                dao.deleteUris(stale)
+            }
         }
     }
 }

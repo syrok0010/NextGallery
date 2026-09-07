@@ -2,10 +2,15 @@ package com.syrok0010.nextgallery.data.memories
 
 import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class UnifiedTimelineProjection {
+class UnifiedTimelineProjection(
+    private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+) {
     private val mutex = Mutex()
     private var sources = TimelineSources()
 
@@ -46,11 +51,10 @@ class UnifiedTimelineProjection {
     private suspend fun updateSources(
         transform: (TimelineSources) -> TimelineSources,
     ): UnifiedTimelineProjectionResult = mutex.withLock {
-        val updatedSources = transform(sources)
-        val update = project(
-            remoteSnapshot = updatedSources.remote,
-            localItems = updatedSources.local,
-        )
+        val update = withContext(computationDispatcher) {
+            val updatedSources = transform(sources)
+            project(updatedSources.remote, updatedSources.local)
+        }
         sources = update.sources
         currentSnapshot = update.result.snapshot
         update.result

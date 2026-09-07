@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.data.local
 
+import androidx.room.Room
+import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
+import java.util.concurrent.atomic.AtomicInteger
 import android.content.ContentProvider
 import android.content.ContentResolver
 import android.content.ContentValues
@@ -82,20 +85,52 @@ class AndroidMediaStoreReaderTest {
         }
 
         try {
-            val reader = AndroidMediaStoreReader(ContentResolver.wrap(FixtureMediaProvider(jpeg)))
-
-            val firstImage = reader.readBatches(batchSize = 3).toList().single().metadata.first()
-
-            assertEquals(1_704_164_645L, firstImage.memoriesTimelineEpochSeconds)
-            assertEquals("camera-unique-42", firstImage.imageUniqueId)
+            val provider = FixtureMediaProvider(jpeg)
+            val database = Room.inMemoryDatabaseBuilder(context, NextGalleryDatabase::class.java).build()
+            try {
+                var version = "v1"
+                fun reader() = AndroidMediaStoreReader(
+                    ContentResolver.wrap(provider), database.localMediaMetadataDao(),
+                    volumeVersions = { mapOf("external_primary" to version) },
+                )
+                val firstImage = reader().readBatches(3).toList().single().metadata.first()
+                assertEquals(1_704_164_645L, firstImage.memoriesTimelineEpochSeconds)
+                assertEquals("camera-unique-42", firstImage.imageUniqueId)
+                assertEquals(2, provider.fileOpens.get())
+                reader().readBatches(2).toList()
+                assertEquals(2, provider.fileOpens.get())
+                provider.generation = 2
+                reader().readBatches(3).toList()
+                assertEquals(4, provider.fileOpens.get())
+                version = "v2"
+                reader().readBatches(3).toList()
+                assertEquals(6, provider.fileOpens.get())
+            } finally {
+                database.close()
+            }
         } finally {
             jpeg.delete()
         }
     }
 
+    @Test
+    fun nullCursorDoesNotReportSuccessfulEmptyLibrary() = runBlocking {
+        val reader = AndroidMediaStoreReader(ContentResolver.wrap(FixtureMediaProvider(nullCursor = true)))
+        var failed = false
+        try {
+            reader.readBatches(200).toList()
+        } catch (expected: IllegalStateException) {
+            failed = true
+        }
+        assertTrue(failed)
+    }
+
     private class FixtureMediaProvider(
         private val mediaFile: File? = null,
+        private val nullCursor: Boolean = false,
     ) : ContentProvider() {
+        val fileOpens = AtomicInteger()
+        var generation = 1L
         var observedSelection: String? = null
         var observedSortOrder: String? = null
 
@@ -107,7 +142,8 @@ class AndroidMediaStoreReaderTest {
             selection: String?,
             selectionArgs: Array<out String>?,
             sortOrder: String?,
-        ): Cursor {
+        ): Cursor? {
+            if (nullCursor) return null
             observedSelection = selection
             observedSortOrder = sortOrder
             return fixtureCursor(requireNotNull(projection))
@@ -118,7 +154,7 @@ class AndroidMediaStoreReaderTest {
             projection: Array<out String>?,
             queryArgs: Bundle?,
             cancellationSignal: CancellationSignal?,
-        ): Cursor = query(
+        ): Cursor? = query(
             uri = uri,
             projection = projection,
             selection = queryArgs?.getString(ContentResolver.QUERY_ARG_SQL_SELECTION),
@@ -128,6 +164,7 @@ class AndroidMediaStoreReaderTest {
 
         override fun getType(uri: Uri): String? = null
         override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+            fileOpens.incrementAndGet()
             val file = mediaFile ?: throw FileNotFoundException(uri.toString())
             return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
         }
@@ -148,6 +185,8 @@ class AndroidMediaStoreReaderTest {
         ) {
             val values = projection.map { column ->
                 when (column) {
+                    MediaStore.MediaColumns.VOLUME_NAME -> "external_primary"
+                    MediaStore.MediaColumns.GENERATION_MODIFIED -> generation
                     MediaStore.Files.FileColumns._ID -> id
                     MediaStore.Files.FileColumns.MEDIA_TYPE -> mediaType
                     MediaStore.MediaColumns.DISPLAY_NAME -> "media-$id"

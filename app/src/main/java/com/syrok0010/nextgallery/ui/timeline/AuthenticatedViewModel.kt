@@ -233,11 +233,14 @@ class AuthenticatedViewModel(
             localReconcileRequests.tryEmit(Unit)
             return
         }
+        var lastLocalItems: List<MediaItem>? = null
         localMediaJob = localMediaSource.updates(localReconcileRequests)
             .onEach { indexState ->
-                val projectedSnapshot = unifiedTimelineProjection
-                    .replaceLocalItems(indexState.items)
-                    .snapshot
+                if (lastLocalItems !== indexState.items) {
+                    unifiedTimelineProjection.replaceLocalItems(indexState.items)
+                    lastLocalItems = indexState.items
+                }
+                val projectedSnapshot = unifiedTimelineProjection.snapshot
                 _state.update { state ->
                     state.copy(
                         timeline = state.timeline.copy(snapshot = projectedSnapshot),
