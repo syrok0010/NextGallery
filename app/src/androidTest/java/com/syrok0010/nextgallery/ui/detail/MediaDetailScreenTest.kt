@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.ui.detail
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
@@ -63,6 +64,46 @@ class MediaDetailScreenTest {
         rule.onRoot().performTouchInput { swipeDown() }
         rule.waitForIdle()
         rule.runOnIdle { assertEquals(item, closed) }
+    }
+
+    @Test
+    fun reorderingSequencePreservesActiveItemAndDismissal() {
+        val first = mediaItem("first")
+        val second = mediaItem("second")
+        val prepended = mediaItem("prepended")
+        val sequenceState = mutableStateOf(
+            ViewerSequence(
+                items = listOf(first, second),
+                pageIndexByMediaId = mapOf(first.mediaId to 0, second.mediaId to 1),
+                timelineSlotIndexByMediaId = mapOf(first.mediaId to 100, second.mediaId to 101),
+            ),
+        )
+        var closed: MediaItem? = null
+        rule.setContent {
+            MediaDetailScreen(
+                initialMediaId = first.mediaId,
+                sequence = sequenceState.value,
+                tileBoundsForMediaId = { null },
+                onBack = { closed = it },
+                onCurrentItemChange = {},
+                onVisibleTimelineRange = { _, _ -> },
+            )
+        }
+        rule.onNodeWithText("first.jpg").assertIsDisplayed()
+
+        rule.runOnIdle {
+            sequenceState.value = ViewerSequence(
+                items = listOf(prepended, first, second),
+                pageIndexByMediaId = mapOf(prepended.mediaId to 0, first.mediaId to 1, second.mediaId to 2),
+                timelineSlotIndexByMediaId = mapOf(prepended.mediaId to 99, first.mediaId to 100, second.mediaId to 101),
+            )
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("first.jpg").assertIsDisplayed()
+        rule.onRoot().performTouchInput { swipeDown() }
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(first, closed) }
     }
 
     private fun showViewer(

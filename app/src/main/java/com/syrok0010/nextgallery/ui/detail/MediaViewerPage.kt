@@ -14,8 +14,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -48,8 +52,7 @@ internal fun MediaViewerPage(
     surfaceTransform: ViewerSurfaceTransform,
     trackSurfaceBounds: Boolean,
     onToggleChrome: () -> Unit,
-    onHdrChange: (Boolean) -> Unit,
-    onZoomedOutChange: (Boolean) -> Unit,
+    onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
@@ -79,6 +82,12 @@ internal fun MediaViewerPage(
         }
 
         if (item.isVideo) {
+            if (isCurrentPage) {
+                SideEffect(item.mediaId) {
+                    onActivePageStateChange(ActiveViewerPageState(hasHdr = false, canDragDown = true))
+                }
+            }
+
             Box(
                 modifier = contentSurfaceModifier
                     .then(pageTransformModifier)
@@ -96,10 +105,6 @@ internal fun MediaViewerPage(
                     contentScale = ContentScale.Fit,
                 )
 
-                LaunchedEffect(item.mediaId) {
-                    onHdrChange(false)
-                    onZoomedOutChange(true)
-                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -111,20 +116,29 @@ internal fun MediaViewerPage(
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
             val zoomableImageState = rememberZoomableImageState(zoomableState)
+            var hasGainmap by remember(item.mediaId) { mutableStateOf(false) }
+            val isZoomedOut by remember(zoomableState) {
+                derivedStateOf { (zoomableState.zoomFraction ?: 0f) <= 0.01f }
+            }
+
+            if (isCurrentPage) {
+                SideEffect(item.mediaId, hasGainmap, isZoomedOut) {
+                    onActivePageStateChange(
+                        ActiveViewerPageState(
+                            hasHdr = hasGainmap,
+                            canDragDown = isZoomedOut,
+                        ),
+                    )
+                }
+            }
+
             val originalPlan = requestFactory.rememberPlan(item, MediaImagePurpose.Original)
             val originalRequest = rememberFallbackImageRequest(
                 context = context,
                 plan = originalPlan,
-                onSuccess = { image -> onHdrChange(image.hasGainmapCompat()) },
-                onError = { onHdrChange(false) },
+                onSuccess = { image -> hasGainmap = image.hasGainmapCompat() },
+                onError = { hasGainmap = false },
             )
-
-            LaunchedEffect(item.mediaId, zoomableState) {
-                snapshotFlow { zoomableState.zoomFraction ?: 0f }
-                    .collect { zoomFraction ->
-                        onZoomedOutChange(zoomFraction <= 0.01f)
-                    }
-            }
 
             Box(
                 modifier = Modifier

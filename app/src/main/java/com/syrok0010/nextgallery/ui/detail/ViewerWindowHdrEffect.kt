@@ -6,13 +6,13 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
 internal fun ViewerWindowHdrEffect(enabled: Boolean) {
     val activity = LocalContext.current.findActivity()
-    LaunchedEffect(activity, enabled) {
+    SideEffect(activity, enabled) {
         activity?.window?.colorMode = if (enabled) {
             ActivityInfo.COLOR_MODE_HDR
         } else {

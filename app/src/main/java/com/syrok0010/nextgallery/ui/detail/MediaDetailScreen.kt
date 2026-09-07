@@ -10,9 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -24,6 +23,11 @@ import androidx.compose.ui.graphics.Color
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.domain.media.MediaId
 import kotlinx.coroutines.launch
+
+internal data class ActiveViewerPageState(
+    val hasHdr: Boolean = false,
+    val canDragDown: Boolean = true,
+)
 
 @Composable
 internal fun MediaDetailScreen(
@@ -39,25 +43,22 @@ internal fun MediaDetailScreen(
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    val pageZoomedOutByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }
-    val hdrByMediaId = remember { mutableStateMapOf<MediaId, Boolean>() }
     val currentItem = items.getOrNull(pagerState.currentPage)
-    val currentPageHasHdr = currentItem?.let { hdrByMediaId[it.mediaId] == true } == true
-    val currentPageCanDragDown = currentItem
-        ?.let { pageZoomedOutByMediaId[it.mediaId] }
-        ?: true
+    var activePageState by remember(currentItem?.mediaId) {
+        mutableStateOf(ActiveViewerPageState())
+    }
     val motion = rememberViewerMotionState(
         initialMediaId = initialMediaId,
         currentMediaId = currentItem?.mediaId,
         tileBoundsForMediaId = tileBoundsForMediaId,
         onClose = { currentItem?.let(onBack) },
     )
-    ViewerWindowHdrEffect(enabled = currentPageHasHdr)
+    ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
 
-    LaunchedEffect(pagerState.currentPage, items) {
-        val item = items.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
+    SideEffect(pagerState.currentPage, items) {
+        val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect
         onCurrentItemChange(item)
-        val slotIndex = sequence.timelineSlotIndex(item.mediaId) ?: return@LaunchedEffect
+        val slotIndex = sequence.timelineSlotIndex(item.mediaId) ?: return@SideEffect
         onVisibleTimelineRange(
             (slotIndex - ViewerSequencePrefetchSlots).coerceAtLeast(0),
             slotIndex + ViewerSequencePrefetchSlots,
@@ -76,7 +77,7 @@ internal fun MediaDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .viewerDismissGestures(motion, currentItem?.mediaId, currentPageCanDragDown),
+                .viewerDismissGestures(motion, currentItem?.mediaId, activePageState.canDragDown),
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -87,22 +88,21 @@ internal fun MediaDetailScreen(
                 val item = items[page]
                 MediaViewerPage(
                     item = item,
-                    isCurrentPage = page == pagerState.currentPage,
-                    surfaceTransform = if (page == pagerState.currentPage) {
+                    isCurrentPage = item.mediaId == currentItem?.mediaId,
+                    surfaceTransform = if (item.mediaId == currentItem?.mediaId) {
                         motion.surfaceTransform(item.mediaId)
                     } else {
                         ViewerSurfaceTransform()
                     },
-                    trackSurfaceBounds = page == pagerState.currentPage && motion.trackSurfaceBounds,
+                    trackSurfaceBounds = item.mediaId == currentItem?.mediaId && motion.trackSurfaceBounds,
                     onToggleChrome = { chromeVisible = !chromeVisible },
-                    onHdrChange = { hasHdr ->
-                        hdrByMediaId[item.mediaId] = hasHdr
-                    },
-                    onZoomedOutChange = { isZoomedOut ->
-                        pageZoomedOutByMediaId[item.mediaId] = isZoomedOut
+                    onActivePageStateChange = { state ->
+                        if (item.mediaId == currentItem?.mediaId) {
+                            activePageState = state
+                        }
                     },
                     onSurfaceBoundsChange = { bounds ->
-                        if (page == pagerState.currentPage) {
+                        if (item.mediaId == currentItem?.mediaId) {
                             motion.onSurfaceBoundsChange(bounds)
                         }
                     },
@@ -115,6 +115,7 @@ internal fun MediaDetailScreen(
                 visible = chromeVisible,
                 enter = fadeIn(animationSpec = tween(ViewerChromeFadeDurationMillis)),
                 exit = fadeOut(animationSpec = tween(ViewerChromeFadeDurationMillis)),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 ViewerChrome(
                     item = currentItem,
