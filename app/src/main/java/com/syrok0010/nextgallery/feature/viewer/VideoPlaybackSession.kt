@@ -17,10 +17,14 @@ internal data class VideoPlaybackState(
     val phase: VideoPlaybackPhase = VideoPlaybackPhase.Poster,
     val positionMillis: Long = 0,
     val durationMillis: Long? = null,
+    val playRequested: Boolean = false,
     val isMuted: Boolean = false,
     val error: VideoPlaybackError? = null,
     val isFullscreen: Boolean = false,
-)
+) {
+    val showsPauseAction: Boolean
+        get() = phase == VideoPlaybackPhase.Playing || (phase == VideoPlaybackPhase.Loading && playRequested)
+}
 
 internal sealed interface VideoPlaybackInput {
     data object Play : VideoPlaybackInput
@@ -64,7 +68,6 @@ internal sealed interface VideoPlaybackEffect {
     data class SeekTo(val positionMillis: Long) : VideoPlaybackEffect
 
     data class SetVolume(val volume: Float) : VideoPlaybackEffect
-
 }
 
 internal class VideoPlaybackSession(
@@ -79,17 +82,13 @@ internal class VideoPlaybackSession(
                 VideoPlaybackPhase.Poster,
                 VideoPlaybackPhase.Error,
                 -> {
-                    state = state.copy(
-                        phase = VideoPlaybackPhase.Loading,
-                        error = null,
-                        positionMillis = 0,
-                    )
-                    VideoPlaybackEffect.PrepareAndPlay(contentUri)
+                    prepareAndPlay()
                 }
 
                 VideoPlaybackPhase.Ready,
                 VideoPlaybackPhase.Paused,
                 -> {
+                    state = state.copy(playRequested = true)
                     val durationMillis = state.durationMillis
                     if (durationMillis != null && state.positionMillis >= durationMillis) {
                         VideoPlaybackEffect.ReplayFromStart
@@ -98,22 +97,29 @@ internal class VideoPlaybackSession(
                     }
                 }
 
-                VideoPlaybackPhase.Loading,
-                VideoPlaybackPhase.Playing,
-                -> null
+                VideoPlaybackPhase.Loading -> {
+                    if (state.playRequested) null else {
+                        state = state.copy(playRequested = true)
+                        VideoPlaybackEffect.Play
+                    }
+                }
+                VideoPlaybackPhase.Playing -> null
             }
         }
 
         VideoPlaybackInput.Pause -> {
-            state = state.copy(phase = VideoPlaybackPhase.Paused)
+            state = state.copy(playRequested = false)
+            if (state.phase in setOf(VideoPlaybackPhase.Playing, VideoPlaybackPhase.Ready, VideoPlaybackPhase.Paused)) {
+                state = state.copy(phase = VideoPlaybackPhase.Paused)
+            }
             VideoPlaybackEffect.Pause
         }
 
         is VideoPlaybackInput.PlayerReady -> {
             state = state.copy(
                 phase = VideoPlaybackPhase.Ready,
-                durationMillis = input.durationMillis,
-                positionMillis = state.positionMillis.coerceIn(0L, input.durationMillis),
+                durationMillis = input.durationMillis.coerceAtLeast(0L),
+                positionMillis = state.positionMillis.coerceIn(0L, input.durationMillis.coerceAtLeast(0L)),
             )
             null
         }
@@ -153,18 +159,12 @@ internal class VideoPlaybackSession(
             state = state.copy(
                 phase = VideoPlaybackPhase.Error,
                 error = VideoPlaybackError.CannotPlay,
+                playRequested = false,
             )
             null
         }
 
-        VideoPlaybackInput.Retry -> {
-            state = state.copy(
-                phase = VideoPlaybackPhase.Loading,
-                error = null,
-                positionMillis = 0,
-            )
-            VideoPlaybackEffect.PrepareAndPlay(contentUri)
-        }
+        VideoPlaybackInput.Retry -> prepareAndPlay()
 
         VideoPlaybackInput.Leave -> {
             state = VideoPlaybackState()
@@ -187,5 +187,16 @@ internal class VideoPlaybackSession(
             state = state.copy(isFullscreen = false)
             null
         }
+    }
+
+    private fun prepareAndPlay(): VideoPlaybackEffect {
+        state = state.copy(
+            phase = VideoPlaybackPhase.Loading,
+            error = null,
+            playRequested = true,
+            durationMillis = null,
+            positionMillis = 0,
+        )
+        return VideoPlaybackEffect.PrepareAndPlay(contentUri)
     }
 }

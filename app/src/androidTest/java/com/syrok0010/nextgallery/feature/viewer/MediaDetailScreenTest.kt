@@ -57,12 +57,12 @@ class MediaDetailScreenTest {
     }
 
     @Test
-    fun videoPlaceholderSupportsDragDismissWithoutTile() {
+    fun localVideoPosterSupportsDragDismissWithoutTile() {
         val item = mediaItem("video", isVideo = true)
         var closed: MediaItem? = null
         showViewer(listOf(item), tileBounds = null, onClose = { closed = it })
 
-        rule.onNodeWithText(rule.activity.getString(R.string.media_video_badge)).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
         saveScreenshot("video")
         rule.onRoot().performTouchInput { swipeDown() }
         rule.waitForIdle()

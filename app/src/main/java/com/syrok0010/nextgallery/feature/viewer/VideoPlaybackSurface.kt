@@ -1,54 +1,51 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.MediaItem as Media3Item
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.compose.PlayerSurface
-import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.ui.common.MediaAssetImage
-import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
+import androidx.media3.ui.compose.ContentFrame
+import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.images.MediaAssetImage
+import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import java.util.Locale
-import kotlin.time.Duration.Companion.milliseconds
 
 internal const val VideoPlaybackSurfaceTestTag = "video_playback_surface"
 internal const val VideoPlaybackPlayPauseTestTag = "video_playback_play_pause"
@@ -57,18 +54,21 @@ internal const val VideoPlaybackSeekTestTag = "video_playback_seek"
 internal const val VideoPlaybackMuteTestTag = "video_playback_mute"
 internal const val VideoPlaybackFullscreenTestTag = "video_playback_fullscreen"
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 internal fun VideoPlaybackSurface(
     item: MediaItem,
     contentUri: String,
     modifier: Modifier = Modifier,
     onToggleChrome: () -> Unit,
+    contentModifier: Modifier = Modifier.fillMaxSize(),
+    controlsVisible: Boolean = true,
     onFullscreenChanged: (Boolean) -> Unit = {},
+    createPlayer: (Context) -> ExoPlayer = { ExoPlayer.Builder(it).build() },
 ) {
     val context = LocalContext.current
-    val activity = context.videoActivity()
-    val player = remember(item.mediaId) {
-        ExoPlayer.Builder(context).build()
+    val player = remember(item.mediaId, contentUri) {
+        createPlayer(context)
     }
     val session = remember(item.mediaId, contentUri) {
         VideoPlaybackSession(contentUri)
@@ -76,13 +76,10 @@ internal fun VideoPlaybackSurface(
     var playbackState by remember(item.mediaId, contentUri) {
         mutableStateOf(session.state)
     }
-    val initialOrientation = remember(activity) {
-        activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    }
-
-    LaunchedEffect(item.mediaId) {
-        onFullscreenChanged(false)
-    }
+    val fullscreenChanged by rememberUpdatedState(onFullscreenChanged)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val density = LocalDensity.current
+    var controlsHeight by remember { mutableStateOf(0.dp) }
 
     fun applyEffect(effect: VideoPlaybackEffect?) {
         when (effect) {
@@ -118,6 +115,7 @@ internal fun VideoPlaybackSurface(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
+                    Player.STATE_IDLE -> Unit
                     Player.STATE_BUFFERING -> dispatch(VideoPlaybackInput.PlayerBuffering)
                     Player.STATE_READY -> dispatch(
                         VideoPlaybackInput.PlayerReady(
@@ -146,7 +144,7 @@ internal fun VideoPlaybackSurface(
         onDispose {
             player.removeListener(listener)
             applyEffect(session.accept(VideoPlaybackInput.Leave))
-            onFullscreenChanged(false)
+            fullscreenChanged(false)
         }
     }
 
@@ -159,41 +157,45 @@ internal fun VideoPlaybackSurface(
         }
     }
 
-    LaunchedEffect(playbackState.isFullscreen, activity) {
-        if (playbackState.isFullscreen) {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            activity?.requestedOrientation = initialOrientation
+    DisposableEffect(lifecycleOwner, player, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) dispatch(VideoPlaybackInput.Pause)
         }
-        onFullscreenChanged(playbackState.isFullscreen)
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    DisposableEffect(activity) {
-        onDispose {
-            activity?.requestedOrientation = initialOrientation
-        }
+    BackHandler(enabled = playbackState.isFullscreen) {
+        dispatch(VideoPlaybackInput.ExitFullscreen)
     }
+    LaunchedEffect(playbackState.isFullscreen) {
+        fullscreenChanged(playbackState.isFullscreen)
+    }
+    VideoFullscreenEffect(playbackState.isFullscreen)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
-            .testTag(VideoPlaybackSurfaceTestTag)
-            .background(Color.Black),
+            .testTag(VideoPlaybackSurfaceTestTag),
     ) {
-        MediaAssetImage(
-            item = item,
-            purpose = MediaImagePurpose.DetailPreview,
-            contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit,
-        )
-
-        if (playbackState.phase != VideoPlaybackPhase.Poster &&
-            playbackState.phase != VideoPlaybackPhase.Error
-        ) {
-            PlayerSurface(
-                player = player,
+        Box(modifier = contentModifier.align(Alignment.Center).background(Color.Black)) {
+            MediaAssetImage(
+                item = item,
+                purpose = MediaImagePurpose.DetailPreview,
+                contentDescription = item.displayName,
                 modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
             )
+
+            if (playbackState.phase != VideoPlaybackPhase.Poster &&
+                playbackState.phase != VideoPlaybackPhase.Error
+            ) {
+                ContentFrame(
+                    player = player,
+                    surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         Box(
@@ -202,7 +204,9 @@ internal fun VideoPlaybackSurface(
                 .clickable(onClick = onToggleChrome),
         )
 
-        VideoPlaybackCenterAction(
+        if (playbackState.phase != VideoPlaybackPhase.Playing &&
+            (controlsVisible || playbackState.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error, VideoPlaybackPhase.Loading))
+        ) VideoPlaybackCenterAction(
             phase = playbackState.phase,
             onClick = {
                 when (playbackState.phase) {
@@ -211,15 +215,19 @@ internal fun VideoPlaybackSurface(
                     else -> dispatch(VideoPlaybackInput.Play)
                 }
             },
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier.align(Alignment.Center)
+                .offset {
+                    val y = if (controlsVisible) minOf(0.dp, maxHeight / 2 - controlsHeight - 64.dp) else 0.dp
+                    IntOffset(0, y.roundToPx())
+                },
         )
 
-        VideoPlaybackControls(
+        if (controlsVisible) VideoPlaybackControls(
             state = playbackState,
             onPlayPause = {
-                if (playbackState.phase == VideoPlaybackPhase.Playing) {
+                if (playbackState.showsPauseAction) {
                     dispatch(VideoPlaybackInput.Pause)
-                } else if (playbackState.phase != VideoPlaybackPhase.Loading) {
+                } else {
                     dispatch(VideoPlaybackInput.Play)
                 }
             },
@@ -234,207 +242,10 @@ internal fun VideoPlaybackSurface(
                     },
                 )
             },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(bottom = if (playbackState.isFullscreen) 0.dp else FilmstripRowHeight),
         )
     }
-}
-
-@Composable
-private fun VideoPlaybackCenterAction(
-    phase: VideoPlaybackPhase,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    when (phase) {
-        VideoPlaybackPhase.Loading -> {
-            Column(
-                modifier = modifier,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp))
-                Text(
-                    text = stringResource(R.string.video_playback_loading),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-        }
-        VideoPlaybackPhase.Poster,
-        VideoPlaybackPhase.Ready,
-        VideoPlaybackPhase.Paused,
-        VideoPlaybackPhase.Error,
-        -> {
-            Column(
-                modifier = modifier,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                IconButton(
-                    onClick = onClick,
-                    modifier = Modifier.testTag(VideoPlaybackPlayPauseTestTag),
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (phase == VideoPlaybackPhase.Error) R.drawable.ic_video_replay else R.drawable.ic_video_play,
-                        ),
-                        contentDescription = stringResource(
-                            if (phase == VideoPlaybackPhase.Error) {
-                                R.string.video_playback_retry
-                            } else {
-                                R.string.video_playback_play
-                            },
-                        ),
-                        tint = Color.White,
-                    )
-                }
-                if (phase == VideoPlaybackPhase.Error) {
-                    Text(
-                        text = stringResource(R.string.video_playback_error),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-        }
-
-        VideoPlaybackPhase.Playing -> {
-            IconButton(
-                onClick = onClick,
-                modifier = modifier.testTag(VideoPlaybackPlayPauseTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_video_pause),
-                    contentDescription = stringResource(R.string.video_playback_pause),
-                    tint = Color.White,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun VideoPlaybackControls(
-    state: VideoPlaybackState,
-    onPlayPause: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onToggleMute: () -> Unit,
-    onToggleFullscreen: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val durationMillis = state.durationMillis ?: 0L
-    val sliderValue = if (durationMillis > 0L) {
-        state.positionMillis.coerceIn(0L, durationMillis).toFloat() / durationMillis
-    } else {
-        0f
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.72f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        Slider(
-            value = sliderValue,
-            onValueChange = { value ->
-                if (durationMillis > 0L) onSeek((value * durationMillis).toLong())
-            },
-            enabled = durationMillis > 0L && state.phase != VideoPlaybackPhase.Loading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(VideoPlaybackSeekTestTag),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(
-                onClick = onPlayPause,
-                modifier = Modifier.testTag(VideoPlaybackControlsPlayPauseTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.phase == VideoPlaybackPhase.Playing) {
-                            R.drawable.ic_video_pause
-                        } else {
-                            R.drawable.ic_video_play
-                        },
-                    ),
-                    contentDescription = stringResource(
-                        if (state.phase == VideoPlaybackPhase.Playing) {
-                            R.string.video_playback_pause
-                        } else {
-                            R.string.video_playback_play
-                        },
-                    ),
-                    tint = Color.White,
-                )
-            }
-            Text(
-                text = stringResource(
-                    R.string.video_playback_position,
-                    formatVideoTime(state.positionMillis),
-                    formatVideoTime(durationMillis),
-                ),
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(
-                onClick = onToggleMute,
-                modifier = Modifier.testTag(VideoPlaybackMuteTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.isMuted) R.drawable.ic_video_volume_off else R.drawable.ic_video_volume_up,
-                    ),
-                    contentDescription = stringResource(
-                        if (state.isMuted) R.string.video_playback_unmute else R.string.video_playback_mute,
-                    ),
-                    tint = Color.White,
-                )
-            }
-            IconButton(
-                onClick = onToggleFullscreen,
-                modifier = Modifier.testTag(VideoPlaybackFullscreenTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.isFullscreen) R.drawable.ic_video_fullscreen_exit else R.drawable.ic_video_fullscreen,
-                    ),
-                    contentDescription = stringResource(
-                        if (state.isFullscreen) {
-                            R.string.video_playback_exit_fullscreen
-                        } else {
-                            R.string.video_playback_fullscreen
-                        },
-                    ),
-                    tint = Color.White,
-                )
-            }
-        }
-    }
-}
-
-private fun formatVideoTime(milliseconds: Long): String {
-    val totalSeconds = (milliseconds / 1_000L).coerceAtLeast(0L)
-    val hours = totalSeconds / 3_600L
-    val minutes = (totalSeconds / 60L) % 60L
-    val seconds = totalSeconds % 60L
-    return if (hours > 0L) {
-        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format(Locale.US, "%d:%02d", minutes, seconds)
-    }
-}
-
-private fun Context.videoActivity(): Activity? {
-    var currentContext = this
-    while (currentContext is ContextWrapper) {
-        if (currentContext is Activity) return currentContext
-        currentContext = currentContext.baseContext
-    }
-    return null
 }

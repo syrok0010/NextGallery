@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -49,7 +51,9 @@ class VideoPlaybackControlsTest {
         assertEquals(1, muteClicks)
         assertEquals(1, fullscreenClicks)
         assertEquals(1, playPauseClicks)
-        assertEquals(-1L, seekPosition)
+        composeRule.onNodeWithTag(VideoPlaybackSeekTestTag)
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        assertEquals(2_000L, seekPosition)
     }
 
     @Test

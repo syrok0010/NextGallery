@@ -31,6 +31,14 @@ Viewer должен показывать full-resolution still images, подд�
 
 Закрывает image engine через Telephoto, pager через Compose Foundation и оставляет приложению только transition/session coordination.
 
+### Media3 для обычного видео
+
+Media3/ExoPlayer даёт platform decoding, seek и события playback без собственного
+codec engine; Compose controls позволяют сохранить язык viewer. Отдельный video
+screen нарушил бы общий pager/return transition, а готовый внешний player UI
+навязал бы самостоятельную навигацию и chrome. Bundled software decoders увеличили
+бы размер и стоимость сопровождения ради поддержки форматов вне первого среза.
+
 ## Решение
 
 - Telephoto `zoomable-image-coil3` отображает still originals и управляет zoom/subsampling.
@@ -43,8 +51,10 @@ Viewer должен показывать full-resolution still images, подд�
 - Текущее локальное видео в активной detail-page воспроизводится через Media3/ExoPlayer; cloud-only video до remote playback остаётся preview.
 - `VideoPlaybackSession` отделяет typed playback state/effects от Media3: сессия создаётся только для активной локальной video-page, при уходе получает `Leave` и освобождает player.
 - Воспроизведение запускается только явным действием. Position не сохраняется при смене pager page или возвращении к ней; новая сессия начинается с нуля.
-- Управление (play/pause, seek, duration, mute, fullscreen, loading/error/retry) остаётся Compose UI поверх `PlayerSurface`.
-- Fullscreen временно переводит activity в landscape и восстанавливает исходную ориентацию при выходе/уничтожении surface.
+- Управление (play/pause, seek, duration, mute, fullscreen, loading/error/retry) остаётся Compose UI поверх `ContentFrame` с сохранением пропорций видео.
+- Fullscreen остаётся в текущей page: временно разрешает landscape, скрывает viewer chrome и system bars; Back сначала выходит из fullscreen. Исходная ориентация и видимость system bars восстанавливаются при выходе/уничтожении surface. Activity обрабатывает смену ориентации без пересоздания, чтобы не потерять playback session.
+- При уходе приложения в фон playback ставится на паузу, включая отмену play intent во время загрузки. Возврат не запускает видео автоматически.
+- Для video surface используется TextureView, чтобы поверхность следовала Compose-transform при возврате в tile. Это обмен эффективности SurfaceView на совместимость с существующей анимацией viewer; controls в transform не входят.
 - В первом приближении используются только platform decoders Media3; transcoding и remote source ladder вынесены в отдельные задачи.
 
 Версии библиотек определяет version catalog.

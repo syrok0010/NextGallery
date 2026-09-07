@@ -54,6 +54,7 @@
     <string name="value_unknown">unknown</string>
     <string name="value_unknown_short">?</string>
     <string name="error_save_credentials">Не удалось сохранить подключение. Попробуйте войти заново.</string>
+    <string name="video_playback_seek">Позиция видео</string>
     <string name="video_playback_play">Воспроизвести видео</string>
     <string name="video_playback_pause">Приостановить видео</string>
     <string name="video_playback_retry">Повторить воспроизведение</string>

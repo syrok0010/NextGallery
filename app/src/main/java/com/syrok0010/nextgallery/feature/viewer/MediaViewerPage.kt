@@ -40,7 +40,6 @@ import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.rememberFallbackImageRequest
-import com.syrok0010.nextgallery.core.media.localContentOrNull
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
@@ -56,6 +55,7 @@ internal fun MediaViewerPage(
     onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
     onFullscreenChanged: (Boolean) -> Unit = {},
+    controlsVisible: Boolean = true,
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
@@ -90,12 +90,18 @@ internal fun MediaViewerPage(
                 }
             }
 
-            val localAsset = item.assetRef.localContentOrNull()
+            val localAsset = when (val asset = item.assetRef) {
+                is MediaAssetRef.LocalContent -> asset
+                is MediaAssetRef.LocalFirst -> asset.local
+                is MediaAssetRef.MemoriesFile -> null
+            }
             if (isCurrentPage && localAsset != null) {
                 VideoPlaybackSurface(
                     item = item,
                     contentUri = localAsset.contentUri,
-                    modifier = contentSurfaceModifier
+                    modifier = Modifier.fillMaxSize(),
+                    controlsVisible = controlsVisible,
+                    contentModifier = contentSurfaceModifier
                         .then(pageTransformModifier)
                         .onGloballyPositioned { coordinates ->
                             if (trackSurfaceBounds) onSurfaceBoundsChange(coordinates.boundsInRoot())
