@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.domain.media.MediaId
@@ -26,20 +27,22 @@ class ViewerMotionStateTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
-    private lateinit var motion: ViewerMotionState
     private val firstId = MediaId("first")
     private val currentId = mutableStateOf(firstId)
     private val closedIds = mutableListOf<MediaId>()
-    private val surface = Rect(0f, 100f, 800f, 700f)
-    private val tile = Rect(20f, 40f, 140f, 160f)
+    private val surface = Rect(0f, 200f, 800f, 1000f)
+    private val tile = Rect(100f, 300f, 300f, 500f)
+    private lateinit var motion: ViewerMotionState
 
     @Test
-    fun openingWaitsForMeasurementThenRestoresSurfaceAndChrome() {
+    fun opensOnlyAfterMeasuredSurfaceIsReported() {
         showViewer(measure = false)
         rule.runOnIdle {
-            assertEquals(0f, motion.surfaceTransform(firstId).alpha, 0f)
-            assertFalse(motion.chromeAllowed)
+            assertEquals(1f, motion.surfaceTransform(firstId).scale, 0f)
             motion.onSurfaceBoundsChange(surface)
+        }
+        rule.runOnIdle {
+            assertTrue(motion.surfaceTransform(firstId).scale < 1f)
         }
         finishAnimations()
         rule.runOnIdle { assertResting() }
@@ -52,6 +55,46 @@ class ViewerMotionStateTest {
         rule.runOnIdle {
             assertFalse(motion.chromeAllowed)
             motion.endDrag(canClose = true, thresholdPx = 112f)
+        }
+        finishAnimations()
+        rule.runOnIdle {
+            assertResting()
+            assertTrue(closedIds.isEmpty())
+        }
+    }
+
+    @Test
+    fun fastFlingBelowThresholdClosesViewer() {
+        showViewer()
+        rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
+        rule.runOnIdle {
+            assertFalse(motion.chromeAllowed)
+            motion.endDrag(
+                canClose = true,
+                thresholdPx = 112f,
+                flingVelocityPx = 800f,
+                velocity = Velocity(0f, 1500f),
+            )
+        }
+        finishAnimations()
+        rule.runOnIdle {
+            assertEquals(listOf(firstId), closedIds)
+            assertEquals(0f, motion.backgroundAlpha, 0f)
+        }
+    }
+
+    @Test
+    fun upwardFlingBelowThresholdDoesNotCloseViewer() {
+        showViewer()
+        rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
+        rule.runOnIdle {
+            assertFalse(motion.chromeAllowed)
+            motion.endDrag(
+                canClose = true,
+                thresholdPx = 112f,
+                flingVelocityPx = 800f,
+                velocity = Velocity(0f, -500f),
+            )
         }
         finishAnimations()
         rule.runOnIdle {

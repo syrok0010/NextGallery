@@ -2,7 +2,9 @@ package com.syrok0010.nextgallery.ui.detail
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.Composable
@@ -22,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.domain.media.MediaId
 import kotlinx.coroutines.CancellationException
@@ -153,7 +157,10 @@ internal class ViewerMotionState(
         enterPending = false
     }
 
-    fun close(onClosed: () -> Unit = onClose.value) {
+    fun close(
+        onClosed: () -> Unit = onClose.value,
+        initialVelocityPx: Float = 0f,
+    ) {
         // Capture the destination and callback before starting the animation.
         val target = surfaceBounds?.settleTarget(tileBounds(), dragOffset.value, predictiveBackProgress)
         scope.launch {
@@ -161,11 +168,30 @@ internal class ViewerMotionState(
                 settleProgress.snapTo(0f)
                 settleTarget = target
                 launch {
-                    backgroundOpacity.animateTo(0f, tween(durationMillis = ViewerBackgroundExitDurationMillis))
+                    backgroundOpacity.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
+                    )
                 }
-                settleProgress.animateTo(1f, tween(durationMillis = ViewerSettleDurationMillis))
+                val distance = (target.targetOffset - target.startOffset).getDistance()
+                val normalizedVelocity = if (distance > 1f && initialVelocityPx > 0f) {
+                    (initialVelocityPx / distance).coerceIn(0f, 10f)
+                } else {
+                    0f
+                }
+                settleProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium,
+                    ),
+                    initialVelocity = normalizedVelocity,
+                )
             } else {
-                backgroundOpacity.snapTo(0f)
+                backgroundOpacity.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
+                )
             }
             onClosed()
         }
@@ -191,11 +217,26 @@ internal class ViewerMotionState(
         scope.launch { dragOffset.animateTo(Offset.Zero) }
     }
 
-    fun endDrag(canClose: Boolean, thresholdPx: Float) {
-        if (canClose && dragOffset.value.y > thresholdPx) {
-            close()
+    fun endDrag(
+        canClose: Boolean,
+        thresholdPx: Float,
+        flingVelocityPx: Float = Float.MAX_VALUE,
+        velocity: Velocity = Velocity.Zero,
+    ) {
+        val isFlingClose = velocity.y > flingVelocityPx && dragOffset.value.y > 0f
+        if (canClose && (dragOffset.value.y > thresholdPx || isFlingClose)) {
+            close(initialVelocityPx = velocity.y)
         } else {
-            scope.launch { dragOffset.animateTo(Offset.Zero) }
+            scope.launch {
+                dragOffset.animateTo(
+                    targetValue = Offset.Zero,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium,
+                    ),
+                    initialVelocity = Offset(velocity.x, velocity.y),
+                )
+            }
         }
     }
 }
@@ -207,11 +248,30 @@ internal fun Modifier.viewerDismissGestures(
     canDrag: Boolean,
 ): Modifier {
     val thresholdPx = with(LocalDensity.current) { ViewerDismissThreshold.toPx() }
-    return pointerInput(motion, mediaId, canDrag, thresholdPx) {
+    val flingVelocityPx = with(LocalDensity.current) { ViewerDismissFlingVelocity.toPx() }
+    val velocityTracker = remember { VelocityTracker() }
+
+    return pointerInput(motion, mediaId, canDrag, thresholdPx, flingVelocityPx) {
         detectDragGestures(
-            onDragCancel = motion::cancelDrag,
-            onDragEnd = { motion.endDrag(canClose = mediaId != null, thresholdPx = thresholdPx) },
+            onDragStart = {
+                velocityTracker.resetTracking()
+            },
+            onDragCancel = {
+                velocityTracker.resetTracking()
+                motion.cancelDrag()
+            },
+            onDragEnd = {
+                val velocity = velocityTracker.calculateVelocity()
+                velocityTracker.resetTracking()
+                motion.endDrag(
+                    canClose = mediaId != null,
+                    thresholdPx = thresholdPx,
+                    flingVelocityPx = flingVelocityPx,
+                    velocity = velocity,
+                )
+            },
         ) { change, amount ->
+            velocityTracker.addPosition(change.uptimeMillis, change.position)
             if (canDrag && motion.dragBy(amount)) change.consume()
         }
     }
@@ -227,5 +287,5 @@ private const val ViewerBackgroundEnterDelayMillis = 210
 private const val ViewerBackgroundEnterDurationMillis = 90
 private const val ViewerBackgroundExitDurationMillis = 90
 private const val ViewerEnterDurationMillis = 220
-private const val ViewerSettleDurationMillis = 220
 private val ViewerDismissThreshold = 112.dp
+private val ViewerDismissFlingVelocity = 800.dp
