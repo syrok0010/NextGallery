@@ -237,6 +237,43 @@ class UnifiedTimelineProjectionTest {
         assertEquals(localOnly.assetRef, items.getValue(localOnly.mediaId).assetRef)
     }
 
+    @Test
+    fun `local item does not mark unloaded remote day as loaded but marks local-only day as loaded`() = runBlocking {
+        val sameDayLocal = localItem(
+            mediaId = MediaId("local-same-day"),
+            auid = "local-same-day-auid",
+            buid = "local-buid-1",
+            contentUri = "content://images/100",
+        ).copy(dayId = 100)
+        val localOnlyDayItem = localItem(
+            mediaId = MediaId("local-only-day"),
+            auid = "local-only-day-auid",
+            buid = "local-buid-2",
+            contentUri = "content://images/200",
+        ).copy(dayId = 200)
+
+        val remoteLoadedItem = remoteItem(
+            mediaId = MediaId("remote-loaded"),
+            auid = "remote-loaded-auid",
+        ).copy(dayId = 300)
+        val remoteSnapshot = TimelineSnapshotAssembler.assemble(
+            config = memoriesConfig(),
+            days = listOf(
+                TimelineDay(dayId = 300, count = 1),
+                TimelineDay(dayId = 100, count = 2),
+            ),
+            mediaItems = listOf(remoteLoadedItem),
+            loadedDayIds = setOf(300),
+        )
+
+        val projection = UnifiedTimelineProjection()
+        projection.replaceLocalItems(listOf(sameDayLocal, localOnlyDayItem))
+        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
+
+        val snapshot = requireNotNull(result.snapshot)
+        assertEquals(setOf(200, 300), snapshot.loadedDayIds)
+    }
+
     private fun localItem(
         mediaId: MediaId,
         auid: String,
