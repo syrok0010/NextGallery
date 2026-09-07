@@ -27,6 +27,12 @@ interface LocalMediaDao {
     @Query("DELETE FROM local_media_projection WHERE contentUri NOT IN (:contentUris)")
     suspend fun deleteNotIn(contentUris: Collection<String>)
 
+    @Query("SELECT contentUri FROM local_media_projection")
+    suspend fun contentUris(): List<String>
+
+    @Query("DELETE FROM local_media_projection WHERE contentUri IN (:uris)")
+    suspend fun deleteUris(uris: List<String>)
+
     @Query("DELETE FROM local_media_projection")
     suspend fun deleteAll()
 }

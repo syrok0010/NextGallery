@@ -13,6 +13,7 @@ import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
 import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.data.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.data.local.AndroidMediaStoreReader
+import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.data.local.LocalMediaProjectionStore
 import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
@@ -47,7 +48,20 @@ val appModule = module {
     single { TimelineCacheRepository(get(), get(), get()) }
     factory { UnifiedTimelineProjection() }
     single { LocalMediaPermissionCoordinator(androidContext()) }
-    single { AndroidMediaStoreReader(androidContext().contentResolver) }
+    single {
+        val context = androidContext()
+        val permissions = get<LocalMediaPermissionCoordinator>()
+        AndroidMediaStoreReader(
+            context.contentResolver,
+            get<NextGalleryDatabase>().localMediaMetadataDao(),
+            volumeVersions = {
+                check(permissions.currentMode() == LocalMediaPermissionMode.Full) { "Full media permission required" }
+                android.provider.MediaStore.getExternalVolumeNames(context).associateWith { volume ->
+                    checkNotNull(android.provider.MediaStore.getVersion(context, volume))
+                }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
+            },
+        )
+    }
     single { AndroidMediaStoreChangeObserver(androidContext().contentResolver) }
     single<LocalMediaProjectionStore> { LocalMediaProjectionRepository(get()) }
     single {

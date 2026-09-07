@@ -24,6 +24,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flow
+import kotlin.time.Duration
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -90,6 +95,7 @@ class LocalMediaSourceTest {
             identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
             batchSize = 2,
+            publicationInterval = Duration.INFINITE,
         )
 
         val states = source.updates(emptyFlow()).take(3).toList()
@@ -97,7 +103,7 @@ class LocalMediaSourceTest {
         assertEquals(listOf(cached), states[0].items)
         assertNull(states[0].progress)
         assertEquals(
-            listOf("content://images/3", "content://video/2", "content://images/cached"),
+            listOf("content://images/cached"),
             states[1].items.map(MediaItem::localContentUri),
         )
         assertEquals(LocalMediaIndexProgress(indexedCount = 2, totalCount = 3), states[1].progress)
@@ -217,6 +223,53 @@ class LocalMediaSourceTest {
 
         assertEquals(2, scanNumber)
         assertEquals(listOf("scan-1", "scan-2"), publishedNames.distinct())
+    }
+
+    @Test
+    fun `unchanged 20000 item rescan keeps one published list across 100 batches`() = runBlocking {
+        var rows = List(20_000) { metadata("content://images/$it", taken = (it + 1) * 1_000L) }
+        val store = InMemoryLocalMediaProjectionStore()
+        val registry = CountingMediaIdentityRegistry()
+        fun source() = LocalMediaSource(
+            reader = LocalMediaReader {
+                flow {
+                    rows.chunked(200).forEachIndexed { index, batch ->
+                        emit(LocalMediaBatch(batch, LocalMediaIndexProgress((index + 1) * 200, rows.size)))
+                    }
+                }
+            },
+            projectionStore = store,
+            identityRegistry = registry,
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            publicationInterval = Duration.INFINITE,
+        )
+        val cold = source().updates(emptyFlow()).take(101).toList()
+        assertTrue(cold.dropLast(1).all { it.items.isEmpty() })
+        assertEquals(20_000, cold.last().items.size)
+        val warm = source().updates(emptyFlow()).take(101).toList()
+        warm.forEach { assertSame(warm.first().items, it.items) }
+        assertNull(warm.last().progress)
+        assertEquals(20_000, registry.resolvedCandidateCount)
+        rows = rows.dropLast(1) + rows.last().copy(displayName = "renamed.jpg")
+        val changed = source().updates(emptyFlow()).take(101).toList()
+        assertEquals(20_001, registry.resolvedCandidateCount)
+        assertTrue(changed.last().items.any { it.displayName == "renamed.jpg" })
+    }
+
+    @Test
+    fun `incomplete scan preserves cached rows and does not reconcile deletions`() = runBlocking {
+        val cached = localItem("content://images/cached", 100)
+        val store = InMemoryLocalMediaProjectionStore(listOf(cached))
+        val source = LocalMediaSource(
+            reader = LocalMediaReader { emptyFlow() },
+            projectionStore = store,
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+        )
+        var failed = false
+        source.updates(emptyFlow()).catch { failed = true }.collect()
+        assertTrue(failed)
+        assertEquals(listOf(cached), store.items)
     }
 
     private class InMemoryLocalMediaProjectionStore(

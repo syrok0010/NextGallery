@@ -4,20 +4,26 @@ import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
 import com.syrok0010.nextgallery.data.memories.MediaItem
 import com.syrok0010.nextgallery.data.memories.mediaIdentityCandidate
+import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.domain.media.MediaSourceKind
-import java.time.LocalDate
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class LocalMediaMetadata(
     val contentUri: String,
     val displayName: String,
@@ -32,11 +38,14 @@ data class LocalMediaMetadata(
     val dateAddedSeconds: Long?,
     val durationMillis: Long?,
     val isVideo: Boolean,
+    val generationModified: Long? = null,
+    val volumeName: String? = null,
 )
 
 data class LocalMediaBatch(
     val metadata: List<LocalMediaMetadata>,
     val progress: LocalMediaIndexProgress,
+    val unavailableContentUris: Set<String> = emptySet(),
 )
 
 data class LocalMediaIndexProgress(
@@ -44,6 +53,7 @@ data class LocalMediaIndexProgress(
     val totalCount: Int,
 )
 
+/** Progress-only updates retain the same immutable items instance. */
 data class LocalMediaIndexState(
     val items: List<MediaItem>,
     val progress: LocalMediaIndexProgress?,
@@ -71,43 +81,45 @@ class LocalMediaSource(
     private val changeObserver: LocalMediaChangeObserver,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
     private val changeDebounce: Duration = DEFAULT_CHANGE_DEBOUNCE,
+    private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val publicationInterval: Duration = 250.milliseconds,
 ) {
     fun updates(reconcileRequests: Flow<Unit>): Flow<LocalMediaIndexState> = channelFlow {
         var publishedItems = projectionStore.loadLocalMediaProjection()
         send(LocalMediaIndexState(items = publishedItems, progress = null))
 
         suspend fun reconcile() {
-            val freshItems = linkedMapOf<String, MediaItem>()
+            val itemsByUri = publishedItems.associateByTo(linkedMapOf()) { it.localContentUri() }
+            val seenUris = mutableSetOf<String>()
+            var dirty = false
+            var lastPublication = TimeSource.Monotonic.markNow()
             var completed = false
 
             reader.readBatches(batchSize).collect { batch ->
-                val mappedItems = mapMetadata(batch.metadata)
-                projectionStore.saveLocalMediaBatch(mappedItems)
-                mappedItems.forEach { item -> freshItems[item.localContentUri()] = item }
-
-                if (batch.progress.indexedCount >= batch.progress.totalCount) {
-                    projectionStore.finishLocalMediaReconciliation(freshItems.keys)
-                    publishedItems = freshItems.values.toList().sortedForTimeline()
-                    send(LocalMediaIndexState(items = publishedItems, progress = null))
-                    completed = true
-                } else {
-                    val freshUris = freshItems.keys
-                    publishedItems = (freshItems.values + publishedItems.filterNot { it.localContentUri() in freshUris })
-                        .sortedForTimeline()
-                    send(
-                        LocalMediaIndexState(
-                            items = publishedItems,
-                            progress = batch.progress,
-                        ),
-                    )
+                check(!completed) { "MediaStore emitted data after completion" }
+                val mappedItems = mapMetadata(batch.metadata, itemsByUri)
+                val changedItems = mappedItems.filter { itemsByUri[it.localContentUri()] != it }
+                projectionStore.saveLocalMediaBatch(changedItems)
+                mappedItems.forEach { item ->
+                    val uri = item.localContentUri()
+                    seenUris += uri
+                    itemsByUri[uri] = item
                 }
+                dirty = dirty || changedItems.isNotEmpty()
+                completed = batch.progress.indexedCount >= batch.progress.totalCount
+                if (completed) {
+                    seenUris.addAll(batch.unavailableContentUris)
+                    projectionStore.finishLocalMediaReconciliation(seenUris)
+                    dirty = itemsByUri.keys.retainAll(seenUris) || dirty
+                }
+                if (dirty && (completed || lastPublication.elapsedNow() >= publicationInterval)) {
+                    publishedItems = itemsByUri.values.toList().sortedForTimeline()
+                    dirty = false
+                    lastPublication = TimeSource.Monotonic.markNow()
+                }
+                send(LocalMediaIndexState(publishedItems, if (completed) null else batch.progress))
             }
-
-            if (!completed) {
-                projectionStore.finishLocalMediaReconciliation(emptySet())
-                publishedItems = emptyList()
-                send(LocalMediaIndexState(items = emptyList(), progress = null))
-            }
+            check(completed) { "MediaStore scan ended without a complete result" }
         }
 
         val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
@@ -125,9 +137,12 @@ class LocalMediaSource(
         for (ignored in reconcileTriggers) {
             reconcile()
         }
-    }
+    }.flowOn(computationDispatcher)
 
-    private suspend fun mapMetadata(metadata: List<LocalMediaMetadata>): List<MediaItem> {
+    private suspend fun mapMetadata(
+        metadata: List<LocalMediaMetadata>,
+        existingItems: Map<String, MediaItem>,
+    ): List<MediaItem> {
         val drafts = metadata.mapNotNull { item ->
             val timestamp = item.timelineEpochSeconds() ?: return@mapNotNull null
             val aliases = MemoriesMediaIdentity.calculate(
@@ -138,7 +153,12 @@ class LocalMediaSource(
             )
             LocalMediaDraft(item, timestamp, aliases)
         }
-        val candidates = drafts.map { draft ->
+        val unchangedItems = drafts.mapNotNull { draft ->
+            existingItems[draft.metadata.contentUri]?.takeIf { existing ->
+                draft.toMediaItem(existing.mediaId) == existing
+            }
+        }.associateBy { it.localContentUri() }
+        val candidates = drafts.filterNot { it.metadata.contentUri in unchangedItems }.map { draft ->
             mediaIdentityCandidate(
                 source = draft.metadata.sourceIdentity(),
                 auid = draft.aliases.auid,
@@ -147,23 +167,25 @@ class LocalMediaSource(
         }
         val resolution = identityRegistry.resolve(candidates)
         return drafts.map { draft ->
-            val item = draft.metadata
-            LocalMediaProjectionItem(
-                mediaId = resolution.mediaIds.getValue(item.sourceIdentity()),
-                contentUri = item.contentUri,
-                displayName = item.displayName,
-                mimeType = item.mimeType,
-                width = item.width,
-                height = item.height,
-                takenAtEpochSeconds = draft.timelineEpochSeconds,
-                modifiedAtEpochSeconds = item.dateModifiedSeconds,
-                isVideo = item.isVideo,
-                videoDurationSeconds = item.durationMillis?.takeIf { it > 0 }?.div(1_000),
-                auid = draft.aliases.auid,
-                buid = draft.aliases.buid,
-            ).toMediaItem()
-        }.sortedForTimeline()
+            unchangedItems[draft.metadata.contentUri]
+                ?: draft.toMediaItem(resolution.mediaIds.getValue(draft.metadata.sourceIdentity()))
+        }
     }
+
+    private fun LocalMediaDraft.toMediaItem(mediaId: MediaId): MediaItem = LocalMediaProjectionItem(
+        mediaId = mediaId,
+        contentUri = metadata.contentUri,
+        displayName = metadata.displayName,
+        mimeType = metadata.mimeType,
+        width = metadata.width,
+        height = metadata.height,
+        takenAtEpochSeconds = timelineEpochSeconds,
+        modifiedAtEpochSeconds = metadata.dateModifiedSeconds,
+        isVideo = metadata.isVideo,
+        videoDurationSeconds = metadata.durationMillis?.takeIf { it > 0 }?.div(1_000),
+        auid = aliases.auid,
+        buid = aliases.buid,
+    ).toMediaItem()
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
         memoriesTimelineEpochSeconds

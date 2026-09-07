@@ -5,24 +5,30 @@ import android.content.ContentUris
 import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import androidx.core.net.toUri
+import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataDao
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
 class AndroidMediaStoreReader(
     private val contentResolver: ContentResolver,
+    private val metadataCache: LocalMediaMetadataDao? = null,
+    private val volumeVersions: () -> Map<String, String> = { emptyMap() },
 ) : LocalMediaReader {
     override fun readBatches(batchSize: Int): Flow<LocalMediaBatch> = flow {
         require(batchSize > 0)
+        val versions = volumeVersions()
+        val enrichment = LocalMediaMetadataEnrichment(metadataCache, versions) { it.withExif() }
+        enrichment.load()
+        suspend fun enrich(batch: List<LocalMediaMetadata>) = enrichment.enrich(batch) { it.withDateFallback() }
         val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
+            MediaStore.MediaColumns.VOLUME_NAME,
+            MediaStore.MediaColumns.GENERATION_MODIFIED,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.MIME_TYPE,
@@ -67,6 +73,8 @@ class AndroidMediaStoreReader(
             val takenColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.ImageColumns.DATE_TAKEN)
             val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
             val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val volumeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.VOLUME_NAME)
+            val generationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.GENERATION_MODIFIED)
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.VideoColumns.DURATION)
             val batch = ArrayList<LocalMediaMetadata>(batchSize)
             var indexedCount = 0
@@ -98,53 +106,56 @@ class AndroidMediaStoreReader(
                     dateAddedSeconds = cursor.nullableLong(addedColumn),
                     durationMillis = cursor.nullableLong(durationColumn),
                     isVideo = isVideo,
+                    volumeName = cursor.nullableString(volumeColumn),
+                    generationModified = cursor.nullableLong(generationColumn),
                 )
                 indexedCount += 1
                 if (batch.size == batchSize) {
+                    val enriched = enrich(batch)
+                    if (indexedCount == cursor.count) {
+                        check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
+                    }
                     emit(
                         LocalMediaBatch(
-                            metadata = batch.enrichExif(),
+                            metadata = enriched,
                             progress = LocalMediaIndexProgress(indexedCount, cursor.count),
+                            unavailableContentUris = enrichment.unavailableUris,
                         ),
                     )
                     batch.clear()
                 }
             }
             if (batch.isNotEmpty() || cursor.count == 0) {
+                val enriched = enrich(batch)
+                check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
                 emit(
                     LocalMediaBatch(
-                        metadata = batch.enrichExif(),
+                        metadata = enriched,
                         progress = LocalMediaIndexProgress(indexedCount, cursor.count),
+                        unavailableContentUris = enrichment.unavailableUris,
                     ),
                 )
             }
-        } ?: emit(
-            LocalMediaBatch(
-                metadata = emptyList(),
-                progress = LocalMediaIndexProgress(indexedCount = 0, totalCount = 0),
-            ),
-        )
+        } ?: error("MediaStore query returned no cursor")
+        check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
+        enrichment.finish()
     }.flowOn(Dispatchers.IO)
 
-    private suspend fun List<LocalMediaMetadata>.enrichExif(): List<LocalMediaMetadata> =
-        chunked(EXIF_CONCURRENCY).flatMap { chunk ->
-            coroutineScope {
-                chunk.map { metadata ->
-                    async(Dispatchers.IO) { metadata.withExif() }
-                }.awaitAll()
-            }
-        }
-
-    private fun LocalMediaMetadata.withExif(): LocalMediaMetadata {
-        val exif = if (isVideo) null else readExif(contentUri)
+    private fun LocalMediaMetadata.withExif(): LocalMediaMetadata? {
+        if (isVideo) return withDateFallback()
+        val exif = readExif(contentUri) ?: return null
         return copy(
             memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(
-                exifDateTime = exif?.getAttribute(ExifInterface.TAG_DATETIME),
+                exifDateTime = exif.getAttribute(ExifInterface.TAG_DATETIME),
                 dateTakenMillis = dateTakenMillis,
             ),
-            imageUniqueId = exif?.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
+            imageUniqueId = exif.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
         )
     }
+
+    private fun LocalMediaMetadata.withDateFallback() = copy(
+        memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(null, dateTakenMillis),
+    )
 
     private fun android.database.Cursor.nullableString(column: Int): String? =
         if (isNull(column)) null else getString(column)
@@ -177,9 +188,5 @@ class AndroidMediaStoreReader(
         return dateTakenMillis?.takeIf { it > 0 }?.let { timestamp ->
             (timestamp + TimeZone.getDefault().getOffset(timestamp)) / 1_000
         }
-    }
-
-    private companion object {
-        const val EXIF_CONCURRENCY = 8
     }
 }

@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.data.cache
 
+import android.util.Log
+import com.syrok0010.nextgallery.data.memories.MediaItem
+import kotlin.system.measureNanoTime
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -69,10 +72,25 @@ class LocalMediaIndexingRegressionTest {
         )
         val projection = UnifiedTimelineProjection()
 
-        source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
-            projection.replaceLocalItems(state.items)
+        suspend fun scan(): Int {
+            var previous: List<MediaItem>? = null
+            var builds = 0
+            var projectionNanos = 0L
+            val elapsed = measureNanoTime {
+                source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
+                    if (previous !== state.items) {
+                        projectionNanos += measureNanoTime { projection.replaceLocalItems(state.items) }
+                        builds++
+                        previous = state.items
+                    }
+                }
+            }
+            Log.i("LocalIndexRegression", "items=${BATCH_COUNT * BATCH_SIZE} builds=$builds projectionMs=${projectionNanos / 1_000_000} scanMs=${elapsed / 1_000_000}")
+            return builds
         }
-
+        scan()
+        assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
+        assertEquals(1, scan())
         assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
     }
 
@@ -109,7 +127,7 @@ class LocalMediaIndexingRegressionTest {
 
     private companion object {
         const val DATABASE_NAME = "local-media-indexing-regression.db"
-        const val BATCH_COUNT = 10
-        const val BATCH_SIZE = 100
+        const val BATCH_COUNT = 100
+        const val BATCH_SIZE = 200
     }
 }

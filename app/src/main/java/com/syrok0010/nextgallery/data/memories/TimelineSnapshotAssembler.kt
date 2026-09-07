@@ -76,6 +76,7 @@ object TimelineSnapshotAssembler {
     ): TimelineSnapshot {
         if (items.isEmpty()) return snapshot
 
+        val daysById = snapshot.days.associateBy { it.dayId }
         val currentSlotsByDay = snapshot.slots.groupBy { it.dayId }
         val additionalItemsByDay = items.groupBy { it.dayId }
         val dayIds = (snapshot.days.map { it.dayId } + items.map { it.dayId })
@@ -84,7 +85,7 @@ object TimelineSnapshotAssembler {
         val days = dayIds.map { dayId ->
             TimelineDay(
                 dayId = dayId,
-                count = snapshot.days.firstOrNull { it.dayId == dayId }?.count.orZero() +
+                count = daysById[dayId]?.count.orZero() +
                     additionalItemsByDay[dayId].orEmpty().size,
             )
         }
