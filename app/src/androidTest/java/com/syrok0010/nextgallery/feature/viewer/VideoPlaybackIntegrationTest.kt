@@ -326,7 +326,7 @@ class VideoPlaybackIntegrationTest {
         RemoteVideoFixture(bytes).use { fixture ->
             try {
                 session.signIn(AccountCredentials(fixture.url, "fixture", "password"))
-                val remote = sample().copy(remoteFileId = 42, assetRef = MediaAssetRef.MemoriesFile(42))
+                val remote = sample().copy(assetRef = MediaAssetRef.MemoriesFile(42))
                 block(fixture, remote)
             } finally {
                 when (previous) {

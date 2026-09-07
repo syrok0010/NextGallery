@@ -8,12 +8,10 @@ import java.io.IOException
 import okhttp3.Interceptor
 import okhttp3.Response
 
-internal class VideoAuthenticationRequired : IOException("Video authentication required")
-
 /** Runs for every open, range request and retry; no credential snapshot is retained by the player. */
 internal class AuthenticatedVideoSource(
     private val transport: NextcloudTransport,
-    private val credentials: () -> AccountCredentials?,
+    private val credentials: () -> AccountCredentials,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -22,7 +20,7 @@ internal class AuthenticatedVideoSource(
                 segments[1].toLongOrNull()
             } else null
         } ?: throw IOException("Invalid video source")
-        val account = credentials() ?: throw VideoAuthenticationRequired()
+        val account = credentials()
         val url = MemoriesAssetUrlFactory.urlsFor(MediaAssetRef.MemoriesFile(fileId), account.serverUrl).originalUrl
         val authenticated = transport.authenticatedRequestBuilder(account, url, "*/*")
             .get()

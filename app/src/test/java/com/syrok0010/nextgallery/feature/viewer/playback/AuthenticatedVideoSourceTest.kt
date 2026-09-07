@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.viewer.playback
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import java.io.IOException
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
@@ -15,7 +16,7 @@ import org.junit.Test
 
 class AuthenticatedVideoSourceTest {
     @Test fun `every request resolves current credentials and retains ranges without URL secrets`() {
-        var account: AccountCredentials? = AccountCredentials("https://cloud.example/nextcloud/", "alice", "first")
+        var account = AccountCredentials("https://cloud.example/nextcloud/", "alice", "first")
         val requests = mutableListOf<Request>()
         val transport = NextcloudTransport(Json, OkHttpClient())
         val client = transport.baseClient.newBuilder()
@@ -28,7 +29,7 @@ class AuthenticatedVideoSourceTest {
         val reference = VideoSources.from(MediaAssetRef.MemoriesFile(42)).primary
         fun request() = client.newCall(Request.Builder().url(reference).header("Range", "bytes=128-255").build()).execute()
         request().use { assertEquals(206, it.code) }
-        account = account!!.copy(appPassword = "second")
+        account = account.copy(appPassword = "second")
         request().close()
         assertEquals(2, requests.size)
         requests.forEach {
@@ -40,10 +41,7 @@ class AuthenticatedVideoSourceTest {
         }
         assertEquals(Credentials.basic("alice", "first"), requests[0].header("Authorization"))
         assertEquals(Credentials.basic("alice", "second"), requests[1].header("Authorization"))
-        account = null
-        assertThrows(VideoAuthenticationRequired::class.java) { request().close() }
-        assertEquals(2, requests.size)
-        assertThrows(java.io.IOException::class.java) {
+        assertThrows(IOException::class.java) {
             client.newCall(Request.Builder().url("https://other.example/original/42").build()).execute().close()
         }
     }

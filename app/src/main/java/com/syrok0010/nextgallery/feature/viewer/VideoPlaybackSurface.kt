@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -57,7 +59,7 @@ internal const val VideoPlaybackSeekTestTag = "video_playback_seek"
 internal const val VideoPlaybackMuteTestTag = "video_playback_mute"
 internal const val VideoPlaybackFullscreenTestTag = "video_playback_fullscreen"
 
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@OptIn(UnstableApi::class)
 @Composable
 internal fun VideoPlaybackSurface(
     item: MediaItem,

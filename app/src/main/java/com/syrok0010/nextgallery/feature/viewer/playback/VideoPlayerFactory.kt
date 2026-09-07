@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.viewer.playback
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import java.io.InterruptedIOException
 import android.content.Context
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -9,14 +12,17 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@OptIn(UnstableApi::class)
 internal class VideoPlayerFactory(transport: NextcloudTransport, sessionStore: SessionStore) {
     // Redirects must not carry app credentials to a different server or a login page.
     private val client = transport.baseClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
         .addInterceptor(AuthenticatedVideoSource(transport) {
-            (sessionStore.session.value as? SessionUiState.SignedIn)?.credentials
+            // Logout disposes the viewer; cancel any request racing with that disposal.
+            val session = sessionStore.session.value as? SessionUiState.SignedIn
+                ?: throw InterruptedIOException("Playback session ended")
+            session.credentials
         })
         .build()
 
