@@ -1,11 +1,16 @@
 package com.syrok0010.nextgallery.ui.detail
 
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Gainmap
+import android.os.Build
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.data.memories.MediaAssetRef
 import com.syrok0010.nextgallery.data.memories.MediaItem
@@ -22,6 +28,7 @@ import com.syrok0010.nextgallery.domain.media.MediaId
 import java.io.File
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +72,128 @@ class MediaDetailScreenTest {
         rule.runOnIdle { assertEquals(item, closed) }
     }
 
+    @Test
+    fun reorderingSequencePreservesActiveItemAndDismissal() {
+        val first = mediaItem("first")
+        val second = mediaItem("second")
+        val prepended = mediaItem("prepended")
+        val sequenceState = mutableStateOf(
+            ViewerSequence(
+                items = listOf(first, second),
+                pageIndexByMediaId = mapOf(first.mediaId to 0, second.mediaId to 1),
+                timelineSlotIndexByMediaId = mapOf(first.mediaId to 100, second.mediaId to 101),
+            ),
+        )
+        var closed: MediaItem? = null
+        rule.setContent {
+            MediaDetailScreen(
+                initialMediaId = first.mediaId,
+                sequence = sequenceState.value,
+                tileBoundsForMediaId = { null },
+                onBack = { closed = it },
+                onCurrentItemChange = {},
+                onVisibleTimelineRange = { _, _ -> },
+            )
+        }
+        rule.onNodeWithText("first.jpg").assertIsDisplayed()
+
+        rule.runOnIdle {
+            sequenceState.value = ViewerSequence(
+                items = listOf(prepended, first, second),
+                pageIndexByMediaId = mapOf(prepended.mediaId to 0, first.mediaId to 1, second.mediaId to 2),
+                timelineSlotIndexByMediaId = mapOf(prepended.mediaId to 99, first.mediaId to 100, second.mediaId to 101),
+            )
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("first.jpg").assertIsDisplayed()
+        rule.onRoot().performTouchInput { swipeDown() }
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(first, closed) }
+    }
+
+    @Test
+    fun zoomedPhotoCannotDismissAfterReorderingUntilZoomedOut() {
+        val current = mediaItem("zoomed")
+        val neighbor = mediaItem("neighbor")
+        val sequence = mutableStateOf(sequenceOf(current, neighbor))
+        var closed: MediaItem? = null
+        rule.setContent {
+            MediaDetailScreen(
+                initialMediaId = current.mediaId,
+                sequence = sequence.value,
+                tileBoundsForMediaId = { null },
+                onBack = { closed = it },
+                onCurrentItemChange = {},
+                onVisibleTimelineRange = { _, _ -> },
+            )
+        }
+        // Coil completes outside Compose's idling resources. Wait for actual image pixels.
+        rule.waitUntil(timeoutMillis = 10_000) {
+            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
+            // JPEG encoding can round the original RGB channels.
+            android.graphics.Color.red(pixel) in 56..64 &&
+                android.graphics.Color.green(pixel) in 96..104 &&
+                android.graphics.Color.blue(pixel) in 156..164
+        }
+        rule.onRoot().performTouchInput { doubleClick() }
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { swipeDown() }
+        rule.runOnIdle { assertNull(closed) }
+
+        rule.runOnIdle { sequence.value = sequenceOf(neighbor, current) }
+        rule.waitForIdle()
+        rule.onNodeWithText("zoomed.jpg").assertIsDisplayed()
+        rule.onRoot().performTouchInput { swipeDown() }
+        rule.runOnIdle { assertNull(closed) }
+        saveScreenshot("zoom-after-reorder")
+
+        rule.onRoot().performTouchInput { doubleClick() }
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { swipeDown() }
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(current, closed) }
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = 34)
+    fun hdrWindowSurvivesReorderingAndResetsOnSdrPage() {
+        val current = mediaItem("hdr", hasGainmap = true)
+        val neighbor = mediaItem("sdr")
+        val sequence = mutableStateOf(sequenceOf(current, neighbor))
+        rule.setContent {
+            MediaDetailScreen(
+                initialMediaId = current.mediaId,
+                sequence = sequence.value,
+                tileBoundsForMediaId = { null },
+                onBack = {},
+                onCurrentItemChange = {},
+                onVisibleTimelineRange = { _, _ -> },
+            )
+        }
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.activity.window.colorMode == ActivityInfo.COLOR_MODE_HDR
+        }
+        rule.runOnIdle { sequence.value = sequenceOf(neighbor, current) }
+        rule.waitForIdle()
+        rule.onNodeWithText("hdr.jpg").assertIsDisplayed()
+        rule.runOnIdle { assertEquals(ActivityInfo.COLOR_MODE_HDR, rule.activity.window.colorMode) }
+
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(ActivityInfo.COLOR_MODE_DEFAULT, rule.activity.window.colorMode) }
+        rule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
+        rule.waitForIdle()
+        rule.runOnIdle { assertEquals(ActivityInfo.COLOR_MODE_HDR, rule.activity.window.colorMode) }
+    }
+
+    private fun sequenceOf(vararg items: MediaItem) = ViewerSequence(
+        items = items.toList(),
+        pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
+        timelineSlotIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index + 100 }.toMap(),
+    )
+
     private fun showViewer(
         items: List<MediaItem>,
         tileBounds: Rect? = Rect(30f, 60f, 150f, 180f),
@@ -90,12 +219,22 @@ class MediaDetailScreenTest {
         rule.waitForIdle()
     }
 
-    private fun mediaItem(name: String, isVideo: Boolean = false): MediaItem {
+    private fun mediaItem(name: String, isVideo: Boolean = false, hasGainmap: Boolean = false): MediaItem {
         val file = File(rule.activity.cacheDir, "$name.jpg")
         val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(60, 100, 160))
+        val gainmapBitmap = if (hasGainmap) {
+            check(Build.VERSION.SDK_INT >= 34)
+            Bitmap.createBitmap(200, 150, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(android.graphics.Color.WHITE)
+                bitmap.gainmap = Gainmap(this)
+            }
+        } else {
+            null
+        }
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         bitmap.recycle()
+        gainmapBitmap?.recycle()
         return MediaItem(
             mediaId = MediaId(name), remoteFileId = null, dayId = 20_000,
             day = LocalDate.ofEpochDay(20_000), displayName = "$name.jpg",

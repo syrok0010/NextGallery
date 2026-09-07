@@ -48,7 +48,7 @@ RUN yes | sdkmanager --licenses >/dev/null \
         "build-tools;36.0.0" \
         "emulator" \
         "platform-tools" \
-        "platforms;android-36.1" \
+        "platforms;android-37.0" \
         "system-images;android-36;google_apis;x86_64"
 
 RUN groupadd --gid 1000 android \
