@@ -134,5 +134,5 @@ internal fun MediaDetailScreen(
     }
 }
 
-private const val ViewerSequencePrefetchSlots = 80
+private const val ViewerSequencePrefetchSlots = 240
 private const val ViewerChromeFadeDurationMillis = 180

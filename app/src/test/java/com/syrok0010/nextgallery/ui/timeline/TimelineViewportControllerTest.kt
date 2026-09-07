@@ -10,6 +10,7 @@ import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.domain.media.MediaId
 import com.syrok0010.nextgallery.ui.TimelineUiState
 import java.time.LocalDate
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNotNull
@@ -18,6 +19,73 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TimelineViewportControllerTest {
+    @Test
+    fun `viewer range hydrates both sides beyond the first batch without another gesture`() = runBlocking {
+        val days = (10..30).map { TimelineDay(dayId = it, count = 1) }
+        val host = FakeTimelineViewportHost(
+            TimelineViewportSession(
+                credentials = credentials(),
+                timelineState = TimelineUiState(
+                    snapshot = timelineSnapshot(days = days, loadedDayIds = setOf(20)),
+                ),
+            ),
+        ).apply {
+            dayLoader = { _, ids -> ids.map { mediaItem(it.toLong() * 100, it) } }
+        }
+        val controller = DefaultTimelineViewportController(scope = this, host = host, prefetchSlots = 0)
+
+        controller.onViewportObservation(TimelineViewportObservation(0, 20, TimelineViewportLoadingMode.Immediate))
+
+        awaitUntil { host.requireSession().timelineState.snapshot?.loadedDayIds == (10..30).toSet() }
+        assertEquals((10..30).filter { it != 20 }, host.dayLoadRequests.flatten())
+    }
+
+    @Test
+    fun `hydration continues with the latest viewport instead of the old window`() = runBlocking {
+        val firstBatch = CompletableDeferred<Unit>()
+        val host = FakeTimelineViewportHost(
+            TimelineViewportSession(
+                credentials(),
+                TimelineUiState(snapshot = timelineSnapshot(days = (10..30).map { TimelineDay(it, 1) })),
+            ),
+        ).apply {
+            dayLoader = { _, ids ->
+                if (ids.first() == 10) firstBatch.await()
+                ids.map { mediaItem(it.toLong() * 100, it) }
+            }
+        }
+        val controller = DefaultTimelineViewportController(scope = this, host = host, prefetchSlots = 0)
+        controller.onViewportObservation(TimelineViewportObservation(0, 10, TimelineViewportLoadingMode.Immediate))
+        awaitUntil { host.dayLoadRequests.isNotEmpty() }
+        controller.onViewportObservation(TimelineViewportObservation(20, 20, TimelineViewportLoadingMode.Immediate))
+        firstBatch.complete(Unit)
+        awaitUntil { host.requireSession().timelineState.loadingDayIds.isEmpty() }
+        assertEquals(setOf(10, 11, 12, 13, 30), host.dayLoadRequests.flatten().toSet())
+    }
+
+    @Test
+    fun `cancel prevents further batches after an in flight request completes`() = runBlocking {
+        val firstBatch = CompletableDeferred<Unit>()
+        val host = FakeTimelineViewportHost(
+            TimelineViewportSession(
+                credentials(),
+                TimelineUiState(snapshot = timelineSnapshot(days = (10..30).map { TimelineDay(it, 1) })),
+            ),
+        ).apply {
+            dayLoader = { _, ids ->
+                firstBatch.await()
+                ids.map { mediaItem(it.toLong() * 100, it) }
+            }
+        }
+        val controller = DefaultTimelineViewportController(scope = this, host = host, prefetchSlots = 0)
+        controller.onViewportObservation(TimelineViewportObservation(0, 20, TimelineViewportLoadingMode.Immediate))
+        awaitUntil { host.dayLoadRequests.isNotEmpty() }
+        controller.cancel()
+        firstBatch.complete(Unit)
+        awaitUntil { host.requireSession().timelineState.loadingDayIds.isEmpty() }
+        assertEquals(listOf(listOf(10, 11, 12, 13)), host.dayLoadRequests)
+    }
+
     @Test
     fun `viewport batching skips loaded loading and failed days`() = runBlocking {
         val days = (10..15).map { TimelineDay(dayId = it, count = 1) }
@@ -48,9 +116,9 @@ class TimelineViewportControllerTest {
                 loadingMode = TimelineViewportLoadingMode.Immediate,
             ),
         )
-        awaitUntil { host.dayLoadRequests == listOf(listOf(11, 14)) }
+        awaitUntil { host.dayLoadRequests == listOf(listOf(11, 14), listOf(15)) }
 
-        assertEquals(listOf(listOf(11, 14)), host.dayLoadRequests)
+        assertEquals(listOf(listOf(11, 14), listOf(15)), host.dayLoadRequests)
     }
 
     @Test

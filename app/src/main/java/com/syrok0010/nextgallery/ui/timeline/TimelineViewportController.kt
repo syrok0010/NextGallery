@@ -51,6 +51,7 @@ internal class DefaultTimelineViewportController(
     private val dayBatchSize: Int = DEFAULT_DAY_BATCH_SIZE,
 ) : TimelineViewportController {
     private var pendingObservationJob: Job? = null
+    private var activeObservation: TimelineViewportObservation? = null
 
     override fun prefetchFromStart() {
         acceptObservation(
@@ -71,6 +72,7 @@ internal class DefaultTimelineViewportController(
             }
 
             TimelineViewportLoadingMode.Debounced -> {
+                activeObservation = null
                 pendingObservationJob?.cancel()
                 pendingObservationJob = scope.launch {
                     delay(scrollbarDragLoadDebounceMillis.milliseconds)
@@ -82,11 +84,13 @@ internal class DefaultTimelineViewportController(
     }
 
     override fun cancel() {
+        activeObservation = null
         pendingObservationJob?.cancel()
         pendingObservationJob = null
     }
 
     private fun acceptObservation(observation: TimelineViewportObservation) {
+        activeObservation = observation
         val session = host.currentSession() ?: return
         val timelineState = session.timelineState
         val timeline = timelineState.snapshot ?: return
@@ -136,6 +140,10 @@ internal class DefaultTimelineViewportController(
 
                     host.currentSession()?.timelineState?.snapshot?.items?.size
                         ?.let(host::showLoadedItemsStatus)
+
+                    if (host.currentSession()?.credentials == session.credentials) {
+                        activeObservation?.let(::acceptObservation)
+                    }
                 }
                 .onFailure {
                     host.updateTimeline { state ->
