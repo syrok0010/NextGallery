@@ -43,9 +43,12 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import org.koin.compose.koinInject
 
 internal const val VideoPlaybackSurfaceTestTag = "video_playback_surface"
 internal const val VideoPlaybackPlayPauseTestTag = "video_playback_play_pause"
@@ -58,22 +61,23 @@ internal const val VideoPlaybackFullscreenTestTag = "video_playback_fullscreen"
 @Composable
 internal fun VideoPlaybackSurface(
     item: MediaItem,
-    contentUri: String,
     modifier: Modifier = Modifier,
     onToggleChrome: () -> Unit,
     contentModifier: Modifier = Modifier.fillMaxSize(),
     controlsVisible: Boolean = true,
     onFullscreenChanged: (Boolean) -> Unit = {},
-    createPlayer: (Context) -> ExoPlayer = { ExoPlayer.Builder(it).build() },
+    playerFactory: VideoPlayerFactory = koinInject(),
+    createPlayer: (Context) -> ExoPlayer = playerFactory::create,
 ) {
+    val sources = VideoSources.from(item.assetRef)
     val context = LocalContext.current
-    val player = remember(item.mediaId, contentUri) {
+    val player = remember(item.mediaId, sources) {
         createPlayer(context)
     }
-    val session = remember(item.mediaId, contentUri) {
-        VideoPlaybackSession(contentUri)
+    val session = remember(item.mediaId, sources) {
+        VideoPlaybackSession(sources.primary, sources.fallback)
     }
-    var playbackState by remember(item.mediaId, contentUri) {
+    var playbackState by remember(item.mediaId, sources) {
         mutableStateOf(session.state)
     }
     val fullscreenChanged by rememberUpdatedState(onFullscreenChanged)
@@ -84,9 +88,9 @@ internal fun VideoPlaybackSurface(
     fun applyEffect(effect: VideoPlaybackEffect?) {
         when (effect) {
             is VideoPlaybackEffect.PrepareAndPlay -> {
-                player.setMediaItem(Media3Item.fromUri(effect.contentUri))
+                player.setMediaItem(Media3Item.fromUri(effect.contentUri), effect.positionMillis)
                 player.prepare()
-                player.playWhenReady = true
+                player.playWhenReady = effect.playWhenReady
             }
 
             VideoPlaybackEffect.Play -> player.play()
@@ -137,7 +141,7 @@ internal fun VideoPlaybackSurface(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                dispatch(VideoPlaybackInput.PlayerFailed)
+                dispatch(VideoPlaybackInput.SourceFailed(error.toVideoPlaybackError()))
             }
         }
         player.addListener(listener)
@@ -208,6 +212,7 @@ internal fun VideoPlaybackSurface(
             (controlsVisible || playbackState.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error, VideoPlaybackPhase.Loading))
         ) VideoPlaybackCenterAction(
             phase = playbackState.phase,
+            error = playbackState.error,
             onClick = {
                 when (playbackState.phase) {
                     VideoPlaybackPhase.Error -> dispatch(VideoPlaybackInput.Retry)

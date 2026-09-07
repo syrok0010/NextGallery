@@ -65,4 +65,6 @@
     <string name="video_playback_fullscreen">Полноэкранный режим</string>
     <string name="video_playback_exit_fullscreen">Выйти из полноэкранного режима</string>
     <string name="video_playback_position">%1$s / %2$s</string>
+    <string name="video_playback_auth_error">Для просмотра видео войдите в аккаунт заново</string>
+    <string name="video_playback_remote_error">Облачное видео недоступно. Проверьте подключение и повторите попытку</string>
 </resources>

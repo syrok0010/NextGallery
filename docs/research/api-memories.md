@@ -8,7 +8,7 @@ Memories API должен быть основным API для фотодоме�
 
 ## Что найдено в локальном clone Memories
 
-Локальный clone: `/home/syrok/AndroidStudioProjects/memories`.
+Локальный clone: `/home/syrok/WebstormProjects/memories`.
 
 Основные маршруты объявлены в:
 
@@ -214,3 +214,21 @@ MemoriesRepository -> identified remote projection
 LocalMediaSource   -> identified local projection
 UnifiedTimelineProjection -> published timeline
 ```
+
+## Video original: контракт `/stream`
+
+Проверено по checkout Memories `abea4165`: `appinfo/routes.php`,
+`lib/Controller/DownloadController.php::one` и `src/services/API.ts::STREAM_FILE`.
+
+- `GET /apps/memories/api/stream/{fileid}` читает исходный файл через user filesystem
+  и проверяет право скачивания. `PublicPage` допускает также shared-контекст, но
+  не превращает произвольный file ID в публичную ссылку.
+- Original поддерживает одиночный `Range: bytes=start-end`, `Accept-Ranges: bytes`
+  и `Content-Range`/206 для части файла; ответ на полный файл может быть 200.
+- `Content-Type` берётся из файла, `Content-Length` соответствует диапазону.
+  `Content-Disposition: attachment` не мешает чтению bytes через Media3.
+- Native playback использует существующие app-password headers NextcloudTransport,
+  не браузерный request token в URL. Instrumentation fixture проверяет этот
+  HTTP-контракт отдельно от доступности личного сервера.
+
+Transcoding/HLS и quality profiles требуют отдельного контракта в следующем срезе.

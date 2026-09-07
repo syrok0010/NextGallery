@@ -11,6 +11,8 @@ internal enum class VideoPlaybackPhase {
 
 internal enum class VideoPlaybackError {
     CannotPlay,
+    AuthenticationRequired,
+    RemoteUnavailable,
 }
 
 internal data class VideoPlaybackState(
@@ -43,6 +45,8 @@ internal sealed interface VideoPlaybackInput {
 
     data object PlayerFailed : VideoPlaybackInput
 
+    data class SourceFailed(val error: VideoPlaybackError) : VideoPlaybackInput
+
     data object Retry : VideoPlaybackInput
 
     data object Leave : VideoPlaybackInput
@@ -55,7 +59,7 @@ internal sealed interface VideoPlaybackInput {
 }
 
 internal sealed interface VideoPlaybackEffect {
-    data class PrepareAndPlay(val contentUri: String) : VideoPlaybackEffect
+    data class PrepareAndPlay(val contentUri: String, val positionMillis: Long = 0, val playWhenReady: Boolean = true) : VideoPlaybackEffect
 
     data object Play : VideoPlaybackEffect
 
@@ -72,7 +76,10 @@ internal sealed interface VideoPlaybackEffect {
 
 internal class VideoPlaybackSession(
     private val contentUri: String,
+    private val fallbackUri: String? = null,
 ) {
+    private var usingFallback = false
+
     var state: VideoPlaybackState = VideoPlaybackState()
         private set
 
@@ -155,18 +162,13 @@ internal class VideoPlaybackSession(
             VideoPlaybackEffect.SetVolume(if (isMuted) 0f else 1f)
         }
 
-        VideoPlaybackInput.PlayerFailed -> {
-            state = state.copy(
-                phase = VideoPlaybackPhase.Error,
-                error = VideoPlaybackError.CannotPlay,
-                playRequested = false,
-            )
-            null
-        }
+        VideoPlaybackInput.PlayerFailed -> sourceFailed(VideoPlaybackError.CannotPlay)
+        is VideoPlaybackInput.SourceFailed -> sourceFailed(input.error)
 
         VideoPlaybackInput.Retry -> prepareAndPlay()
 
         VideoPlaybackInput.Leave -> {
+            usingFallback = false
             state = VideoPlaybackState()
             VideoPlaybackEffect.PauseAndRelease
         }
@@ -189,7 +191,18 @@ internal class VideoPlaybackSession(
         }
     }
 
+    private fun sourceFailed(error: VideoPlaybackError): VideoPlaybackEffect? {
+        if (!usingFallback && fallbackUri != null) {
+            usingFallback = true
+            state = state.copy(phase = VideoPlaybackPhase.Loading, error = null)
+            return VideoPlaybackEffect.PrepareAndPlay(fallbackUri, state.positionMillis, state.playRequested)
+        }
+        state = state.copy(phase = VideoPlaybackPhase.Error, error = error, playRequested = false)
+        return null
+    }
+
     private fun prepareAndPlay(): VideoPlaybackEffect {
+        usingFallback = false
         state = state.copy(
             phase = VideoPlaybackPhase.Loading,
             error = null,

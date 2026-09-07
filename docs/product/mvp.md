@@ -15,7 +15,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - индексирует доступные локальные фото и видео из MediaStore;
 - объединяет локальные и облачные копии по устойчивому `MediaId` и приблизительным `AUID`/`BUID`;
 - показывает cached local projection и материализованную cloud metadata до завершения refresh;
-- показывает локально доступное видео в detail view с явным playback; cloud-only video пока остаётся static preview до remote playback.
+- воспроизводит локальные и облачные video originals в detail view после явного запуска; при ошибке локальной копии переключается на Memories original в той же playback session.
 
 Подробные требования и незавершённые части ведутся в GitHub Issues, а устойчивые технические решения — в `docs/adr/`.
 
@@ -61,6 +61,6 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 
 - несколько аккаунтов и account switcher;
 - полноценная работа с Android Selected Photos Access;
-- remote playback и transcoding видео;
+- transcoding/HLS и выбор качества видео;
 - гарантированный полный offline archive;
 - WebDAV fallback без подтверждённого пробела Memories API.
