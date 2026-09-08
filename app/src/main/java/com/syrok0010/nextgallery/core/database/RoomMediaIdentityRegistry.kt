@@ -1,16 +1,16 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import androidx.room.withTransaction
-import com.syrok0010.nextgallery.data.memories.MediaAlias
-import com.syrok0010.nextgallery.data.memories.MediaAliasKind
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaIdentityConflict
-import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.MediaIdentityResolution
-import com.syrok0010.nextgallery.data.memories.reconcileMediaIdentities
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.MediaAlias
+import com.syrok0010.nextgallery.core.media.MediaAliasKind
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.reconcileMediaIdentities
 
 class RoomMediaIdentityRegistry(
     private val database: NextGalleryDatabase,
@@ -22,68 +22,86 @@ class RoomMediaIdentityRegistry(
         if (candidates.isEmpty()) return MediaIdentityResolution(emptyMap(), emptyList())
 
         return database.withTransaction {
-            val sourceMediaIds = candidates
-                .groupBy { it.source.identifierKind() }
-                .flatMap { (kind, sourceCandidates) ->
-                    sourceCandidates.map { it.source.sourceKey }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { keys ->
-                        dao.identifiers(kind, keys)
-                    }
-                }
-                .associate { entity -> entity.toSourceIdentity() to MediaId(entity.mediaId) }
-            val requestedAliases = candidates.flatMapTo(mutableSetOf()) { it.aliases }
-            val aliasMediaIds = requestedAliases
-                .groupBy { it.identifierKind() }
-                .flatMap { (kind, aliases) ->
-                    aliases.map { it.value }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { values ->
-                        dao.identifiers(kind, values)
-                    }
-                }
-                .associate { entity -> entity.toAlias() to MediaId(entity.mediaId) }
-            val localMediaIds = aliasMediaIds.values
-                .map { it.value }
-                .distinct()
-                .chunked(QUERY_CHUNK_SIZE)
-                .flatMap { mediaIds -> dao.identifiersForMediaIds(mediaIds) }
-                .filter { it.kind == MediaIdentifierKind.LocalContent }
-                .mapTo(mutableSetOf()) { MediaId(it.mediaId) }
+            val known = lookupKnownIdentities(candidates)
             val reconciliation = reconcileMediaIdentities(
                 candidates = candidates,
-                initialSourceMediaIds = sourceMediaIds,
-                initialAliasMediaIds = aliasMediaIds,
-                initialLocalMediaIds = localMediaIds,
+                initialSourceMediaIds = known.sources,
+                initialAliasMediaIds = known.aliases,
+                initialLocalMediaIds = known.localIds,
                 mediaIdFactory = mediaIdFactory,
             )
 
-            reconciliation.reassignments.forEach { (from, to) ->
-                dao.reassignMediaId(from.value, to.value)
-            }
-            val sourceIdentifiers = reconciliation.resolution.mediaIds.map { (source, mediaId) ->
-                MediaIdentifierEntity(source.identifierKind(), source.sourceKey, mediaId.value)
-            }
-            val conflictsBySource = reconciliation.resolution.conflicts.associateBy { it.source }
-            val resolvedCandidates = candidates.filterNot { it.source in conflictsBySource }
-            val existingConflictSources = dao.conflicts().mapTo(mutableSetOf()) { entity ->
-                MediaSourceIdentity(entity.source, entity.sourceKey)
-            }
-            resolvedCandidates
-                .map { it.source }
-                .filter { it in existingConflictSources }
-                .forEach { source -> dao.deleteConflict(source.source, source.sourceKey) }
-            val aliasIdentifiers = resolvedCandidates.flatMap { candidate ->
-                val mediaId = reconciliation.resolution.mediaIds.getValue(candidate.source)
-                candidate.aliases.map { alias ->
-                    MediaIdentifierEntity(alias.identifierKind(), alias.value, mediaId.value)
-                }
-            }
-            dao.upsertIdentifiers(
-                (sourceIdentifiers + aliasIdentifiers).distinctBy { entity -> entity.kind to entity.value },
-            )
-            if (conflictsBySource.isNotEmpty()) {
-                dao.upsertConflicts(conflictsBySource.values.map { it.toEntity() })
-            }
+            persistReconciliation(candidates, reconciliation)
             reconciliation.resolution
         }
     }
+
+    private suspend fun lookupKnownIdentities(candidates: List<MediaIdentityCandidate>): KnownIdentities {
+        val sourceMediaIds = candidates
+            .groupBy { it.source.identifierKind() }
+            .flatMap { (kind, sourceCandidates) ->
+                sourceCandidates.map { it.source.sourceKey }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { keys ->
+                    dao.identifiers(kind, keys)
+                }
+            }
+            .associate { entity -> entity.toSourceIdentity() to MediaId(entity.mediaId) }
+        val requestedAliases = candidates.flatMapTo(mutableSetOf()) { it.aliases }
+        val aliasMediaIds = requestedAliases
+            .groupBy { it.identifierKind() }
+            .flatMap { (kind, aliases) ->
+                aliases.map { it.value }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { values ->
+                    dao.identifiers(kind, values)
+                }
+            }
+            .associate { entity -> entity.toAlias() to MediaId(entity.mediaId) }
+        val localMediaIds = aliasMediaIds.values
+            .map { it.value }
+            .distinct()
+            .chunked(QUERY_CHUNK_SIZE)
+            .flatMap { mediaIds -> dao.identifiersForMediaIds(mediaIds) }
+            .filter { it.kind == MediaIdentifierKind.LocalContent }
+            .mapTo(mutableSetOf()) { MediaId(it.mediaId) }
+        return KnownIdentities(sourceMediaIds, aliasMediaIds, localMediaIds)
+    }
+
+    private suspend fun persistReconciliation(
+        candidates: List<MediaIdentityCandidate>,
+        reconciliation: com.syrok0010.nextgallery.core.media.MediaIdentityReconciliation,
+    ) {
+        reconciliation.reassignments.forEach { (from, to) ->
+            dao.reassignMediaId(from.value, to.value)
+        }
+        val sourceIdentifiers = reconciliation.resolution.mediaIds.map { (source, mediaId) ->
+            MediaIdentifierEntity(source.identifierKind(), source.sourceKey, mediaId.value)
+        }
+        val conflictsBySource = reconciliation.resolution.conflicts.associateBy { it.source }
+        val resolvedCandidates = candidates.filterNot { it.source in conflictsBySource }
+        val existingConflictSources = dao.conflicts().mapTo(mutableSetOf()) { entity ->
+            MediaSourceIdentity(entity.source, entity.sourceKey)
+        }
+        resolvedCandidates
+            .map { it.source }
+            .filter { it in existingConflictSources }
+            .forEach { source -> dao.deleteConflict(source.source, source.sourceKey) }
+        val aliasIdentifiers = resolvedCandidates.flatMap { candidate ->
+            val mediaId = reconciliation.resolution.mediaIds.getValue(candidate.source)
+            candidate.aliases.map { alias ->
+                MediaIdentifierEntity(alias.identifierKind(), alias.value, mediaId.value)
+            }
+        }
+        dao.upsertIdentifiers(
+            (sourceIdentifiers + aliasIdentifiers).distinctBy { entity -> entity.kind to entity.value },
+        )
+        if (conflictsBySource.isNotEmpty()) {
+            dao.upsertConflicts(conflictsBySource.values.map { it.toEntity() })
+        }
+    }
+
+    private data class KnownIdentities(
+        val sources: Map<MediaSourceIdentity, MediaId>,
+        val aliases: Map<MediaAlias, MediaId>,
+        val localIds: Set<MediaId>,
+    )
 
     override suspend fun removeSource(source: MediaSourceKind) {
         database.withTransaction {

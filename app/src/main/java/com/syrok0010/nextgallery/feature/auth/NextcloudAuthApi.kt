@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.auth
+package com.syrok0010.nextgallery.feature.auth
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -1,6 +1,6 @@
-package com.syrok0010.nextgallery.data.network
+package com.syrok0010.nextgallery.core.network
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody

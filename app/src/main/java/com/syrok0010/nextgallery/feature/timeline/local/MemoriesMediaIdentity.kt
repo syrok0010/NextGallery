@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
 import java.math.BigInteger
 import java.security.MessageDigest

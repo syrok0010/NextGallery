@@ -1,25 +1,26 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaAlias
-import com.syrok0010.nextgallery.data.memories.MediaAliasKind
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.ThumbnailPreview
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAlias
+import com.syrok0010.nextgallery.core.media.MediaAliasKind
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.images.ThumbnailKey
+import com.syrok0010.nextgallery.feature.images.ThumbnailPreview
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,6 +35,7 @@ class TimelineCacheRepositoryOfflineTest {
     private lateinit var context: Context
     private lateinit var database: NextGalleryDatabase
     private lateinit var identityRegistry: RoomMediaIdentityRegistry
+    private val imageCache get() = com.syrok0010.nextgallery.feature.images.RemoteImageCache(database, thumbnailFileStore)
     private lateinit var repository: TimelineCacheRepository
     private lateinit var thumbnailFileStore: ThumbnailFileStore
 
@@ -133,7 +135,7 @@ class TimelineCacheRepositoryOfflineTest {
                 loadedDayIds = setOf(MATERIALIZED_DAY_ID),
             ),
         )
-        repository.saveThumbnails(
+        imageCache.saveThumbnails(
             previews = listOf(ThumbnailPreview(FILE_ID, 0, "image/jpeg", byteArrayOf(1, 2, 3))),
             width = THUMBNAIL_SIZE,
             height = THUMBNAIL_SIZE,
@@ -180,9 +182,7 @@ class TimelineCacheRepositoryOfflineTest {
 
     private fun remoteItem() = MediaItem(
         mediaId = MediaId("remote-42"),
-        remoteFileId = FILE_ID,
         dayId = MATERIALIZED_DAY_ID,
-        day = LocalDate.ofEpochDay(MATERIALIZED_DAY_ID.toLong()),
         displayName = "IMG_0042.jpg",
         mimeType = "image/jpeg",
         width = 4_032,
@@ -202,7 +202,6 @@ class TimelineCacheRepositoryOfflineTest {
 
     private fun localItem() = remoteItem().copy(
         mediaId = MediaId("local-42"),
-        remoteFileId = null,
         auid = "shared-auid",
         buid = "local-buid-42",
         assetRef = MediaAssetRef.LocalContent(
@@ -217,7 +216,7 @@ class TimelineCacheRepositoryOfflineTest {
         is MediaAssetRef.LocalFirst -> error("Cache integration test expects source copies")
     }
 
-    private suspend fun loadThumbnailKeys(item: MediaItem) = repository.loadThumbnailKeys(
+    private suspend fun loadThumbnailKeys(item: MediaItem) = imageCache.loadThumbnailKeys(
         fileIds = listOf(FILE_ID),
         width = THUMBNAIL_SIZE,
         height = THUMBNAIL_SIZE,

@@ -1,11 +1,12 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull

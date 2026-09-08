@@ -1,14 +1,14 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import com.syrok0010.nextgallery.ui.auth.LoginScreen
-import com.syrok0010.nextgallery.ui.timeline.HomeScreen
+import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

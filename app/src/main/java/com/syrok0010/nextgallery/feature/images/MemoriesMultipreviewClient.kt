@@ -1,7 +1,7 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.images
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable

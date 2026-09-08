@@ -1,12 +1,17 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.feature.timeline.persistence
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.local.LocalMediaProjectionItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.database.IdentifiedLocalMedia
+import com.syrok0010.nextgallery.core.database.IdentifiedMemoriesMedia
+import com.syrok0010.nextgallery.core.database.LocalMediaEntity
+import com.syrok0010.nextgallery.core.database.MemoriesCacheMetadataEntity
+import com.syrok0010.nextgallery.core.database.MemoriesMediaEntity
+import com.syrok0010.nextgallery.core.database.TimelineDayEntity
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionItem
 
 fun MemoriesConfig.toCacheMetadataEntity(
     serverUrl: String,
@@ -80,9 +85,7 @@ fun MediaItem.toMemoriesMediaEntity(): MemoriesMediaEntity {
 fun IdentifiedMemoriesMedia.toMediaItem(): MediaItem {
     return MediaItem(
         mediaId = MediaId(mediaId),
-        remoteFileId = media.fileId,
         dayId = media.dayId,
-        day = LocalDate.ofEpochDay(media.dayId.toLong()),
         displayName = media.displayName,
         mimeType = media.mimeType,
         width = media.width,

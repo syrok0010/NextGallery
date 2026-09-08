@@ -1,7 +1,13 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -186,7 +192,6 @@ class TimelineSnapshotAssemblerTest {
     fun `local items form a usable snapshot without memories metadata`() {
         val localItem = mediaItem(fileId = 7, dayId = 19871).copy(
             mediaId = MediaId("local-7"),
-            remoteFileId = null,
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/7",
                 modifiedAtEpochSeconds = null,
@@ -217,9 +222,7 @@ class TimelineSnapshotAssemblerTest {
     private fun mediaItem(fileId: Long, dayId: Int): MediaItem {
         return MediaItem(
             mediaId = MediaId("remote-$fileId"),
-            remoteFileId = fileId,
             dayId = dayId,
-            day = LocalDate.ofEpochDay(dayId.toLong()),
             displayName = "file-$fileId",
             mimeType = "image/jpeg",
             width = null,

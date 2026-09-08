@@ -1,8 +1,5 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import androidx.room.Room
-import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
-import java.util.concurrent.atomic.AtomicInteger
 import android.content.ContentProvider
 import android.content.ContentResolver
 import android.content.ContentValues
@@ -14,13 +11,16 @@ import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.exifinterface.media.ExifInterface
+import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals

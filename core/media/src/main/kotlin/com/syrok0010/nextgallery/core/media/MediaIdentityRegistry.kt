@@ -1,8 +1,4 @@
-package com.syrok0010.nextgallery.data.memories
-
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+package com.syrok0010.nextgallery.core.media
 
 enum class MediaAliasKind {
     Auid,
@@ -26,7 +22,7 @@ data class MediaIdentityCandidate(
     val aliases: Set<MediaAlias>,
 )
 
-internal fun mediaIdentityCandidate(
+fun mediaIdentityCandidate(
     source: MediaSourceIdentity,
     publishedMediaId: MediaId? = null,
     auid: String?,
@@ -50,14 +46,14 @@ interface MediaIdentityRegistry {
     suspend fun removeSource(source: MediaSourceKind)
 }
 
-internal data class MediaIdentityReconciliation(
+data class MediaIdentityReconciliation(
     val resolution: MediaIdentityResolution,
     val sourceMediaIds: Map<MediaSourceIdentity, MediaId>,
     val aliasMediaIds: Map<MediaAlias, MediaId>,
     val reassignments: List<Pair<MediaId, MediaId>>,
 )
 
-internal fun reconcileMediaIdentities(
+fun reconcileMediaIdentities(
     candidates: List<MediaIdentityCandidate>,
     initialSourceMediaIds: Map<MediaSourceIdentity, MediaId>,
     initialAliasMediaIds: Map<MediaAlias, MediaId>,

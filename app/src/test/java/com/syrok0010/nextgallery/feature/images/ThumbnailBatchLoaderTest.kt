@@ -1,29 +1,32 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import kotlin.time.Duration.Companion.milliseconds
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ThumbnailBatchLoaderTest {
     private val loaderScopes = mutableListOf<CoroutineScope>()
 
@@ -36,7 +39,7 @@ class ThumbnailBatchLoaderTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun `concurrent requests are deduplicated and loaded in one batch`() = runBlocking {
+    fun `concurrent requests are deduplicated and loaded in one batch`() = runTest {
         val credentials = credentials()
         val requests = listOf(
             thumbnailRequest(credentials, fileId = 1, etag = "etag-1"),
@@ -58,7 +61,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `large request group is split by multipreview batch size`() = runBlocking {
+    fun `large request group is split by multipreview batch size`() = runTest {
         val credentials = credentials()
         val loadedBatchSizes = mutableListOf<Int>()
         val loader = loader(batchSize = 3) { _, keys ->
@@ -76,7 +79,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `full batch flushes without waiting for time window`() = runBlocking {
+    fun `full batch flushes without waiting for time window`() = runTest {
         val credentials = credentials()
         val loader = loader(
             batchSize = 3,
@@ -97,7 +100,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `duplicate request joins batch that is already loading`() = runBlocking {
+    fun `duplicate request joins batch that is already loading`() = runTest {
         val credentials = credentials()
         val request = thumbnailRequest(credentials, fileId = 42, etag = "etag-42")
         val batchStarted = CompletableDeferred<Unit>()
@@ -123,7 +126,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `no more than configured number of batches load concurrently`() = runBlocking {
+    fun `no more than configured number of batches load concurrently`() = runTest {
         val credentials = credentials()
         val activeBatches = AtomicInteger()
         val maximumActiveBatches = AtomicInteger()
@@ -164,7 +167,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `cancelled request in pending batch is not loaded and empty batch is not started`() = runBlocking {
+    fun `cancelled request in pending batch is not loaded and empty batch is not started`() = runTest {
         val credentials = credentials()
         val request = thumbnailRequest(credentials, fileId = 10, etag = "etag-10")
         var batchCalls = 0
@@ -186,7 +189,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `cancelling one of multiple requests in pending batch removes only cancelled request`() = runBlocking {
+    fun `cancelling one of multiple requests in pending batch removes only cancelled request`() = runTest {
         val credentials = credentials()
         val request1 = thumbnailRequest(credentials, fileId = 11, etag = "etag-11")
         val request2 = thumbnailRequest(credentials, fileId = 12, etag = "etag-12")
@@ -209,7 +212,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `duplicate request completes even if first requester cancels`() = runBlocking {
+    fun `duplicate request completes even if first requester cancels`() = runTest {
         val credentials = credentials()
         val request = thumbnailRequest(credentials, fileId = 30, etag = "etag-30")
         val loader = loader(
@@ -228,11 +231,11 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `new requester rejoins dispatched batch after all previous waiters cancel`() = runBlocking {
+    fun `new requester rejoins dispatched batch after all previous waiters cancel`() = runTest {
         val request = thumbnailRequest(credentials(), fileId = 40, etag = "etag-40")
         val releaseBatch = CompletableDeferred<Unit>()
         var batchCalls = 0
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).also(loaderScopes::add)
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)).also(loaderScopes::add)
         val loader = ThumbnailBatchLoader(
             loadBatch = { _, keys ->
                 batchCalls++
@@ -258,9 +261,9 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `abandoned requests are dropped when a pending batch fills`() = runBlocking {
+    fun `abandoned requests are dropped when a pending batch fills`() = runTest {
         val loadedIds = mutableListOf<Long>()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).also(loaderScopes::add)
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)).also(loaderScopes::add)
         val loader = ThumbnailBatchLoader(
             loadBatch = { _, keys ->
                 loadedIds += keys.map { it.fileId }
@@ -282,7 +285,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `thumbnail resolver returns cached file without starting a batch`() = runBlocking {
+    fun `thumbnail resolver returns cached file without starting a batch`() = runTest {
         val request = thumbnailRequest(credentials(), fileId = 7, etag = "etag-7")
         val cachedFile = fileFor(request.key).apply { writeText("cached") }
         var ensureCalls = 0
@@ -301,7 +304,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `thumbnail resolver reads file after successful batch`() = runBlocking {
+    fun `thumbnail resolver reads file after successful batch`() = runTest {
         val request = thumbnailRequest(credentials(), fileId = 8, etag = "etag-8")
 
         val resolvedFile = resolveThumbnailFile(
@@ -317,7 +320,7 @@ class ThumbnailBatchLoaderTest {
     }
 
     @Test
-    fun `thumbnail resolver returns null when batch cannot provide file`() = runBlocking {
+    fun `thumbnail resolver returns null when batch cannot provide file`() = runTest {
         val request = thumbnailRequest(credentials(), fileId = 9, etag = "etag-9")
 
         val resolvedFile = resolveThumbnailFile(
@@ -329,7 +332,7 @@ class ThumbnailBatchLoaderTest {
         assertNull(resolvedFile)
     }
 
-    private fun loader(
+    private fun TestScope.loader(
         batchSize: Int = 12,
         batchWindowMillis: Long = 5,
         maxConcurrentBatches: Int = 4,
@@ -337,7 +340,7 @@ class ThumbnailBatchLoaderTest {
     ): ThumbnailBatchLoader {
         return ThumbnailBatchLoader(
             loadBatch = loadBatch,
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also(loaderScopes::add),
+            scope = backgroundScope,
             batchWindowMillis = batchWindowMillis,
             batchSize = batchSize,
             maxConcurrentBatches = maxConcurrentBatches,

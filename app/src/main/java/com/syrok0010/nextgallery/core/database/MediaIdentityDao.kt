@@ -1,10 +1,10 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 
 @Dao
 interface MediaIdentityDao {

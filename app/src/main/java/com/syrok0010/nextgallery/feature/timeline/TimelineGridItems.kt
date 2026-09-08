@@ -1,6 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
-
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
+package com.syrok0010.nextgallery.feature.timeline
 
 internal sealed interface TimelineGridItem {
     val key: String

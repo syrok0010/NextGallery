@@ -1,7 +1,6 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaItem
 
 data class MemoriesConfig(
     val version: String,
@@ -19,9 +18,9 @@ data class TimelineSnapshot(
     val days: List<TimelineDay>,
     val slots: List<TimelineSlot>,
     val loadedDayIds: Set<Int>,
-    val totalDayCount: Int,
     val totalMediaCountHint: Int,
 ) {
+    val totalDayCount: Int get() = days.size
     val memoriesVersion: String = config?.version.orEmpty()
     val timelinePath: String? = config?.timelinePath
     val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
@@ -43,47 +42,3 @@ data class TimelineSlotKey(
     val dayId: Int,
     val indexInDay: Int,
 )
-
-data class MediaItem(
-    val mediaId: MediaId,
-    val remoteFileId: Long?,
-    val dayId: Int,
-    val day: LocalDate,
-    val displayName: String,
-    val mimeType: String?,
-    val width: Int?,
-    val height: Int?,
-    val etag: String?,
-    val livePhotoId: String?,
-    val auid: String?,
-    val buid: String?,
-    val sharedBy: String?,
-    val takenAtEpochSeconds: Long?,
-    val isVideo: Boolean,
-    val videoDurationSeconds: Long?,
-    val isFavorite: Boolean,
-    val isHidden: Boolean,
-    val assetRef: MediaAssetRef,
-)
-
-sealed interface MediaAssetRef {
-    data class MemoriesFile(
-        val photoFileId: Long,
-    ) : MediaAssetRef
-
-    data class LocalContent(
-        val contentUri: String,
-        val modifiedAtEpochSeconds: Long?,
-    ) : MediaAssetRef
-
-    data class LocalFirst(
-        val local: LocalContent,
-        val remote: MemoriesFile,
-    ) : MediaAssetRef
-}
-
-val MediaItem.hasRemoteCopy: Boolean
-    get() = assetRef is MediaAssetRef.MemoriesFile || assetRef is MediaAssetRef.LocalFirst
-
-val MediaItem.hasLocalCopy: Boolean
-    get() = assetRef is MediaAssetRef.LocalContent || assetRef is MediaAssetRef.LocalFirst

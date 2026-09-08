@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.core.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable

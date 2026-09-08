@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -20,8 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import kotlinx.coroutines.launch
 
 internal data class ActiveViewerPageState(
@@ -36,7 +36,6 @@ internal fun MediaDetailScreen(
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
-    onVisibleTimelineRange: (firstVisibleIndex: Int, lastVisibleIndex: Int) -> Unit,
 ) {
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
@@ -58,11 +57,7 @@ internal fun MediaDetailScreen(
     SideEffect(pagerState.currentPage, items) {
         val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect
         onCurrentItemChange(item)
-        val slotIndex = sequence.timelineSlotIndex(item.mediaId) ?: return@SideEffect
-        onVisibleTimelineRange(
-            (slotIndex - ViewerSequencePrefetchSlots).coerceAtLeast(0),
-            slotIndex + ViewerSequencePrefetchSlots,
-        )
+
     }
 
     Box(
@@ -134,5 +129,4 @@ internal fun MediaDetailScreen(
     }
 }
 
-private const val ViewerSequencePrefetchSlots = 240
 private const val ViewerChromeFadeDurationMillis = 180

@@ -1,22 +1,21 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaAlias
-import com.syrok0010.nextgallery.data.memories.MediaAliasKind
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAlias
+import com.syrok0010.nextgallery.core.media.MediaAliasKind
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -117,9 +116,7 @@ class UnifiedTimelineProjectionPersistenceTest {
         buid: String = "shared-buid",
     ) = MediaItem(
         mediaId = mediaId,
-        remoteFileId = (assetRef as? MediaAssetRef.MemoriesFile)?.photoFileId,
         dayId = 19_675,
-        day = LocalDate.ofEpochDay(19_675),
         displayName = "IMG_0042.jpg",
         mimeType = "image/jpeg",
         width = 4_032,

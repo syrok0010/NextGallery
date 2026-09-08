@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect

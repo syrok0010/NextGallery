@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
@@ -15,12 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -116,7 +113,6 @@ class TimelineScrollAnchorTest {
         val initialMedia = mediaRange().toMutableList()
         val anchorIndex = 4
         val local = initialMedia[anchorIndex].copy(
-            remoteFileId = null,
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
                 modifiedAtEpochSeconds = 1_728_000_100L,
@@ -125,7 +121,6 @@ class TimelineScrollAnchorTest {
         initialMedia[anchorIndex] = local
         val updatedMedia = initialMedia.toMutableList()
         updatedMedia[anchorIndex] = local.copy(
-            remoteFileId = 42,
             assetRef = MediaAssetRef.LocalFirst(
                 local = local.assetRef as MediaAssetRef.LocalContent,
                 remote = MediaAssetRef.MemoriesFile(42),
@@ -262,9 +257,7 @@ class TimelineScrollAnchorTest {
         takenAtEpochSeconds: Long,
     ) = MediaItem(
         mediaId = MediaId(id),
-        remoteFileId = id.hashCode().toLong(),
         dayId = dayId,
-        day = LocalDate.ofEpochDay(dayId.toLong()),
         displayName = "$id.jpg",
         mimeType = "image/jpeg",
         width = 1_024,

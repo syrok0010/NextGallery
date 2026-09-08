@@ -1,8 +1,13 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.MediaAlias
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.reconcileMediaIdentities
 
 class InMemoryMediaIdentityRegistry(
     private val mediaIdFactory: () -> MediaId = MediaId::generate,

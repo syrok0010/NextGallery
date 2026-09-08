@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import androidx.room.Dao
 import androidx.room.Insert

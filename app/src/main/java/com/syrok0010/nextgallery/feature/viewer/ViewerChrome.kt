@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaItem
 import java.time.format.DateTimeFormatter
 
 @Composable

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,15 +13,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.app.ui.rememberViewerSequence
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
@@ -181,16 +181,14 @@ class ViewerSequenceMemoizationTest {
             days = listOf(TimelineDay(dayId = DAY_ID, count = slots.size)),
             slots = slots,
             loadedDayIds = emptySet(),
-            totalDayCount = 1,
+
             totalMediaCountHint = slots.size,
         )
     }
 
     private fun mediaItem(id: String, fileId: Long): MediaItem = MediaItem(
         mediaId = MediaId("media-$id"),
-        remoteFileId = fileId,
         dayId = DAY_ID,
-        day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "$id.jpg",
         mimeType = "image/jpeg",
         width = null,

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
@@ -22,11 +22,10 @@ import androidx.compose.ui.test.swipeDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import java.io.File
-import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -43,15 +42,13 @@ class MediaDetailScreenTest {
         val items = listOf(mediaItem("first"), mediaItem("second"))
         var current: MediaItem? = null
         var closed: MediaItem? = null
-        var range: Pair<Int, Int>? = null
-        showViewer(items, onCurrent = { current = it }, onClose = { closed = it }, onRange = { a, b -> range = a to b })
+        showViewer(items, onCurrent = { current = it }, onClose = { closed = it })
 
         rule.onNodeWithText("first.jpg").assertIsDisplayed()
         rule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         rule.onNodeWithText("second.jpg").assertIsDisplayed()
         rule.runOnIdle {
             assertEquals(items[1], current)
-            assertEquals(21 to 181, range)
         }
         saveScreenshot("photo")
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.action_back)).performClick()
@@ -81,7 +78,6 @@ class MediaDetailScreenTest {
             ViewerSequence(
                 items = listOf(first, second),
                 pageIndexByMediaId = mapOf(first.mediaId to 0, second.mediaId to 1),
-                timelineSlotIndexByMediaId = mapOf(first.mediaId to 100, second.mediaId to 101),
             ),
         )
         var closed: MediaItem? = null
@@ -92,7 +88,6 @@ class MediaDetailScreenTest {
                 tileBoundsForMediaId = { null },
                 onBack = { closed = it },
                 onCurrentItemChange = {},
-                onVisibleTimelineRange = { _, _ -> },
             )
         }
         rule.onNodeWithText("first.jpg").assertIsDisplayed()
@@ -101,7 +96,6 @@ class MediaDetailScreenTest {
             sequenceState.value = ViewerSequence(
                 items = listOf(prepended, first, second),
                 pageIndexByMediaId = mapOf(prepended.mediaId to 0, first.mediaId to 1, second.mediaId to 2),
-                timelineSlotIndexByMediaId = mapOf(prepended.mediaId to 99, first.mediaId to 100, second.mediaId to 101),
             )
         }
         rule.waitForIdle()
@@ -125,7 +119,6 @@ class MediaDetailScreenTest {
                 tileBoundsForMediaId = { null },
                 onBack = { closed = it },
                 onCurrentItemChange = {},
-                onVisibleTimelineRange = { _, _ -> },
             )
         }
         // Coil completes outside Compose's idling resources. Wait for actual image pixels.
@@ -169,7 +162,6 @@ class MediaDetailScreenTest {
                 tileBoundsForMediaId = { null },
                 onBack = {},
                 onCurrentItemChange = {},
-                onVisibleTimelineRange = { _, _ -> },
             )
         }
         rule.waitUntil(timeoutMillis = 10_000) {
@@ -191,7 +183,6 @@ class MediaDetailScreenTest {
     private fun sequenceOf(vararg items: MediaItem) = ViewerSequence(
         items = items.toList(),
         pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
-        timelineSlotIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index + 100 }.toMap(),
     )
 
     private fun showViewer(
@@ -199,12 +190,10 @@ class MediaDetailScreenTest {
         tileBounds: Rect? = Rect(30f, 60f, 150f, 180f),
         onCurrent: (MediaItem) -> Unit = {},
         onClose: (MediaItem) -> Unit,
-        onRange: (Int, Int) -> Unit = { _, _ -> },
     ) {
         val sequence = ViewerSequence(
             items = items,
             pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
-            timelineSlotIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index + 100 }.toMap(),
         )
         rule.setContent {
             MediaDetailScreen(
@@ -213,7 +202,6 @@ class MediaDetailScreenTest {
                 tileBoundsForMediaId = { tileBounds },
                 onBack = onClose,
                 onCurrentItemChange = onCurrent,
-                onVisibleTimelineRange = onRange,
             )
         }
         rule.waitForIdle()
@@ -236,8 +224,7 @@ class MediaDetailScreenTest {
         bitmap.recycle()
         gainmapBitmap?.recycle()
         return MediaItem(
-            mediaId = MediaId(name), remoteFileId = null, dayId = 20_000,
-            day = LocalDate.ofEpochDay(20_000), displayName = "$name.jpg",
+            mediaId = MediaId(name), dayId = 20_000, displayName = "$name.jpg",
             mimeType = if (isVideo) "video/mp4" else "image/jpeg",
             width = 800, height = 600, etag = null, livePhotoId = null,
             auid = null, buid = null, sharedBy = null, takenAtEpochSeconds = null,

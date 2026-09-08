@@ -1,6 +1,5 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.core.session
 
-import com.syrok0010.nextgallery.data.credentials.CredentialsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +13,7 @@ class SessionStore(
 
     val session: StateFlow<SessionUiState> = _session.asStateFlow()
 
-    fun signIn(credentials: com.syrok0010.nextgallery.data.credentials.AccountCredentials) {
+    fun signIn(credentials: com.syrok0010.nextgallery.core.session.AccountCredentials) {
         _session.value = SessionUiState.SignedIn(credentials)
     }
 

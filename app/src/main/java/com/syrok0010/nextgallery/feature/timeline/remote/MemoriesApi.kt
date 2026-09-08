@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
 import retrofit2.http.GET
 import retrofit2.http.Path

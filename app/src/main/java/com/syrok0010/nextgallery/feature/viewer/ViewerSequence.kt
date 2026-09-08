@@ -1,21 +1,16 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 
 internal class ViewerSequence(
     val items: List<MediaItem>,
     private val pageIndexByMediaId: Map<MediaId, Int>,
-    private val timelineSlotIndexByMediaId: Map<MediaId, Int>,
 ) {
     operator fun contains(mediaId: MediaId): Boolean = mediaId in pageIndexByMediaId
 
     fun pageIndex(mediaId: MediaId): Int? = pageIndexByMediaId[mediaId]
 
-    fun timelineSlotIndex(mediaId: MediaId): Int? = timelineSlotIndexByMediaId[mediaId]
 
     fun pageKey(page: Int): String = items[page].mediaId.value
 
@@ -33,7 +28,6 @@ internal class ViewerSequence(
         return ViewerSequence(
             items = retainedItems,
             pageIndexByMediaId = retainedPageIndexes,
-            timelineSlotIndexByMediaId = timelineSlotIndexByMediaId,
         )
     }
 
@@ -41,69 +35,11 @@ internal class ViewerSequence(
         val Empty = ViewerSequence(
             items = emptyList(),
             pageIndexByMediaId = emptyMap(),
-            timelineSlotIndexByMediaId = emptyMap(),
         )
     }
 }
 
-internal class ViewerSequenceController {
-    private var sourceSnapshot: TimelineSnapshot? = null
-    private var liveSequence = ViewerSequence.Empty
-    private var displayedSequence = ViewerSequence.Empty
-
-    fun update(
-        snapshot: TimelineSnapshot?,
-        currentMediaId: MediaId?,
-    ): ViewerSequence {
-        if (snapshot !== sourceSnapshot) {
-            sourceSnapshot = snapshot
-            liveSequence = snapshot.toViewerSequence()
-        }
-
-        displayedSequence = reconcileCurrentMedia(
-            live = liveSequence,
-            previous = displayedSequence,
-            currentMediaId = currentMediaId,
-        )
-        return displayedSequence
-    }
-}
-
-@Composable
-internal fun rememberViewerSequence(
-    snapshot: TimelineSnapshot?,
-    currentMediaId: MediaId?,
-): ViewerSequence {
-    val controller = remember { ViewerSequenceController() }
-    return remember(snapshot, currentMediaId) {
-        controller.update(snapshot, currentMediaId)
-    }
-}
-
-internal fun TimelineSnapshot?.toViewerSequence(): ViewerSequence {
-    if (this == null) {
-        return ViewerSequence.Empty
-    }
-
-    val items = ArrayList<MediaItem>(this.items.size)
-    val pageIndexByMediaId = LinkedHashMap<MediaId, Int>()
-    val timelineSlotIndexByMediaId = LinkedHashMap<MediaId, Int>()
-
-    slots.forEachIndexed { slotIndex, slot ->
-        val item = slot.mediaItem ?: return@forEachIndexed
-        pageIndexByMediaId[item.mediaId] = items.size
-        timelineSlotIndexByMediaId[item.mediaId] = slotIndex
-        items += item
-    }
-
-    return ViewerSequence(
-        items = items,
-        pageIndexByMediaId = pageIndexByMediaId,
-        timelineSlotIndexByMediaId = timelineSlotIndexByMediaId,
-    )
-}
-
-private fun reconcileCurrentMedia(
+internal fun reconcileCurrentMedia(
     live: ViewerSequence,
     previous: ViewerSequence,
     currentMediaId: MediaId?,

@@ -1,7 +1,9 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -25,9 +27,7 @@ fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
 
     return MediaItem(
         mediaId = mediaId,
-        remoteFileId = fileid,
         dayId = dayid,
-        day = LocalDate.ofEpochDay(dayid.toLong()),
         displayName = basename ?: "file-$fileid",
         mimeType = mimetype,
         width = w,

@@ -1,7 +1,7 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataDao
-import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataEntity
+import com.syrok0010.nextgallery.core.database.LocalMediaMetadataDao
+import com.syrok0010.nextgallery.core.database.LocalMediaMetadataEntity
 import java.util.TimeZone
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -38,34 +38,46 @@ internal class LocalMediaMetadataEnrichment(
             coroutineScope {
                 chunk.map { metadata ->
                     async {
-                        val version = versions[metadata.volumeName]
-                        val fingerprint = Json.encodeToString(metadata) + "|" + version + "|" + timeZone
-                        val previous = cached[metadata.contentUri]
-                        val reusable = version != null && metadata.generationModified != null
-                        val unchanged = reusable && previous?.fingerprint == fingerprint && previous.exifComplete
-                        val enriched = if (unchanged) {
-                            Json.decodeFromString<LocalMediaMetadata>(checkNotNull(previous).metadataJson)
-                        } else {
-                            readExif(metadata)
-                        }
-                        val result = enriched ?: fallback(metadata)
-                        val entry = if (reusable && (previous?.fingerprint != fingerprint || !previous.exifComplete)) {
-                            LocalMediaMetadataEntity(
-                                metadata.contentUri, fingerprint, Json.encodeToString(result), enriched != null,
-                            )
-                        } else null
-                        result to entry
+                        enrichOne(metadata, fallback)
                     }
                 }.awaitAll()
             }
         }
-        val entries = results.mapNotNull { it.second }
+        val entries = results.mapNotNull { it.cacheUpdate }
         if (entries.isNotEmpty()) cache?.upsert(entries)
         seen.addAll(batch.map { it.contentUri })
-        return results.map { it.first }
+        return results.map { it.metadata }
+    }
+
+    private suspend fun enrichOne(
+        metadata: LocalMediaMetadata,
+        fallback: (LocalMediaMetadata) -> LocalMediaMetadata,
+    ): EnrichmentResult {
+        val version = versions[metadata.volumeName]
+        val fingerprint = Json.encodeToString(metadata) + "|" + version + "|" + timeZone
+        val previous = cached[metadata.contentUri]
+        val reusable = version != null && metadata.generationModified != null
+        val unchanged = reusable && previous?.fingerprint == fingerprint && previous.exifComplete
+        val enriched = if (unchanged) {
+            Json.decodeFromString<LocalMediaMetadata>(checkNotNull(previous).metadataJson)
+        } else {
+            readExif(metadata)
+        }
+        val result = enriched ?: fallback(metadata)
+        val entry = if (reusable && (previous?.fingerprint != fingerprint || !previous.exifComplete)) {
+            LocalMediaMetadataEntity(
+                metadata.contentUri, fingerprint, Json.encodeToString(result), enriched != null,
+            )
+        } else null
+        return EnrichmentResult(result, entry)
     }
 
     suspend fun finish() {
         cached.keys.filterNot { it in seen }.forEach { cache?.delete(it) }
     }
 }
+
+private data class EnrichmentResult(
+    val metadata: LocalMediaMetadata,
+    val cacheUpdate: LocalMediaMetadataEntity?,
+)

@@ -1,11 +1,8 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -37,9 +34,7 @@ class TimelineGridItemsTest {
 
     private fun mediaItem(mediaId: MediaId, fileId: Long) = MediaItem(
         mediaId = mediaId,
-        remoteFileId = fileId,
         dayId = DAY_ID,
-        day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "file-$fileId",
         mimeType = "image/jpeg",
         width = null,

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,9 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import org.koin.compose.koinInject
 
 @Composable

@@ -1,12 +1,23 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
+import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
+import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.reconcileMediaIdentities
+import com.syrok0010.nextgallery.core.media.remoteCopy
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class UnifiedTimelineProjection(
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -20,26 +31,28 @@ class UnifiedTimelineProjection(
     val snapshot: TimelineSnapshot?
         get() = currentSnapshot
 
-    suspend fun replaceRemoteSnapshot(snapshot: TimelineSnapshot?): UnifiedTimelineProjectionResult =
-        updateSources { sources -> sources.copy(remote = snapshot) }
+    suspend fun replaceRemoteSnapshot(snapshot: TimelineSnapshot?): UnifiedTimelineProjectionResult {
+        snapshot?.let { RemoteMediaProjection(it.items) }
+        return updateSources { sources -> sources.copy(remote = snapshot) }
+    }
 
     suspend fun mergeRemoteItems(
-        items: List<MediaItem>,
+        items: RemoteMediaProjection,
         loadedDayIds: Set<Int>,
     ): UnifiedTimelineProjectionResult = updateSources { sources ->
         sources.copy(
             remote = sources.remote?.let { snapshot ->
                 TimelineSnapshotAssembler.mergeLoadedItems(
                     snapshot = snapshot,
-                    items = items,
+                    items = items.items,
                     loadedDayIds = loadedDayIds,
                 )
             },
         )
     }
 
-    suspend fun replaceLocalItems(items: List<MediaItem>): UnifiedTimelineProjectionResult =
-        updateSources { sources -> sources.copy(local = items) }
+    suspend fun replaceLocalItems(items: LocalMediaProjection): UnifiedTimelineProjectionResult =
+        updateSources { sources -> sources.copy(local = items.items) }
 
     suspend fun clear() {
         mutex.withLock {
@@ -102,8 +115,8 @@ class UnifiedTimelineProjection(
                         } else {
                             remote.copy(
                                 assetRef = MediaAssetRef.LocalFirst(
-                                    local = local.assetRef as MediaAssetRef.LocalContent,
-                                    remote = remote.assetRef as MediaAssetRef.MemoriesFile,
+                                    local = requireNotNull(local.localCopy),
+                                    remote = requireNotNull(remote.remoteCopy),
                                 ),
                             )
                         },

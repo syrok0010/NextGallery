@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import android.os.Build
 import androidx.compose.foundation.background
@@ -34,12 +34,12 @@ import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.ui.common.MediaAssetImage
-import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
-import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
-import com.syrok0010.nextgallery.ui.common.rememberFallbackImageRequest
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.images.MediaAssetImage
+import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import com.syrok0010.nextgallery.feature.images.rememberFallbackImageRequest
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState

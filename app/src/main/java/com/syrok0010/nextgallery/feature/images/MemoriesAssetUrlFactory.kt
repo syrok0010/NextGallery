@@ -1,6 +1,7 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.images
 
-import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
 
 private const val PREVIEW_AUTH_QUERY = "a=1"
 

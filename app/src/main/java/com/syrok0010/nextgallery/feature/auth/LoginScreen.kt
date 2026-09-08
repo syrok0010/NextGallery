@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.auth
+package com.syrok0010.nextgallery.feature.auth
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,10 +8,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.ui.NextGalleryScaffold
+import com.syrok0010.nextgallery.core.ui.NextGalleryScaffold
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsActions
@@ -6,23 +6,19 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.credentials.CredentialsStore
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.AppMessageUiState
-import com.syrok0010.nextgallery.ui.TimelineUiState
-import com.syrok0010.nextgallery.ui.SessionStore
-import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.ui.AppMessageUiState
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -200,9 +196,7 @@ class TimelineSlotTileTest {
 
     private fun mediaItem(isVideo: Boolean): MediaItem = MediaItem(
         mediaId = MediaId("remote-42"),
-        remoteFileId = 42,
         dayId = DAY_ID,
-        day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "remote.jpg",
         mimeType = if (isVideo) "video/mp4" else "image/jpeg",
         width = 1200,

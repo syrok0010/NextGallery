@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
@@ -35,18 +35,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.hasLocalCopy
-import com.syrok0010.nextgallery.data.memories.hasRemoteCopy
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.common.MediaAssetImage
-import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
-import com.syrok0010.nextgallery.ui.common.MediaImageRequestFactory
-import org.koin.compose.koinInject
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.hasLocalCopy
+import com.syrok0010.nextgallery.core.media.hasRemoteCopy
+import com.syrok0010.nextgallery.feature.images.MediaAssetImage
+import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.koin.compose.koinInject
 
 @Composable
 internal fun TimelineDayHeader(dayId: Int) {

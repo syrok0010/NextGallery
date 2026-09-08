@@ -1,21 +1,23 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.InMemoryMediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.MediaIdentityResolution
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
+import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.take
@@ -24,12 +26,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flow
-import kotlin.time.Duration
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LocalMediaSourceTest {
@@ -64,7 +63,7 @@ class LocalMediaSourceTest {
         val projection = UnifiedTimelineProjection()
 
         source.updates(emptyFlow()).take(batchCount + 1).collect { state ->
-            projection.replaceLocalItems(state.items)
+            projection.replaceLocalItems(LocalMediaProjection(state.items))
         }
 
         assertEquals(batchCount * batchSize, registry.resolvedCandidateCount)
@@ -266,10 +265,40 @@ class LocalMediaSourceTest {
             identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
         )
-        var failed = false
-        source.updates(emptyFlow()).catch { failed = true }.collect()
-        assertTrue(failed)
+        val updates = source.updates(emptyFlow()).take(2).toList()
+        assertTrue(updates.last().failure)
         assertEquals(listOf(cached), store.items)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun `failed scan recovers on next observer trigger in the same subscription`() = kotlinx.coroutines.test.runTest {
+        val changes = Channel<Unit>(Channel.UNLIMITED)
+        var scans = 0
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flow {
+                    scans++
+                    if (scans == 1) error("temporary read failure")
+                    emit(LocalMediaBatch(listOf(metadata("content://images/recovered", taken = 1_000)),
+                        LocalMediaIndexProgress(1, 1)))
+                }
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver(changes::receiveAsFlow),
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+            changeDebounce = 25.milliseconds,
+        )
+        val states = mutableListOf<LocalMediaIndexState>()
+        backgroundScope.launch { source.updates(emptyFlow()).collect { states += it } }
+        testScheduler.runCurrent()
+        assertTrue(states.last().failure)
+        changes.send(Unit)
+        testScheduler.advanceTimeBy(26)
+        testScheduler.runCurrent()
+        assertEquals(2, scans)
+        assertTrue(!states.last().failure)
+        assertEquals("recovered", states.last().items.single().displayName)
     }
 
     private class InMemoryLocalMediaProjectionStore(
@@ -328,9 +357,7 @@ class LocalMediaSourceTest {
 
     private fun localItem(uri: String, timestamp: Long) = MediaItem(
         mediaId = MediaId("stable:$uri"),
-        remoteFileId = null,
         dayId = Math.floorDiv(timestamp, 86_400L).toInt(),
-        day = LocalDate.ofEpochDay(Math.floorDiv(timestamp, 86_400L)),
         displayName = uri.substringAfterLast('/'),
         mimeType = "image/jpeg",
         width = 100,

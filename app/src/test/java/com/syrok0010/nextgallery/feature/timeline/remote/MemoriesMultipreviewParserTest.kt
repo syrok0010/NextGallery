@@ -1,5 +1,7 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
+import com.syrok0010.nextgallery.feature.images.ThumbnailPreview
+import com.syrok0010.nextgallery.feature.images.parseMemoriesMultipreviewResponse
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

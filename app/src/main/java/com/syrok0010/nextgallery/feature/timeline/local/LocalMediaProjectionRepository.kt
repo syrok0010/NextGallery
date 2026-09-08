@@ -1,11 +1,11 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
 import androidx.room.withTransaction
-import com.syrok0010.nextgallery.data.cache.IdentifiedLocalMedia
-import com.syrok0010.nextgallery.data.cache.NextGalleryDatabase
-import com.syrok0010.nextgallery.data.cache.toLocalMediaEntity
-import com.syrok0010.nextgallery.data.cache.toMediaItem
-import com.syrok0010.nextgallery.data.memories.MediaItem
+import com.syrok0010.nextgallery.core.database.IdentifiedLocalMedia
+import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.persistence.toLocalMediaEntity
+import com.syrok0010.nextgallery.feature.timeline.persistence.toMediaItem
 
 class LocalMediaProjectionRepository(
     private val database: NextGalleryDatabase,

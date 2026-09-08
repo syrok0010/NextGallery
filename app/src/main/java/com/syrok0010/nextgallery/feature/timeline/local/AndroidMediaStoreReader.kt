@@ -1,13 +1,11 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.provider.MediaStore
-import androidx.exifinterface.media.ExifInterface
 import androidx.core.net.toUri
-import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataDao
-import java.text.SimpleDateFormat
-import java.util.TimeZone
+import androidx.exifinterface.media.ExifInterface
+import com.syrok0010.nextgallery.core.database.LocalMediaMetadataDao
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -145,7 +143,7 @@ class AndroidMediaStoreReader(
         if (isVideo) return withDateFallback()
         val exif = readExif(contentUri) ?: return null
         return copy(
-            memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(
+            memoriesTimelineEpochSeconds = canonicalTimelineSeconds(
                 exifDateTime = exif.getAttribute(ExifInterface.TAG_DATETIME),
                 dateTakenMillis = dateTakenMillis,
             ),
@@ -154,7 +152,7 @@ class AndroidMediaStoreReader(
     }
 
     private fun LocalMediaMetadata.withDateFallback() = copy(
-        memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds(null, dateTakenMillis),
+        memoriesTimelineEpochSeconds = canonicalTimelineSeconds(null, dateTakenMillis),
     )
 
     private fun android.database.Cursor.nullableString(column: Int): String? =
@@ -174,19 +172,4 @@ class AndroidMediaStoreReader(
         }
     }.getOrNull()
 
-    private fun memoriesTimelineEpochSeconds(
-        exifDateTime: String?,
-        dateTakenMillis: Long?,
-    ): Long? {
-        if (exifDateTime != null) {
-            runCatching {
-                SimpleDateFormat("yyyy:MM:dd HH:mm:ss").apply {
-                    timeZone = TimeZone.getTimeZone("GMT")
-                }.parse(exifDateTime)?.time?.div(1_000)
-            }.getOrNull()?.let { return it }
-        }
-        return dateTakenMillis?.takeIf { it > 0 }?.let { timestamp ->
-            (timestamp + TimeZone.getDefault().getOffset(timestamp)) / 1_000
-        }
-    }
 }

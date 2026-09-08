@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.theme
+package com.syrok0010.nextgallery.core.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

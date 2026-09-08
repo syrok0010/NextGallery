@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +22,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.AppMessageUiState
-import com.syrok0010.nextgallery.ui.TimelineUiState
-import com.syrok0010.nextgallery.ui.asString
-import com.syrok0010.nextgallery.ui.common.StatusBlock
-import com.syrok0010.nextgallery.ui.uiText
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.ui.AppMessageUiState
+import com.syrok0010.nextgallery.core.ui.StatusBlock
+import com.syrok0010.nextgallery.core.ui.asString
+import com.syrok0010.nextgallery.core.ui.uiText
 
 @Composable
 internal fun TimelinePanel(

@@ -1,6 +1,6 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaId
 
 internal data class TimelineVisibleGridItem(
     val gridIndex: Int,

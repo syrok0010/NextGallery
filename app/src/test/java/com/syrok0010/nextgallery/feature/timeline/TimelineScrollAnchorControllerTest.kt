@@ -1,11 +1,8 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -102,7 +99,6 @@ class TimelineScrollAnchorControllerTest {
     fun `merging source copies follows the stable media id`() {
         val controller = TimelineScrollAnchorController()
         val local = mediaItem("stable", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000).copy(
-            remoteFileId = null,
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
                 modifiedAtEpochSeconds = 1_728_000_100,
@@ -110,7 +106,6 @@ class TimelineScrollAnchorControllerTest {
         )
         val initialItems = gridItems(local)
         val merged = local.copy(
-            remoteFileId = 42,
             assetRef = MediaAssetRef.LocalFirst(
                 local = local.assetRef as MediaAssetRef.LocalContent,
                 remote = MediaAssetRef.MemoriesFile(42),
@@ -233,9 +228,7 @@ class TimelineScrollAnchorControllerTest {
         takenAtEpochSeconds: Long,
     ) = MediaItem(
         mediaId = MediaId(id),
-        remoteFileId = id.hashCode().toLong(),
         dayId = dayId,
-        day = LocalDate.ofEpochDay(dayId.toLong()),
         displayName = "$id.jpg",
         mimeType = "image/jpeg",
         width = 1_024,

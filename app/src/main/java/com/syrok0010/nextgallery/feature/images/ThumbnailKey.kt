@@ -1,8 +1,8 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 
 data class ThumbnailKey(
     val accountScope: String,

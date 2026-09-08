@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.common
+package com.syrok0010.nextgallery.core.ui
 
 import android.graphics.Bitmap
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -9,13 +9,15 @@ import coil3.asImage
 import coil3.intercept.Interceptor
 import coil3.request.ErrorResult
 import coil3.request.SuccessResult
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.credentials.CredentialsStore
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.ui.SessionStore
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.images.MediaAssetImage
+import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -41,7 +43,6 @@ class MediaAssetImageTest {
         )
         val remote = mediaItem(MediaAssetRef.MemoriesFile(42)).copy(
             mediaId = MediaId("generated-remote"),
-            remoteFileId = 42,
             auid = "shared-auid",
         )
         val item = remote.copy(
@@ -96,9 +97,7 @@ class MediaAssetImageTest {
 
     private fun mediaItem(assetRef: MediaAssetRef): MediaItem = MediaItem(
         mediaId = MediaId("local:42"),
-        remoteFileId = null,
         dayId = 1,
-        day = LocalDate.of(2026, 8, 17),
         displayName = "local.jpg",
         mimeType = "image/jpeg",
         width = 4000,

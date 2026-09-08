@@ -1,24 +1,25 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
-import android.util.Log
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import kotlin.system.measureNanoTime
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.local.LocalMediaBatch
-import com.syrok0010.nextgallery.data.local.LocalMediaChangeObserver
-import com.syrok0010.nextgallery.data.local.LocalMediaIndexProgress
-import com.syrok0010.nextgallery.data.local.LocalMediaMetadata
-import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.data.local.LocalMediaReader
-import com.syrok0010.nextgallery.data.local.LocalMediaSource
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.MediaIdentityResolution
-import com.syrok0010.nextgallery.data.memories.UnifiedTimelineProjection
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaBatch
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaChangeObserver
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexProgress
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaMetadata
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaReader
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
+import kotlin.system.measureNanoTime
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -79,7 +80,7 @@ class LocalMediaIndexingRegressionTest {
             val elapsed = measureNanoTime {
                 source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
                     if (previous !== state.items) {
-                        projectionNanos += measureNanoTime { projection.replaceLocalItems(state.items) }
+                        projectionNanos += measureNanoTime { projection.replaceLocalItems(LocalMediaProjection(state.items)) }
                         builds++
                         previous = state.items
                     }

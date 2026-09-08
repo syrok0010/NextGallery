@@ -1,19 +1,16 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MemoriesRepository
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlin.time.Duration.Companion.milliseconds
 
 internal class ThumbnailBatchLoader(
     private val loadBatch: suspend (AccountCredentials, List<ThumbnailKey>) -> Set<ThumbnailKey>,
@@ -29,15 +26,6 @@ internal class ThumbnailBatchLoader(
     }
 
     private val batchSemaphore = Semaphore(maxConcurrentBatches)
-
-    constructor(
-        repository: MemoriesRepository,
-    ) : this(
-        loadBatch = { credentials, keys ->
-            repository.ensureThumbnails(credentials, keys).toSet()
-        },
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    )
 
     private val mailbox = Channel<Command>(
         capacity = Channel.BUFFERED,

@@ -1,15 +1,15 @@
-package com.syrok0010.nextgallery.data.auth
+package com.syrok0010.nextgallery.feature.auth
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(
     private val transport: NextcloudTransport,
-) {
-    suspend fun startLogin(serverUrl: String): LoginSession {
+) : LoginGateway {
+    override suspend fun startLogin(serverUrl: String): LoginSession {
         val normalizedServerUrl = transport.normalizeBaseUrl(serverUrl)
         val api = transport.nextcloudAuthApi(normalizedServerUrl)
         val response = api.startLogin()
@@ -22,7 +22,7 @@ class NextcloudLoginRepository(
         )
     }
 
-    suspend fun pollLogin(session: LoginSession): LoginPollResult {
+    override suspend fun pollLogin(session: LoginSession): LoginPollResult {
         return try {
             val api = transport.nextcloudAuthApi(session.serverUrl)
             val response = api.pollLogin(session.pollEndpoint, session.pollToken)

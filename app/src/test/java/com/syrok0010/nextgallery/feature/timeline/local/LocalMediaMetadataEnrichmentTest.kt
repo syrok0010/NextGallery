@@ -1,7 +1,7 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataDao
-import com.syrok0010.nextgallery.data.cache.LocalMediaMetadataEntity
+import com.syrok0010.nextgallery.core.database.LocalMediaMetadataDao
+import com.syrok0010.nextgallery.core.database.LocalMediaMetadataEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test

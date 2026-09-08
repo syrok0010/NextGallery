@@ -1,6 +1,7 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
 import androidx.navigation3.runtime.NavKey
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import kotlinx.serialization.Serializable
 
 @Serializable

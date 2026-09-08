@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
 import android.content.Context
 import coil3.ImageLoader
@@ -11,7 +11,6 @@ import coil3.key.Keyer
 import coil3.memory.MemoryCache
 import coil3.request.Options
 import coil3.video.VideoFrameDecoder
-import com.syrok0010.nextgallery.data.cache.ThumbnailFileStore
 import java.io.File
 import okio.Path.Companion.toPath
 

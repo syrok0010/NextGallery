@@ -1,6 +1,7 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

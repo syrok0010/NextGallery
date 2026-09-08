@@ -1,7 +1,16 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
+import com.syrok0010.nextgallery.core.media.hasRemoteCopy
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,7 +28,7 @@ class UnifiedTimelineProjectionTest {
             loadedDayIds = setOf(remote.dayId),
         )
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(local))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot)
 
@@ -40,7 +49,7 @@ class UnifiedTimelineProjectionTest {
         val local = localItem(MediaId("local-only"), auid = "local-auid")
         val remote = remoteItem(MediaId("cloud-only"), auid = "cloud-auid")
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(local))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
@@ -67,7 +76,7 @@ class UnifiedTimelineProjectionTest {
         )
 
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(local))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
@@ -100,7 +109,7 @@ class UnifiedTimelineProjectionTest {
             loadedDayIds = setOf(conflictingRemote.dayId),
         )
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(first, second))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(first, second)))
 
         val result = projection.replaceRemoteSnapshot(remoteSnapshot)
 
@@ -127,7 +136,7 @@ class UnifiedTimelineProjectionTest {
             contentUri = "content://images/2",
         )
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(first, second))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(first, second)))
         projection.replaceRemoteSnapshot(
             remoteSnapshot(remoteItem(MediaId("remote"), "first-auid", buid = null)),
         )
@@ -159,11 +168,11 @@ class UnifiedTimelineProjectionTest {
         )
         val projection = UnifiedTimelineProjection()
 
-        projection.replaceLocalItems(listOf(local))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
         assertEquals(listOf(local.mediaId), requireNotNull(projection.snapshot).items.map { it.mediaId })
 
         projection.replaceRemoteSnapshot(remoteIndex)
-        val merged = projection.mergeRemoteItems(listOf(remote), setOf(remote.dayId))
+        val merged = projection.mergeRemoteItems(RemoteMediaProjection(listOf(remote)), setOf(remote.dayId))
 
         val item = requireNotNull(merged.snapshot).items.single()
         assertEquals(local.mediaId, item.mediaId)
@@ -193,17 +202,17 @@ class UnifiedTimelineProjectionTest {
         val projection = UnifiedTimelineProjection()
         projection.replaceRemoteSnapshot(remoteSnapshot(remote))
 
-        val withPermission = projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        val withPermission = projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
         val merged = requireNotNull(withPermission.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
         assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
         assertTrue(withPermission.snapshot.items.any { it.mediaId == localOnly.mediaId })
 
-        val withoutPermission = projection.replaceLocalItems(emptyList())
+        val withoutPermission = projection.replaceLocalItems(LocalMediaProjection(emptyList()))
         val cloudOnly = requireNotNull(withoutPermission.snapshot).items.single()
         assertEquals(mergedLocal.mediaId, cloudOnly.mediaId)
         assertTrue(cloudOnly.assetRef is MediaAssetRef.MemoriesFile)
 
-        val restored = projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        val restored = projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
         val restoredMerged = requireNotNull(restored.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
         assertTrue(restoredMerged.assetRef is MediaAssetRef.LocalFirst)
         assertTrue(restored.snapshot.items.any { it.mediaId == localOnly.mediaId })
@@ -224,7 +233,7 @@ class UnifiedTimelineProjectionTest {
             etag = "etag-refreshed",
         )
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(mergedLocal, localOnly))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
         projection.replaceRemoteSnapshot(remoteSnapshot(initialRemote))
 
         val refreshed = projection.replaceRemoteSnapshot(remoteSnapshot(refreshedRemote))
@@ -267,7 +276,7 @@ class UnifiedTimelineProjectionTest {
         )
 
         val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(listOf(sameDayLocal, localOnlyDayItem))
+        projection.replaceLocalItems(LocalMediaProjection(listOf(sameDayLocal, localOnlyDayItem)))
         val result = projection.replaceRemoteSnapshot(remoteSnapshot)
 
         val snapshot = requireNotNull(result.snapshot)
@@ -281,9 +290,7 @@ class UnifiedTimelineProjectionTest {
         contentUri: String = "content://images/42",
     ) = MediaItem(
         mediaId = mediaId,
-        remoteFileId = null,
         dayId = 19_869,
-        day = LocalDate.ofEpochDay(19_869),
         displayName = "device-name.jpg",
         mimeType = "image/jpeg",
         width = 3_000,
@@ -307,9 +314,7 @@ class UnifiedTimelineProjectionTest {
         buid: String? = "remote-buid",
     ) = MediaItem(
         mediaId = mediaId,
-        remoteFileId = 42,
         dayId = 19_870,
-        day = LocalDate.ofEpochDay(19_870),
         displayName = "cloud-name.jpg",
         mimeType = "image/jpeg",
         width = 4_032,

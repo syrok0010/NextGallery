@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.images
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

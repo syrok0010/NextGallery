@@ -1,4 +1,6 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline
+
+import com.syrok0010.nextgallery.core.media.MediaItem
 
 object TimelineSnapshotAssembler {
     fun assemble(
@@ -14,7 +16,7 @@ object TimelineSnapshotAssembler {
             days = days,
             slots = buildTimelineSlots(days, itemsByDay),
             loadedDayIds = loadedDayIds,
-            totalDayCount = days.size,
+
             totalMediaCountHint = days.sumOf { it.count },
         )
     }
@@ -104,7 +106,7 @@ object TimelineSnapshotAssembler {
         return snapshot.copy(
             days = days,
             slots = buildTimelineSlots(days, mergedItemsByDay, placeholderCountsByDay),
-            totalDayCount = days.size,
+
             totalMediaCountHint = snapshot.totalMediaCountHint + items.size,
         )
     }

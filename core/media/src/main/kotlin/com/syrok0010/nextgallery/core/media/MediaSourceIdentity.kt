@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.domain.media
+package com.syrok0010.nextgallery.core.media
 
 enum class MediaSourceKind {
     Memories,

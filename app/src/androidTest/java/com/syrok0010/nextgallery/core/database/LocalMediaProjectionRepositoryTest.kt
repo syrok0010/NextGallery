@@ -1,17 +1,18 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaIdentityCandidate
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -135,9 +136,7 @@ class LocalMediaProjectionRepositoryTest {
         val dayId = Math.floorDiv(modifiedAtEpochSeconds, 86_400L).toInt()
         return MediaItem(
             mediaId = mediaId,
-            remoteFileId = null,
             dayId = dayId,
-            day = LocalDate.ofEpochDay(dayId.toLong()),
             displayName = contentUri.substringAfterLast('/'),
             mimeType = if ("video" in contentUri) "video/mp4" else "image/jpeg",
             width = 4_032,

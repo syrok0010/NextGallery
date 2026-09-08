@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.auth
+package com.syrok0010.nextgallery.feature.auth
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
@@ -24,9 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.ui.AppMessageUiState
-import com.syrok0010.nextgallery.ui.LoginUiState
-import com.syrok0010.nextgallery.ui.common.StatusBlock
+import com.syrok0010.nextgallery.core.ui.AppMessageUiState
+import com.syrok0010.nextgallery.core.ui.StatusBlock
 
 @Composable
 internal fun LoginPanel(

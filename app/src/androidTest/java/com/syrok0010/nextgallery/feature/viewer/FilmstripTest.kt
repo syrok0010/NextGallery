@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableIntStateOf
@@ -10,10 +10,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -102,9 +101,7 @@ class FilmstripTest {
         dayId: Int,
     ) = MediaItem(
         mediaId = MediaId(id),
-        remoteFileId = null,
         dayId = dayId,
-        day = LocalDate.ofEpochDay(dayId.toLong()),
         displayName = "$id.jpg",
         mimeType = "image/jpeg",
         width = 1_024,

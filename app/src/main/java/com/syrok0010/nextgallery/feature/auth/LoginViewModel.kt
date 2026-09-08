@@ -1,226 +1,125 @@
-package com.syrok0010.nextgallery.ui.auth
+package com.syrok0010.nextgallery.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.data.auth.LoginPollFailure
-import com.syrok0010.nextgallery.data.auth.LoginPollResult
-import com.syrok0010.nextgallery.data.auth.LoginSession
-import com.syrok0010.nextgallery.data.auth.NextcloudLoginRepository
-import com.syrok0010.nextgallery.data.credentials.CredentialsStore
-import com.syrok0010.nextgallery.ui.AppMessageUiState
-import com.syrok0010.nextgallery.ui.LoginUiState
-import com.syrok0010.nextgallery.ui.SessionStore
-import com.syrok0010.nextgallery.ui.uiText
-import java.util.concurrent.TimeUnit
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.ui.AppMessageUiState
+import com.syrok0010.nextgallery.core.ui.uiText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class LoginScreenUiState(
     val login: LoginUiState = LoginUiState(),
-    val isBusy: Boolean = false,
     val message: AppMessageUiState = AppMessageUiState(),
-)
+) {
+    val isBusy: Boolean get() = login.attempt == LoginAttempt.Starting || login.attempt == LoginAttempt.SavingCredentials
+}
 
 class LoginViewModel(
     private val sessionStore: SessionStore,
     private val credentialsStore: CredentialsStore,
-    private val loginRepository: NextcloudLoginRepository,
+    private val gateway: LoginGateway,
+    private val storageDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(LoginScreenUiState())
-    val state: StateFlow<LoginScreenUiState> = _state.asStateFlow()
-
-    private var loginStartJob: Job? = null
-    private var loginPollingJob: Job? = null
-    private var loginAttemptId = 0L
+    private val mutableState = MutableStateFlow(LoginScreenUiState())
+    val state = mutableState.asStateFlow()
+    private var attemptJob: Job? = null
 
     fun updateServerUrl(value: String) {
-        _state.update { state ->
-            state.copy(login = state.login.copy(serverUrlInput = value))
-        }
+        mutableState.update { it.copy(login = it.login.copy(serverUrlInput = value)) }
     }
 
     fun startLogin() {
-        loginAttemptId += 1
-        val attemptId = loginAttemptId
-        loginStartJob?.cancel()
-        loginPollingJob?.cancel()
-        val serverUrl = state.value.login.serverUrlInput.trim()
-        if (serverUrl.isBlank()) {
-            _state.update { state ->
-                state.copy(
-                    login = state.login.copy(
-                        session = null,
-                        browserOpened = false,
-                        isPolling = false,
-                    ),
-                    isBusy = false,
-                    message = AppMessageUiState(error = uiText(R.string.error_enter_nextcloud_url)),
-                )
-            }
+        if (state.value.login.attempt == LoginAttempt.SavingCredentials) return
+        attemptJob?.cancel()
+        val server = state.value.login.serverUrlInput.trim()
+        if (server.isBlank()) {
+            fail(R.string.error_enter_nextcloud_url)
             return
         }
-
-        loginStartJob = viewModelScope.launch {
-            _state.update { state ->
-                state.copy(
-                    login = state.login.copy(
-                        session = null,
-                        browserOpened = false,
-                        isPolling = false,
-                    ),
-                    isBusy = true,
-                    message = AppMessageUiState(status = uiText(R.string.status_creating_login_flow)),
-                )
-            }
-
+        setAttempt(LoginAttempt.Starting, R.string.status_creating_login_flow)
+        attemptJob = viewModelScope.launch {
             try {
-                val session = loginRepository.startLogin(serverUrl)
-                if (attemptId != loginAttemptId) {
-                    return@launch
-                }
-
-                loginStartJob = null
-                _state.update { state ->
-                    state.copy(
-                        login = state.login.copy(
-                            session = session,
-                            browserOpened = false,
-                            isPolling = true,
-                        ),
-                        isBusy = false,
-                        message = AppMessageUiState(status = uiText(R.string.status_open_browser_confirm_login)),
-                    )
-                }
-                startLoginPolling(session)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                if (attemptId == loginAttemptId) {
-                    loginStartJob = null
-                    _state.update { state ->
-                        state.copy(
-                            login = state.login.copy(isPolling = false),
-                            isBusy = false,
-                            message = AppMessageUiState(error = uiText(R.string.error_start_login_flow_failed)),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun markLoginBrowserOpened() {
-        _state.update { state ->
-            state.copy(login = state.login.copy(browserOpened = true))
-        }
-    }
-
-    fun reportLoginBrowserOpenFailure() {
-        _state.update { state ->
-            state.copy(
-                login = state.login.copy(browserOpened = true),
-                message = AppMessageUiState(error = uiText(R.string.error_open_browser_failed)),
-            )
-        }
-    }
-
-    fun cancelLogin() {
-        loginAttemptId += 1
-        loginStartJob?.cancel()
-        loginStartJob = null
-        loginPollingJob?.cancel()
-        loginPollingJob = null
-        _state.value = LoginScreenUiState(
-            message = AppMessageUiState(error = uiText(R.string.error_login_cancelled)),
-        )
-    }
-
-    private fun startLoginPolling(session: LoginSession) {
-        loginPollingJob?.cancel()
-        loginPollingJob = viewModelScope.launch {
-            val startedAt = System.nanoTime()
-
-            while (elapsedMillis(startedAt) < LOGIN_POLL_TIMEOUT_MS) {
-                delay(LOGIN_POLL_INTERVAL_MS.milliseconds)
-                if (state.value.login.session != session) {
-                    return@launch
-                }
-
-                _state.update { state ->
-                    state.copy(
-                        login = state.login.copy(isPolling = true),
-                        message = AppMessageUiState(status = uiText(R.string.status_waiting_browser_confirmation)),
-                    )
-                }
-
-                when (val result = loginRepository.pollLogin(session)) {
-                    LoginPollResult.Pending -> {
-                        _state.update { state ->
-                            state.copy(
-                                login = state.login.copy(isPolling = true),
-                                message = AppMessageUiState(status = uiText(R.string.status_login_not_confirmed_yet)),
-                            )
+                val session = gateway.startLogin(server)
+                setAttempt(LoginAttempt.Awaiting(session), R.string.status_open_browser_confirm_login)
+                val result = withTimeoutOrNull(120_000) {
+                    while (true) {
+                        delay(2_000)
+                        when (val poll = gateway.pollLogin(session)) {
+                            LoginPollResult.Pending -> status(R.string.status_login_not_confirmed_yet)
+                            is LoginPollResult.Ready -> return@withTimeoutOrNull poll
+                            is LoginPollResult.Failed -> {
+                                if (!poll.isRecoverable) return@withTimeoutOrNull poll
+                                status(R.string.status_login_poll_network_retrying)
+                            }
                         }
                     }
-
-                    is LoginPollResult.Failed -> {
-                        if (result.isRecoverable) {
-                            _state.update { state ->
-                                state.copy(
-                                    login = state.login.copy(isPolling = true),
-                                    message = AppMessageUiState(
-                                        status = loginPollRecoverableStatus(result.failure),
-                                    ),
-                                )
-                            }
-                        } else {
-                            _state.update { state ->
-                                state.copy(
-                                    login = state.login.copy(isPolling = false),
-                                    message = AppMessageUiState(error = result.failure.toUiText()),
-                                )
-                            }
-                            loginPollingJob = null
+                    @Suppress("UNREACHABLE_CODE")
+                    null
+                }
+                when (result) {
+                    is LoginPollResult.Ready -> {
+                        setAttempt(LoginAttempt.SavingCredentials, R.string.status_login_complete_loading_timeline)
+                        try {
+                            withContext(storageDispatcher) { credentialsStore.save(result.credentials) }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            fail(R.string.error_save_credentials)
                             return@launch
                         }
-                    }
-
-                    is LoginPollResult.Ready -> {
-                        credentialsStore.save(result.credentials)
-                        _state.value = LoginScreenUiState()
                         sessionStore.signIn(result.credentials)
-                        loginPollingJob = null
-                        return@launch
+                        mutableState.value = LoginScreenUiState()
                     }
+                    is LoginPollResult.Failed -> {
+                        mutableState.update {
+                            it.copy(login = it.login.copy(attempt = LoginAttempt.Failed),
+                                message = AppMessageUiState(error = result.failure.toUiText()))
+                        }
+                    }
+                    else -> fail(R.string.error_login_confirmation_timeout)
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                fail(R.string.error_start_login_flow_failed)
             }
-
-            if (state.value.login.session == session) {
-                _state.update { state ->
-                    state.copy(
-                        login = state.login.copy(
-                            session = null,
-                            browserOpened = false,
-                            isPolling = false,
-                        ),
-                        message = AppMessageUiState(error = uiText(R.string.error_login_confirmation_timeout)),
-                    )
-                }
-            }
-            loginPollingJob = null
         }
     }
 
-    private fun elapsedMillis(startedAt: Long): Long {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+    fun markLoginBrowserOpened() { markBrowserOpened() }
+    fun reportLoginBrowserOpenFailure() {
+        markBrowserOpened()
+        mutableState.update { it.copy(message = AppMessageUiState(error = uiText(R.string.error_open_browser_failed))) }
+    }
+    private fun markBrowserOpened() {
+        mutableState.update { state ->
+            val awaiting = state.login.attempt as? LoginAttempt.Awaiting ?: return@update state
+            state.copy(login = state.login.copy(attempt = awaiting.copy(browserOpened = true)))
+        }
+    }
+    fun cancelLogin() {
+        if (state.value.login.attempt == LoginAttempt.SavingCredentials) return
+        attemptJob?.cancel()
+        fail(R.string.error_login_cancelled)
+    }
+    private fun setAttempt(attempt: LoginAttempt, statusRes: Int) {
+        mutableState.update { it.copy(login = it.login.copy(attempt = attempt), message = AppMessageUiState(status = uiText(statusRes))) }
+    }
+    private fun status(res: Int) { mutableState.update { it.copy(message = AppMessageUiState(status = uiText(res))) } }
+    private fun fail(res: Int) {
+        mutableState.update { it.copy(login = it.login.copy(attempt = LoginAttempt.Failed), message = AppMessageUiState(error = uiText(res))) }
     }
 }
 
@@ -229,11 +128,3 @@ private fun LoginPollFailure.toUiText() = when (this) {
     LoginPollFailure.Network -> uiText(R.string.error_login_poll_network)
     LoginPollFailure.Unknown -> uiText(R.string.error_login_poll_unknown)
 }
-
-private fun loginPollRecoverableStatus(failure: LoginPollFailure) = when (failure) {
-    LoginPollFailure.Network -> uiText(R.string.status_login_poll_network_retrying)
-    else -> failure.toUiText()
-}
-
-private const val LOGIN_POLL_INTERVAL_MS = 2_000L
-private const val LOGIN_POLL_TIMEOUT_MS = 120_000L

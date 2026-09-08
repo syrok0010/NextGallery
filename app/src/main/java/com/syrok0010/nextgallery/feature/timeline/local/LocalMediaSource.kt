@@ -1,12 +1,12 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaIdentityRegistry
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.mediaIdentityCandidate
-import com.syrok0010.nextgallery.domain.media.MediaId
-import com.syrok0010.nextgallery.domain.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
@@ -57,6 +57,7 @@ data class LocalMediaIndexProgress(
 data class LocalMediaIndexState(
     val items: List<MediaItem>,
     val progress: LocalMediaIndexProgress?,
+    val failure: Boolean = false,
 )
 
 fun interface LocalMediaReader {
@@ -135,7 +136,14 @@ class LocalMediaSource(
         }
         reconcileTriggers.trySend(Unit)
         for (ignored in reconcileTriggers) {
-            reconcile()
+            try {
+                reconcile()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Keep the observer alive; another explicit or MediaStore trigger can recover.
+                send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+            }
         }
     }.flowOn(computationDispatcher)
 

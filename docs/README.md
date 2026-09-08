@@ -24,3 +24,5 @@
 - [ADR 0009: Типизированная session boundary](adr/0009-typed-ui-session-state.md)
 - [ADR 0010: Warm-start cache policy](adr/0010-mvp-cache-policy.md)
 - [ADR 0011: Стек просмотра фото](adr/0011-photo-viewer-stack.md)
+
+- [ADR 0012: Feature-срезы и чистый media module](adr/0012-feature-slices.md)

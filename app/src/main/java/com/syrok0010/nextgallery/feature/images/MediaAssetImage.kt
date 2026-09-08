@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.common
+package com.syrok0010.nextgallery.feature.images
 
 import android.content.Context
 import androidx.compose.foundation.layout.Box
@@ -18,15 +18,11 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.data.network.NextcloudTransport
-import com.syrok0010.nextgallery.data.thumbnail.coilCacheKey
-import com.syrok0010.nextgallery.data.thumbnail.thumbnailRequest
-import com.syrok0010.nextgallery.ui.SessionStore
-import com.syrok0010.nextgallery.ui.SessionUiState
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.koin.compose.koinInject
 
 internal enum class MediaImagePurpose {
@@ -163,13 +159,13 @@ private fun remoteRequestPlan(
                 .build(),
         )
         MediaImagePurpose.DetailPreview -> MediaImageRequestPlan(
-            primary = NextcloudTransport.authenticatedImageRequest(context, urls.detailPreviewUrl, credentials),
+            primary = authenticatedImageRequest(context, urls.detailPreviewUrl, credentials),
             preview = ImageRequest.Builder(context)
                 .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
                 .build(),
         )
         MediaImagePurpose.Original -> MediaImageRequestPlan(
-            primary = NextcloudTransport.authenticatedImageRequest(context, urls.originalUrl, credentials),
+            primary = authenticatedImageRequest(context, urls.originalUrl, credentials),
         )
     }
 }

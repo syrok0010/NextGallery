@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.timeline
+package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -7,13 +7,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.syrok0010.nextgallery.data.local.LocalMediaPermissionCoordinator
-import com.syrok0010.nextgallery.data.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
+import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 
 @Composable
 internal fun LocalMediaPermissionFlow(

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.memories
+package com.syrok0010.nextgallery.feature.timeline.remote
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

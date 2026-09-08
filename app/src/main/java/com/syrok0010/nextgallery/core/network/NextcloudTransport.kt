@@ -1,12 +1,6 @@
-package com.syrok0010.nextgallery.data.network
+package com.syrok0010.nextgallery.core.network
 
-import android.content.Context
-import coil3.network.NetworkHeaders
-import coil3.network.httpHeaders
-import coil3.request.ImageRequest
-import com.syrok0010.nextgallery.data.auth.NextcloudAuthApi
-import com.syrok0010.nextgallery.data.credentials.AccountCredentials
-import com.syrok0010.nextgallery.data.memories.MemoriesApi
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
@@ -21,21 +15,6 @@ class NextcloudTransport(
     private val json: Json,
     internal val baseClient: OkHttpClient = defaultBaseClient(),
 ) {
-    private val publicClient = baseClient
-
-    fun nextcloudAuthApi(serverUrl: String): NextcloudAuthApi {
-        return retrofit(
-            baseUrl = normalizeBaseUrl(serverUrl),
-            client = publicClient,
-        ).create(NextcloudAuthApi::class.java)
-    }
-
-    fun memoriesApi(credentials: AccountCredentials): MemoriesApi {
-        return retrofit(
-            baseUrl = normalizeBaseUrl(credentials.serverUrl),
-            client = authenticatedClient(credentials),
-        ).create(MemoriesApi::class.java)
-    }
 
     fun normalizeBaseUrl(input: String): String {
         return normalizeServerOrigin(input) + "/"
@@ -99,17 +78,6 @@ class NextcloudTransport(
             return withScheme.trimEnd('/')
         }
 
-        fun authenticatedImageRequest(
-            context: Context,
-            url: String,
-            credentials: AccountCredentials,
-        ): ImageRequest {
-            return ImageRequest.Builder(context)
-                .data(url)
-                .httpHeaders(authenticatedNetworkHeaders(credentials))
-                .build()
-        }
-
         internal fun applyAuthenticatedHeaders(
             builder: Request.Builder,
             credentials: AccountCredentials,
@@ -122,20 +90,12 @@ class NextcloudTransport(
                 .header("OCS-APIRequest", "true")
         }
 
-        internal fun authenticatedNetworkHeaders(credentials: AccountCredentials): NetworkHeaders {
-            return NetworkHeaders.Builder()
-                .set("Authorization", authorizationHeader(credentials))
-                .set("X-Requested-With", "XMLHttpRequest")
-                .set("OCS-APIRequest", "true")
-                .build()
-        }
-
         internal fun authorizationHeader(credentials: AccountCredentials): String {
             return Credentials.basic(credentials.loginName, credentials.appPassword)
         }
     }
 
-    private fun retrofit(baseUrl: String, client: OkHttpClient): Retrofit {
+    fun retrofit(baseUrl: String, client: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(client)

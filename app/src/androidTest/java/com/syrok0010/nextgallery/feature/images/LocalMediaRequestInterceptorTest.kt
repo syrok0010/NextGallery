@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,9 +34,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.ui.common.MediaAssetImage
-import com.syrok0010.nextgallery.ui.common.MediaImagePurpose
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.images.MediaAssetImage
+import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import kotlin.math.abs
 
 internal val FilmstripTileWidth = 34.dp

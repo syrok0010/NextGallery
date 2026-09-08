@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.thumbnail
+package com.syrok0010.nextgallery.feature.images
 
 import coil3.intercept.Interceptor
 import coil3.request.ImageResult

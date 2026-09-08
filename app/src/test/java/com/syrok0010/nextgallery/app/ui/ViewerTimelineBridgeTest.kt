@@ -1,19 +1,27 @@
-package com.syrok0010.nextgallery.ui.detail
+package com.syrok0010.nextgallery.app.ui
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSlot
-import com.syrok0010.nextgallery.data.memories.TimelineSlotKey
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-class ViewerSequenceTest {
+class ViewerTimelineBridgeTest {
+    @Test fun `prefetch uses timeline slots with placeholders and excludes orphan media`() {
+        val current = mediaItem("current", 1)
+        val orphan = mediaItem("orphan", 2)
+        val index = ViewerTimelineIndex(snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()))
+        assertEquals(0..341, index.prefetchRange(current.mediaId))
+        assertEquals(null, index.prefetchRange(orphan.mediaId))
+    }
+
     @Test
     fun `null snapshot creates an empty sequence`() {
         val sequence = (null as TimelineSnapshot?).toViewerSequence()
@@ -31,8 +39,8 @@ class ViewerSequenceTest {
         assertEquals(listOf(first, second), sequence.items)
         assertEquals(0, sequence.pageIndex(first.mediaId))
         assertEquals(1, sequence.pageIndex(second.mediaId))
-        assertEquals(0, sequence.timelineSlotIndex(first.mediaId))
-        assertEquals(2, sequence.timelineSlotIndex(second.mediaId))
+        assertEquals(0, ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(first.mediaId))
+        assertEquals(2, ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(second.mediaId))
     }
 
     @Test
@@ -95,7 +103,7 @@ class ViewerSequenceTest {
         val updated = controller.update(snapshot(first, next), current.mediaId)
 
         assertEquals(listOf(first, current, next), updated.items)
-        assertEquals(null, updated.timelineSlotIndex(current.mediaId))
+        assertEquals(null, ViewerTimelineIndex(snapshot(first, next)).slotIndex(current.mediaId))
     }
 
     @Test
@@ -158,16 +166,14 @@ class ViewerSequenceTest {
             days = listOf(TimelineDay(dayId = DAY_ID, count = slots.size)),
             slots = slots,
             loadedDayIds = emptySet(),
-            totalDayCount = 1,
+
             totalMediaCountHint = slots.size,
         )
     }
 
     private fun mediaItem(id: String, fileId: Long): MediaItem = MediaItem(
         mediaId = MediaId("media-$id"),
-        remoteFileId = fileId,
         dayId = DAY_ID,
-        day = LocalDate.ofEpochDay(DAY_ID.toLong()),
         displayName = "$id.jpg",
         mimeType = "image/jpeg",
         width = null,

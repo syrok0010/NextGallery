@@ -1,9 +1,8 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 
 internal data class LocalMediaProjectionItem(
     val mediaId: MediaId,
@@ -23,9 +22,7 @@ internal data class LocalMediaProjectionItem(
         val dayId = Math.floorDiv(takenAtEpochSeconds, SECONDS_PER_DAY).toInt()
         return MediaItem(
             mediaId = mediaId,
-            remoteFileId = null,
             dayId = dayId,
-            day = LocalDate.ofEpochDay(dayId.toLong()),
             displayName = displayName,
             mimeType = mimeType,
             width = width,

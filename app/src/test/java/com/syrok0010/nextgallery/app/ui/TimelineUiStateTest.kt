@@ -1,13 +1,14 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.data.memories.MemoriesConfig
-import com.syrok0010.nextgallery.data.memories.TimelineDay
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshot
-import com.syrok0010.nextgallery.data.memories.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
+import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
+import com.syrok0010.nextgallery.feature.timeline.TimelineUiState
+import com.syrok0010.nextgallery.feature.timeline.withRefreshedSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -49,9 +50,7 @@ class TimelineUiStateTest {
     private fun mediaItem(fileId: Long, etag: String): MediaItem {
         return MediaItem(
             mediaId = MediaId("remote-$fileId"),
-            remoteFileId = fileId,
             dayId = DAY_ID,
-            day = LocalDate.ofEpochDay(DAY_ID.toLong()),
             displayName = "file-$fileId",
             mimeType = "image/jpeg",
             width = 512,

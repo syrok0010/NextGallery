@@ -1,9 +1,10 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
-import com.syrok0010.nextgallery.data.memories.MediaAssetRef
-import com.syrok0010.nextgallery.data.memories.MediaItem
-import com.syrok0010.nextgallery.domain.media.MediaId
-import java.time.LocalDate
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.timeline.persistence.toMediaItem
+import com.syrok0010.nextgallery.feature.timeline.persistence.toMemoriesMediaEntity
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,9 +13,7 @@ class TimelineCacheMappersTest {
     fun `cache mapping restores memories asset reference from file identity`() {
         val item = MediaItem(
             mediaId = MediaId("persistent-media-id"),
-            remoteFileId = 42L,
             dayId = 19870,
-            day = LocalDate.ofEpochDay(19870),
             displayName = "IMG_0042.jpg",
             mimeType = "image/jpeg",
             width = 4032,

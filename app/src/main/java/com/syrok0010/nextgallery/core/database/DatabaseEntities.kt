@@ -1,10 +1,10 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.core.database
 
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.syrok0010.nextgallery.domain.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 
 @Entity(tableName = "memories_cache_metadata")
 data class MemoriesCacheMetadataEntity(

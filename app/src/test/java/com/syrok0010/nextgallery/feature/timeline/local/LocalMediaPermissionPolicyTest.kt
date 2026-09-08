@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.local
+package com.syrok0010.nextgallery.feature.timeline.local
 
 import android.Manifest
 import android.os.Build

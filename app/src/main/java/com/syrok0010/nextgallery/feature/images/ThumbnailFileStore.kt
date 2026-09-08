@@ -1,7 +1,6 @@
-package com.syrok0010.nextgallery.data.cache
+package com.syrok0010.nextgallery.feature.images
 
 import android.content.Context
-import com.syrok0010.nextgallery.data.thumbnail.ThumbnailKey
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers

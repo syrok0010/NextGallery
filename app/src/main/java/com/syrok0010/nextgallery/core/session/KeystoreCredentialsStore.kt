@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.data.credentials
+package com.syrok0010.nextgallery.core.session
 
 import android.content.Context
 import android.content.SharedPreferences

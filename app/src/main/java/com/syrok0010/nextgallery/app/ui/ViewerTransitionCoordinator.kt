@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.ui
+package com.syrok0010.nextgallery.app.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -8,7 +8,8 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
-import com.syrok0010.nextgallery.domain.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.session.SessionUiState
 
 internal interface ViewerTransitionCoordinator {
     val viewerMediaId: MediaId?
