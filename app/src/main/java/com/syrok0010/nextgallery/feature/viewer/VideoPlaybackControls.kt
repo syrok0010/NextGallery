@@ -1,5 +1,10 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -89,6 +94,7 @@ internal fun VideoPlaybackCenterAction(
                     Text(
                         text = stringResource(when (error) {
                             VideoPlaybackError.AuthenticationRequired -> R.string.video_playback_auth_error
+                            VideoPlaybackError.TranscodeFailed -> R.string.video_playback_transcode_error
                             VideoPlaybackError.RemoteUnavailable -> R.string.video_playback_remote_error
                             else -> R.string.video_playback_error
                         }),
@@ -113,6 +119,7 @@ internal fun VideoPlaybackControls(
     onToggleMute: () -> Unit,
     onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
+    onSelectQuality: (RemoteVideoQuality) -> Unit = {},
 ) {
     val durationMillis = state.durationMillis ?: 0L
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
@@ -187,6 +194,20 @@ internal fun VideoPlaybackControls(
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.weight(1f),
             )
+            if (state.qualities.isNotEmpty()) Box {
+                var expanded by remember { mutableStateOf(false) }
+                TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("video_quality")) {
+                    Text(state.quality, color = Color.White)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    state.qualities.forEach { quality ->
+                        DropdownMenuItem(text = { Text(quality.label) }, onClick = {
+                            expanded = false
+                            onSelectQuality(quality)
+                        })
+                    }
+                }
+            }
             IconButton(
                 onClick = onToggleMute,
                 modifier = Modifier.testTag(VideoPlaybackMuteTestTag),

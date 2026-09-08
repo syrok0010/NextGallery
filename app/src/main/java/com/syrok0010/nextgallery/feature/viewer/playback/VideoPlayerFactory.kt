@@ -26,6 +26,9 @@ internal class VideoPlayerFactory(transport: NextcloudTransport, sessionStore: S
         })
         .build()
 
+    suspend fun qualities(remoteUri: String, clientId: String): List<RemoteVideoQuality> =
+        MemoriesVideoDiscovery(client).qualities(remoteUri, clientId)
+
     fun create(context: Context): ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(
             DefaultDataSource.Factory(context, OkHttpDataSource.Factory(client)),

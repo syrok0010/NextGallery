@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
+
 internal enum class VideoPlaybackPhase {
     Poster,
     Loading,
@@ -13,6 +15,7 @@ internal enum class VideoPlaybackError {
     CannotPlay,
     AuthenticationRequired,
     RemoteUnavailable,
+    TranscodeFailed,
 }
 
 internal data class VideoPlaybackState(
@@ -23,12 +26,18 @@ internal data class VideoPlaybackState(
     val isMuted: Boolean = false,
     val error: VideoPlaybackError? = null,
     val isFullscreen: Boolean = false,
+    val qualities: List<RemoteVideoQuality> = emptyList(),
+    val quality: String = "Direct",
 ) {
     val showsPauseAction: Boolean
         get() = phase == VideoPlaybackPhase.Playing || (phase == VideoPlaybackPhase.Loading && playRequested)
 }
 
 internal sealed interface VideoPlaybackInput {
+    data class QualitiesLoaded(val qualities: List<RemoteVideoQuality>) : VideoPlaybackInput
+
+    data class SelectQuality(val quality: RemoteVideoQuality) : VideoPlaybackInput
+
     data object Play : VideoPlaybackInput
 
     data object Pause : VideoPlaybackInput
@@ -79,11 +88,28 @@ internal class VideoPlaybackSession(
     private val fallbackUri: String? = null,
 ) {
     private var usingFallback = false
+    private var hlsAttempted = false
+    private var currentUri = contentUri
+    private val remoteUri = fallbackUri ?: contentUri.takeIf { it.startsWith("https://memories.invalid/original/") }
 
     var state: VideoPlaybackState = VideoPlaybackState()
         private set
 
     fun accept(input: VideoPlaybackInput): VideoPlaybackEffect? = when (input) {
+        is VideoPlaybackInput.QualitiesLoaded -> {
+            state = state.copy(qualities = remoteUri?.let {
+                if (input.qualities.isEmpty()) emptyList() else listOf(RemoteVideoQuality("Direct", it)) + input.qualities
+            } ?: emptyList())
+            null
+        }
+        is VideoPlaybackInput.SelectQuality -> {
+            if (input.quality !in state.qualities) null else {
+                hlsAttempted = input.quality.label != "Direct"
+                usingFallback = true
+                state = state.copy(quality = input.quality.label)
+                replaceSource(input.quality.uri)
+            }
+        }
         VideoPlaybackInput.Play -> {
             when (state.phase) {
                 VideoPlaybackPhase.Poster,
@@ -165,10 +191,12 @@ internal class VideoPlaybackSession(
         VideoPlaybackInput.PlayerFailed -> sourceFailed(VideoPlaybackError.CannotPlay)
         is VideoPlaybackInput.SourceFailed -> sourceFailed(input.error)
 
-        VideoPlaybackInput.Retry -> prepareAndPlay()
+        VideoPlaybackInput.Retry -> if (hlsAttempted) replaceSource(currentUri) else prepareAndPlay()
 
         VideoPlaybackInput.Leave -> {
             usingFallback = false
+            hlsAttempted = false
+            currentUri = contentUri
             state = VideoPlaybackState()
             VideoPlaybackEffect.PauseAndRelease
         }
@@ -194,14 +222,33 @@ internal class VideoPlaybackSession(
     private fun sourceFailed(error: VideoPlaybackError): VideoPlaybackEffect? {
         if (!usingFallback && fallbackUri != null) {
             usingFallback = true
-            state = state.copy(phase = VideoPlaybackPhase.Loading, error = null)
-            return VideoPlaybackEffect.PrepareAndPlay(fallbackUri, state.positionMillis, state.playRequested)
+            return replaceSource(fallbackUri)
         }
-        state = state.copy(phase = VideoPlaybackPhase.Error, error = error, playRequested = false)
+        if (!hlsAttempted && currentUri == remoteUri && error == VideoPlaybackError.CannotPlay) {
+            state.qualities.firstOrNull { it.label == "Auto" }?.let {
+                hlsAttempted = true
+                state = state.copy(quality = it.label)
+                return replaceSource(it.uri)
+            }
+        }
+        state = state.copy(phase = VideoPlaybackPhase.Error,
+            error = if (hlsAttempted) VideoPlaybackError.TranscodeFailed else error,
+            playRequested = if (hlsAttempted) state.playRequested else false)
         return null
     }
 
+    private fun replaceSource(uri: String): VideoPlaybackEffect {
+        currentUri = uri
+        state = state.copy(phase = VideoPlaybackPhase.Loading, error = null)
+        return VideoPlaybackEffect.PrepareAndPlay(uri, state.positionMillis, state.playRequested)
+    }
+
     private fun prepareAndPlay(): VideoPlaybackEffect {
+        if (hlsAttempted) {
+            state = state.copy(playRequested = true)
+            return replaceSource(currentUri)
+        }
+        currentUri = contentUri
         usingFallback = false
         state = state.copy(
             phase = VideoPlaybackPhase.Loading,

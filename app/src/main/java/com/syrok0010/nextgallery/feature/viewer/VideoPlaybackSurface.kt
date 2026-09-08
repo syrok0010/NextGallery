@@ -18,8 +18,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,14 +88,34 @@ internal fun VideoPlaybackSurface(
     var playbackState by remember(item.mediaId, sources) {
         mutableStateOf(session.state)
     }
+    val scope = rememberCoroutineScope()
+    val qualities = remember(session) {
+        scope.async(start = CoroutineStart.LAZY) {
+            val remote = sources.fallback ?: sources.primary.takeIf { it.startsWith("https://memories.invalid/") }
+            if (remote == null) emptyList() else try {
+                playerFactory.qualities(remote, java.util.UUID.randomUUID().toString())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: java.io.IOException) {
+                emptyList()
+            } catch (_: kotlinx.serialization.SerializationException) {
+                emptyList()
+            }
+        }
+    }
     val fullscreenChanged by rememberUpdatedState(onFullscreenChanged)
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
     var controlsHeight by remember { mutableStateOf(0.dp) }
 
+    var sourceGeneration by remember(session) { mutableIntStateOf(0) }
+
     fun applyEffect(effect: VideoPlaybackEffect?) {
         when (effect) {
             is VideoPlaybackEffect.PrepareAndPlay -> {
+                sourceGeneration++
+                qualities.start()
+                player.playWhenReady = effect.playWhenReady
                 player.setMediaItem(Media3Item.fromUri(effect.contentUri), effect.positionMillis)
                 player.prepare()
                 player.playWhenReady = effect.playWhenReady
@@ -143,14 +169,35 @@ internal fun VideoPlaybackSurface(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                dispatch(VideoPlaybackInput.SourceFailed(error.toVideoPlaybackError()))
+                dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
+                val failure = error.toVideoPlaybackError()
+                val uri = player.currentMediaItem?.localConfiguration?.uri.toString()
+                if (failure != VideoPlaybackError.CannotPlay || !uri.startsWith("https://memories.invalid/original/")) {
+                    dispatch(VideoPlaybackInput.SourceFailed(failure))
+                    return
+                }
+                val generation = sourceGeneration
+                dispatch(VideoPlaybackInput.PlayerBuffering)
+                scope.launch {
+                    dispatch(VideoPlaybackInput.QualitiesLoaded(qualities.await()))
+                    if (!player.isReleased && generation == sourceGeneration) {
+                        dispatch(VideoPlaybackInput.SourceFailed(failure))
+                    }
+                }
             }
         }
         player.addListener(listener)
         onDispose {
+            qualities.cancel()
             player.removeListener(listener)
             applyEffect(session.accept(VideoPlaybackInput.Leave))
             fullscreenChanged(false)
+        }
+    }
+
+    LaunchedEffect(session, playbackState.phase != VideoPlaybackPhase.Poster) {
+        if (playbackState.phase != VideoPlaybackPhase.Poster) {
+            dispatch(VideoPlaybackInput.QualitiesLoaded(qualities.await()))
         }
     }
 
@@ -237,6 +284,10 @@ internal fun VideoPlaybackSurface(
                 } else {
                     dispatch(VideoPlaybackInput.Play)
                 }
+            },
+            onSelectQuality = { quality ->
+                dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
+                dispatch(VideoPlaybackInput.SelectQuality(quality))
             },
             onSeek = { positionMillis -> dispatch(VideoPlaybackInput.SeekTo(positionMillis)) },
             onToggleMute = { dispatch(VideoPlaybackInput.ToggleMute) },
