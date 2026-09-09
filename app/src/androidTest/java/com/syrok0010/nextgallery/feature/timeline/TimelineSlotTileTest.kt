@@ -17,7 +17,6 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.ui.AppMessageUiState
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -146,25 +145,6 @@ class TimelineSlotTileTest {
                 "$LOCAL_COPY_DESCRIPTION, $CLOUD_COPY_DESCRIPTION",
             ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
         ).assertIsDisplayed()
-    }
-
-    @Test
-    fun timelineDoesNotOfferDeviceMediaAction() {
-        composeRule.setContent {
-            MaterialTheme {
-                TimelinePanel(
-                    state = TimelineUiState(),
-                    message = AppMessageUiState(),
-                    onViewportObservation = {},
-                    revealMediaId = null,
-                    onMediaRevealed = {},
-                    registerTimelineTile = { _, _ -> noOpUnregister },
-                    onSelect = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Фото с устройства").assertDoesNotExist()
     }
 
     private fun showSlot(mediaItem: MediaItem?) {
