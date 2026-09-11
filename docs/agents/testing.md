@@ -1,41 +1,18 @@
-# Тесты
+# Тестирование
 
-## Сборка и JVM-тесты
+Устройство выбирай по [android-development.md](android-development.md).
+JVM-тесты запускаются из корня checkout: `./gradlew :app:testAutomationUnitTest`.
 
-Запускайте подходящие задачи из корня проверяемого checkout:
-
-```bash
-./gradlew --no-daemon --max-workers=2 --console=plain \
-  :app:testAutomationUnitTest :app:assembleAutomation \
-  :app:assembleAutomationAndroidTest :app:lintAutomation
-```
-
-Для короткого цикла выбирайте только задачи, относящиеся к изменению.
-
-## Instrumentation
-
-Выбирайте устройство по [правилам Android-разработки](android-development.md).
-
-На хосте устройства проверьте `adb devices -l`; для эмулятора дополнительно
-сверьте имя через `adb -s <serial> emu avd name`. Serial зависит от запуска,
-поэтому не предполагайте, что это всегда `emulator-5554`. Запускайте тесты
-из checkout проверяемой ревизии с явно выбранным serial:
+Instrumentation запускай на хосте устройства из checkout проверяемой ревизии.
+Для эмулятора через SSH Device Hub это `syrok-server`, а не локальный ADB
+на `syrok-arch`. Укажи выбранный ADB serial и вариант `automation`:
 
 ```bash
-ANDROID_SERIAL=<serial> ./gradlew --no-daemon --max-workers=2 --console=plain \
-  :app:connectedAutomationAndroidTest
+ANDROID_SERIAL=<serial> ./gradlew :app:connectedAutomationAndroidTest
 ```
 
-Замените `<serial>` фактическим значением. При SSH device host на `syrok-server`
-эту команду выполняйте на `syrok-server`, а не против локального ADB на
-`syrok-arch`. Отчёты находятся в `app/build/reports/androidTests/` на хосте запуска;
-перенесите нужные артефакты в рабочий checkout агента.
-
-## Данные физического телефона
-
-Debug-приложение `com.syrok0010.nextgallery` сохраняет пользовательскую
-авторизацию, Room database и cache. Instrumentation выполняется только для
-`automation`: пакет `com.syrok0010.nextgallery.automation` имеет отдельные данные.
-
-Не запускайте `connectedDebugAndroidTest` на общем физическом устройстве:
-переустановка или удаление target APK может уничтожить данные debug-приложения.
+> **Данные телефона:** нельзя трогать данные `com.syrok0010.nextgallery` на телефоне
+> пользователя: очищать данные, удалять приложение или выполнять действия,
+> сбрасывающие его состояние. Для тестов используй отдельный пакет
+> `com.syrok0010.nextgallery.automation`. `connectedDebugAndroidTest` на телефоне
+> запрещён: он может удалить или переустановить основное приложение с потерей данных.

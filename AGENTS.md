@@ -25,8 +25,8 @@
 
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов следуй правилам выбора устройства и runtime-проверки в `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов следуй правилам выбора устройства в `docs/agents/android-development.md`.
 
 ### Тесты
 
-Для сборки APK, JVM-тестов и instrumentation используй `docs/agents/testing.md`.
+Для JVM-тестов и instrumentation используй `docs/agents/testing.md`.
