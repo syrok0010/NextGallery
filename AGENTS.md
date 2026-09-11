@@ -29,4 +29,4 @@
 
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов сначала выбери контур по среде: headless-агент на `syrok-server` или HITL на ноутбуке с личным телефоном. См. `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов используй эмулятор через T3 Code по умолчанию, в том числе на `syrok-arch` через SSH device host `syrok-server`. Реальный телефон используй только по явному указанию пользователя с выбранным ADB serial. См. `docs/agents/android-development.md`.
