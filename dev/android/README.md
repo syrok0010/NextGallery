@@ -1,143 +1,139 @@
-# Headless Android-контур
+# Локальный Android SDK и AVD
 
-Этот контур предназначен для конкретной headless-машины `syrok-server`, где нет
-GUI. Он даёт агенту Android runtime, не устанавливая SDK и эмулятор на хост, и
-не является обязательным способом разработки на других компьютерах. При
-HITL-разработке на ноутбуке приложение проверяется на личном физическом телефоне
-по `docs/agents/android-development.md`.
+На `syrok-server` используется локальный Android SDK под пользователем `syrok`.
+Android CLI обслуживает SDK, T3 Code управляет AVD и интерактивным экраном,
+Gradle Wrapper собирает приложение и запускает тесты. Android Studio не нужна.
 
-Контур собирает NextGallery и запускает один Android 16 (API 36) x86_64
-эмулятор в Docker с аппаратным ускорением KVM. Android SDK, JDK 21 и system
-image находятся внутри Docker-образа; на хост передается только `/dev/kvm`.
-Гостю запрошено 2 ГБ RAM и четыре CPU; для выбранного экрана эмулятор повышает
-RAM до 2,5 ГБ. Контейнер ограничен 5 ГБ RAM, включая память QEMU и SwiftShader.
-Vulkan доступен через SwiftShader.
+Существующие Docker-файлы и `run-dev.sh`, `run-smoke.sh`, `adb.sh` в этом каталоге
+относятся к прежнему контуру. Для локальной среды используйте команды ниже.
 
-Рабочий экран — 1080x2340 при 450 dpi. Он сохраняет размер интерфейса и
-соотношение сторон Samsung Galaxy S24 Ultra с фактическими параметрами
-1440x3120 при 600 dpi: оба профиля дают 384x832 dp. Уменьшенный framebuffer
-требует меньше RAM и CPU. Для проверки полного физического разрешения:
+## SDK
+
+Установите официальный Android CLI:
+https://developer.android.com/tools/agents/android-cli/download.
+Задайте окружение в shell и в окружении серверного процесса T3:
 
 ```bash
-EMULATOR_SCREEN_SIZE=1440x3120 \
-EMULATOR_SCREEN_DENSITY=600 \
-  ./dev/android/run-dev.sh
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$HOME/.local/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 ```
 
-GPU backend также можно переопределить через `EMULATOR_GPU_MODE`. На этом
-headless-хосте `host` видит Intel UHD 730 для Vulkan, но GLES требует X11/GLX и
-не может создать framebuffer без display; рабочий backend по умолчанию —
-`swiftshader`.
-
-## Постоянный dev-эмулятор
-
-Из корня репозитория:
+Для текущего `compileSdk = 37` установите платформу 37.0. Образ AVD Android 36
+используется независимо от платформы компиляции:
 
 ```bash
-./dev/android/run-dev.sh
+android --sdk="$ANDROID_HOME" sdk install \
+  cmdline-tools/latest platform-tools emulator \
+  platforms/android-37.0 build-tools/36.0.0 \
+  system-images/android-36/google_apis/x86_64
+emulator -accel-check
 ```
 
-Скрипт поднимает `emulator-dev` и ожидает полной загрузки Android. Его userdata
-хранится в Docker volume `nextgallery-android_avd-data`, поэтому установленные
-APK, данные приложений и изменения в системе сохраняются после остановки и
-повторного запуска. Это основной режим для интерактивной работы агента.
+Нужны JDK 21 и доступ пользователя к `/dev/kvm`. После изменения `compileSdk`
+сверяйте пакет платформы с `app/build.gradle.kts`. После установки SDK
+перезапустите сервер T3: он запоминает пути при старте. Перезапуск сервиса может
+завершить запущенные внутри него сессии агентов; сначала сохраните результаты.
 
-Команды ADB выполняются через SDK внутри контейнера (по умолчанию в
-`emulator-dev`):
+## Устройства
+
+Создайте только отсутствующие AVD, проверив `emulator -list-avds`:
 
 ```bash
-./dev/android/adb.sh devices
-./dev/android/adb.sh install -r app/build/outputs/apk/automation/app-automation.apk
-./dev/android/adb.sh shell am start \
-  -n com.syrok0010.nextgallery.automation/com.syrok0010.nextgallery.MainActivity
-./dev/android/adb.sh shell input tap 360 640
-./dev/android/adb.sh exec-out screencap -p > build/android-dev/screen.png
-./dev/android/adb.sh logcat -d
+avdmanager create avd --name nextgallery-api36-dev \
+  --package 'system-images;android-36;google_apis;x86_64'
+avdmanager create avd --name nextgallery-api36-smoke \
+  --package 'system-images;android-36;google_apis;x86_64'
 ```
 
-Таким способом агент может произвольно устанавливать и запускать сборки,
-выполнять shell-команды, вводить текст и касания, читать UI hierarchy, logcat и
-делать снимки экрана. Это не привязано к одному заранее заданному тесту.
+На вопрос о custom hardware profile ответьте `no`. AVD хранятся в
+`~/.android/avd`. Dev сохраняет данные между запусками; smoke имеет отдельное
+userdata для чистых проверок. Оба используют один установленный системный образ.
 
-## Воспроизводимый smoke
+В `config.ini` выключенного AVD задайте 3072 МБ RAM (`hw.ramSize`), четыре CPU
+(`hw.cpu.ncore`), экран 1080×2340 (`hw.lcd.width`, `hw.lcd.height`), 450 dpi
+(`hw.lcd.density`), `hw.gpu.enabled=yes`, `hw.gpu.mode=swiftshader`.
+Экран даёт 384×832 dp. На Emulator 37.1.11 режим `-gpu auto`, используемый T3,
+проверен без display: выбран Google SwiftShader, CPU ускоряется через KVM.
+На этой машине запускайте один AVD за раз и собирайте APK до запуска VM,
+чтобы снизить пиковое потребление памяти.
+
+## Работа через T3 Code
+
+Откройте `https://t3.syrok/`, панель Device и `nextgallery-api36-dev`.
+Android-видео требует HTTPS с доверенным сертификатом или localhost;
+`http://t3.syrok/` не предоставляет WebCodecs. На новом клиентском устройстве
+установите доверие к локальному корневому сертификату. Закрытый ключ CA
+остаётся на сервере.
+
+Включите Agent device access и начните новую сессию агента для получения
+окружения CLI. При доступных `device_*` и `agent-device` используйте их для
+интерактивной проверки. Закрытие вкладки не выключает AVD: используйте кнопку
+питания. Предупреждение `xcrun` относится к поиску iOS на Linux; само по себе
+оно не означает отказ Android.
+
+ADB остаётся на localhost, удалённое управление идёт через соединение T3.
+Для обычного терминала сначала определите serial именно нужного AVD:
 
 ```bash
-./dev/android/run-smoke.sh
+adb devices
+adb -s emulator-5554 emu avd name
 ```
 
-Скрипт:
+`emulator-5554` — пример: порт может меняться. В последующих командах задайте
+`ANDROID_SERIAL` по проверенному serial. Это исключает выбор другого AVD или
+физического телефона.
 
-1. собирает Docker-образ;
-2. запускает JVM-тесты и собирает automation APK;
-3. останавливает dev-режим и поднимает чистый headless-эмулятор с `-wipe-data`;
-4. устанавливает и запускает приложение;
-5. сохраняет `screen.png`, `logcat.txt` и `window.xml` в
-   `build/android-smoke/`.
-
-На холодном boot Android 16 с программной графикой System UI иногда показывает
-одноразовый ANR до запуска приложения. Preflight распознает только этот точный
-диалог и нажимает `Wait`; любой ANR после запуска NextGallery завершает smoke с
-ошибкой.
-
-Первое выполнение загружает Android SDK и system image и поэтому занимает
-несколько гигабайт диска и заметно дольше повторных запусков.
-
-`run-dev.sh` и `run-smoke.sh` автоматически останавливают противоположный
-режим, потому что оба используют один адрес ADB. После smoke можно снова вызвать
-`run-dev.sh`: состояние постоянного dev-эмулятора останется в его volume.
-Для разовой команды в smoke-эмуляторе используйте:
+## Сборка и runtime-проверка
 
 ```bash
-./dev/android/adb.sh --smoke shell getprop sys.boot_completed
+./gradlew --no-daemon --max-workers=2 --console=plain \
+  :app:testAutomationUnitTest :app:assembleAutomation \
+  :app:assembleAutomationAndroidTest :app:lintAutomation
 ```
 
-## ADB
-
-ADB эмулятора опубликован только на WireGuard-адресе хоста:
+Затем запустите dev-AVD через T3. Для ручной установки из терминала:
 
 ```bash
-adb connect 10.9.0.1:5555
+export ANDROID_SERIAL=emulator-5554 # serial после проверки имени AVD
+adb install -r app/build/outputs/apk/automation/app-automation.apk
+adb shell am start -n \
+  com.syrok0010.nextgallery.automation/com.syrok0010.nextgallery.MainActivity
 ```
 
-Порт доступен узлам, имеющим маршрут к `10.9.0.0/24`. Эмулятор запускается с
-`-skip-adb-auth`, поэтому этот порт нельзя публиковать на внешнем интерфейсе или
-пробрасывать из WireGuard-сети в интернет.
-
-## Повторные команды
-
-Сборка и unit-тесты без запуска эмулятора:
+Для чистой финальной проверки выключите dev и любой работающий smoke-AVD,
+затем в отдельном терминале запустите:
 
 ```bash
-docker compose -f dev/android/compose.yaml run --rm builder \
-  ./gradlew --no-daemon --console=plain \
-  :app:testAutomationUnitTest :app:assembleAutomation
+emulator -avd nextgallery-api36-smoke -no-window -no-audio -gpu auto \
+  -wipe-data -no-snapshot
 ```
 
-Состояние и логи эмулятора:
+Проверьте имя и serial тестового устройства. Дождитесь значения `1` от
+`adb shell getprop sys.boot_completed`, установите и запустите automation APK
+командами выше. Воспроизведите изменённый сценарий. Сохраните screenshot,
+UI hierarchy и logcat в `build/android-smoke/`; проверьте отсутствие ANR и
+падений приложения. Затем выполните:
 
 ```bash
-docker compose -f dev/android/compose.yaml --profile dev ps
-docker compose -f dev/android/compose.yaml --profile dev logs emulator-dev
-docker compose -f dev/android/compose.yaml --profile smoke logs emulator-smoke
+./gradlew --no-daemon --max-workers=2 --console=plain \
+  :app:connectedAutomationAndroidTest
+adb emu kill
 ```
 
-Остановка контейнеров без удаления постоянных volumes:
+`ANDROID_SERIAL` должен указывать на smoke-AVD весь прогон. Отчёты тестов —
+в `app/build/reports/androidTests/`. Сброс dev userdata не входит в smoke.
+Правила физического телефона описаны в `docs/agents/testing.md`.
+
+## Обслуживание
 
 ```bash
-docker compose -f dev/android/compose.yaml down
+android sdk list --all
+android sdk update emulator
+android sdk update platform-tools
+avdmanager list avd
 ```
 
-Gradle cache хранится в Docker volume `nextgallery-android_gradle-cache`.
-Эмуляторы не имеют автозапуска и после `down` не остаются запущенными.
-
-Чтобы намеренно полностью сбросить dev-эмулятор, сначала остановите контейнер,
-а затем явно удалите только его volume:
-
-```bash
-docker compose -f dev/android/compose.yaml --profile dev stop emulator-dev
-docker compose -f dev/android/compose.yaml --profile dev rm -f emulator-dev
-docker volume rm nextgallery-android_avd-data
-```
-
-Следующий `run-dev.sh` создаст чистое userdata. Эта операция необратимо удаляет
-установленные в dev-эмулятор приложения и их данные.
+Обновляйте пакеты при выключенных AVD, затем проверяйте загрузку и приложение.
+Новую версию Android проверяйте отдельным AVD. Старые Docker volumes
+`nextgallery-android_avd-data` и `nextgallery-android_gradle-cache` не используются
+локальным SDK; их удаление требует отдельного решения о потере старых данных.
