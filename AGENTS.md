@@ -23,10 +23,10 @@
 
 Проект single-context: продуктовые документы в `docs/product/`, исследования в `docs/research/`, решения в `docs/adr/`. См. `docs/agents/domain.md`.
 
-### Тесты на устройстве
-
-На общем физическом устройстве instrumentation запускается через отдельный automation-вариант, чтобы не удалить данные «горячего» debug-приложения. См. `docs/agents/testing.md`.
-
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов используй эмулятор через T3 Code по умолчанию, в том числе на `syrok-arch` через SSH device host `syrok-server`. Реальный телефон используй только по явному указанию пользователя с выбранным ADB serial. См. `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов следуй правилам выбора устройства и runtime-проверки в `docs/agents/android-development.md`.
+
+### Тесты
+
+Для сборки APK, JVM-тестов и instrumentation используй `docs/agents/testing.md`.
