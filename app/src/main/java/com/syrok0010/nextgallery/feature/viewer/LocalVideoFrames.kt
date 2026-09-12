@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import androidx.core.net.toUri
 
 internal sealed interface VideoFrameEvent {
     data class Duration(val millis: Long) : VideoFrameEvent
@@ -27,7 +28,7 @@ internal class LocalVideoFrames(private val context: Context) : VideoFrameProvid
     override fun frames(uri: String): Flow<VideoFrameEvent> = flow {
         decoder.withLock {
             MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(context, Uri.parse(uri))
+                retriever.setDataSource(context, uri.toUri())
                 val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                     ?: error("Video duration unavailable")
                 val plan = VideoFilmstripProjection<Bitmap>().apply { durationKnown(duration) }.state.positionsMillis
