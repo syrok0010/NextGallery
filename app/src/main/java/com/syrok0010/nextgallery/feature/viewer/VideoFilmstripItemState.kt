@@ -60,7 +60,9 @@ internal class VideoFilmstripItemState(
         return true
     }
 
-    fun retry() { loader?.retry() }
+    fun retry() {
+        loader?.retry()
+    }
 
     fun close() {
         if (loader != null) playback.finish(item.mediaId)

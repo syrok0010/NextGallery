@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import org.koin.compose.koinInject
+import androidx.compose.runtime.Composable
+import android.content.Context
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import org.koin.core.context.GlobalContext
@@ -15,6 +18,8 @@ import android.net.Uri
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
@@ -66,7 +71,7 @@ class VideoPlaybackIntegrationTest {
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(
+                TestPlaybackSurface(
                     item = item,
                     modifier = Modifier.fillMaxSize(),
                     onToggleChrome = {},
@@ -169,7 +174,7 @@ class VideoPlaybackIntegrationTest {
         rule.setContent {
             if (visible.value) {
                 MaterialTheme {
-                    VideoPlaybackSurface(
+                    TestPlaybackSurface(
                         item,
                         Modifier.fillMaxSize(), onToggleChrome = {},
                         createPlayer = { ExoPlayer.Builder(it).build().also(players::add) },
@@ -199,7 +204,7 @@ class VideoPlaybackIntegrationTest {
         val uri = Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri)
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
+                TestPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
             }
         }
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
@@ -226,7 +231,7 @@ class VideoPlaybackIntegrationTest {
                 modifier = Modifier.fillMaxSize().then(Modifier.testTag("remote-pager")),
             ) { page ->
                 if (page == pagerState.currentPage) MaterialTheme {
-                    VideoPlaybackSurface(
+                    TestPlaybackSurface(
                         item = remote.copy(mediaId = MediaId("remote-$page")),
                         onToggleChrome = {},
                         createPlayer = { factory.create(it).also(players::add) },
@@ -274,7 +279,7 @@ class VideoPlaybackIntegrationTest {
         val factory = koin.get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -310,7 +315,7 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -326,7 +331,7 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -377,7 +382,7 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -396,7 +401,7 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -411,18 +416,50 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
     }
 
+    @Test fun viewerPlaybackOwnsOneSessionAndRejectsNeighborAndClosedSessionCommands() {
+        val first = sample()
+        val second = first.copy(mediaId = MediaId("second-video"))
+        var selected by mutableStateOf(first)
+        lateinit var owner: ViewerPlaybackState
+        rule.setContent {
+            owner = rememberViewerPlaybackState(selected)
+        }
+        rule.waitForIdle()
+        lateinit var previous: VideoPlaybackController
+        rule.runOnIdle {
+            previous = checkNotNull(owner.current)
+            assertNotNull(previous.sourceFor(first.mediaId))
+            assertNull(previous.sourceFor(second.mediaId))
+            previous.seek(second.mediaId, 500, true)
+            assertEquals(VideoPlaybackPhase.Poster, previous.state.phase)
+            selected = second
+        }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertTrue(previous.player.isReleased)
+            assertNull(previous.sourceFor(first.mediaId))
+            previous.seek(first.mediaId, 500, true)
+            assertEquals(second.mediaId, owner.current?.mediaId)
+            assertFalse(checkNotNull(owner.current).player.isReleased)
+            owner.close()
+            assertNull(owner.current)
+        }
+    }
+
     @Test fun localFilmstripBuilds24FramesAndScrubsBeforeFirstPlay() {
         val item = sample()
-        val controller = VideoScrubController(item.mediaId)
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-                    VideoPlaybackSurface(item, onToggleChrome = {}, scrubController = controller,
+                    val playback = rememberViewerPlaybackState(item,
                         createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } })
+                    playback.current?.let { controller ->
+                        VideoPlaybackSurface(item, onToggleChrome = {}, controller = controller)
+                    }
                     Filmstrip(listOf(item), 0, {},
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
-                        playback = controller)
+                        playback = playback.current ?: FilmstripPlayback.None)
                 }
             }
         }
@@ -474,16 +511,18 @@ class VideoPlaybackIntegrationTest {
     @Test fun remoteFilmstripFailureAndRetryDoNotInterruptPlaybackOrChangeMedia() = withRemote { fixture, remote ->
         fixture.hls = true
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        val controller = VideoScrubController(remote.mediaId)
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-                    VideoPlaybackSurface(remote, onToggleChrome = {}, scrubController = controller,
+                    val playback = rememberViewerPlaybackState(remote,
                         createPlayer = { factory.create(it).also { created -> player = created } })
+                    playback.current?.let { controller ->
+                        VideoPlaybackSurface(remote, onToggleChrome = {}, controller = controller)
+                    }
                     Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
-                        playback = controller)
+                        playback = playback.current ?: FilmstripPlayback.None)
                 }
             }
         }
@@ -576,5 +615,20 @@ class VideoPlaybackIntegrationTest {
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
         val directory = File(rule.activity.getExternalFilesDir(null), "video-review").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+}
+
+
+// Uses the same owner as MediaDetailScreen while allowing tests to observe real players.
+@Composable
+private fun TestPlaybackSurface(
+    item: MediaItem,
+    modifier: Modifier = Modifier,
+    onToggleChrome: () -> Unit,
+    createPlayer: (Context) -> ExoPlayer = koinInject<VideoPlayerFactory>()::create,
+) {
+    val playback = rememberViewerPlaybackState(item, createPlayer = createPlayer)
+    playback.current?.let {
+        VideoPlaybackSurface(item, modifier, onToggleChrome = onToggleChrome, controller = it)
     }
 }

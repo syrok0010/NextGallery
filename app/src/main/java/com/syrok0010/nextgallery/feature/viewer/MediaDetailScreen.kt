@@ -44,7 +44,7 @@ internal fun MediaDetailScreen(
     var videoFullscreen by remember(items.getOrNull(pagerState.currentPage)?.mediaId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val currentItem = items.getOrNull(pagerState.currentPage)
-    val videoScrub = remember(currentItem?.mediaId) { VideoScrubController(currentItem?.mediaId) }
+    val playback = rememberViewerPlaybackState(currentItem)
     var activePageState by remember(currentItem?.mediaId) {
         mutableStateOf(ActiveViewerPageState())
     }
@@ -93,7 +93,7 @@ internal fun MediaDetailScreen(
                     },
                     trackSurfaceBounds = item.mediaId == currentItem?.mediaId && motion.trackSurfaceBounds,
                     controlsVisible = chromeVisible,
-                    scrubController = videoScrub,
+                    playbackController = playback.current?.takeIf { it.mediaId == item.mediaId },
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onActivePageStateChange = { state ->
                         if (item.mediaId == currentItem?.mediaId) {
@@ -127,7 +127,7 @@ internal fun MediaDetailScreen(
                         Filmstrip(
                             items = items,
                             currentPage = pagerState.currentPage,
-                            playback = videoScrub,
+                            playback = playback.current ?: FilmstripPlayback.None,
                             onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         )
                     },

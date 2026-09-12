@@ -53,12 +53,19 @@ internal fun VideoFilmstripItem(
     )
     val tileHeight by animateDpAsState(height, label = "filmstrip_tile_height")
     Box(
-        modifier.size(tileWidth, tileHeight).clip(RoundedCornerShape(4.dp)).clickable(
-            onClickLabel = if (isExpanded) stringResource(R.string.video_filmstrip_collapse) else null,
-            onClick = onClick,
-        ),
+        modifier
+            .size(tileWidth, tileHeight)
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(
+                onClickLabel = if (isExpanded) stringResource(R.string.video_filmstrip_collapse) else null,
+                onClick = onClick,
+            ),
     ) {
-        Crossfade(isExpanded, animationSpec = tween(250), label = "video_card_expansion") { showFrames ->
+        Crossfade(
+            isExpanded,
+            animationSpec = tween(250),
+            label = "video_card_expansion"
+        ) { showFrames ->
             if (showFrames) {
                 VideoFilmstripCard(
                     item = item,

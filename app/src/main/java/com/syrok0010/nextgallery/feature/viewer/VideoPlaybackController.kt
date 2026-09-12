@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.annotation.OptIn
+import com.syrok0010.nextgallery.core.media.MediaId
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,23 +23,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Owns one player's commands, callbacks and asynchronous work until the surface leaves composition. */
+/** Owns one player's commands, callbacks and asynchronous work until the viewer changes its active media or closes. */
 @OptIn(UnstableApi::class)
 internal class VideoPlaybackController(
+    val mediaId: MediaId,
     val player: ExoPlayer,
     private val sources: VideoSources,
     private val playerFactory: VideoPlayerFactory,
     parentScope: CoroutineScope,
-) {
+) : FilmstripPlayback {
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
     private val session = VideoPlaybackSession(sources.primary, sources.fallback)
     var state by mutableStateOf(session.state)
         private set
-    private var scrubController: VideoScrubController? = null
+    private var sourceUri by mutableStateOf(session.sourceUri)
     private val vodClientId = java.util.UUID.randomUUID().toString()
     private var sourceGeneration = 0
     private var started = false
-    private var closed = false
+    private var closed by mutableStateOf(false)
     private var qualityObserver: Job? = null
 
     private fun discoverQualities() = scope.async(start = CoroutineStart.LAZY) {
@@ -107,7 +109,7 @@ internal class VideoPlaybackController(
         }
         val effect = session.accept(input)
         state = session.state
-        scrubController?.sourceUri = session.sourceUri
+        sourceUri = session.sourceUri
         applyEffect(effect)
     }
 
@@ -162,11 +164,17 @@ internal class VideoPlaybackController(
         }
     }
 
-    fun bindScrub(controller: VideoScrubController?) {
-        scrubController?.dispatch = null
-        scrubController = controller
-        controller?.sourceUri = session.sourceUri
-        controller?.dispatch = ::dispatch
+    override fun sourceFor(id: MediaId): String? =
+        sourceUri.takeIf { !closed && id == mediaId }
+
+    override fun seek(id: MediaId, position: Long, finished: Boolean) {
+        if (id != mediaId) return
+        dispatch(VideoPlaybackInput.ScrubTo(position))
+        if (finished) finish(id)
+    }
+
+    override fun finish(id: MediaId) {
+        if (id == mediaId) dispatch(VideoPlaybackInput.EndScrub)
     }
 
     fun start() {
@@ -187,7 +195,6 @@ internal class VideoPlaybackController(
     fun close() {
         if (closed) return
         closed = true
-        bindScrub(null)
         scope.cancel()
         player.removeListener(listener)
         applyEffect(session.accept(VideoPlaybackInput.Leave))

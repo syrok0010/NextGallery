@@ -47,37 +47,59 @@ internal fun VideoFilmstripCard(
     modifier: Modifier = Modifier,
 ) {
     val label = stringResource(R.string.video_filmstrip_description)
-    val phaseLabel = stringResource(when (state.phase) {
-        VideoFilmstripPhase.Loading -> R.string.video_filmstrip_loading
-        VideoFilmstripPhase.Ready -> R.string.video_filmstrip_ready
-        VideoFilmstripPhase.Degraded -> R.string.video_filmstrip_degraded
-    })
+    val phaseLabel = stringResource(
+        when (state.phase) {
+            VideoFilmstripPhase.Loading -> R.string.video_filmstrip_loading
+            VideoFilmstripPhase.Ready -> R.string.video_filmstrip_ready
+            VideoFilmstripPhase.Degraded -> R.string.video_filmstrip_degraded
+        }
+    )
 
     Box(modifier) {
-        Row(Modifier.fillMaxSize().testTag(VideoFilmstripTestTag).semantics {
-            contentDescription = label
-            stateDescription = phaseLabel
-            progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
-            setProgress(action = onSeek)
-        }) {
+        Row(Modifier
+            .fillMaxSize()
+            .testTag(VideoFilmstripTestTag)
+            .semantics {
+                contentDescription = label
+                stateDescription = phaseLabel
+                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+                setProgress(action = onSeek)
+            }) {
             repeat(VideoFilmstripProjection.FrameCount) { index ->
                 val frame = state.frames[index]
-                val cell = Modifier.weight(1f).fillMaxHeight()
+                val cell = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
                 if (frame == null) MediaAssetImage(
-                    item = item, purpose = MediaImagePurpose.TimelineThumbnail,
-                    contentDescription = null, modifier = cell, contentScale = ContentScale.Crop,
-                ) else Image(frame.asImageBitmap(), contentDescription = null,
-                    modifier = cell, contentScale = ContentScale.Crop)
+                    item = item,
+                    purpose = MediaImagePurpose.TimelineThumbnail,
+                    contentDescription = null,
+                    modifier = cell,
+                    contentScale = ContentScale.Crop,
+                ) else Image(
+                    frame.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = cell,
+                    contentScale = ContentScale.Crop
+                )
             }
         }
         if (state.phase == VideoFilmstripPhase.Degraded) {
-            TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.TopStart)
-                .background(Color.Black.copy(alpha = 0.8f)).testTag(VideoFilmstripRetryTestTag)) {
+            TextButton(
+                onClick = onRetry,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .background(Color.Black.copy(alpha = 0.8f))
+                    .testTag(VideoFilmstripRetryTestTag)
+            ) {
                 Text(stringResource(R.string.video_filmstrip_retry), color = Color.White)
             }
         } else if (state.phase == VideoFilmstripPhase.Loading) {
             LinearProgressIndicator(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(2.dp),
                 color = Color.White.copy(alpha = 0.8f),
                 trackColor = Color.Black.copy(alpha = 0.25f),
             )

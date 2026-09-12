@@ -39,7 +39,9 @@ internal class VideoFilmstripProjection<T> {
         state = state.copy(phase = if (!state.showsPoster) VideoFilmstripPhase.Ready else VideoFilmstripPhase.Degraded)
     }
 
-    fun failed() { state = state.copy(phase = VideoFilmstripPhase.Degraded) }
+    fun failed() {
+        state = state.copy(phase = VideoFilmstripPhase.Degraded)
+    }
 
     fun retry() {
         state = VideoFilmstripState()
