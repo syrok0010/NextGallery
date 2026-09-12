@@ -5,17 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
-import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 import kotlinx.coroutines.CoroutineScope
-
-/** Connection to the current playback session, shared by the strip's video items. */
-internal interface FilmstripPlayback {
-    fun sourceFor(id: MediaId): String?
-    fun seek(id: MediaId, position: Long, finished: Boolean)
-    fun finish(id: MediaId)
-}
 
 /** Geometry supplied by the strip; decoding and playback policy do not depend on LazyRow. */
 internal data class VideoFilmstripPlacement(

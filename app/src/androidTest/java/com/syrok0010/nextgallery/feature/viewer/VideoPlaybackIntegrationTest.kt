@@ -413,7 +413,7 @@ class VideoPlaybackIntegrationTest {
 
     @Test fun localFilmstripBuilds24FramesAndScrubsBeforeFirstPlay() {
         val item = sample()
-        val controller = VideoScrubController()
+        val controller = VideoScrubController(item.mediaId)
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
@@ -422,7 +422,7 @@ class VideoPlaybackIntegrationTest {
                         createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } })
                     Filmstrip(listOf(item), 0, {},
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
-                        onVideoScrub = controller::seek, onVideoScrubFinished = controller::finish)
+                        playback = controller)
                 }
             }
         }
@@ -474,7 +474,7 @@ class VideoPlaybackIntegrationTest {
     @Test fun remoteFilmstripFailureAndRetryDoNotInterruptPlaybackOrChangeMedia() = withRemote { fixture, remote ->
         fixture.hls = true
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        val controller = VideoScrubController()
+        val controller = VideoScrubController(remote.mediaId)
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
@@ -483,8 +483,7 @@ class VideoPlaybackIntegrationTest {
                         createPlayer = { factory.create(it).also { created -> player = created } })
                     Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
-                        onVideoScrub = controller::seek, onVideoScrubFinished = controller::finish,
-                        activeVideoSource = controller.sourceUri)
+                        playback = controller)
                 }
             }
         }

@@ -105,6 +105,13 @@ class FilmstripTest {
         val items = listOf(mediaItem("before", 20_001), video, mediaItem("after", 19_999))
         val currentPage = mutableIntStateOf(0)
         val seeks = mutableListOf<Pair<Long, Boolean>>()
+        val playback = object : FilmstripPlayback {
+            override fun sourceFor(id: MediaId): String? = null
+            override fun seek(id: MediaId, position: Long, finished: Boolean) {
+                if (items[currentPage.intValue].mediaId == id) seeks += position to finished
+            }
+            override fun finish(id: MediaId) = Unit
+        }
         val listState = LazyListState()
         val provider = VideoFrameProvider {
             kotlinx.coroutines.flow.flow {
@@ -115,7 +122,7 @@ class FilmstripTest {
         }
         composeRule.setContent {
             Filmstrip(items, currentPage.intValue, { currentPage.intValue = it },
-                onVideoScrub = { position, finished -> seeks += position to finished }, frameProvider = provider, lazyListState = listState)
+                playback = playback, frameProvider = provider, lazyListState = listState)
         }
         composeRule.waitForIdle()
         val initialLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset

@@ -44,7 +44,7 @@ internal fun MediaDetailScreen(
     var videoFullscreen by remember(items.getOrNull(pagerState.currentPage)?.mediaId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val currentItem = items.getOrNull(pagerState.currentPage)
-    val videoScrub = remember(currentItem?.mediaId) { VideoScrubController() }
+    val videoScrub = remember(currentItem?.mediaId) { VideoScrubController(currentItem?.mediaId) }
     var activePageState by remember(currentItem?.mediaId) {
         mutableStateOf(ActiveViewerPageState())
     }
@@ -127,9 +127,7 @@ internal fun MediaDetailScreen(
                         Filmstrip(
                             items = items,
                             currentPage = pagerState.currentPage,
-                            onVideoScrub = videoScrub::seek,
-                            activeVideoSource = videoScrub.sourceUri,
-                            onVideoScrubFinished = videoScrub::finish,
+                            playback = videoScrub,
                             onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         )
                     },

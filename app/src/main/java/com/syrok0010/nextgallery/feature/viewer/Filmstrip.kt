@@ -53,10 +53,8 @@ internal fun Filmstrip(
     currentPage: Int,
     onPageSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onVideoScrub: (Long, Boolean) -> Unit = { _, _ -> },
-    onVideoScrubFinished: () -> Unit = {},
+    playback: FilmstripPlayback = FilmstripPlayback.None,
     frameProvider: VideoFrameProvider? = null,
-    activeVideoSource: String? = null,
     lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
 ) {
     if (items.isEmpty()) return
@@ -72,23 +70,6 @@ internal fun Filmstrip(
     val selectPage by rememberUpdatedState(onPageSelected)
     val latestExpanded by rememberUpdatedState(expandedVideo)
     val isScrolling = scrollState.isScrollInProgress
-
-    val latestSource by rememberUpdatedState(activeVideoSource)
-    val latestItems by rememberUpdatedState(items)
-    val seekVideo by rememberUpdatedState(onVideoScrub)
-    val finishVideo by rememberUpdatedState(onVideoScrubFinished)
-    val playback = remember {
-        object : FilmstripPlayback {
-            override fun sourceFor(id: MediaId) =
-                latestSource.takeIf { latestItems.getOrNull(latestPage)?.mediaId == id }
-            override fun seek(id: MediaId, position: Long, finished: Boolean) {
-                if (latestItems.getOrNull(latestPage)?.mediaId == id) seekVideo(position, finished)
-            }
-            override fun finish(id: MediaId) {
-                if (latestItems.getOrNull(latestPage)?.mediaId == id) finishVideo()
-            }
-        }
-    }
 
     LaunchedEffect(scrollState, lazyListState, items.size) {
         snapshotFlow {
@@ -164,7 +145,7 @@ internal fun Filmstrip(
                         item = item,
                         onClick = {
                             if (isExpanded) {
-                                onVideoScrubFinished()
+                                playback.finish(item.mediaId)
                                 expandedVideo = null
                                 expansionSelection = null
                             } else {
