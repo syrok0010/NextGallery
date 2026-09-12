@@ -14,7 +14,7 @@ import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 
 @OptIn(UnstableApi::class)
-internal class VideoPlayerFactory(transport: NextcloudTransport, private val sessionStore: SessionStore) {
+internal class VideoPlayerFactory(private val transport: NextcloudTransport, private val sessionStore: SessionStore) {
     // Redirects must not carry app credentials to a different server or a login page.
     private val client = transport.baseClient.newBuilder()
         .followRedirects(false)
@@ -33,7 +33,7 @@ internal class VideoPlayerFactory(transport: NextcloudTransport, private val ses
     }
 
     suspend fun qualities(original: RemoteVideoOriginal, clientId: String): List<RemoteVideoQuality> =
-        MemoriesVideoDiscovery(client).qualities(original, clientId)
+        MemoriesVideoDiscovery(transport, client).qualities(original, clientId)
 
     fun mediaSourceFactory(context: Context) = DefaultMediaSourceFactory(
         DefaultDataSource.Factory(context, OkHttpDataSource.Factory(client)),

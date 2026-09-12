@@ -33,7 +33,7 @@ class MemoriesVideoDiscoveryTest {
     }
 
     private fun discovery(requests: MutableList<Request>, disabled: Boolean, status: Int = 200): MemoriesVideoDiscovery {
-        val transport = NextcloudTransport(Json, OkHttpClient())
+        val transport = NextcloudTransport(Json { ignoreUnknownKeys = true }, OkHttpClient())
         val client = transport.baseClient.newBuilder()
             .addInterceptor(AuthenticatedVideoSource(transport) { AccountCredentials("https://cloud.example/nextcloud", "alice", "secret") })
             .addInterceptor { chain ->
@@ -42,9 +42,9 @@ class MemoriesVideoDiscoveryTest {
                 val config = request.url.encodedPath.endsWith("/config")
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                     .code(if (config) 200 else status).message("fixture")
-                    .body((if (config) """{"version":"7","vod_disable":$disabled}"""
+                    .body((if (config) """{"version":"7","unrelated_setting":true,"vod_disable":$disabled}"""
                         else "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=640x360\n360p.m3u8").toResponseBody()).build()
             }.build()
-        return MemoriesVideoDiscovery(client)
+        return MemoriesVideoDiscovery(transport, client)
     }
 }

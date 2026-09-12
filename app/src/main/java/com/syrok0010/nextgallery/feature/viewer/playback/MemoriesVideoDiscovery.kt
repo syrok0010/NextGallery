@@ -1,51 +1,41 @@
 package com.syrok0010.nextgallery.feature.viewer.playback
 
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerialName
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import java.io.IOException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.serialization.json.Json
-import okhttp3.Call
-import okhttp3.Callback
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import okhttp3.ResponseBody
+import retrofit2.HttpException
+import retrofit2.http.GET
+import retrofit2.http.Url
 
-internal class MemoriesVideoDiscovery(private val client: OkHttpClient) {
+internal class MemoriesVideoDiscovery(
+    private val transport: NextcloudTransport,
+    private val client: OkHttpClient,
+) {
     suspend fun qualities(original: RemoteVideoOriginal, clientId: String): List<RemoteVideoQuality> {
         val master = original.masterPlaylist(clientId)
-        val config = json.decodeFromString<VideoConfigDto>(read(original.configurationUri))
-        if (config.vodDisable) return emptyList()
-        return MemoriesVideoManifest.qualities(master, read(master))
+        val api = transport.retrofit(original.configurationUri.toHttpUrl().resolve(".")!!.toString(), client)
+            .create(MemoriesVideoApi::class.java)
+        try {
+            val config = api.configuration(original.configurationUri)
+            if (config.vodDisable) return emptyList()
+            val manifest = api.playlist(master).use { it.string() }
+            return MemoriesVideoManifest.qualities(master, manifest)
+        } catch (error: HttpException) {
+            throw IOException("Video discovery failed: ${error.code()}", error)
+        }
     }
+}
 
-    private suspend fun read(uri: String): String = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(Request.Builder().url(uri).build())
-        continuation.invokeOnCancellation { call.cancel() }
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                continuation.resumeWithException(e)
-            }
+private interface MemoriesVideoApi {
+    @GET
+    suspend fun configuration(@Url url: String): VideoConfigDto
 
-            override fun onResponse(call: Call, response: Response) {
-                try {
-                    val body = response.use {
-                        if (!it.isSuccessful) throw IOException("Video discovery failed: ${it.code}")
-                        it.body.string()
-                    }
-                    continuation.resume(body)
-                } catch (error: IOException) {
-                    continuation.resumeWithException(error)
-                }
-            }
-        })
-    }
-
-    private companion object {
-        val json = Json { ignoreUnknownKeys = true }
-    }
+    @GET
+    suspend fun playlist(@Url url: String): ResponseBody
 }
 
 @Serializable
