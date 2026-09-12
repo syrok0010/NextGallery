@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -163,6 +164,8 @@ internal fun VideoPlaybackSurface(
         playbackState = session.state
         applyEffect(effect)
     }
+
+    SideEffect { scrubController?.sourceUri = session.sourceUri }
 
     DisposableEffect(player, session, scrubController) {
         scrubController?.dispatch = ::dispatch

@@ -46,6 +46,7 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaId
 import java.io.File
+import kotlinx.coroutines.flow.toList
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -441,6 +442,81 @@ class VideoPlaybackIntegrationTest {
         screenshot("local-filmstrip-scrub")
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+    }
+
+    @Test fun remoteFrameExtractionAuthenticatesOriginalAndHlsAndFallsBackFromCorruptLocal() = withRemote { fixture, remote ->
+        fixture.hls = true
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val provider = RemoteVideoFrames(rule.activity) { factory.mediaSourceFactory(rule.activity) }
+        val originalUri = "https://memories.invalid/original/42"
+        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(originalUri, "framesclient") }
+        val hlsUri = qualities.first { it.label == "Auto" }.uri
+        for (uri in listOf(originalUri, hlsUri)) {
+            val frames = kotlinx.coroutines.runBlocking { provider.frames(uri).toList() }
+            assertTrue(frames.first() is VideoFrameEvent.Duration)
+            val bitmaps = frames.filterIsInstance<VideoFrameEvent.Frame>()
+            assertEquals(24, bitmaps.size)
+            assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
+        }
+        val corruptLocal = sample(corrupt = true)
+        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri) { qualities }
+        val recovered = kotlinx.coroutines.runBlocking {
+            ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
+        }
+        assertEquals(24, recovered.filterIsInstance<VideoFrameEvent.Frame>().size)
+        fixture.corruptOriginal = true
+        val transcoded = kotlinx.coroutines.runBlocking { ladder.frames(originalUri).toList() }
+        assertEquals(24, transcoded.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertTrue(fixture.requests.filter { it[":request"]?.contains("/stream/") == true ||
+            it[":request"]?.contains("/video/transcode/") == true }.all { it["authorization"] == fixture.authorization })
+    }
+
+    @Test fun remoteFilmstripFailureAndRetryDoNotInterruptPlaybackOrChangeMedia() = withRemote { fixture, remote ->
+        fixture.hls = true
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val controller = VideoScrubController()
+        lateinit var player: ExoPlayer
+        rule.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    VideoPlaybackSurface(remote, onToggleChrome = {}, scrubController = controller,
+                        createPlayer = { factory.create(it).also { created -> player = created } })
+                    Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        onVideoScrub = controller::seek, onVideoScrubFinished = controller::finish,
+                        activeVideoSource = controller.sourceUri)
+                }
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying }
+        fixture.status = 503
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitUntil(15_000) { rule.onAllNodesWithTag(VideoFilmstripRetryTestTag).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
+        rule.runOnIdle { assertTrue(player.playWhenReady) }
+        fixture.status = 200
+        rule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertTrue(player.playWhenReady) }
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        waitForPlayer { player.currentPosition in 6800L..7600L }
+        rule.runOnIdle { assertFalse(player.playWhenReady) }
+        rule.onNodeWithTag("video_quality").performClick()
+        rule.onNodeWithText("360p").performClick()
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY &&
+            player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("360p.m3u8") }
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertFalse(player.playWhenReady); assertTrue(player.currentPosition in 6800L..7600L) }
+        screenshot("remote-filmstrip-retry-and-scrub")
+        rule.onAllNodesWithTag(VideoFilmstripTestTag).assertCountEquals(1)
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {

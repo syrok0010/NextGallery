@@ -42,6 +42,9 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
+import org.koin.compose.koinInject
 
 internal const val VideoFilmstripScreenWidths = 2f
 
@@ -56,12 +59,24 @@ internal fun VideoFilmstripCard(
     onScrubFinished: () -> Unit,
     modifier: Modifier = Modifier,
     frameProvider: VideoFrameProvider? = null,
+    fallbackUri: String? = null,
     fraction: Float = 0f,
     isScrolling: Boolean = false,
     onSeekFraction: (Float) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val provider = frameProvider ?: remember(context) { LocalVideoFrames(context) }
+    val factory: VideoPlayerFactory? = if (frameProvider == null &&
+        (!sourceUri.startsWith("content://") || fallbackUri != null)) koinInject() else null
+    val frameClientId = remember(item.mediaId) { java.util.UUID.randomUUID().toString() }
+    val provider = frameProvider ?: remember(context, factory, fallbackUri, frameClientId) {
+        val local = LocalVideoFrames(context)
+        if (factory == null) local else FallbackVideoFrames(
+            local = local,
+            remote = RemoteVideoFrames(context) { factory.mediaSourceFactory(context) },
+            fallbackUri = fallbackUri,
+            qualities = { uri -> factory.qualities(uri, frameClientId) },
+        )
+    }
     val projection = remember(item.mediaId, sourceUri) { VideoFilmstripProjection<Bitmap>() }
     var state by remember(projection) { mutableStateOf(projection.state) }
     var retry by remember(projection) { mutableIntStateOf(0) }
@@ -86,9 +101,13 @@ internal fun VideoFilmstripCard(
                 state = projection.state
             }
             projection.finished()
+        } catch (_: TimeoutCancellationException) {
+            projection.failed()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: java.io.IOException) {
+            projection.failed()
+        } catch (_: kotlinx.serialization.SerializationException) {
             projection.failed()
         } catch (_: RuntimeException) {
             projection.failed()

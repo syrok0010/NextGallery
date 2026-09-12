@@ -99,6 +99,7 @@ internal class VideoPlaybackSession(
     private var usingFallback = false
     private var hlsAttempted = false
     private var currentUri = contentUri
+    val sourceUri: String get() = currentUri
     private val remoteUri = fallbackUri ?: contentUri.takeIf { it.startsWith("https://memories.invalid/original/") }
 
     var state: VideoPlaybackState = VideoPlaybackState()

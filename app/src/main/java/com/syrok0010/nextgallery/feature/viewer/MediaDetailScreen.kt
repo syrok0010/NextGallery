@@ -128,6 +128,7 @@ internal fun MediaDetailScreen(
                             items = items,
                             currentPage = pagerState.currentPage,
                             onVideoScrub = videoScrub::seek,
+                            activeVideoSource = videoScrub.sourceUri,
                             onVideoScrubFinished = videoScrub::finish,
                             onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         )

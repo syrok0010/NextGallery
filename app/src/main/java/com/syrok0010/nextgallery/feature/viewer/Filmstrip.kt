@@ -70,6 +70,7 @@ internal fun Filmstrip(
     onVideoScrub: (Long, Boolean) -> Unit = { _, _ -> },
     onVideoScrubFinished: () -> Unit = {},
     frameProvider: VideoFrameProvider? = null,
+    activeVideoSource: String? = null,
     lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
 ) {
     if (items.isEmpty()) return
@@ -173,7 +174,7 @@ internal fun Filmstrip(
                                 onVideoScrubFinished()
                                 expandedVideo = null
                                 expansionSelection = null
-                            } else if (item.isVideo && VideoSources.from(item.assetRef).primary.startsWith("content://")) {
+                            } else if (item.isVideo) {
                                 if (expandedVideo == null) expansionSelection = items.getOrNull(currentPage)?.mediaId
                                 expandedVideo = item.mediaId
                             }
@@ -183,7 +184,8 @@ internal fun Filmstrip(
                     Crossfade(targetState = isExpanded, animationSpec = tween(250), label = "video_card_expansion") { showFrames ->
                         if (showFrames) VideoFilmstripCard(
                             item = item,
-                            sourceUri = VideoSources.from(item.assetRef).primary,
+                            sourceUri = activeVideoSource.takeIf { isSelected } ?: VideoSources.from(item.assetRef).primary,
+                            fallbackUri = VideoSources.from(item.assetRef).fallback,
                             fraction = lazyListState.layoutInfo.let { layout ->
                                 val info = layout.visibleItemsInfo.firstOrNull { it.index == index }
                                 if (info == null) 0f else ((layout.viewportStartOffset + layout.viewportEndOffset) / 2f - info.offset)

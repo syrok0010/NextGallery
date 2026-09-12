@@ -134,6 +134,34 @@ mute preference. TalkBack получает состояние ленты и seek
 при его недоступности лента деградирует независимо от playback. Совместимость
 проверяется на целевом устройстве.
 
+### Remote-лента кадров
+
+Критерии: тот же authenticated transport для MP4/HLS, local-first и независимость
+от playback, отсутствие полного скачивания original и новых backend endpoint.
+Для remote source используется `media3-inspector-frame` (`FrameExtractor`), а
+`media3-inspector` получает duration. Оба принимают `MediaSource.Factory` от
+`VideoPlayerFactory`: manifest, segments и ranges разрешают актуальные credentials
+на каждом запросе. UI по-прежнему получает только логические ссылки.
+
+`MediaMetadataRetriever` с прямыми remote URL отклонён: он обходит session-aware
+transport и не закрывает HLS. Предварительное скачивание original отклонено из-за
+трафика и задержки. Inspector использует platform decoders и уменьшает кадры до
+160×160 через Presentation, не подключая bundled codec extensions.
+
+Одновременно строится одна remote-лента: 24 последовательных запроса кадров,
+8 с на metadata, 5 с на отдельный кадр, 45 с на попытку извлечения. Отмена закрывает
+retriever/extractor и отменяет ожидаемый future; таймаут даёт degraded state с retry.
+Local failure допускает remote original, неподдерживаемый remote original —
+обнаруженный HLS; ошибки сети не запускают transcode. Frame source следует явной
+смене playback quality, карточка сохраняет `MediaId`, старое извлечение отменяется.
+Пока новый источник готовится, снова используется poster; ошибки ленты не меняют
+player state. Самостоятельный frame retry повторяет выбор источника.
+
+Последствия: inspector добавляет GL-обработку и дополнительный platform decoder;
+наличие рабочего playback не гарантирует frame extraction на конкретном устройстве.
+Серверный transcode может быть недоступен, и тогда остаются poster и обычный player.
+Проверка физических codec/GL-зависимых сценариев остаётся обязательной.
+
 Версии библиотек определяет version catalog.
 
 ## Последствия
@@ -146,4 +174,4 @@ mute preference. TalkBack получает состояние ленты и seek
 ## Открытые вопросы
 
 - Совместимость VOD-контракта с другими версиями Memories и storage backends.
-- Какой client-side filmstrip projection даст scrubbing без изменений серверного API.
+- Совместимость inspector frame extraction с codec/GL реализациями целевых устройств.
