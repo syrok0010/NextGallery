@@ -34,8 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import com.syrok0010.nextgallery.R
@@ -170,13 +168,17 @@ internal fun Filmstrip(
                         .size(width = tileWidth, height = tileHeight)
                         .clip(RoundedCornerShape(4.dp))
                         .testTag(filmstripTileTestTag(index))
-                        .then(if (isExpanded) Modifier else Modifier.clickable {
-                            if (item.isVideo && VideoSources.from(item.assetRef).primary.startsWith("content://")) {
+                        .clickable(onClickLabel = if (isExpanded) stringResource(R.string.video_filmstrip_collapse) else null) {
+                            if (isExpanded) {
+                                onVideoScrubFinished()
+                                expandedVideo = null
+                                expansionSelection = null
+                            } else if (item.isVideo && VideoSources.from(item.assetRef).primary.startsWith("content://")) {
                                 if (expandedVideo == null) expansionSelection = items.getOrNull(currentPage)?.mediaId
                                 expandedVideo = item.mediaId
                             }
                             onPageSelected(index)
-                        }),
+                        },
                 ) {
                     Crossfade(targetState = isExpanded, animationSpec = tween(250), label = "video_card_expansion") { showFrames ->
                         if (showFrames) VideoFilmstripCard(
@@ -216,11 +218,7 @@ internal fun Filmstrip(
                 drawLine(Color.White, Offset(size.width / 2, 16.dp.toPx()),
                     Offset(size.width / 2, size.height - 4.dp.toPx()), 2.dp.toPx())
             }
-            TextButton(onClick = { onVideoScrubFinished(); expandedVideo = null; expansionSelection = null },
-                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.8f))
-                    .testTag("video_filmstrip_collapse")) {
-                Text(stringResource(R.string.video_filmstrip_collapse), color = Color.White)
-            }
+
         }
     }
 }

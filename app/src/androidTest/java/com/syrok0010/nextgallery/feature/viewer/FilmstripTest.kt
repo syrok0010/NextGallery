@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -155,16 +156,16 @@ class FilmstripTest {
         }
         val expandedWidth = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size
         composeRule.mainClock.autoAdvance = false
-        composeRule.onNodeWithTag("video_filmstrip_collapse").performClick()
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performTouchInput { click() }
         composeRule.mainClock.advanceTimeBy(100)
         val middleWidth = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size
         assertTrue(middleWidth > 60 && middleWidth < expandedWidth)
         composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertDoesNotExist()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(1f) }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput { swipeLeft() }

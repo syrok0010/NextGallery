@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -135,8 +137,11 @@ internal fun VideoFilmstripCard(
                 Text(stringResource(R.string.video_filmstrip_retry), color = Color.White)
             }
         } else if (state.phase == VideoFilmstripPhase.Loading) {
-            Text(phaseLabel, color = Color.White, modifier = Modifier.align(Alignment.TopStart)
-                .background(Color.Black.copy(alpha = 0.7f)).padding(4.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp),
+                color = Color.White.copy(alpha = 0.8f),
+                trackColor = Color.Black.copy(alpha = 0.25f),
+            )
         }
     }
 }
