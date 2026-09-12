@@ -428,11 +428,11 @@ class VideoPlaybackIntegrationTest {
         }
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         rule.waitUntil(20_000) {
-            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
                 rule.activity.getString(R.string.video_filmstrip_ready)
         }
         rule.runOnIdle { assertFalse(player.playWhenReady) }
-        rule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY }
         rule.runOnIdle {
             assertFalse(player.playWhenReady)
@@ -498,12 +498,12 @@ class VideoPlaybackIntegrationTest {
         fixture.status = 200
         rule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
         rule.waitUntil(20_000) {
-            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
                 rule.activity.getString(R.string.video_filmstrip_ready)
         }
         rule.runOnIdle { assertTrue(player.playWhenReady) }
         rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
-        rule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
         waitForPlayer { player.currentPosition in 6800L..7600L }
         rule.runOnIdle { assertFalse(player.playWhenReady) }
         rule.onNodeWithTag("video_quality").performClick()
@@ -511,12 +511,12 @@ class VideoPlaybackIntegrationTest {
         waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY &&
             player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("360p.m3u8") }
         rule.waitUntil(20_000) {
-            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
                 rule.activity.getString(R.string.video_filmstrip_ready)
         }
         rule.runOnIdle { assertFalse(player.playWhenReady); assertTrue(player.currentPosition in 6800L..7600L) }
         screenshot("remote-filmstrip-retry-and-scrub")
-        rule.onAllNodesWithTag(VideoFilmstripTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
