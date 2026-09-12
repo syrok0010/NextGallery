@@ -1,25 +1,18 @@
-# Тесты
+# Тестирование
 
-## Инструментальные тесты на общем физическом устройстве
+Устройство выбирай по [android-development.md](android-development.md).
+JVM-тесты запускаются из корня checkout: `./gradlew :app:testAutomationUnitTest`.
 
-Установленный debug-вариант `com.syrok0010.nextgallery` считается «горячим» приложением:
-в нем сохраняются авторизация, Room database и cache для ручной проверки.
-
-Инструментальные тесты запускаются только для build type `automation`:
-
-```bash
-./gradlew --no-daemon --console=plain :app:connectedAutomationAndroidTest
-```
-
-Automation-вариант имеет application ID `com.syrok0010.nextgallery.automation` и отдельное
-имя `NextGallery Automation`. Android хранит его данные отдельно от debug-варианта, поэтому
-установка и удаление target APK не сбрасывают состояние «горячего» приложения.
-
-Не запускать `connectedDebugAndroidTest` на общем физическом устройстве: эта задача использует
-target package «горячего» debug-приложения и может переустановить или удалить его вместе с данными.
-
-Локальные JVM-тесты не обращаются к устройству и запускаются как обычно:
+Instrumentation запускай на хосте устройства из checkout проверяемой ревизии.
+Для эмулятора через SSH Device Hub это `syrok-server`, а не локальный ADB
+на `syrok-arch`. Укажи выбранный ADB serial и вариант `automation`:
 
 ```bash
-./gradlew --no-daemon --console=plain :app:testAutomationUnitTest
+ANDROID_SERIAL=<serial> ./gradlew :app:connectedAutomationAndroidTest
 ```
+
+> **Данные телефона:** нельзя трогать данные `com.syrok0010.nextgallery` на телефоне
+> пользователя: очищать данные, удалять приложение или выполнять действия,
+> сбрасывающие его состояние. Для тестов используй отдельный пакет
+> `com.syrok0010.nextgallery.automation`. `connectedDebugAndroidTest` на телефоне
+> запрещён: он может удалить или переустановить основное приложение с потерей данных.

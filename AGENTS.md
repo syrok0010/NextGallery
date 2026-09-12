@@ -23,10 +23,10 @@
 
 Проект single-context: продуктовые документы в `docs/product/`, исследования в `docs/research/`, решения в `docs/adr/`. См. `docs/agents/domain.md`.
 
-### Тесты на устройстве
-
-На общем физическом устройстве instrumentation запускается через отдельный automation-вариант, чтобы не удалить данные «горячего» debug-приложения. См. `docs/agents/testing.md`.
-
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов сначала выбери контур по среде: headless-агент на `syrok-server` или HITL на ноутбуке с личным телефоном. См. `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов следуй правилам выбора устройства в `docs/agents/android-development.md`.
+
+### Тесты
+
+Для JVM-тестов и instrumentation используй `docs/agents/testing.md`.
