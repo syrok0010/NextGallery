@@ -47,7 +47,9 @@ internal fun VideoFilmstripItem(
     DisposableEffect(state) { onDispose { state.close() } }
     val isExpanded = placement.expanded
     val compactWidth = if (placement.activeWidth) FilmstripActiveTileWidth else FilmstripTileWidth
-    val expandedWidth = placement.viewportWidth * VideoFilmstripScreenWidths
+    val frameCount = state.frames.positionsMillis.size.takeIf { it > 0 }
+        ?: videoFilmstripFrameCount((item.videoDurationSeconds ?: 0L) * 1000)
+    val expandedWidth = VideoFilmstripFrameWidth * frameCount
     val height = if (placement.selected) FilmstripActiveTileHeight else FilmstripTileHeight
     val tileWidth by animateDpAsState(
         if (isExpanded) expandedWidth else compactWidth, tween(250), label = "filmstrip_tile_width",

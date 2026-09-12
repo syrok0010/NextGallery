@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import kotlin.math.log10
 import kotlin.math.roundToLong
 
 internal enum class VideoFilmstripPhase { Loading, Ready, Degraded }
@@ -25,8 +26,9 @@ internal class VideoFilmstripProjection<T> {
             return
         }
         val end = durationMillis - 1
-        state = VideoFilmstripState(positionsMillis = List(FrameCount) { index ->
-            (end.toDouble() * index / (FrameCount - 1)).toLong()
+        val frameCount = videoFilmstripFrameCount(durationMillis)
+        state = VideoFilmstripState(positionsMillis = List(frameCount) { index ->
+            (end.toDouble() * index / (frameCount - 1)).toLong()
         })
     }
 
@@ -58,7 +60,11 @@ internal class VideoFilmstripProjection<T> {
     }
 
     companion object {
-        const val FrameCount = 24
         const val SeekIntervalMillis = 100L
     }
+}
+
+internal fun videoFilmstripFrameCount(durationMillis: Long): Int {
+    val seconds = (durationMillis / 1000).coerceAtLeast(1)
+    return (7 * log10(seconds.toDouble())).toInt().coerceAtLeast(3)
 }

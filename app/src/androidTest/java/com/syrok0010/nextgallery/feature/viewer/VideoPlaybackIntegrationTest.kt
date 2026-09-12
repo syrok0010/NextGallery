@@ -495,7 +495,7 @@ class VideoPlaybackIntegrationTest {
             val frames = kotlinx.coroutines.runBlocking { provider.frames(uri).toList() }
             assertTrue(frames.first() is VideoFrameEvent.Duration)
             val bitmaps = frames.filterIsInstance<VideoFrameEvent.Frame>()
-            assertEquals(24, bitmaps.size)
+            assertEquals(7, bitmaps.size)
             assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
         }
         val corruptLocal = sample(corrupt = true)
@@ -503,10 +503,10 @@ class VideoPlaybackIntegrationTest {
         val recovered = kotlinx.coroutines.runBlocking {
             ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
         }
-        assertEquals(24, recovered.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertEquals(7, recovered.filterIsInstance<VideoFrameEvent.Frame>().size)
         fixture.corruptOriginal = true
         val transcoded = kotlinx.coroutines.runBlocking { ladder.frames(originalUri).toList() }
-        assertEquals(24, transcoded.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertEquals(7, transcoded.filterIsInstance<VideoFrameEvent.Frame>().size)
         assertTrue(fixture.requests.filter { it[":request"]?.contains("/stream/") == true ||
             it[":request"]?.contains("/video/transcode/") == true }.all { it["authorization"] == fixture.authorization })
     }

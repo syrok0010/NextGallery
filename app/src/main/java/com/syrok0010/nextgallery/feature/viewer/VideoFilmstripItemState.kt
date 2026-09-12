@@ -4,7 +4,6 @@ import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.unit.Dp
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +13,6 @@ internal data class VideoFilmstripPlacement(
     val expanded: Boolean,
     val selected: Boolean,
     val activeWidth: Boolean,
-    val viewportWidth: Dp,
     val fraction: Float,
     val scrolling: Boolean,
 )

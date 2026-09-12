@@ -4,13 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoFilmstripProjectionTest {
-    @Test fun `poster first and 24 evenly spaced frames regardless of duration`() {
-        for (duration in listOf(1L, 12_000L, 86_400_000L)) {
+    @Test fun `poster first and logarithmic frame count with evenly spaced positions`() {
+        for ((duration, expectedCount) in listOf(
+            1L to 3, 999L to 3, 1000L to 3, 1999L to 3,
+            10_000L to 7, 30_000L to 10, 60_000L to 12,
+            300_000L to 17, 3_600_000L to 24, 86_400_000L to 34,
+        )) {
             val projection = VideoFilmstripProjection<String>()
             assertTrue(projection.state.showsPoster)
             projection.durationKnown(duration)
             val positions = projection.state.positionsMillis
-            assertEquals(24, positions.size)
+            assertEquals(expectedCount, positions.size)
             assertEquals(0L, positions.first())
             assertEquals(duration - 1, positions.last())
             val intervals = positions.zipWithNext { a, b -> b - a }
@@ -18,7 +22,7 @@ class VideoFilmstripProjectionTest {
             projection.frameReady(0, "first")
             assertEquals(mapOf(0 to "first"), projection.state.frames)
             assertTrue(projection.state.showsPoster)
-            for (index in 1..23) projection.frameReady(index, "frame-$index")
+            for (index in 1 until expectedCount) projection.frameReady(index, "frame-$index")
             projection.finished()
             assertEquals(VideoFilmstripPhase.Ready, projection.state.phase)
             assertFalse(projection.state.showsPoster)
@@ -29,7 +33,7 @@ class VideoFilmstripProjectionTest {
         val projection = VideoFilmstripProjection<String>()
         projection.durationKnown(12_000)
         projection.frameReady(0, "first")
-        projection.frameReady(24, "outside plan")
+        projection.frameReady(projection.state.positionsMillis.size, "outside plan")
         projection.failed()
         assertEquals(VideoFilmstripPhase.Degraded, projection.state.phase)
         assertEquals(mapOf(0 to "first"), projection.state.frames)

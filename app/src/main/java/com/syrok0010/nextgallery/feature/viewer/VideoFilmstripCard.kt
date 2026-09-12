@@ -32,7 +32,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 
-internal const val VideoFilmstripScreenWidths = 2f
+internal val VideoFilmstripFrameWidth = 59.dp
 
 internal const val VideoFilmstripTestTag = "video_filmstrip_frames"
 internal const val VideoFilmstripRetryTestTag = "video_filmstrip_retry"
@@ -65,7 +65,7 @@ internal fun VideoFilmstripCard(
                 progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
                 setProgress(action = onSeek)
             }) {
-            repeat(VideoFilmstripProjection.FrameCount) { index ->
+            repeat(state.positionsMillis.size.coerceAtLeast(1)) { index ->
                 val frame = state.frames[index]
                 val cell = Modifier
                     .weight(1f)

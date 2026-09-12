@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
@@ -33,7 +32,7 @@ class VideoFilmstripItemStateTest {
             }
         }
         val state = VideoFilmstripItemState(mediaItem("video", 0), provider, playback, backgroundScope) { 0L }
-        val expanded = VideoFilmstripPlacement(true, true, true, 400.dp, 0f, false)
+        val expanded = VideoFilmstripPlacement(true, true, true, 0f, false)
         state.update(expanded.copy(expanded = false))
         runCurrent()
         assertTrue(requests.isEmpty())

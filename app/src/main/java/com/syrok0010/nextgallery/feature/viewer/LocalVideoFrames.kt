@@ -40,7 +40,7 @@ internal class LocalVideoFrames(private val context: Context) : VideoFrameProvid
                 plan.forEachIndexed { index, position ->
                     currentCoroutineContext().ensureActive()
                     val bitmap = retriever.getScaledFrameAtTime(
-                        position * 1000, MediaMetadataRetriever.OPTION_CLOSEST,
+                        position * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
                         (width * scale).toInt().coerceAtLeast(1), (height * scale).toInt().coerceAtLeast(1),
                     ) ?: error("Video frame unavailable")
                     emit(VideoFrameEvent.Frame(index, bitmap))

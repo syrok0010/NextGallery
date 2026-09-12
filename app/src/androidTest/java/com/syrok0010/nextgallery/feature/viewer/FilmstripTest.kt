@@ -138,8 +138,8 @@ class FilmstripTest {
         composeRule.waitForIdle()
         val videoInfo = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }
         assertEquals(initialLeft, videoInfo.offset)
-        val viewport = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
-        assertEquals(viewport * VideoFilmstripScreenWidths, videoInfo.size.toFloat(), 2f)
+        val expectedWidth = with(composeRule.density) { (VideoFilmstripFrameWidth * 7).toPx() }
+        assertEquals(expectedWidth, videoInfo.size.toFloat(), 2f)
         assertTrue(videoInfo.offset + videoInfo.size > neighborLeft)
         composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
         composeRule.mainClock.autoAdvance = false

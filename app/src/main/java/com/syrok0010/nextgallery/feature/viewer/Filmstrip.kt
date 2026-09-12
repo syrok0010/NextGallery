@@ -158,7 +158,6 @@ internal fun Filmstrip(
                             expanded = isExpanded,
                             selected = isSelected,
                             activeWidth = usesActiveSize,
-                            viewportWidth = maxWidth,
                             fraction = lazyListState.layoutInfo.let { layout ->
                                 val info = layout.visibleItemsInfo.firstOrNull { it.index == index }
                                 if (info == null) 0f else ((layout.viewportStartOffset + layout.viewportEndOffset) / 2f - info.offset)
