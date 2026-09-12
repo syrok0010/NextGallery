@@ -68,4 +68,9 @@
     <string name="video_playback_auth_error">Для просмотра видео войдите в аккаунт заново</string>
     <string name="video_playback_remote_error">Облачное видео недоступно. Проверьте подключение и повторите попытку</string>
     <string name="video_playback_transcode_error">Server could not transcode this video. Try again.</string>
+    <string name="video_filmstrip_description">Seek within video</string>
+    <string name="video_filmstrip_loading">Loading frames…</string>
+    <string name="video_filmstrip_ready">Video frames ready</string>
+    <string name="video_filmstrip_degraded">Some video frames are unavailable</string>
+    <string name="video_filmstrip_retry">Retry frames</string>
 </resources>

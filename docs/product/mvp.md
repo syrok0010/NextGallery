@@ -16,6 +16,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - объединяет локальные и облачные копии по устойчивому `MediaId` и приблизительным `AUID`/`BUID`;
 - показывает cached local projection и материализованную cloud metadata до завершения refresh;
 - воспроизводит локальные и облачные video originals в detail view после явного запуска; при ошибке локальной копии переключается на Memories original в той же playback session;
+- раскрывает локальное видео в ленту кадров с перемоткой внутри текущего медиаобъекта;
 - использует Memories HLS при несовместимости remote original и позволяет выбрать доступное серверное качество с сохранением позиции и play/pause intent.
 
 Подробные требования и незавершённые части ведутся в GitHub Issues, а устойчивые технические решения — в `docs/adr/`.

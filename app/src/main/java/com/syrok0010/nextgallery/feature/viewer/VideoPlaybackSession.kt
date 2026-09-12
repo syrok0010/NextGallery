@@ -24,6 +24,7 @@ internal data class VideoPlaybackState(
     val durationMillis: Long? = null,
     val playRequested: Boolean = false,
     val isMuted: Boolean = false,
+    val isScrubbing: Boolean = false,
     val error: VideoPlaybackError? = null,
     val isFullscreen: Boolean = false,
     val qualities: List<RemoteVideoQuality> = emptyList(),
@@ -50,6 +51,10 @@ internal sealed interface VideoPlaybackInput {
 
     data class SeekTo(val positionMillis: Long) : VideoPlaybackInput
 
+    data class ScrubTo(val positionMillis: Long) : VideoPlaybackInput
+
+    data object EndScrub : VideoPlaybackInput
+
     data object ToggleMute : VideoPlaybackInput
 
     data object PlayerFailed : VideoPlaybackInput
@@ -69,6 +74,10 @@ internal sealed interface VideoPlaybackInput {
 
 internal sealed interface VideoPlaybackEffect {
     data class PrepareAndPlay(val contentUri: String, val positionMillis: Long = 0, val playWhenReady: Boolean = true) : VideoPlaybackEffect
+
+    data class SilentSeek(val positionMillis: Long, val prepareUri: String?) : VideoPlaybackEffect
+
+    data class FinishScrub(val playWhenReady: Boolean, val volume: Float) : VideoPlaybackEffect
 
     data object Play : VideoPlaybackEffect
 
@@ -182,6 +191,21 @@ internal class VideoPlaybackSession(
             VideoPlaybackEffect.SeekTo(positionMillis)
         }
 
+        is VideoPlaybackInput.ScrubTo -> {
+            val prepare = state.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error)
+            val position = input.positionMillis.coerceIn(0, state.durationMillis ?: Long.MAX_VALUE)
+            state = state.copy(positionMillis = position, isScrubbing = true, error = null,
+                phase = if (prepare) VideoPlaybackPhase.Loading else state.phase)
+            VideoPlaybackEffect.SilentSeek(position, currentUri.takeIf { prepare })
+        }
+
+        VideoPlaybackInput.EndScrub -> {
+            if (!state.isScrubbing) null else {
+                state = state.copy(isScrubbing = false)
+                VideoPlaybackEffect.FinishScrub(state.playRequested, if (state.isMuted) 0f else 1f)
+            }
+        }
+
         VideoPlaybackInput.ToggleMute -> {
             val isMuted = !state.isMuted
             state = state.copy(isMuted = isMuted)
@@ -240,7 +264,7 @@ internal class VideoPlaybackSession(
     private fun replaceSource(uri: String): VideoPlaybackEffect {
         currentUri = uri
         state = state.copy(phase = VideoPlaybackPhase.Loading, error = null)
-        return VideoPlaybackEffect.PrepareAndPlay(uri, state.positionMillis, state.playRequested)
+        return VideoPlaybackEffect.PrepareAndPlay(uri, state.positionMillis, state.playRequested && !state.isScrubbing)
     }
 
     private fun prepareAndPlay(): VideoPlaybackEffect {

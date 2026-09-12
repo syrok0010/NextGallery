@@ -74,6 +74,7 @@ internal fun VideoPlaybackSurface(
     contentModifier: Modifier = Modifier.fillMaxSize(),
     controlsVisible: Boolean = true,
     onFullscreenChanged: (Boolean) -> Unit = {},
+    scrubController: VideoScrubController? = null,
     playerFactory: VideoPlayerFactory = koinInject(),
     createPlayer: (Context) -> ExoPlayer = playerFactory::create,
 ) {
@@ -121,6 +122,20 @@ internal fun VideoPlaybackSurface(
                 player.playWhenReady = effect.playWhenReady
             }
 
+            is VideoPlaybackEffect.SilentSeek -> {
+                player.pause()
+                player.volume = 0f
+                if (effect.prepareUri != null) {
+                    sourceGeneration++
+                    qualities.start()
+                    player.setMediaItem(Media3Item.fromUri(effect.prepareUri), effect.positionMillis)
+                    player.prepare()
+                } else player.seekTo(effect.positionMillis)
+            }
+            is VideoPlaybackEffect.FinishScrub -> {
+                player.volume = effect.volume
+                player.playWhenReady = effect.playWhenReady
+            }
             VideoPlaybackEffect.Play -> player.play()
             VideoPlaybackEffect.ReplayFromStart -> {
                 player.seekTo(0L)
@@ -147,6 +162,11 @@ internal fun VideoPlaybackSurface(
         val effect = session.accept(input)
         playbackState = session.state
         applyEffect(effect)
+    }
+
+    DisposableEffect(player, session, scrubController) {
+        scrubController?.dispatch = ::dispatch
+        onDispose { scrubController?.dispatch = null }
     }
 
     DisposableEffect(player, session) {
@@ -209,7 +229,7 @@ internal fun VideoPlaybackSurface(
 
     LaunchedEffect(player) {
         while (isActive) {
-            if (player.playbackState == Player.STATE_READY) {
+            if (player.playbackState == Player.STATE_READY && !session.state.isScrubbing) {
                 dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
             }
             delay(200L.milliseconds)

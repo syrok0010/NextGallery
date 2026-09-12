@@ -410,6 +410,39 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
     }
 
+    @Test fun localFilmstripBuilds24FramesAndScrubsBeforeFirstPlay() {
+        val item = sample()
+        val controller = VideoScrubController()
+        lateinit var player: ExoPlayer
+        rule.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    VideoPlaybackSurface(item, onToggleChrome = {}, scrubController = controller,
+                        createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } })
+                    Filmstrip(listOf(item), 0, {},
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        onVideoScrub = controller::seek, onVideoScrubFinished = controller::finish)
+                }
+            }
+        }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertFalse(player.playWhenReady) }
+        rule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY }
+        rule.runOnIdle {
+            assertFalse(player.playWhenReady)
+            assertEquals(1f, player.volume)
+            assertTrue(player.currentPosition in 5800L..6200L)
+        }
+        screenshot("local-filmstrip-scrub")
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+    }
+
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
         val session = GlobalContext.get().get<SessionStore>()
         val previous = session.session.value

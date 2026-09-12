@@ -96,6 +96,39 @@ class FilmstripTest {
         }
     }
 
+    @Test
+    fun videoExpandsProgressivelyAndScrubNeverSelectsAnotherMedia() {
+        val video = mediaItem("video", 20_000).copy(isVideo = true, videoDurationSeconds = 12)
+        val items = listOf(mediaItem("before", 20_001), video, mediaItem("after", 19_999))
+        val currentPage = mutableIntStateOf(0)
+        val seeks = mutableListOf<Pair<Long, Boolean>>()
+        val provider = VideoFrameProvider {
+            kotlinx.coroutines.flow.flow {
+                emit(VideoFrameEvent.Duration(12_000))
+                emit(VideoFrameEvent.Frame(0, android.graphics.Bitmap.createBitmap(16, 16, android.graphics.Bitmap.Config.ARGB_8888)))
+                throw java.io.IOException("temporary frame failure")
+            }
+        }
+        composeRule.setContent {
+            Filmstrip(items, currentPage.intValue, { currentPage.intValue = it },
+                onVideoScrub = { position, finished -> seeks += position to finished }, frameProvider = provider)
+        }
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
+        composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).performTouchInput {
+            swipeWithVelocity(Offset(width * 0.1f, height * 0.8f), Offset(width * 0.8f, height * 0.8f), 2000f, 400)
+        }
+        composeRule.runOnIdle {
+            assertEquals(1, currentPage.intValue)
+            assertTrue(seeks.isNotEmpty())
+            assertTrue(seeks.last().second)
+            assertTrue(seeks.last().first in 9000L..10_000L)
+        }
+        composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
+    }
+
     private fun mediaItem(
         id: String,
         dayId: Int,

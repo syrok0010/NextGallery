@@ -56,6 +56,7 @@ internal fun MediaViewerPage(
     onSurfaceBoundsChange: (Rect?) -> Unit,
     onFullscreenChanged: (Boolean) -> Unit = {},
     controlsVisible: Boolean = true,
+    scrubController: VideoScrubController? = null,
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
@@ -95,6 +96,7 @@ internal fun MediaViewerPage(
                     item = item,
                     modifier = Modifier.fillMaxSize(),
                     controlsVisible = controlsVisible,
+                    scrubController = scrubController,
                     contentModifier = contentSurfaceModifier
                         .then(pageTransformModifier)
                         .onGloballyPositioned { coordinates ->
