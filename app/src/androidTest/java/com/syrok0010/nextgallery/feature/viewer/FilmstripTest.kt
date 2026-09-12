@@ -116,16 +116,41 @@ class FilmstripTest {
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
         composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
+        val strip = composeRule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode()
+        val range = strip.config[androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange]
+        assertEquals(strip.boundsInRoot.width * VideoFilmstripScreenWidths, range.maxValue(), 2f)
+        composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithTag(VideoFilmstripTestTag).performTouchInput {
-            swipeWithVelocity(Offset(width * 0.1f, height * 0.8f), Offset(width * 0.8f, height * 0.8f), 2000f, 400)
+            swipeWithVelocity(Offset(width * 0.45f, height * 0.8f), Offset(width * 0.05f, height * 0.8f), 1500f, 200)
         }
+        composeRule.mainClock.advanceTimeByFrame()
+        var positionAtRelease = 0L
+        composeRule.runOnIdle { positionAtRelease = seeks.last().first }
+        composeRule.mainClock.advanceTimeBy(250)
+        composeRule.runOnIdle {
+            assertTrue("Fling continues seeking after release", seeks.last().first > positionAtRelease)
+            assertEquals(1, currentPage.intValue)
+        }
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
         composeRule.runOnIdle {
             assertEquals(1, currentPage.intValue)
             assertTrue(seeks.isNotEmpty())
             assertTrue(seeks.last().second)
-            assertTrue(seeks.last().first in 9000L..10_000L)
+            assertTrue(seeks.last().first > positionAtRelease)
         }
         composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
+        val expandedWidth = composeRule.onNodeWithTag(filmstripTileTestTag(1)).fetchSemanticsNode().boundsInRoot.width
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag("video_filmstrip_collapse").performClick()
+        composeRule.mainClock.advanceTimeBy(100)
+        val middleWidth = composeRule.onNodeWithTag(filmstripTileTestTag(1)).fetchSemanticsNode().boundsInRoot.width
+        assertTrue(middleWidth > 60 && middleWidth < expandedWidth)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertDoesNotExist()
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
     }
 

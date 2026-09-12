@@ -194,7 +194,7 @@ internal class VideoPlaybackSession(
         is VideoPlaybackInput.ScrubTo -> {
             val prepare = state.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error)
             val position = input.positionMillis.coerceIn(0, state.durationMillis ?: Long.MAX_VALUE)
-            state = state.copy(positionMillis = position, isScrubbing = true, error = null,
+            state = state.copy(positionMillis = position, isScrubbing = true, playRequested = false, error = null,
                 phase = if (prepare) VideoPlaybackPhase.Loading else state.phase)
             VideoPlaybackEffect.SilentSeek(position, currentUri.takeIf { prepare })
         }

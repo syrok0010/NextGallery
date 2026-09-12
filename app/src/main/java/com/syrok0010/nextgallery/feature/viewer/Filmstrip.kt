@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -112,9 +114,10 @@ internal fun Filmstrip(
                 state = scrollState,
                 orientation = Orientation.Horizontal,
                 reverseDirection = true,
+                enabled = !expanded,
             ),
     ) {
-        val expandedWidth = minOf(320.dp, maxWidth * 0.75f)
+        val expandedWidth = maxWidth
         val selectedWidth = if (expanded) expandedWidth else FilmstripActiveTileWidth
         val horizontalPadding = ((maxWidth - selectedWidth) / 2f).coerceAtLeast(0.dp)
 
@@ -141,6 +144,7 @@ internal fun Filmstrip(
                 val isExpanded = isSelected && item.mediaId == expandedVideo
                 val tileWidth by animateDpAsState(
                     targetValue = if (isExpanded) expandedWidth else if (isSelected) FilmstripActiveTileWidth else FilmstripTileWidth,
+                    animationSpec = tween(250),
                     label = "filmstrip_tile_width",
                 )
                 val tileHeight by animateDpAsState(
@@ -148,6 +152,9 @@ internal fun Filmstrip(
                     label = "filmstrip_tile_height",
                 )
 
+                LaunchedEffect(tileWidth, isExpanded) {
+                    if (isExpanded && !isScrolling) lazyListState.scrollToItem(index)
+                }
                 Box(
                     modifier = Modifier
                         .size(width = tileWidth, height = tileHeight)
@@ -160,20 +167,23 @@ internal fun Filmstrip(
                             onPageSelected(index)
                         }),
                 ) {
-                    if (isExpanded) VideoFilmstripCard(
-                        item = item,
-                        sourceUri = VideoSources.from(item.assetRef).primary,
-                        onScrub = onVideoScrub,
-                        onScrubFinished = onVideoScrubFinished,
-                        frameProvider = frameProvider,
-                        modifier = Modifier.size(width = tileWidth, height = tileHeight),
-                    ) else MediaAssetImage(
-                        item = item,
-                        purpose = MediaImagePurpose.TimelineThumbnail,
-                        contentDescription = item.displayName,
-                        modifier = Modifier.size(width = tileWidth, height = tileHeight),
-                        contentScale = ContentScale.Crop,
-                    )
+                    Crossfade(targetState = isExpanded, animationSpec = tween(250), label = "video_card_expansion") { showFrames ->
+                        if (showFrames) VideoFilmstripCard(
+                            item = item,
+                            sourceUri = VideoSources.from(item.assetRef).primary,
+                            onCollapse = { onVideoScrubFinished(); expandedVideo = null },
+                            onScrub = { position, finished -> if (isExpanded) onVideoScrub(position, finished) },
+                            onScrubFinished = { if (isExpanded) onVideoScrubFinished() },
+                            frameProvider = frameProvider,
+                            modifier = Modifier.size(width = tileWidth, height = tileHeight),
+                        ) else MediaAssetImage(
+                            item = item,
+                            purpose = MediaImagePurpose.TimelineThumbnail,
+                            contentDescription = item.displayName,
+                            modifier = Modifier.size(width = tileWidth, height = tileHeight),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                 }
             }
         }

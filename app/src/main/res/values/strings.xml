@@ -73,4 +73,5 @@
     <string name="video_filmstrip_ready">Video frames ready</string>
     <string name="video_filmstrip_degraded">Some video frames are unavailable</string>
     <string name="video_filmstrip_retry">Retry frames</string>
+    <string name="video_filmstrip_collapse">Collapse video</string>
 </resources>
