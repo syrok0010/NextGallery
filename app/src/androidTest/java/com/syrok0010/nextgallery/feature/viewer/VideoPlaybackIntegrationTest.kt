@@ -354,7 +354,7 @@ class VideoPlaybackIntegrationTest {
         rule.onNodeWithTag("video_quality").performClick()
         rule.onNodeWithText("Auto").performClick()
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_transcode_error)).fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_remote_error)).fetchSemanticsNodes().isNotEmpty()
         }
         screenshot("hls-transcode-error")
         fixture.hlsStatus = 200
@@ -385,6 +385,29 @@ class VideoPlaybackIntegrationTest {
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
         screenshot("hls-automatic-fallback")
+    }
+
+    @Test fun retryRediscoversHlsAfterTransientManifestFailure() = withRemote { fixture, remote ->
+        fixture.hls = true
+        fixture.corruptOriginal = true
+        fixture.hlsStatus = 503
+        lateinit var player: ExoPlayer
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
+        }
+        fixture.hlsStatus = 200
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
+        waitForPlayer { player.isPlaying }
+        rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {

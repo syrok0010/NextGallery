@@ -232,7 +232,7 @@ internal class VideoPlaybackSession(
             }
         }
         state = state.copy(phase = VideoPlaybackPhase.Error,
-            error = if (hlsAttempted) VideoPlaybackError.TranscodeFailed else error,
+            error = if (hlsAttempted && error == VideoPlaybackError.CannotPlay) VideoPlaybackError.TranscodeFailed else error,
             playRequested = if (hlsAttempted) state.playRequested else false)
         return null
     }

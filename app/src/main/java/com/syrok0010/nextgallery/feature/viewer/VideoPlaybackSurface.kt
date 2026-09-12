@@ -89,20 +89,20 @@ internal fun VideoPlaybackSurface(
         mutableStateOf(session.state)
     }
     val scope = rememberCoroutineScope()
-    val qualities = remember(session) {
-        scope.async(start = CoroutineStart.LAZY) {
-            val remote = sources.fallback ?: sources.primary.takeIf { it.startsWith("https://memories.invalid/") }
-            if (remote == null) emptyList() else try {
-                playerFactory.qualities(remote, java.util.UUID.randomUUID().toString())
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: java.io.IOException) {
-                emptyList()
-            } catch (_: kotlinx.serialization.SerializationException) {
-                emptyList()
-            }
+    val vodClientId = remember(session) { java.util.UUID.randomUUID().toString() }
+    fun discoverQualities() = scope.async(start = CoroutineStart.LAZY) {
+        val remote = sources.fallback ?: sources.primary.takeIf { it.startsWith("https://memories.invalid/") }
+        if (remote == null) emptyList() else try {
+            playerFactory.qualities(remote, vodClientId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: java.io.IOException) {
+            emptyList()
+        } catch (_: kotlinx.serialization.SerializationException) {
+            emptyList()
         }
     }
+    var qualities by remember(session) { mutableStateOf(discoverQualities()) }
     val fullscreenChanged by rememberUpdatedState(onFullscreenChanged)
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
@@ -138,6 +138,12 @@ internal fun VideoPlaybackSurface(
     }
 
     fun dispatch(input: VideoPlaybackInput) {
+        if (input == VideoPlaybackInput.Retry ||
+            (input == VideoPlaybackInput.Play && session.state.phase == VideoPlaybackPhase.Error)
+        ) {
+            qualities.cancel()
+            qualities = discoverQualities()
+        }
         val effect = session.accept(input)
         playbackState = session.state
         applyEffect(effect)
@@ -195,7 +201,7 @@ internal fun VideoPlaybackSurface(
         }
     }
 
-    LaunchedEffect(session, playbackState.phase != VideoPlaybackPhase.Poster) {
+    LaunchedEffect(session, qualities, playbackState.phase != VideoPlaybackPhase.Poster) {
         if (playbackState.phase != VideoPlaybackPhase.Poster) {
             dispatch(VideoPlaybackInput.QualitiesLoaded(qualities.await()))
         }

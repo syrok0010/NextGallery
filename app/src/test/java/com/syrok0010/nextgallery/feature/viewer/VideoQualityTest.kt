@@ -58,6 +58,20 @@ class VideoQualityTest {
         }
     }
 
+    @Test fun `HLS authentication and network errors retain their category and retry intent`() {
+        for (error in listOf(VideoPlaybackError.AuthenticationRequired, VideoPlaybackError.RemoteUnavailable)) {
+            val session = VideoPlaybackSession(remote)
+            session.accept(VideoPlaybackInput.QualitiesLoaded(listOf(auto)))
+            session.accept(VideoPlaybackInput.Play)
+            session.accept(VideoPlaybackInput.PlayerPositionChanged(4500))
+            session.accept(VideoPlaybackInput.Pause)
+            session.accept(VideoPlaybackInput.SelectQuality(auto))
+            assertNull(session.accept(VideoPlaybackInput.SourceFailed(error)))
+            assertEquals(error, session.state.error)
+            assertEquals(VideoPlaybackEffect.PrepareAndPlay(auto.uri, 4500, false), session.accept(VideoPlaybackInput.Retry))
+        }
+    }
+
     @Test fun `local remote HLS ladder retains playing intent`() {
         val session = VideoPlaybackSession("content://video/42", remote)
         session.accept(VideoPlaybackInput.QualitiesLoaded(listOf(auto)))
