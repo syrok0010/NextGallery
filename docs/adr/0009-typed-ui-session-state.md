@@ -4,6 +4,8 @@
 
 Принято; первоначальный единый MainViewModel разделён по slices.
 
+Распределение timeline orchestration уточнено [ADR 0012](0012-feature-slices.md): workflow принадлежит TimelineWorkflow; AuthenticatedViewModel адаптирует session и UI state. Остальные решения этого ADR сохраняются.
+
 ## Контекст
 
 Signed-out login workflow и authenticated timeline не должны одновременно жить в одном плоском state. По мере роста timeline единый `MainViewModel` также стал владельцем слишком разных lifecycle и был разделён.

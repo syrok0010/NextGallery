@@ -20,6 +20,7 @@ room = "2.8.4"
 telephoto = "0.19.0"
 
 [libraries]
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version = "1.10.2" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

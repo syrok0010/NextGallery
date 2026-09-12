@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "NextGallery"
 include(":app")
+
+include(":core:media")

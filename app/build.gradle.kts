@@ -49,6 +49,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:media"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.foundation)
@@ -79,6 +80,7 @@ dependencies {
     implementation(libs.telephoto.zoomable.image.coil3)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -88,3 +90,33 @@ dependencies {
     add("automationImplementation", libs.androidx.compose.ui.test.manifest)
     add("automationImplementation", libs.androidx.compose.ui.tooling)
 }
+
+// Package boundaries are checked until individual features justify separate Gradle projects.
+val verifyFeatureBoundaries by tasks.registering {
+    group = "verification"
+    description = "Checks ownership of core, feature and app dependencies."
+    val sources = fileTree("src/main/java") { include("**/*.kt") }
+    inputs.files(sources)
+    doLast {
+        val prefix = "com.syrok0010.nextgallery."
+        val importPattern = Regex("(?m)^import (com\\.syrok0010\\.nextgallery\\.[\\w.]+)")
+        sources.forEach { source ->
+            val text = source.readText()
+            val owner = Regex("(?m)^package (.+)").find(text)!!.groupValues[1]
+            importPattern.findAll(text).forEach { match ->
+                val dependency = match.groupValues[1]
+                check(!(owner.startsWith(prefix + "core.") &&
+                    (dependency.startsWith(prefix + "feature.") || dependency.startsWith(prefix + "app.")))) {
+                    "${source.name}: core must not depend on $dependency"
+                }
+                check(!(owner.startsWith(prefix + "feature.") && dependency.startsWith(prefix + "app."))) {
+                    "${source.name}: app composes features, not the reverse ($dependency)"
+                }
+                check(!(owner.startsWith(prefix + "feature.viewer") && dependency.startsWith(prefix + "feature.timeline"))) {
+                    "${source.name}: viewer accepts media sequence, not timeline internals"
+                }
+            }
+        }
+    }
+}
+tasks.named("check") { dependsOn(verifyFeatureBoundaries) }
