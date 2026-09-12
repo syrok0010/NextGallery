@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.viewer
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -31,6 +32,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.res.stringResource
+import com.syrok0010.nextgallery.R
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,15 +77,15 @@ internal fun Filmstrip(
     if (items.isEmpty()) return
 
     var expandedVideo by remember { mutableStateOf<MediaId?>(null) }
-    LaunchedEffect(currentPage) {
-        if (items.getOrNull(currentPage)?.mediaId != expandedVideo) expandedVideo = null
-    }
-    val expanded = items.getOrNull(currentPage)?.mediaId == expandedVideo
+    var expansionSelection by remember { mutableStateOf<MediaId?>(null) }
+    val scope = rememberCoroutineScope()
+    val expanded = expandedVideo != null
     val scrollState = rememberScrollableState { delta ->
         lazyListState.dispatchRawDelta(delta)
     }
     val latestPage by rememberUpdatedState(currentPage)
     val selectPage by rememberUpdatedState(onPageSelected)
+    val latestExpanded by rememberUpdatedState(expandedVideo)
     val isScrolling = scrollState.isScrollInProgress
 
     LaunchedEffect(scrollState, lazyListState, items.size) {
@@ -86,7 +94,13 @@ internal fun Filmstrip(
                 val layout = lazyListState.layoutInfo
                 val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
                 layout.visibleItemsInfo.minByOrNull {
-                    abs(it.offset + it.size / 2 - center)
+                    if (items.getOrNull(it.index)?.mediaId == latestExpanded) {
+                        when {
+                            center < it.offset -> it.offset - center
+                            center > it.offset + it.size -> center - it.offset - it.size
+                            else -> 0
+                        }
+                    } else abs(it.offset + it.size / 2 - center)
                 }?.index
             } else {
                 null
@@ -99,7 +113,7 @@ internal fun Filmstrip(
     }
 
     LaunchedEffect(currentPage, isScrolling, items.size, expanded) {
-        if (!isScrolling) {
+        if (!isScrolling && !expanded) {
             lazyListState.animateScrollToItem(currentPage.coerceIn(items.indices))
         }
     }
@@ -114,12 +128,10 @@ internal fun Filmstrip(
                 state = scrollState,
                 orientation = Orientation.Horizontal,
                 reverseDirection = true,
-                enabled = !expanded,
             ),
     ) {
-        val expandedWidth = maxWidth
-        val selectedWidth = if (expanded) expandedWidth else FilmstripActiveTileWidth
-        val horizontalPadding = ((maxWidth - selectedWidth) / 2f).coerceAtLeast(0.dp)
+        val expandedWidth = maxWidth * VideoFilmstripScreenWidths
+        val horizontalPadding = ((maxWidth - FilmstripActiveTileWidth) / 2f).coerceAtLeast(0.dp)
 
         LazyRow(
             state = lazyListState,
@@ -141,9 +153,10 @@ internal fun Filmstrip(
                 key = { _, item -> "filmstrip:${item.mediaId.value}" },
             ) { index, item ->
                 val isSelected = index == currentPage
-                val isExpanded = isSelected && item.mediaId == expandedVideo
+                val isExpanded = item.mediaId == expandedVideo
+                val usesActiveSize = item.mediaId == (expansionSelection ?: items.getOrNull(currentPage)?.mediaId)
                 val tileWidth by animateDpAsState(
-                    targetValue = if (isExpanded) expandedWidth else if (isSelected) FilmstripActiveTileWidth else FilmstripTileWidth,
+                    targetValue = if (isExpanded) expandedWidth else if (usesActiveSize) FilmstripActiveTileWidth else FilmstripTileWidth,
                     animationSpec = tween(250),
                     label = "filmstrip_tile_width",
                 )
@@ -152,9 +165,6 @@ internal fun Filmstrip(
                     label = "filmstrip_tile_height",
                 )
 
-                LaunchedEffect(tileWidth, isExpanded) {
-                    if (isExpanded && !isScrolling) lazyListState.scrollToItem(index)
-                }
                 Box(
                     modifier = Modifier
                         .size(width = tileWidth, height = tileHeight)
@@ -162,6 +172,7 @@ internal fun Filmstrip(
                         .testTag(filmstripTileTestTag(index))
                         .then(if (isExpanded) Modifier else Modifier.clickable {
                             if (item.isVideo && VideoSources.from(item.assetRef).primary.startsWith("content://")) {
+                                if (expandedVideo == null) expansionSelection = items.getOrNull(currentPage)?.mediaId
                                 expandedVideo = item.mediaId
                             }
                             onPageSelected(index)
@@ -171,9 +182,22 @@ internal fun Filmstrip(
                         if (showFrames) VideoFilmstripCard(
                             item = item,
                             sourceUri = VideoSources.from(item.assetRef).primary,
-                            onCollapse = { onVideoScrubFinished(); expandedVideo = null },
-                            onScrub = { position, finished -> if (isExpanded) onVideoScrub(position, finished) },
-                            onScrubFinished = { if (isExpanded) onVideoScrubFinished() },
+                            fraction = lazyListState.layoutInfo.let { layout ->
+                                val info = layout.visibleItemsInfo.firstOrNull { it.index == index }
+                                if (info == null) 0f else ((layout.viewportStartOffset + layout.viewportEndOffset) / 2f - info.offset)
+                                    .div(info.size.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            },
+                            isScrolling = isScrolling && isSelected && isExpanded,
+                            onSeekFraction = { fraction ->
+                                val info = lazyListState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                                if (info != null) scope.launch {
+                                    val layout = lazyListState.layoutInfo
+                                    val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2f
+                                    lazyListState.scrollToItem(index, (info.size * fraction - center).toInt())
+                                }
+                            },
+                            onScrub = { position, finished -> if (isExpanded && isSelected) onVideoScrub(position, finished) },
+                            onScrubFinished = { if (isExpanded && isSelected) onVideoScrubFinished() },
                             frameProvider = frameProvider,
                             modifier = Modifier.size(width = tileWidth, height = tileHeight),
                         ) else MediaAssetImage(
@@ -185,6 +209,17 @@ internal fun Filmstrip(
                         )
                     }
                 }
+            }
+        }
+        if (expanded) {
+            Canvas(Modifier.fillMaxWidth().height(FilmstripRowHeight).testTag("video_filmstrip_playhead")) {
+                drawLine(Color.White, Offset(size.width / 2, 16.dp.toPx()),
+                    Offset(size.width / 2, size.height - 4.dp.toPx()), 2.dp.toPx())
+            }
+            TextButton(onClick = { onVideoScrubFinished(); expandedVideo = null; expansionSelection = null },
+                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.8f))
+                    .testTag("video_filmstrip_collapse")) {
+                Text(stringResource(R.string.video_filmstrip_collapse), color = Color.White)
             }
         }
     }

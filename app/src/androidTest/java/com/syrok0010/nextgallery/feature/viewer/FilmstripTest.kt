@@ -6,6 +6,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeWithVelocity
@@ -102,6 +104,7 @@ class FilmstripTest {
         val items = listOf(mediaItem("before", 20_001), video, mediaItem("after", 19_999))
         val currentPage = mutableIntStateOf(0)
         val seeks = mutableListOf<Pair<Long, Boolean>>()
+        val listState = LazyListState()
         val provider = VideoFrameProvider {
             kotlinx.coroutines.flow.flow {
                 emit(VideoFrameEvent.Duration(12_000))
@@ -111,17 +114,29 @@ class FilmstripTest {
         }
         composeRule.setContent {
             Filmstrip(items, currentPage.intValue, { currentPage.intValue = it },
-                onVideoScrub = { position, finished -> seeks += position to finished }, frameProvider = provider)
+                onVideoScrub = { position, finished -> seeks += position to finished }, frameProvider = provider, lazyListState = listState)
         }
-        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
-        composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
-        val strip = composeRule.onNodeWithTag(VideoFilmstripTestTag).fetchSemanticsNode()
-        val range = strip.config[androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange]
-        assertEquals(strip.boundsInRoot.width * VideoFilmstripScreenWidths, range.maxValue(), 2f)
+        composeRule.waitForIdle()
+        val initialLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset
+        val neighborLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 2 }.offset
         composeRule.mainClock.autoAdvance = false
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).performTouchInput {
-            swipeWithVelocity(Offset(width * 0.45f, height * 0.8f), Offset(width * 0.05f, height * 0.8f), 1500f, 200)
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
+        composeRule.mainClock.advanceTimeBy(100)
+        composeRule.runOnIdle {
+            assertEquals(initialLeft, listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset)
+            assertTrue(listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size > 100)
+        }
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        val videoInfo = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }
+        assertEquals(initialLeft, videoInfo.offset)
+        val viewport = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
+        assertEquals(viewport * VideoFilmstripScreenWidths, videoInfo.size.toFloat(), 2f)
+        assertTrue(videoInfo.offset + videoInfo.size > neighborLeft)
+        composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput {
+            swipeWithVelocity(Offset(width * 0.7f, height * 0.8f), Offset(width * 0.3f, height * 0.8f), 1500f, 200)
         }
         composeRule.mainClock.advanceTimeByFrame()
         var positionAtRelease = 0L
@@ -135,23 +150,26 @@ class FilmstripTest {
         composeRule.waitForIdle()
         composeRule.runOnIdle {
             assertEquals(1, currentPage.intValue)
-            assertTrue(seeks.isNotEmpty())
             assertTrue(seeks.last().second)
             assertTrue(seeks.last().first > positionAtRelease)
         }
-        composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
-        val expandedWidth = composeRule.onNodeWithTag(filmstripTileTestTag(1)).fetchSemanticsNode().boundsInRoot.width
+        val expandedWidth = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size
         composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithTag("video_filmstrip_collapse").performClick()
         composeRule.mainClock.advanceTimeBy(100)
-        val middleWidth = composeRule.onNodeWithTag(filmstripTileTestTag(1)).fetchSemanticsNode().boundsInRoot.width
+        val middleWidth = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size
         assertTrue(middleWidth > 60 && middleWidth < expandedWidth)
         composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(VideoFilmstripTestTag).assertDoesNotExist()
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag).assertIsDisplayed()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag).performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(1f) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput { swipeLeft() }
+        composeRule.runOnIdle { assertEquals(2, currentPage.intValue) }
+        composeRule.onNodeWithTag(filmstripTileTestTag(2)).assertIsDisplayed()
     }
 
     private fun mediaItem(
