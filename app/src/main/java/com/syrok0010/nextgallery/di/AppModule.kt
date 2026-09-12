@@ -93,6 +93,7 @@ val appModule = module {
     }
     single { SessionStore(get()) }
     single { VideoPlayerFactory(get(), get()) }
+    single { com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory(androidContext(), get()) }
     single { MediaImageRequestFactory(androidContext(), get()) }
 
     viewModelOf(::SessionViewModel)

@@ -14,19 +14,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,9 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem as Media3Item
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
@@ -54,9 +45,6 @@ import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
-import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import org.koin.compose.koinInject
 
 internal const val VideoPlaybackSurfaceTestTag = "video_playback_surface"
@@ -84,162 +72,27 @@ internal fun VideoPlaybackSurface(
     val player = remember(item.mediaId, sources) {
         createPlayer(context)
     }
-    val session = remember(item.mediaId, sources) {
-        VideoPlaybackSession(sources.primary, sources.fallback)
-    }
-    var playbackState by remember(item.mediaId, sources) {
-        mutableStateOf(session.state)
-    }
     val scope = rememberCoroutineScope()
-    val vodClientId = remember(session) { java.util.UUID.randomUUID().toString() }
-    fun discoverQualities() = scope.async(start = CoroutineStart.LAZY) {
-        val remote = sources.fallback ?: sources.primary.takeIf { it.startsWith("https://memories.invalid/") }
-        if (remote == null) emptyList() else try {
-            playerFactory.qualities(remote, vodClientId)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: java.io.IOException) {
-            emptyList()
-        } catch (_: kotlinx.serialization.SerializationException) {
-            emptyList()
-        }
-    }
-    var qualities by remember(session) { mutableStateOf(discoverQualities()) }
+    val controller = remember(player) { VideoPlaybackController(player, sources, playerFactory, scope) }
+    val playbackState = controller.state
+    val dispatch = controller::dispatch
     val fullscreenChanged by rememberUpdatedState(onFullscreenChanged)
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
     var controlsHeight by remember { mutableStateOf(0.dp) }
 
-    var sourceGeneration by remember(session) { mutableIntStateOf(0) }
-
-    fun applyEffect(effect: VideoPlaybackEffect?) {
-        when (effect) {
-            is VideoPlaybackEffect.PrepareAndPlay -> {
-                sourceGeneration++
-                qualities.start()
-                player.playWhenReady = effect.playWhenReady
-                player.setMediaItem(Media3Item.fromUri(effect.contentUri), effect.positionMillis)
-                player.prepare()
-                player.playWhenReady = effect.playWhenReady
-            }
-
-            is VideoPlaybackEffect.SilentSeek -> {
-                player.pause()
-                player.volume = 0f
-                if (effect.prepareUri != null) {
-                    sourceGeneration++
-                    qualities.start()
-                    player.setMediaItem(Media3Item.fromUri(effect.prepareUri), effect.positionMillis)
-                    player.prepare()
-                } else player.seekTo(effect.positionMillis)
-            }
-            is VideoPlaybackEffect.FinishScrub -> {
-                player.volume = effect.volume
-                player.playWhenReady = effect.playWhenReady
-            }
-            VideoPlaybackEffect.Play -> player.play()
-            VideoPlaybackEffect.ReplayFromStart -> {
-                player.seekTo(0L)
-                player.play()
-            }
-            VideoPlaybackEffect.Pause -> player.pause()
-            VideoPlaybackEffect.PauseAndRelease -> {
-                player.pause()
-                player.release()
-            }
-            is VideoPlaybackEffect.SeekTo -> player.seekTo(effect.positionMillis)
-            is VideoPlaybackEffect.SetVolume -> player.volume = effect.volume
-            null -> Unit
-        }
-    }
-
-    fun dispatch(input: VideoPlaybackInput) {
-        if (input == VideoPlaybackInput.Retry ||
-            (input == VideoPlaybackInput.Play && session.state.phase == VideoPlaybackPhase.Error)
-        ) {
-            qualities.cancel()
-            qualities = discoverQualities()
-        }
-        val effect = session.accept(input)
-        playbackState = session.state
-        applyEffect(effect)
-    }
-
-    SideEffect { scrubController?.sourceUri = session.sourceUri }
-
-    DisposableEffect(player, session, scrubController) {
-        scrubController?.dispatch = ::dispatch
-        onDispose { scrubController?.dispatch = null }
-    }
-
-    DisposableEffect(player, session) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                when (playbackState) {
-                    Player.STATE_IDLE -> Unit
-                    Player.STATE_BUFFERING -> dispatch(VideoPlaybackInput.PlayerBuffering)
-                    Player.STATE_READY -> dispatch(
-                        VideoPlaybackInput.PlayerReady(
-                            player.duration.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L,
-                        ),
-                    )
-                    Player.STATE_ENDED -> {
-                        player.duration
-                            .takeUnless { it == C.TIME_UNSET }
-                            ?.coerceAtLeast(0L)
-                            ?.let { dispatch(VideoPlaybackInput.PlayerPositionChanged(it)) }
-                        dispatch(VideoPlaybackInput.PlayerIsPlaying(false))
-                    }
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                dispatch(VideoPlaybackInput.PlayerIsPlaying(isPlaying))
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
-                val failure = error.toVideoPlaybackError()
-                val uri = player.currentMediaItem?.localConfiguration?.uri.toString()
-                if (failure != VideoPlaybackError.CannotPlay || !uri.startsWith("https://memories.invalid/original/")) {
-                    dispatch(VideoPlaybackInput.SourceFailed(failure))
-                    return
-                }
-                val generation = sourceGeneration
-                dispatch(VideoPlaybackInput.PlayerBuffering)
-                scope.launch {
-                    dispatch(VideoPlaybackInput.QualitiesLoaded(qualities.await()))
-                    if (!player.isReleased && generation == sourceGeneration) {
-                        dispatch(VideoPlaybackInput.SourceFailed(failure))
-                    }
-                }
-            }
-        }
-        player.addListener(listener)
+    DisposableEffect(controller) {
+        controller.start()
         onDispose {
-            qualities.cancel()
-            player.removeListener(listener)
-            applyEffect(session.accept(VideoPlaybackInput.Leave))
+            controller.close()
             fullscreenChanged(false)
         }
     }
-
-    LaunchedEffect(session, qualities, playbackState.phase != VideoPlaybackPhase.Poster) {
-        if (playbackState.phase != VideoPlaybackPhase.Poster) {
-            dispatch(VideoPlaybackInput.QualitiesLoaded(qualities.await()))
-        }
+    DisposableEffect(controller, scrubController) {
+        controller.bindScrub(scrubController)
+        onDispose { controller.bindScrub(null) }
     }
-
-    LaunchedEffect(player) {
-        while (isActive) {
-            if (player.playbackState == Player.STATE_READY && !session.state.isScrubbing) {
-                dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
-            }
-            delay(200L.milliseconds)
-        }
-    }
-
-    DisposableEffect(lifecycleOwner, player, session) {
+    DisposableEffect(lifecycleOwner, controller) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) dispatch(VideoPlaybackInput.Pause)
         }

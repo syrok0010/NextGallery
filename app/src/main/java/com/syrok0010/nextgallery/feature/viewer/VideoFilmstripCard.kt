@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,17 +16,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -41,9 +37,6 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
-import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import org.koin.compose.koinInject
 
 internal const val VideoFilmstripScreenWidths = 2f
@@ -64,22 +57,13 @@ internal fun VideoFilmstripCard(
     isScrolling: Boolean = false,
     onSeekFraction: (Float) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val factory: VideoPlayerFactory? = if (frameProvider == null &&
-        (!sourceUri.startsWith("content://") || fallbackUri != null)) koinInject() else null
-    val frameClientId = remember(item.mediaId) { java.util.UUID.randomUUID().toString() }
-    val provider = frameProvider ?: remember(context, factory, fallbackUri, frameClientId) {
-        val local = LocalVideoFrames(context)
-        if (factory == null) local else FallbackVideoFrames(
-            local = local,
-            remote = RemoteVideoFrames(context) { factory.mediaSourceFactory(context) },
-            fallbackUri = fallbackUri,
-            qualities = { uri -> factory.qualities(uri, frameClientId) },
-        )
+    val factory: VideoFramesFactory? = if (frameProvider == null) koinInject() else null
+    val provider = remember(item.mediaId, factory, frameProvider, fallbackUri) {
+        frameProvider ?: checkNotNull(factory).create(fallbackUri)
     }
-    val projection = remember(item.mediaId, sourceUri) { VideoFilmstripProjection<Bitmap>() }
-    var state by remember(projection) { mutableStateOf(projection.state) }
-    var retry by remember(projection) { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val loader = remember(item.mediaId, sourceUri, provider) { VideoFilmstripLoader(provider, sourceUri, scope) }
+    val state = loader.state
     val scrub by rememberUpdatedState(onScrub)
     val finish by rememberUpdatedState(onScrubFinished)
     val label = stringResource(R.string.video_filmstrip_description)
@@ -89,42 +73,12 @@ internal fun VideoFilmstripCard(
         VideoFilmstripPhase.Degraded -> R.string.video_filmstrip_degraded
     })
 
-    LaunchedEffect(projection, provider, retry) {
-        projection.retry()
-        state = projection.state
-        try {
-            provider.frames(sourceUri).collect { event ->
-                when (event) {
-                    is VideoFrameEvent.Duration -> projection.durationKnown(event.millis)
-                    is VideoFrameEvent.Frame -> projection.frameReady(event.index, event.bitmap)
-                }
-                state = projection.state
-            }
-            projection.finished()
-        } catch (_: TimeoutCancellationException) {
-            projection.failed()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: java.io.IOException) {
-            projection.failed()
-        } catch (_: kotlinx.serialization.SerializationException) {
-            projection.failed()
-        } catch (_: RuntimeException) {
-            projection.failed()
-        }
-        state = projection.state
+    DisposableEffect(loader) {
+        loader.retry()
+        onDispose { loader.close(); finish() }
     }
-    DisposableEffect(projection) { onDispose { finish() } }
-
-    var wasScrolling by remember(projection) { mutableStateOf(false) }
-    LaunchedEffect(projection, fraction, isScrolling) {
-        if (isScrolling || wasScrolling) {
-            projection.scrub(fraction, SystemClock.uptimeMillis(), finished = !isScrolling)?.let {
-                scrub(it, !isScrolling)
-            }
-            if (!isScrolling) finish()
-        }
-        wasScrolling = isScrolling
+    LaunchedEffect(loader, fraction, isScrolling) {
+        loader.scroll(fraction, isScrolling, SystemClock.uptimeMillis(), scrub, finish)
     }
 
     Box(modifier) {
@@ -133,7 +87,7 @@ internal fun VideoFilmstripCard(
             stateDescription = phaseLabel
             progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
             setProgress { value ->
-                projection.scrub(value, SystemClock.uptimeMillis(), finished = true)?.let {
+                loader.seek(value, SystemClock.uptimeMillis())?.let {
                     onSeekFraction(value.coerceIn(0f, 1f))
                     scrub(it, true)
                     true
@@ -151,7 +105,7 @@ internal fun VideoFilmstripCard(
             }
         }
         if (state.phase == VideoFilmstripPhase.Degraded) {
-            TextButton(onClick = { retry++ }, modifier = Modifier.align(Alignment.TopStart)
+            TextButton(onClick = loader::retry, modifier = Modifier.align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.8f)).testTag(VideoFilmstripRetryTestTag)) {
                 Text(stringResource(R.string.video_filmstrip_retry), color = Color.White)
             }
