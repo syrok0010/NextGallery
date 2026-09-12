@@ -28,8 +28,8 @@ internal fun VideoFullscreenEffect(isFullscreen: Boolean) {
         }
         onDispose {
             if (isFullscreen) {
-                previousOrientation?.let { activity?.requestedOrientation = it }
-                previousBehavior?.let { controller?.systemBarsBehavior = it }
+                previousOrientation?.let { activity.requestedOrientation = it }
+                previousBehavior?.let { controller.systemBarsBehavior = it }
                 if (insets?.isVisible(WindowInsetsCompat.Type.statusBars()) != false) {
                     controller?.show(WindowInsetsCompat.Type.statusBars())
                 }

@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.activity.compose.BackHandler
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -55,6 +56,9 @@ internal fun rememberViewerPlaybackState(
             VideoPlaybackController(video.mediaId, createPlayer(context), factory.sources(video.assetRef), factory, scope)
         }
     }
+    val fullscreen = state.current?.state?.isFullscreen == true
+    BackHandler(enabled = fullscreen) { state.current?.dispatch(VideoPlaybackInput.ExitFullscreen) }
+    VideoFullscreenEffect(fullscreen)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(state, item?.mediaId, item?.assetRef, item?.isVideo) {
         state.select(item)

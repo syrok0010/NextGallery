@@ -37,6 +37,12 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import java.util.Locale
 
+internal const val VideoPlaybackPlayPauseTestTag = "video_playback_play_pause"
+internal const val VideoPlaybackControlsPlayPauseTestTag = "video_playback_controls_play_pause"
+internal const val VideoPlaybackSeekTestTag = "video_playback_seek"
+internal const val VideoPlaybackMuteTestTag = "video_playback_mute"
+internal const val VideoPlaybackFullscreenTestTag = "video_playback_fullscreen"
+
 @Composable
 internal fun VideoPlaybackCenterAction(
     phase: VideoPlaybackPhase,

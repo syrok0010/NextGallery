@@ -6,10 +6,12 @@ import android.graphics.Gainmap
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -67,6 +69,37 @@ class MediaDetailScreenTest {
         rule.onRoot().performTouchInput { swipeDown() }
         rule.waitForIdle()
         rule.runOnIdle { assertEquals(item, closed) }
+    }
+
+    @Test
+    fun dismissHidesAllVideoControlsAndCancellationRestoresThem() {
+        showViewer(listOf(mediaItem("video", isVideo = true)), tileBounds = null, onClose = {})
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onRoot().performTouchInput {
+            down(Offset(center.x, height * 0.3f))
+            moveBy(Offset(0f, 100f), delayMillis = 200)
+        }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.action_back)).assertDoesNotExist()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertDoesNotExist()
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertDoesNotExist()
+        rule.onRoot().performTouchInput { cancel() }
+        rule.waitForIdle()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(filmstripTileTestTag(0)).assertIsDisplayed()
+    }
+
+    @Test
+    fun videoTapTogglesSharedChromeAndKeepsPosterPlayAvailable() {
+        showViewer(listOf(mediaItem("video", isVideo = true)), tileBounds = null, onClose = {})
+        rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertDoesNotExist()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertIsDisplayed()
     }
 
     @Test

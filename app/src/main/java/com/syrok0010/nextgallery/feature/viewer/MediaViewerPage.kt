@@ -1,7 +1,11 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import android.os.Build
-import androidx.compose.foundation.background
+import androidx.annotation.OptIn
+import androidx.compose.ui.platform.testTag
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.compose.ContentFrame
+import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -9,9 +13,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -23,17 +24,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
-import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
@@ -45,6 +42,9 @@ import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
 import org.koin.compose.koinInject
 
+internal const val VideoPlaybackSurfaceTestTag = "video_playback_surface"
+
+@OptIn(UnstableApi::class)
 @Composable
 internal fun MediaViewerPage(
     item: MediaItem,
@@ -54,14 +54,13 @@ internal fun MediaViewerPage(
     onToggleChrome: () -> Unit,
     onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
-    onFullscreenChanged: (Boolean) -> Unit = {},
-    controlsVisible: Boolean = true,
     playbackController: VideoPlaybackController? = null,
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .then(if (item.isVideo) Modifier.clickable(onClick = onToggleChrome) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         val contentSurfaceModifier = Modifier
@@ -84,36 +83,14 @@ internal fun MediaViewerPage(
             }
         }
 
-        if (item.isVideo) {
-            if (isCurrentPage) {
-                SideEffect(item.mediaId) {
-                    onActivePageStateChange(ActiveViewerPageState(hasHdr = false, canDragDown = true))
-                }
-            }
-
-            if (isCurrentPage && playbackController != null) {
-                VideoPlaybackSurface(
-                    item = item,
-                    modifier = Modifier.fillMaxSize(),
-                    controlsVisible = controlsVisible,
-                    controller = playbackController,
-                    contentModifier = contentSurfaceModifier
-                        .then(pageTransformModifier)
-                        .onGloballyPositioned { coordinates ->
-                            if (trackSurfaceBounds) onSurfaceBoundsChange(coordinates.boundsInRoot())
-                        },
-                    onToggleChrome = onToggleChrome,
-                    onFullscreenChanged = onFullscreenChanged,
-                )
-            } else Box(
-                modifier = contentSurfaceModifier
-                    .then(pageTransformModifier)
-                    .onGloballyPositioned { coordinates ->
-                        if (trackSurfaceBounds) {
-                            onSurfaceBoundsChange(coordinates.boundsInRoot())
-                        }
-                    },
-            ) {
+        Box(
+            modifier = contentSurfaceModifier
+                .then(pageTransformModifier)
+                .onGloballyPositioned { coordinates ->
+                    if (trackSurfaceBounds) onSurfaceBoundsChange(coordinates.boundsInRoot())
+                },
+        ) {
+            if (item.isVideo || item.assetRef is MediaAssetRef.MemoriesFile) {
                 MediaAssetImage(
                     item = item,
                     purpose = MediaImagePurpose.DetailPreview,
@@ -121,14 +98,25 @@ internal fun MediaViewerPage(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(onClick = onToggleChrome),
-                )
-                VideoBadge(modifier = Modifier.align(Alignment.Center))
             }
+            if (item.isVideo && isCurrentPage && playbackController != null) {
+                Box(Modifier.fillMaxSize().testTag(VideoPlaybackSurfaceTestTag)) {
+                    if (playbackController.state.phase != VideoPlaybackPhase.Poster &&
+                        playbackController.state.phase != VideoPlaybackPhase.Error
+                    ) {
+                        ContentFrame(
+                            player = playbackController.player,
+                            surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        }
+
+        val activePageState = if (item.isVideo) {
+            ActiveViewerPageState(hasHdr = false, canDragDown = true)
         } else {
             val context = LocalContext.current
             val zoomableState = rememberZoomableState()
@@ -136,17 +124,6 @@ internal fun MediaViewerPage(
             var hasGainmap by remember(item.mediaId) { mutableStateOf(false) }
             val isZoomedOut by remember(zoomableState) {
                 derivedStateOf { (zoomableState.zoomFraction ?: 0f) <= 0.01f }
-            }
-
-            if (isCurrentPage) {
-                SideEffect(item.mediaId, hasGainmap, isZoomedOut) {
-                    onActivePageStateChange(
-                        ActiveViewerPageState(
-                            hasHdr = hasGainmap,
-                            canDragDown = isZoomedOut,
-                        ),
-                    )
-                }
             }
 
             val originalPlan = requestFactory.rememberPlan(item, MediaImagePurpose.Original)
@@ -162,26 +139,6 @@ internal fun MediaViewerPage(
                     .fillMaxSize()
                     .then(pageTransformModifier),
             ) {
-                Box(
-                    modifier = contentSurfaceModifier
-                        .align(Alignment.Center)
-                        .onGloballyPositioned { coordinates ->
-                            if (trackSurfaceBounds) {
-                                onSurfaceBoundsChange(coordinates.boundsInRoot())
-                            }
-                        },
-                ) {
-                    if (item.assetRef is MediaAssetRef.MemoriesFile) {
-                        MediaAssetImage(
-                            item = item,
-                            purpose = MediaImagePurpose.DetailPreview,
-                            contentDescription = item.displayName,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
-                }
-
                 ZoomableAsyncImage(
                     model = originalRequest,
                     contentDescription = item.displayName,
@@ -191,23 +148,14 @@ internal fun MediaViewerPage(
                     onClick = { onToggleChrome() },
                 )
             }
+            ActiveViewerPageState(hasHdr = hasGainmap, canDragDown = isZoomedOut)
+        }
+        if (isCurrentPage) {
+            SideEffect(item.mediaId, activePageState) {
+                onActivePageStateChange(activePageState)
+            }
         }
     }
-}
-
-@Composable
-private fun VideoBadge(modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(R.string.media_video_badge),
-        modifier = modifier
-            .background(
-                color = Color.Black.copy(alpha = 0.64f),
-                shape = MaterialTheme.shapes.small,
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        color = Color.White,
-        style = MaterialTheme.typography.labelLarge,
-    )
 }
 
 private fun Modifier.viewerSurfaceSize(

@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.viewer
 
 import org.koin.compose.koinInject
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
 import android.content.Context
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -455,7 +456,8 @@ class VideoPlaybackIntegrationTest {
                     val playback = rememberViewerPlaybackState(item,
                         createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } })
                     playback.current?.let { controller ->
-                        VideoPlaybackSurface(item, onToggleChrome = {}, controller = controller)
+                        TestVideoPage(item, controller)
+                        ViewerChrome(item, playback = controller, onBack = {}, filmstrip = {})
                     }
                     Filmstrip(listOf(item), 0, {},
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
@@ -519,7 +521,8 @@ class VideoPlaybackIntegrationTest {
                     val playback = rememberViewerPlaybackState(remote,
                         createPlayer = { factory.create(it).also { created -> player = created } })
                     playback.current?.let { controller ->
-                        VideoPlaybackSurface(remote, onToggleChrome = {}, controller = controller)
+                        TestVideoPage(remote, controller)
+                        ViewerChrome(remote, playback = controller, onBack = {}, filmstrip = {})
                     }
                     Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
@@ -630,6 +633,27 @@ private fun TestPlaybackSurface(
 ) {
     val playback = rememberViewerPlaybackState(item, createPlayer = createPlayer)
     playback.current?.let {
-        VideoPlaybackSurface(item, modifier, onToggleChrome = onToggleChrome, controller = it)
+        Box(modifier) {
+            TestVideoPage(item, it, onToggleChrome)
+            ViewerChrome(item, playback = it, onBack = {}, filmstrip = {}, modifier = Modifier.fillMaxSize())
+        }
     }
+}
+
+@Composable
+private fun TestVideoPage(
+    item: MediaItem,
+    controller: VideoPlaybackController,
+    onToggleChrome: () -> Unit = {},
+) {
+    MediaViewerPage(
+        item = item,
+        isCurrentPage = true,
+        surfaceTransform = ViewerSurfaceTransform(),
+        trackSurfaceBounds = false,
+        onToggleChrome = onToggleChrome,
+        onActivePageStateChange = {},
+        onSurfaceBoundsChange = {},
+        playbackController = controller,
+    )
 }
