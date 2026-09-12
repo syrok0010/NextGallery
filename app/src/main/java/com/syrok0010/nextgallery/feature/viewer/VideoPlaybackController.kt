@@ -33,7 +33,7 @@ internal class VideoPlaybackController(
     parentScope: CoroutineScope,
 ) : FilmstripPlayback {
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
-    private val session = VideoPlaybackSession(sources.primary, sources.fallback)
+    private val session = VideoPlaybackSession(sources.primary, sources.fallback, sources.remoteOriginal?.uri)
     var state by mutableStateOf(session.state)
         private set
     private var sourceUri by mutableStateOf(session.sourceUri)
@@ -44,7 +44,7 @@ internal class VideoPlaybackController(
     private var qualityObserver: Job? = null
 
     private fun discoverQualities() = scope.async(start = CoroutineStart.LAZY) {
-        val remote = sources.fallback ?: sources.primary.takeIf { it.startsWith("https://memories.invalid/") }
+        val remote = sources.remoteOriginal
         if (remote == null) emptyList() else try {
             playerFactory.qualities(remote, vodClientId)
         } catch (cancelled: CancellationException) {
@@ -140,8 +140,7 @@ internal class VideoPlaybackController(
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
             val failure = error.toVideoPlaybackError()
-            val uri = player.currentMediaItem?.localConfiguration?.uri.toString()
-            if (failure != VideoPlaybackError.CannotPlay || !uri.startsWith("https://memories.invalid/original/")) {
+            if (failure != VideoPlaybackError.CannotPlay || !session.isRemoteOriginal) {
                 dispatch(VideoPlaybackInput.SourceFailed(failure))
                 return
             }

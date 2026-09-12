@@ -15,7 +15,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.exoplayer.ExoPlayer
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
-import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 import org.koin.compose.koinInject
 
 /** One active player shared by the page and filmstrip; adjacent pages own no players. */
@@ -53,7 +52,7 @@ internal fun rememberViewerPlaybackState(
     val scope = rememberCoroutineScope()
     val state = remember(context, factory) {
         ViewerPlaybackState { video ->
-            VideoPlaybackController(video.mediaId, createPlayer(context), VideoSources.from(video.assetRef), factory, scope)
+            VideoPlaybackController(video.mediaId, createPlayer(context), factory.sources(video.assetRef), factory, scope)
         }
     }
     val lifecycleOwner = LocalLifecycleOwner.current

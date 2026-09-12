@@ -67,11 +67,11 @@ class VideoFilmstripProjectionTest {
     }
 
     @Test fun `scrub pauses playback and retains mute after release`() {
-        val session = VideoPlaybackSession("content://video/1", "https://memories.invalid/original/1")
+        val session = VideoPlaybackSession("content://video/1", "https://cloud.example/nextcloud/apps/memories/api/stream/1")
         session.accept(VideoPlaybackInput.Play)
         session.accept(VideoPlaybackInput.ToggleMute)
         session.accept(VideoPlaybackInput.ScrubTo(4000))
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/1", 4000, false),
+        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://cloud.example/nextcloud/apps/memories/api/stream/1", 4000, false),
             session.accept(VideoPlaybackInput.PlayerFailed))
         assertEquals(VideoPlaybackEffect.FinishScrub(false, 0f), session.accept(VideoPlaybackInput.EndScrub))
         session.accept(VideoPlaybackInput.ScrubTo(6000))

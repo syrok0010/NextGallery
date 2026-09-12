@@ -14,11 +14,10 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 internal class MemoriesVideoDiscovery(private val client: OkHttpClient) {
-    suspend fun qualities(remoteUri: String, clientId: String): List<RemoteVideoQuality> {
-        val config = json.decodeFromString<VideoConfigDto>(read("https://memories.invalid/config"))
+    suspend fun qualities(original: RemoteVideoOriginal, clientId: String): List<RemoteVideoQuality> {
+        val master = original.masterPlaylist(clientId)
+        val config = json.decodeFromString<VideoConfigDto>(read(original.configurationUri))
         if (config.vodDisable) return emptyList()
-        val fileId = remoteUri.substringAfterLast('/')
-        val master = "https://memories.invalid/vod/$clientId/$fileId/index.m3u8"
         return MemoriesVideoManifest.qualities(master, read(master))
     }
 

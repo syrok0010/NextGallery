@@ -10,12 +10,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FallbackVideoFramesTest {
-    private val original = "https://memories.invalid/original/42"
+    private val original = "https://cloud.example/nextcloud/apps/memories/api/stream/42"
 
     @Test fun `readable local frames never request remote or capabilities`() = runBlocking {
         val provider = FallbackVideoFrames(
             local = VideoFrameProvider { flow { emit(VideoFrameEvent.Duration(12_000)) } },
-            remote = VideoFrameProvider { error("Remote requested") }, fallbackUri = original,
+            remote = VideoFrameProvider { error("Remote requested") }, fallbackUri = original, originalUri = original,
             qualities = { error("Discovery requested") },
         )
         assertEquals(listOf(VideoFrameEvent.Duration(12_000)), provider.frames("content://local/42").toList())
@@ -30,7 +30,7 @@ class FallbackVideoFramesTest {
                 requests += uri
                 if (offline) throw IOException("Offline")
                 emit(VideoFrameEvent.Duration(12_000))
-            } }, fallbackUri = original, qualities = { error("Network errors must not transcode") },
+            } }, fallbackUri = original, originalUri = original, qualities = { error("Network errors must not transcode") },
         )
         try { provider.frames("content://local/42").toList(); fail() } catch (_: IOException) { }
         offline = false
@@ -40,13 +40,13 @@ class FallbackVideoFramesTest {
 
     @Test fun `unsupported original uses only discovered HLS and stops after HLS error`() = runBlocking {
         val requests = mutableListOf<String>()
-        val hls = "https://memories.invalid/vod/client123/42/index.m3u8"
+        val hls = "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8"
         val provider = FallbackVideoFrames(
             local = VideoFrameProvider { error("Local requested") },
             remote = VideoFrameProvider { uri -> flow {
                 requests += uri
                 throw UnsupportedVideoFrames(IOException("Unsupported format"))
-            } }, fallbackUri = null,
+            } }, fallbackUri = null, originalUri = original,
             qualities = { listOf(RemoteVideoQuality("Auto", hls)) },
         )
         try { provider.frames(original).toList(); fail() } catch (_: UnsupportedVideoFrames) { }
@@ -56,7 +56,7 @@ class FallbackVideoFramesTest {
     @Test fun `cancelled local extraction never starts remote fallback`() = runBlocking {
         val provider = FallbackVideoFrames(
             local = VideoFrameProvider { flow { throw CancellationException("Page left") } },
-            remote = VideoFrameProvider { error("Remote requested") }, fallbackUri = original,
+            remote = VideoFrameProvider { error("Remote requested") }, fallbackUri = original, originalUri = original,
             qualities = { error("Discovery requested") },
         )
         try { provider.frames("content://local/42").toList(); fail() } catch (_: CancellationException) { }

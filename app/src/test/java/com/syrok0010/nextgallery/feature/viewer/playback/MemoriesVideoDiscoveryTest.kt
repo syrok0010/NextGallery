@@ -14,13 +14,13 @@ class MemoriesVideoDiscoveryTest {
     @Test fun `disabled VOD never requests transcode`() = runBlocking {
         val requests = mutableListOf<Request>()
         val discovery = discovery(requests, true)
-        assertTrue(discovery.qualities("https://memories.invalid/original/42", "client123").isEmpty())
+        assertTrue(discovery.qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123").isEmpty())
         assertEquals(listOf("/nextcloud/apps/memories/api/config"), requests.map { it.url.encodedPath })
     }
 
     @Test fun `config and manifest use authenticated subpath contract`() = runBlocking {
         val requests = mutableListOf<Request>()
-        val result = discovery(requests, false).qualities("https://memories.invalid/original/42", "client123")
+        val result = discovery(requests, false).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123")
         assertEquals(listOf("Auto", "360p"), result.map { it.label })
         assertEquals("/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8", requests.last().url.encodedPath)
         requests.forEach { assertEquals(Credentials.basic("alice", "secret"), it.header("Authorization")) }
@@ -28,7 +28,7 @@ class MemoriesVideoDiscoveryTest {
 
     @Test fun `unavailable transcode surfaces failure`() {
         assertThrows(IOException::class.java) {
-            runBlocking { discovery(mutableListOf(), false, 403).qualities("https://memories.invalid/original/42", "client123") }
+            runBlocking { discovery(mutableListOf(), false, 403).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123") }
         }
     }
 

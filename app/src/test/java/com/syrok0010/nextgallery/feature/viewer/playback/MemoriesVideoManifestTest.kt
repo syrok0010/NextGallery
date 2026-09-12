@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MemoriesVideoManifestTest {
-    private val master = "https://memories.invalid/vod/client123/42/index.m3u8"
+    private val master = "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8"
 
     @Test fun `qualities come only from manifest including original and portrait resolution`() {
         val result = MemoriesVideoManifest.qualities(master, """
@@ -21,7 +21,7 @@ class MemoriesVideoManifestTest {
 
     @Test fun `empty media playlists and untrusted variants do not invent qualities`() {
         assertTrue(MemoriesVideoManifest.qualities(master, "#EXTM3U\n#EXTINF:12,\nfile.ts").isEmpty())
-        for (uri in listOf("https://evil.example/360p.m3u8", "../360p.m3u8", "http://memories.invalid/vod/client123/42/360p.m3u8")) {
+        for (uri in listOf("https://evil.example/360p.m3u8", "../360p.m3u8", "http://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/360p.m3u8")) {
             assertTrue(MemoriesVideoManifest.qualities(master, "#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=640x360\n$uri").isEmpty())
         }
         assertThrows(IOException::class.java) { MemoriesVideoManifest.qualities(master, "<html>error</html>") }

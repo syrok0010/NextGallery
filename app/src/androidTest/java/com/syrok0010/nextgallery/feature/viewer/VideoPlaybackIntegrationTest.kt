@@ -485,8 +485,9 @@ class VideoPlaybackIntegrationTest {
         fixture.hls = true
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         val provider = RemoteVideoFrames(rule.activity) { factory.mediaSourceFactory(rule.activity) }
-        val originalUri = "https://memories.invalid/original/42"
-        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(originalUri, "framesclient") }
+        val original = checkNotNull(factory.sources(remote.assetRef).remoteOriginal)
+        val originalUri = original.uri
+        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(original, "framesclient") }
         val hlsUri = qualities.first { it.label == "Auto" }.uri
         for (uri in listOf(originalUri, hlsUri)) {
             val frames = kotlinx.coroutines.runBlocking { provider.frames(uri).toList() }
@@ -496,7 +497,7 @@ class VideoPlaybackIntegrationTest {
             assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
         }
         val corruptLocal = sample(corrupt = true)
-        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri) { qualities }
+        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri, originalUri) { qualities }
         val recovered = kotlinx.coroutines.runBlocking {
             ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
         }

@@ -66,11 +66,20 @@ play/pause intent, mute и fullscreen. `MediaId` и pager sequence не меня
 Для original явный retry начинает выбор источников заново. Несовместимый remote
 original допускает ещё один переход к обнаруженному Memories HLS.
 
-UI получает только логическую ссылку на remote file ID. `OkHttpDataSource`
-использует общий `NextcloudTransport`; interceptor разрешает ссылку в Memories
-`/stream/{fileid}` и берёт актуальные credentials из `SessionStore` на каждый
-запрос, включая range и retry. Передача готового URL с auth headers через Compose
-отклонена: она связывает UI с transport и удерживает устаревший app password.
+В каталоге медиа остаются только asset identifiers. Фабрика playback при создании
+сессии строит реальные URL текущего Nextcloud: original, config и HLS master.
+`RemoteVideoOriginal` хранит file ID явно; discovery не извлекает его из URL,
+а playback и frame fallback сравнивают источник с известным original данной сессии.
+Media3 получает реальные адреса и сам разрешает относительные HLS-плейлисты и сегменты.
+
+`OkHttpDataSource` использует общий `NextcloudTransport`; interceptor проверяет
+scheme, host, port и путь Memories API текущего аккаунта и добавляет актуальные
+credentials из `SessionStore` на каждый запрос, включая range и retry.
+URL другого сервера отклоняется до отправки credentials. Передача auth headers
+через Compose отклонена: она удерживает устаревший app password. Служебные URI
+с подставным hostname отклонены: viewer закрывается при выходе из аккаунта,
+поэтому динамическая подмена адреса сервера не оправдывает отдельный протокол ссылок.
+Смена адреса сервера требует новой playback-сессии; старые URL не перенаправляются.
 Предварительное скачивание целого original отклонено из-за задержки запуска и
 лишнего трафика; byte ranges backend позволяют обычный streaming и seek.
 

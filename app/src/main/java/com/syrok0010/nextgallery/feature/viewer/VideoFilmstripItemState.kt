@@ -24,9 +24,9 @@ internal class VideoFilmstripItemState(
     private val provider: VideoFrameProvider,
     private val playback: FilmstripPlayback,
     private val scope: CoroutineScope,
+    private val sources: VideoSources = VideoSources.from(item.assetRef),
     private val uptimeMillis: () -> Long = SystemClock::uptimeMillis,
 ) {
-    private val sources = VideoSources.from(item.assetRef)
     private var source: String? = null
     private var loader by mutableStateOf<VideoFilmstripLoader?>(null)
     val frames get() = loader?.state ?: VideoFilmstripState()

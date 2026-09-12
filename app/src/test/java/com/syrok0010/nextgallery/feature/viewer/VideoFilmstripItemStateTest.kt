@@ -40,7 +40,7 @@ class VideoFilmstripItemStateTest {
         state.update(expanded)
         runCurrent()
         assertEquals(listOf("content://filmstrip/video"), requests)
-        activeSource = "https://memories.invalid/360p.m3u8"
+        activeSource = "https://cloud.example/apps/memories/api/video/transcode/client123/42/360p.m3u8"
         state.update(expanded)
         runCurrent()
         assertEquals(1, cancellations)

@@ -5,12 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoQualityTest {
-    private val remote = "https://memories.invalid/original/42"
-    private val auto = RemoteVideoQuality("Auto", "https://memories.invalid/vod/client123/42/index.m3u8")
-    private val low = RemoteVideoQuality("360p", "https://memories.invalid/vod/client123/42/360p.m3u8")
+    private val remote = "https://cloud.example/nextcloud/apps/memories/api/stream/42"
+    private val auto = RemoteVideoQuality("Auto", "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8")
+    private val low = RemoteVideoQuality("360p", "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/360p.m3u8")
 
     @Test fun `remote decode failure tries HLS once and retry preserves intent and position`() {
-        val session = VideoPlaybackSession(remote)
+        val session = VideoPlaybackSession(remote, remoteUri = remote)
         session.accept(VideoPlaybackInput.QualitiesLoaded(listOf(auto, low)))
         session.accept(VideoPlaybackInput.Play)
         session.accept(VideoPlaybackInput.PlayerPositionChanged(4000))
@@ -39,7 +39,7 @@ class VideoQualityTest {
     }
 
     @Test fun `unavailable VOD and local only expose no quality menu`() {
-        for (session in listOf(VideoPlaybackSession(remote), VideoPlaybackSession("content://video/42"))) {
+        for (session in listOf(VideoPlaybackSession(remote, remoteUri = remote), VideoPlaybackSession("content://video/42"))) {
             session.accept(VideoPlaybackInput.QualitiesLoaded(emptyList()))
             assertTrue(session.state.qualities.isEmpty())
             assertNull(session.accept(VideoPlaybackInput.SelectQuality(low)))
@@ -50,7 +50,7 @@ class VideoQualityTest {
 
     @Test fun `authentication and network failures never try HLS`() {
         for (error in listOf(VideoPlaybackError.AuthenticationRequired, VideoPlaybackError.RemoteUnavailable)) {
-            val session = VideoPlaybackSession(remote)
+            val session = VideoPlaybackSession(remote, remoteUri = remote)
             session.accept(VideoPlaybackInput.QualitiesLoaded(listOf(auto)))
             session.accept(VideoPlaybackInput.Play)
             assertNull(session.accept(VideoPlaybackInput.SourceFailed(error)))
@@ -60,7 +60,7 @@ class VideoQualityTest {
 
     @Test fun `HLS authentication and network errors retain their category and retry intent`() {
         for (error in listOf(VideoPlaybackError.AuthenticationRequired, VideoPlaybackError.RemoteUnavailable)) {
-            val session = VideoPlaybackSession(remote)
+            val session = VideoPlaybackSession(remote, remoteUri = remote)
             session.accept(VideoPlaybackInput.QualitiesLoaded(listOf(auto)))
             session.accept(VideoPlaybackInput.Play)
             session.accept(VideoPlaybackInput.PlayerPositionChanged(4500))

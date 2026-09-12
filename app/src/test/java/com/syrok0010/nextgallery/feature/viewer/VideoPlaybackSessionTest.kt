@@ -180,7 +180,7 @@ class VideoPlaybackSessionTest {
         assertEquals(VideoPlaybackState(), VideoPlaybackSession("content://media/video/42").state)
     }
     @Test fun `local failure falls back once preserving position mute fullscreen and paused intent`() {
-        val session = VideoPlaybackSession("content://local", "https://memories.invalid/original/42")
+        val session = VideoPlaybackSession("content://local", "https://cloud.example/nextcloud/apps/memories/api/stream/42")
         assertEquals(VideoPlaybackEffect.PrepareAndPlay("content://local"), session.accept(VideoPlaybackInput.Play))
         session.accept(VideoPlaybackInput.PlayerReady(10_000))
         session.accept(VideoPlaybackInput.SeekTo(2_000))
@@ -188,7 +188,7 @@ class VideoPlaybackSessionTest {
         session.accept(VideoPlaybackInput.EnterFullscreen)
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(
-            VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42", 2_000, false),
+            VideoPlaybackEffect.PrepareAndPlay("https://cloud.example/nextcloud/apps/memories/api/stream/42", 2_000, false),
             session.accept(VideoPlaybackInput.PlayerFailed),
         )
         assertEquals(true, session.state.isMuted)
@@ -197,15 +197,15 @@ class VideoPlaybackSessionTest {
         assertEquals(VideoPlaybackError.RemoteUnavailable, session.state.error)
         assertEquals(VideoPlaybackPhase.Error, session.state.phase)
         assertEquals(VideoPlaybackEffect.PrepareAndPlay("content://local"), session.accept(VideoPlaybackInput.Retry))
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42"), session.accept(VideoPlaybackInput.PlayerFailed))
+        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://cloud.example/nextcloud/apps/memories/api/stream/42"), session.accept(VideoPlaybackInput.PlayerFailed))
     }
 
     @Test fun `cloud authentication error stays terminal until explicit retry`() {
-        val session = VideoPlaybackSession("https://memories.invalid/original/42")
+        val session = VideoPlaybackSession("https://cloud.example/nextcloud/apps/memories/api/stream/42", remoteUri = "https://cloud.example/nextcloud/apps/memories/api/stream/42")
         session.accept(VideoPlaybackInput.Play)
         assertEquals(null, session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.AuthenticationRequired)))
         assertEquals(VideoPlaybackError.AuthenticationRequired, session.state.error)
         assertEquals(false, session.state.playRequested)
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42"), session.accept(VideoPlaybackInput.Retry))
+        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://cloud.example/nextcloud/apps/memories/api/stream/42"), session.accept(VideoPlaybackInput.Retry))
     }
 }

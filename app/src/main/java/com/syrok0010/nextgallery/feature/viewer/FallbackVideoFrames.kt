@@ -11,6 +11,7 @@ internal class FallbackVideoFrames(
     private val local: VideoFrameProvider,
     private val remote: VideoFrameProvider,
     private val fallbackUri: String?,
+    private val originalUri: String?,
     private val qualities: suspend (String) -> List<RemoteVideoQuality>,
 ) : VideoFrameProvider {
     override fun frames(uri: String): Flow<VideoFrameEvent> = flow {
@@ -30,7 +31,7 @@ internal class FallbackVideoFrames(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: UnsupportedVideoFrames) {
-            if (!remoteUri.startsWith("https://memories.invalid/original/")) throw failure
+            if (remoteUri != originalUri) throw failure
             val hls = qualities(remoteUri).firstOrNull { it.label == "Auto" } ?: throw failure
             emitAll(remote.frames(hls.uri))
         }

@@ -38,8 +38,9 @@ internal fun VideoFilmstripItem(
     val factory: VideoFramesFactory? = if (frameProvider == null) koinInject() else null
     val scope = rememberCoroutineScope()
     val state = remember(item.mediaId, item.assetRef, factory, frameProvider, playback) {
-        val provider = frameProvider ?: checkNotNull(factory).create(VideoSources.from(item.assetRef).fallback)
-        VideoFilmstripItemState(item, provider, playback, scope)
+        val sources = factory?.sources(item.assetRef) ?: VideoSources.from(item.assetRef)
+        val provider = frameProvider ?: checkNotNull(factory).create(sources)
+        VideoFilmstripItemState(item, provider, playback, scope, sources)
     }
     val activeSource = playback.sourceFor(item.mediaId)
     LaunchedEffect(state, placement, activeSource) { state.update(placement) }

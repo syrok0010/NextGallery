@@ -95,12 +95,13 @@ internal sealed interface VideoPlaybackEffect {
 internal class VideoPlaybackSession(
     private val contentUri: String,
     private val fallbackUri: String? = null,
+    private val remoteUri: String? = fallbackUri,
 ) {
     private var usingFallback = false
     private var hlsAttempted = false
     private var currentUri = contentUri
     val sourceUri: String get() = currentUri
-    private val remoteUri = fallbackUri ?: contentUri.takeIf { it.startsWith("https://memories.invalid/original/") }
+    val isRemoteOriginal: Boolean get() = remoteUri != null && currentUri == remoteUri
 
     var state: VideoPlaybackState = VideoPlaybackState()
         private set
