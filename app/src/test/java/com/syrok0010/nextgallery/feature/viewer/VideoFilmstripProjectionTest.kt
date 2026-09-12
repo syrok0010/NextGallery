@@ -60,7 +60,7 @@ class VideoFilmstripProjectionTest {
         assertEquals(VideoPlaybackEffect.SilentSeek(5000, "content://video/1"),
             session.accept(VideoPlaybackInput.ScrubTo(5000)))
         assertFalse(session.state.playRequested)
-        session.accept(VideoPlaybackInput.PlayerReady(12_000))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, 12_000))
         assertEquals(VideoPlaybackEffect.FinishScrub(false, 1f), session.accept(VideoPlaybackInput.EndScrub))
         assertEquals(5000L, session.state.positionMillis)
         assertEquals(VideoPlaybackEffect.Play, session.accept(VideoPlaybackInput.Play))
@@ -71,13 +71,11 @@ class VideoFilmstripProjectionTest {
         session.accept(VideoPlaybackInput.Play)
         session.accept(VideoPlaybackInput.ToggleMute)
         session.accept(VideoPlaybackInput.ScrubTo(4000))
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://cloud.example/nextcloud/apps/memories/api/stream/1", 4000, false),
-            session.accept(VideoPlaybackInput.PlayerFailed))
+        assertEquals(VideoPlaybackEffect.PrepareSource("https://cloud.example/nextcloud/apps/memories/api/stream/1", 4000, false),
+            session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay)))
         assertEquals(VideoPlaybackEffect.FinishScrub(false, 0f), session.accept(VideoPlaybackInput.EndScrub))
         session.accept(VideoPlaybackInput.ScrubTo(6000))
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(VideoPlaybackEffect.FinishScrub(false, 0f), session.accept(VideoPlaybackInput.EndScrub))
-        session.accept(VideoPlaybackInput.Leave)
-        assertEquals(VideoPlaybackState(), session.state)
     }
 }

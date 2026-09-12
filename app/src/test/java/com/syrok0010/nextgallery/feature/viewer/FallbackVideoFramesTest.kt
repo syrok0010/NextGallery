@@ -47,7 +47,7 @@ class FallbackVideoFramesTest {
                 requests += uri
                 throw UnsupportedVideoFrames(IOException("Unsupported format"))
             } }, fallbackUri = null, originalUri = original,
-            qualities = { listOf(RemoteVideoQuality("Auto", hls)) },
+            qualities = { listOf(RemoteVideoQuality("Auto", hls, isAdaptive = true)) },
         )
         try { provider.frames(original).toList(); fail() } catch (_: UnsupportedVideoFrames) { }
         assertEquals(listOf(original, hls), requests)

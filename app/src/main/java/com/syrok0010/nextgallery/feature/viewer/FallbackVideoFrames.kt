@@ -32,7 +32,7 @@ internal class FallbackVideoFrames(
             throw cancelled
         } catch (failure: UnsupportedVideoFrames) {
             if (remoteUri != originalUri) throw failure
-            val hls = qualities(remoteUri).firstOrNull { it.label == "Auto" } ?: throw failure
+            val hls = qualities(remoteUri).firstOrNull { it.isAdaptive } ?: throw failure
             emitAll(remote.frames(hls.uri))
         }
     }

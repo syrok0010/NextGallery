@@ -8,7 +8,7 @@ import androidx.media3.exoplayer.hls.playlist.HlsPlaylistParser
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-internal data class RemoteVideoQuality(val label: String, val uri: String)
+internal data class RemoteVideoQuality(val label: String, val uri: String, val isAdaptive: Boolean = false)
 
 /** Memories names max.m3u8 Original; Direct is the untouched /stream source. */
 @OptIn(UnstableApi::class)
@@ -36,7 +36,8 @@ internal object MemoriesVideoManifest {
         return if (variants.isEmpty()) emptyList() else listOf(
             RemoteVideoQuality(
                 "Auto",
-                masterUri
+                masterUri,
+                isAdaptive = true,
             )
         ) + variants
     }

@@ -61,7 +61,6 @@ internal fun VideoPlaybackCenterAction(
             }
         }
         VideoPlaybackPhase.Poster,
-        VideoPlaybackPhase.Ready,
         VideoPlaybackPhase.Paused,
         VideoPlaybackPhase.Error,
         -> {
@@ -151,7 +150,7 @@ internal fun VideoPlaybackControls(
                 disabledActiveTrackColor = Color.White.copy(alpha = 0.38f),
                 disabledInactiveTrackColor = Color.White.copy(alpha = 0.18f),
             ),
-            enabled = durationMillis > 0L && state.phase in setOf(VideoPlaybackPhase.Ready, VideoPlaybackPhase.Playing, VideoPlaybackPhase.Paused),
+            enabled = durationMillis > 0L && state.phase in setOf(VideoPlaybackPhase.Playing, VideoPlaybackPhase.Paused),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VideoPlaybackSeekTestTag)

@@ -132,10 +132,7 @@ internal fun VideoPlaybackSurface(
                     dispatch(VideoPlaybackInput.Play)
                 }
             },
-            onSelectQuality = { quality ->
-                dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
-                dispatch(VideoPlaybackInput.SelectQuality(quality))
-            },
+            onSelectQuality = controller::selectQuality,
             onSeek = { positionMillis -> dispatch(VideoPlaybackInput.SeekTo(positionMillis)) },
             onToggleMute = { dispatch(VideoPlaybackInput.ToggleMute) },
             onToggleFullscreen = {
