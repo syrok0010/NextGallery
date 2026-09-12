@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 data class LoginScreenUiState(
     val login: LoginUiState = LoginUiState(),
@@ -52,10 +53,13 @@ class LoginViewModel(
         attemptJob = viewModelScope.launch {
             try {
                 val session = gateway.startLogin(server)
-                setAttempt(LoginAttempt.Awaiting(session), R.string.status_open_browser_confirm_login)
-                val result = withTimeoutOrNull(120_000) {
+                setAttempt(
+                    LoginAttempt.Awaiting(session),
+                    R.string.status_open_browser_confirm_login
+                )
+                val result = withTimeoutOrNull(120_000.milliseconds) {
                     while (true) {
-                        delay(2_000)
+                        delay(2_000.milliseconds)
                         when (val poll = gateway.pollLogin(session)) {
                             LoginPollResult.Pending -> status(R.string.status_login_not_confirmed_yet)
                             is LoginPollResult.Ready -> return@withTimeoutOrNull poll
@@ -70,7 +74,10 @@ class LoginViewModel(
                 }
                 when (result) {
                     is LoginPollResult.Ready -> {
-                        setAttempt(LoginAttempt.SavingCredentials, R.string.status_login_complete_loading_timeline)
+                        setAttempt(
+                            LoginAttempt.SavingCredentials,
+                            R.string.status_login_complete_loading_timeline
+                        )
                         try {
                             withContext(storageDispatcher) { credentialsStore.save(result.credentials) }
                         } catch (cancelled: CancellationException) {
@@ -82,12 +89,16 @@ class LoginViewModel(
                         sessionStore.signIn(result.credentials)
                         mutableState.value = LoginScreenUiState()
                     }
+
                     is LoginPollResult.Failed -> {
                         mutableState.update {
-                            it.copy(login = it.login.copy(attempt = LoginAttempt.Failed),
-                                message = AppMessageUiState(error = result.failure.toUiText()))
+                            it.copy(
+                                login = it.login.copy(attempt = LoginAttempt.Failed),
+                                message = AppMessageUiState(error = result.failure.toUiText())
+                            )
                         }
                     }
+
                     else -> fail(R.string.error_login_confirmation_timeout)
                 }
             } catch (cancelled: CancellationException) {
@@ -98,28 +109,43 @@ class LoginViewModel(
         }
     }
 
-    fun markLoginBrowserOpened() { markBrowserOpened() }
     fun reportLoginBrowserOpenFailure() {
         markBrowserOpened()
         mutableState.update { it.copy(message = AppMessageUiState(error = uiText(R.string.error_open_browser_failed))) }
     }
-    private fun markBrowserOpened() {
+
+    fun markBrowserOpened() {
         mutableState.update { state ->
             val awaiting = state.login.attempt as? LoginAttempt.Awaiting ?: return@update state
             state.copy(login = state.login.copy(attempt = awaiting.copy(browserOpened = true)))
         }
     }
+
     fun cancelLogin() {
         if (state.value.login.attempt == LoginAttempt.SavingCredentials) return
         attemptJob?.cancel()
         fail(R.string.error_login_cancelled)
     }
+
     private fun setAttempt(attempt: LoginAttempt, statusRes: Int) {
-        mutableState.update { it.copy(login = it.login.copy(attempt = attempt), message = AppMessageUiState(status = uiText(statusRes))) }
+        mutableState.update {
+            it.copy(
+                login = it.login.copy(attempt = attempt),
+                message = AppMessageUiState(status = uiText(statusRes))
+            )
+        }
     }
-    private fun status(res: Int) { mutableState.update { it.copy(message = AppMessageUiState(status = uiText(res))) } }
+
+    private fun status(res: Int) =
+        mutableState.update { it.copy(message = AppMessageUiState(status = uiText(res))) }
+
     private fun fail(res: Int) {
-        mutableState.update { it.copy(login = it.login.copy(attempt = LoginAttempt.Failed), message = AppMessageUiState(error = uiText(res))) }
+        mutableState.update {
+            it.copy(
+                login = it.login.copy(attempt = LoginAttempt.Failed),
+                message = AppMessageUiState(error = uiText(res))
+            )
+        }
     }
 }
 

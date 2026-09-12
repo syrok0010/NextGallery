@@ -31,7 +31,7 @@ internal fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                 isBusy = state.isBusy,
                 onServerUrlChange = viewModel::updateServerUrl,
                 onStartLogin = viewModel::startLogin,
-                onLoginBrowserOpened = viewModel::markLoginBrowserOpened,
+                onLoginBrowserOpened = viewModel::markBrowserOpened,
                 onLoginBrowserOpenFailed = viewModel::reportLoginBrowserOpenFailure,
                 onCancelLogin = viewModel::cancelLogin,
             )

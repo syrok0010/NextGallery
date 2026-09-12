@@ -36,11 +36,7 @@ internal class LocalMediaMetadataEnrichment(
     ): List<LocalMediaMetadata> {
         val results = batch.chunked(8).flatMap { chunk ->
             coroutineScope {
-                chunk.map { metadata ->
-                    async {
-                        enrichOne(metadata, fallback)
-                    }
-                }.awaitAll()
+                chunk.map { metadata -> async { enrichOne(metadata, fallback) } }.awaitAll()
             }
         }
         val entries = results.mapNotNull { it.cacheUpdate }
@@ -59,7 +55,7 @@ internal class LocalMediaMetadataEnrichment(
         val reusable = version != null && metadata.generationModified != null
         val unchanged = reusable && previous?.fingerprint == fingerprint && previous.exifComplete
         val enriched = if (unchanged) {
-            Json.decodeFromString<LocalMediaMetadata>(checkNotNull(previous).metadataJson)
+            Json.decodeFromString<LocalMediaMetadata>(previous.metadataJson)
         } else {
             readExif(metadata)
         }

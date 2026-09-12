@@ -19,10 +19,9 @@ internal data class LocalMediaProjectionItem(
     val buid: String?,
 ) {
     fun toMediaItem(): MediaItem {
-        val dayId = Math.floorDiv(takenAtEpochSeconds, SECONDS_PER_DAY).toInt()
         return MediaItem(
             mediaId = mediaId,
-            dayId = dayId,
+            dayId = Math.floorDiv(takenAtEpochSeconds, SECONDS_PER_DAY).toInt(),
             displayName = displayName,
             mimeType = mimeType,
             width = width,
