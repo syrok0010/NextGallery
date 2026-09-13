@@ -19,6 +19,7 @@ class AppCompositionTest {
             try {
                 store.put("auth", koin.get<LoginViewModel>())
                 store.put("timeline", koin.get<AuthenticatedViewModel>())
+                store.put("albums", koin.get<com.syrok0010.nextgallery.feature.albums.AlbumsViewModel>())
                 koin.get<MediaImageRequestFactory>()
             } finally {
                 store.clear()

@@ -35,6 +35,7 @@ internal data class TimelineWorkflowState(
     val remote: TimelineOperation = TimelineOperation.Idle,
     val local: TimelineOperation = TimelineOperation.Idle,
     val permission: LocalMediaPermissionMode? = null,
+    val lastLocalProgress: TimelineOperation.Indexing? = null,
 )
 
 /** One session owns all timeline mutations. Intents and state collection use the Main scope. */
@@ -142,7 +143,7 @@ internal class TimelineWorkflow(
             localJob?.cancel()
             localJob = scope.launch {
                 val result = projection.replaceLocalItems(LocalMediaProjection(emptyList()))
-                mutableState.update { it.copy(snapshot = result.snapshot, local = TimelineOperation.Idle) }
+                mutableState.update { it.copy(snapshot = result.snapshot, local = TimelineOperation.Idle, lastLocalProgress = null) }
             }
             return
         }
@@ -165,7 +166,8 @@ internal class TimelineWorkflow(
                 )
                 else -> TimelineOperation.Idle
             }
-            mutableState.update { it.copy(snapshot = projection.snapshot, local = localOperation) }
+            mutableState.update { it.copy(snapshot = projection.snapshot, local = localOperation,
+                lastLocalProgress = (localOperation as? TimelineOperation.Indexing) ?: it.lastLocalProgress) }
         }.catch {
             mutableState.update { it.copy(local = TimelineOperation.Failed) }
         }.launchIn(scope)

@@ -8,6 +8,7 @@ import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.AppMessageUiState
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
@@ -21,6 +22,7 @@ data class AuthenticatedUiState(
     val isSignedIn: Boolean = false,
     val timeline: TimelineUiState = TimelineUiState(),
     val isBusy: Boolean = false,
+    val sourceDiagnostics: List<UiText> = emptyList(),
     val message: AppMessageUiState = AppMessageUiState(),
     val localMediaPermissionMode: LocalMediaPermissionMode? = null,
 )
@@ -62,7 +64,7 @@ class AuthenticatedViewModel(
     }
 }
 
-private fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
+internal fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
     // Independent source states survive each other's updates; errors take precedence over progress.
     val error = when {
         remote == TimelineOperation.Failed -> uiText(R.string.error_load_memories_api_failed)
@@ -79,6 +81,19 @@ private fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
         timeline = TimelineUiState(snapshot, loadingDayIds, failedDayIds,
             if (failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed)),
         isBusy = remote == TimelineOperation.Loading,
+        sourceDiagnostics = listOfNotNull(
+            when (remote) {
+                TimelineOperation.Loading -> uiText(R.string.status_loading_memories_api)
+                TimelineOperation.Failed -> uiText(R.string.error_load_memories_api_failed)
+                else -> uiText(R.string.diagnostics_remote_idle)
+            },
+            when (local) {
+                is TimelineOperation.Indexing -> uiText(R.string.status_indexing_local_media, local.indexed, local.total)
+                TimelineOperation.Failed -> uiText(R.string.error_load_local_media_failed)
+                else -> uiText(R.string.diagnostics_local_idle)
+            },
+            lastLocalProgress?.let { uiText(R.string.diagnostics_local_processed, it.indexed, it.total) },
+        ),
         message = AppMessageUiState(status = status, error = error),
         localMediaPermissionMode = permission,
     )
