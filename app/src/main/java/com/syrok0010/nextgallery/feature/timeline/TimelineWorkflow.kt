@@ -167,7 +167,7 @@ internal class TimelineWorkflow(
                 else -> TimelineOperation.Idle
             }
             mutableState.update { it.copy(snapshot = projection.snapshot, local = localOperation,
-                lastLocalProgress = (localOperation as? TimelineOperation.Indexing) ?: it.lastLocalProgress) }
+                lastLocalProgress = update.processed?.let { progress -> TimelineOperation.Indexing(progress.indexedCount, progress.totalCount) } ?: it.lastLocalProgress) }
         }.catch {
             mutableState.update { it.copy(local = TimelineOperation.Failed) }
         }.launchIn(scope)

@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.timeline.local
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -50,6 +52,11 @@ class LocalMediaPermissionCoordinator(
     private val context: Context,
 ) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    private val observedMode = MutableStateFlow<LocalMediaPermissionMode?>(null)
+    val mode = observedMode.asStateFlow()
+
+    fun refresh() { observedMode.value = currentMode() }
 
     fun currentMode(): LocalMediaPermissionMode {
         fun granted(permission: String): Boolean =
