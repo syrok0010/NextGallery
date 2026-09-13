@@ -123,18 +123,31 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                 }
                             }
                         }
+                        entry<NextGalleryRoute.Album>(metadata = NavDisplay.transitionSpec {
+                            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) togetherWith
+                                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                        }) { album ->
+                            if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout)
+                        }
                         entry<NextGalleryRoute.Albums> {
                             if (signedIn) {
                                 screenStates.SaveableStateProvider("albums") {
                                     AlbumsScreen(
                                         onLogout = sessionViewModel::logout,
+                                        onOpen = { album ->
+                                            album.location?.let { location ->
+                                                if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
+                                                    backStack.add(NextGalleryRoute.Album(location, album.name))
+                                                }
+                                            }
+                                        },
                                     )
                                 }
                             }
                         }
                     },
                 )
-                if (signedIn && !viewerVisible) {
+                if (signedIn && !viewerVisible && page !is NextGalleryRoute.Album) {
                     LibraryIsland(
                         page,
                         { destination ->
