@@ -10,29 +10,33 @@ internal sealed interface NextGalleryRoute : NavKey {
     data object Login : NextGalleryRoute
 
     @Serializable
-    data object Authenticated : NextGalleryRoute
+    data object Photos : NextGalleryRoute
+
+    @Serializable
+    data object Albums : NextGalleryRoute
 }
 
 internal fun SessionUiState.rootRoute(): NextGalleryRoute =
     when (this) {
         is SessionUiState.SignedOut -> NextGalleryRoute.Login
-        is SessionUiState.SignedIn -> NextGalleryRoute.Authenticated
+        is SessionUiState.SignedIn -> NextGalleryRoute.Photos
     }
 
 internal fun syncedBackStack(
     currentBackStack: List<NavKey>,
     session: SessionUiState,
 ): List<NextGalleryRoute> {
-    val requiredRoot = session.rootRoute()
-    val typedBackStack = currentBackStack.filterIsInstance<NextGalleryRoute>()
-    val currentRoot = typedBackStack.firstOrNull()
-    return if (
-        currentRoot == requiredRoot &&
-        typedBackStack.isNotEmpty() &&
-        typedBackStack.size == currentBackStack.size
-    ) {
-        typedBackStack
-    } else {
-        listOf(requiredRoot)
+    val routes = currentBackStack.filterIsInstance<NextGalleryRoute>()
+    return when {
+        session is SessionUiState.SignedOut -> listOf(NextGalleryRoute.Login)
+        routes == listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums) &&
+            routes.size == currentBackStack.size -> routes
+        else -> listOf(NextGalleryRoute.Photos)
     }
+}
+
+internal fun destinationBackStack(destination: NextGalleryRoute): List<NextGalleryRoute> = when (destination) {
+    NextGalleryRoute.Login -> listOf(NextGalleryRoute.Login)
+    NextGalleryRoute.Photos -> listOf(NextGalleryRoute.Photos)
+    NextGalleryRoute.Albums -> listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
 }
