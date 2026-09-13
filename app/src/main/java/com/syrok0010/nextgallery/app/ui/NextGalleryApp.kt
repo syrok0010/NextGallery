@@ -3,6 +3,11 @@ package com.syrok0010.nextgallery.app.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -116,6 +121,21 @@ internal fun NextGalleryApp(
                         NavDisplay(
                             backStack = routes,
                             onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                            transitionSpec = {
+                                if (initialState.entries.last().contentKey == NextGalleryRoute.Photos.toString() &&
+                                    targetState.entries.last().contentKey == NextGalleryRoute.Albums.toString()) {
+                                    slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) togetherWith
+                                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                                } else fadeIn(tween(200)) togetherWith fadeOut(tween(200))
+                            },
+                            popTransitionSpec = {
+                                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) togetherWith
+                                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                            },
+                            predictivePopTransitionSpec = {
+                                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) togetherWith
+                                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                            },
                             entryProvider = entryProvider {
                                 entry<NextGalleryRoute.Login> { LoginScreen() }
                                 entry<NextGalleryRoute.Photos> {

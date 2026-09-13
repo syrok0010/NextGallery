@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -8,12 +9,16 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -36,10 +41,16 @@ internal fun LibraryHeader(page: NextGalleryRoute, hasProblem: Boolean, onDiagno
                         Icon(Icons.Default.MoreVert, stringResource(R.string.library_menu))
                     }
                 }
-                DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.library_diagnostics)) }, onClick = { menu = false; onDiagnostics() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menu = false; onRefresh() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.action_logout)) }, onClick = { menu = false; onLogout() })
+                DropdownMenu(
+                    expanded = menu,
+                    onDismissRequest = { menu = false },
+                    shape = RoundedCornerShape(16.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }, text = { Text(stringResource(R.string.library_diagnostics)) }, onClick = { menu = false; onDiagnostics() })
+                    DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menu = false; onRefresh() })
+                    DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) }, text = { Text(stringResource(R.string.action_logout)) }, onClick = { menu = false; onLogout() })
                 }
             }
         }
@@ -63,7 +74,18 @@ internal fun LibraryIsland(page: NextGalleryRoute, onPage: (NextGalleryRoute) ->
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("library_page:$item").semantics { this.selected = selected }) {
-                    Text(text, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 22.dp, vertical = 15.dp))
+                    Row(
+                        Modifier.padding(horizontal = 18.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            painterResource(if (item == NextGalleryRoute.Photos) R.drawable.ic_photos else R.drawable.ic_albums),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(text, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
