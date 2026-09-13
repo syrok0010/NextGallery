@@ -39,6 +39,16 @@ import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val appModule = module {
+    single<com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource> {
+        com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource(get())
+    }
+    single<com.syrok0010.nextgallery.feature.albums.LocalAlbumSource> {
+        com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource(
+            androidContext().contentResolver,
+        )
+    }
+    viewModel { com.syrok0010.nextgallery.feature.albums.AlbumsViewModel(get(), get(), get()) }
+
     single {
         Json {
             ignoreUnknownKeys = true
