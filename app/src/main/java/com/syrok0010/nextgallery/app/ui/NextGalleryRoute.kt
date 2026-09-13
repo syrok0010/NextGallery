@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.app.ui
 
 import androidx.navigation3.runtime.NavKey
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import kotlinx.serialization.Serializable
 
@@ -14,6 +15,9 @@ internal sealed interface NextGalleryRoute : NavKey {
 
     @Serializable
     data object Albums : NextGalleryRoute
+
+    @Serializable
+    data class Album(val location: AlbumLocation, val title: String) : NextGalleryRoute
 }
 
 internal fun SessionUiState.rootRoute(): NextGalleryRoute {
@@ -30,6 +34,8 @@ internal fun syncedBackStack(
     val routes = currentBackStack.filterIsInstance<NextGalleryRoute>()
     return when {
         session is SessionUiState.SignedOut -> listOf(NextGalleryRoute.Login)
+        routes.size == 3 && routes.take(2) == listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums) &&
+            routes.last() is NextGalleryRoute.Album && routes.size == currentBackStack.size -> routes
         routes == listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums) &&
             routes.size == currentBackStack.size -> routes
         else -> listOf(NextGalleryRoute.Photos)
@@ -40,4 +46,5 @@ internal fun destinationBackStack(destination: NextGalleryRoute): List<NextGalle
     NextGalleryRoute.Login -> listOf(NextGalleryRoute.Login)
     NextGalleryRoute.Photos -> listOf(NextGalleryRoute.Photos)
     NextGalleryRoute.Albums -> listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
+    is NextGalleryRoute.Album -> listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, destination)
 }
