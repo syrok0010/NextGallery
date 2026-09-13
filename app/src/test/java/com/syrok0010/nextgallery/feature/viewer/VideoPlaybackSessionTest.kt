@@ -12,7 +12,7 @@ class VideoPlaybackSessionTest {
 
         assertEquals(VideoPlaybackPhase.Loading, session.state.phase)
         assertEquals(
-            VideoPlaybackEffect.PrepareAndPlay("content://media/video/42"),
+            VideoPlaybackEffect.PrepareSource("content://media/video/42"),
             effect,
         )
     }
@@ -22,9 +22,9 @@ class VideoPlaybackSessionTest {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
 
-        val effect = session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500))
+        val effect = session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500))
 
-        assertEquals(VideoPlaybackPhase.Ready, session.state.phase)
+        assertEquals(VideoPlaybackPhase.Paused, session.state.phase)
         assertEquals(3_500L, session.state.durationMillis)
         assertEquals(0L, session.state.positionMillis)
         assertEquals(null, effect)
@@ -34,9 +34,9 @@ class VideoPlaybackSessionTest {
     fun `player playback state and pause action stay in sync`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
 
-        assertEquals(null, session.accept(VideoPlaybackInput.PlayerIsPlaying(true)))
+        assertEquals(null, session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Playing)))
         assertEquals(VideoPlaybackPhase.Playing, session.state.phase)
 
         val effect = session.accept(VideoPlaybackInput.Pause)
@@ -52,10 +52,10 @@ class VideoPlaybackSessionTest {
     fun `player ready does not reset position after a rebuffer`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
         session.accept(VideoPlaybackInput.PlayerPositionChanged(1_200L))
 
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
 
         assertEquals(1_200L, session.state.positionMillis)
     }
@@ -64,9 +64,9 @@ class VideoPlaybackSessionTest {
     fun `play after ended explicitly restarts from the beginning`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
         session.accept(VideoPlaybackInput.PlayerPositionChanged(3_500L))
-        session.accept(VideoPlaybackInput.PlayerIsPlaying(false))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused))
 
         assertEquals(VideoPlaybackEffect.ReplayFromStart, session.accept(VideoPlaybackInput.Play))
     }
@@ -75,7 +75,7 @@ class VideoPlaybackSessionTest {
     fun `seek and mute update playback state and player effects`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
 
         assertEquals(
             VideoPlaybackEffect.SeekTo(1_200L),
@@ -88,30 +88,27 @@ class VideoPlaybackSessionTest {
     }
 
     @Test
-    fun `error can be retried and leaving releases the session`() {
+    fun `error can be retried`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
 
-        session.accept(VideoPlaybackInput.PlayerFailed)
+        session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay))
         assertEquals(VideoPlaybackPhase.Error, session.state.phase)
         assertEquals(VideoPlaybackError.CannotPlay, session.state.error)
 
         assertEquals(
-            VideoPlaybackEffect.PrepareAndPlay("content://media/video/42"),
+            VideoPlaybackEffect.PrepareSource("content://media/video/42"),
             session.accept(VideoPlaybackInput.Retry),
         )
         assertEquals(VideoPlaybackPhase.Loading, session.state.phase)
 
-        assertEquals(VideoPlaybackEffect.PauseAndRelease, session.accept(VideoPlaybackInput.Leave))
-        assertEquals(VideoPlaybackPhase.Poster, session.state.phase)
-        assertEquals(0L, session.state.positionMillis)
     }
 
     @Test
     fun `player progress and fullscreen are represented in session state`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(durationMillis = 3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, durationMillis = 3_500L))
 
         session.accept(VideoPlaybackInput.PlayerPositionChanged(850L))
         session.accept(VideoPlaybackInput.EnterFullscreen)
@@ -127,7 +124,7 @@ class VideoPlaybackSessionTest {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(VideoPlaybackPhase.Poster, session.state.phase)
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("content://media/video/42"), session.accept(VideoPlaybackInput.Play))
+        assertEquals(VideoPlaybackEffect.PrepareSource("content://media/video/42"), session.accept(VideoPlaybackInput.Play))
     }
 
     @Test
@@ -137,7 +134,7 @@ class VideoPlaybackSessionTest {
         assertEquals(VideoPlaybackEffect.Pause, session.accept(VideoPlaybackInput.Pause))
         assertEquals(false, session.state.playRequested)
         assertEquals(VideoPlaybackPhase.Loading, session.state.phase)
-        session.accept(VideoPlaybackInput.PlayerReady(3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, 3_500L))
         assertEquals(false, session.state.playRequested)
         assertEquals(VideoPlaybackEffect.Play, session.accept(VideoPlaybackInput.Play))
     }
@@ -146,9 +143,9 @@ class VideoPlaybackSessionTest {
     fun `resume while buffering preserves the current source and position`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(3_500L))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, 3_500L))
         session.accept(VideoPlaybackInput.PlayerPositionChanged(1_200L))
-        session.accept(VideoPlaybackInput.PlayerBuffering)
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Loading))
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(VideoPlaybackEffect.Play, session.accept(VideoPlaybackInput.Play))
         assertEquals(1_200L, session.state.positionMillis)
@@ -159,53 +156,41 @@ class VideoPlaybackSessionTest {
     fun `background preserves error and retry resets stale duration`() {
         val session = VideoPlaybackSession("content://media/video/42")
         session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(3_500L))
-        session.accept(VideoPlaybackInput.PlayerFailed)
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, 3_500L))
+        session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay))
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(VideoPlaybackPhase.Error, session.state.phase)
         session.accept(VideoPlaybackInput.Retry)
         assertEquals(null, session.state.durationMillis)
     }
 
-    @Test
-    fun `new session after leaving resets all playback state`() {
-        val session = VideoPlaybackSession("content://media/video/42")
-        session.accept(VideoPlaybackInput.Play)
-        session.accept(VideoPlaybackInput.PlayerReady(3_500L))
-        session.accept(VideoPlaybackInput.SeekTo(2_000L))
-        session.accept(VideoPlaybackInput.ToggleMute)
-        session.accept(VideoPlaybackInput.EnterFullscreen)
-        assertEquals(VideoPlaybackEffect.PauseAndRelease, session.accept(VideoPlaybackInput.Leave))
-        assertEquals(VideoPlaybackState(), session.state)
-        assertEquals(VideoPlaybackState(), VideoPlaybackSession("content://media/video/42").state)
-    }
     @Test fun `local failure falls back once preserving position mute fullscreen and paused intent`() {
-        val session = VideoPlaybackSession("content://local", "https://memories.invalid/original/42")
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("content://local"), session.accept(VideoPlaybackInput.Play))
-        session.accept(VideoPlaybackInput.PlayerReady(10_000))
+        val session = VideoPlaybackSession("content://local", "https://cloud.example/nextcloud/apps/memories/api/stream/42")
+        assertEquals(VideoPlaybackEffect.PrepareSource("content://local"), session.accept(VideoPlaybackInput.Play))
+        session.accept(VideoPlaybackInput.PlayerChanged(VideoPlaybackPhase.Paused, 10_000))
         session.accept(VideoPlaybackInput.SeekTo(2_000))
         session.accept(VideoPlaybackInput.ToggleMute)
         session.accept(VideoPlaybackInput.EnterFullscreen)
         session.accept(VideoPlaybackInput.Pause)
         assertEquals(
-            VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42", 2_000, false),
-            session.accept(VideoPlaybackInput.PlayerFailed),
+            VideoPlaybackEffect.PrepareSource("https://cloud.example/nextcloud/apps/memories/api/stream/42", 2_000, false),
+            session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay)),
         )
         assertEquals(true, session.state.isMuted)
         assertEquals(true, session.state.isFullscreen)
         assertEquals(null, session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.RemoteUnavailable)))
         assertEquals(VideoPlaybackError.RemoteUnavailable, session.state.error)
         assertEquals(VideoPlaybackPhase.Error, session.state.phase)
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("content://local"), session.accept(VideoPlaybackInput.Retry))
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42"), session.accept(VideoPlaybackInput.PlayerFailed))
+        assertEquals(VideoPlaybackEffect.PrepareSource("content://local"), session.accept(VideoPlaybackInput.Retry))
+        assertEquals(VideoPlaybackEffect.PrepareSource("https://cloud.example/nextcloud/apps/memories/api/stream/42"), session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay)))
     }
 
     @Test fun `cloud authentication error stays terminal until explicit retry`() {
-        val session = VideoPlaybackSession("https://memories.invalid/original/42")
+        val session = VideoPlaybackSession("https://cloud.example/nextcloud/apps/memories/api/stream/42", remoteUri = "https://cloud.example/nextcloud/apps/memories/api/stream/42")
         session.accept(VideoPlaybackInput.Play)
         assertEquals(null, session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.AuthenticationRequired)))
         assertEquals(VideoPlaybackError.AuthenticationRequired, session.state.error)
         assertEquals(false, session.state.playRequested)
-        assertEquals(VideoPlaybackEffect.PrepareAndPlay("https://memories.invalid/original/42"), session.accept(VideoPlaybackInput.Retry))
+        assertEquals(VideoPlaybackEffect.PrepareSource("https://cloud.example/nextcloud/apps/memories/api/stream/42"), session.accept(VideoPlaybackInput.Retry))
     }
 }

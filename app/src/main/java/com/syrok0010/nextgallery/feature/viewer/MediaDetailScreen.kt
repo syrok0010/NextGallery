@@ -1,14 +1,11 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -41,9 +38,11 @@ internal fun MediaDetailScreen(
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
-    var videoFullscreen by remember(items.getOrNull(pagerState.currentPage)?.mediaId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val currentItem = items.getOrNull(pagerState.currentPage)
+    val playback = rememberViewerPlaybackState(currentItem)
+    val videoFullscreen = playback.current?.state?.isFullscreen == true
+    LaunchedEffect(videoFullscreen) { chromeVisible = true }
     var activePageState by remember(currentItem?.mediaId) {
         mutableStateOf(ActiveViewerPageState())
     }
@@ -52,6 +51,7 @@ internal fun MediaDetailScreen(
         currentMediaId = currentItem?.mediaId,
         tileBoundsForMediaId = tileBoundsForMediaId,
         onClose = { currentItem?.let(onBack) },
+        backEnabled = !videoFullscreen,
     )
     ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
 
@@ -91,16 +91,12 @@ internal fun MediaDetailScreen(
                         ViewerSurfaceTransform()
                     },
                     trackSurfaceBounds = item.mediaId == currentItem?.mediaId && motion.trackSurfaceBounds,
-                    controlsVisible = chromeVisible,
+                    playbackController = playback.current?.takeIf { it.mediaId == item.mediaId },
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onActivePageStateChange = { state ->
                         if (item.mediaId == currentItem?.mediaId) {
                             activePageState = state
                         }
-                    },
-                    onFullscreenChanged = { isFullscreen ->
-                        videoFullscreen = isFullscreen
-                        chromeVisible = true
                     },
                     onSurfaceBoundsChange = { bounds ->
                         if (item.mediaId == currentItem?.mediaId) {
@@ -112,27 +108,21 @@ internal fun MediaDetailScreen(
         }
 
         if (motion.chromeAllowed && currentItem != null && items.isNotEmpty()) {
-            AnimatedVisibility(
-                visible = chromeVisible && !videoFullscreen,
-                enter = fadeIn(animationSpec = tween(ViewerChromeFadeDurationMillis)),
-                exit = fadeOut(animationSpec = tween(ViewerChromeFadeDurationMillis)),
+            ViewerChrome(
+                item = currentItem,
+                visible = chromeVisible,
+                playback = playback.current,
+                onBack = { motion.close() },
+                filmstrip = {
+                    Filmstrip(
+                        items  = items,
+                        currentPage = pagerState.currentPage,
+                        playback = playback.current ?: FilmstripPlayback.None,
+                        onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
+                    )
+                },
                 modifier = Modifier.fillMaxSize(),
-            ) {
-                ViewerChrome(
-                    item = currentItem,
-                    onBack = { motion.close() },
-                    filmstrip = {
-                        Filmstrip(
-                            items = items,
-                            currentPage = pagerState.currentPage,
-                            onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
-                        )
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            )
         }
     }
 }
-
-private const val ViewerChromeFadeDurationMillis = 180
