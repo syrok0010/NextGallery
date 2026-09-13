@@ -54,6 +54,8 @@ internal fun MediaViewerPage(
     onToggleChrome: () -> Unit,
     onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
+    onFullscreenChanged: (Boolean) -> Unit = {},
+    controlsVisible: Boolean = true,
 ) {
     val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
@@ -88,7 +90,26 @@ internal fun MediaViewerPage(
                 }
             }
 
-            Box(
+            val localAsset = when (val asset = item.assetRef) {
+                is MediaAssetRef.LocalContent -> asset
+                is MediaAssetRef.LocalFirst -> asset.local
+                is MediaAssetRef.MemoriesFile -> null
+            }
+            if (isCurrentPage && localAsset != null) {
+                VideoPlaybackSurface(
+                    item = item,
+                    contentUri = localAsset.contentUri,
+                    modifier = Modifier.fillMaxSize(),
+                    controlsVisible = controlsVisible,
+                    contentModifier = contentSurfaceModifier
+                        .then(pageTransformModifier)
+                        .onGloballyPositioned { coordinates ->
+                            if (trackSurfaceBounds) onSurfaceBoundsChange(coordinates.boundsInRoot())
+                        },
+                    onToggleChrome = onToggleChrome,
+                    onFullscreenChanged = onFullscreenChanged,
+                )
+            } else Box(
                 modifier = contentSurfaceModifier
                     .then(pageTransformModifier)
                     .onGloballyPositioned { coordinates ->

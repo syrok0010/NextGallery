@@ -41,6 +41,7 @@ internal fun MediaDetailScreen(
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
+    var videoFullscreen by remember(items.getOrNull(pagerState.currentPage)?.mediaId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val currentItem = items.getOrNull(pagerState.currentPage)
     var activePageState by remember(currentItem?.mediaId) {
@@ -72,7 +73,7 @@ internal fun MediaDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .viewerDismissGestures(motion, currentItem?.mediaId, activePageState.canDragDown),
+                .viewerDismissGestures(motion, currentItem?.mediaId, activePageState.canDragDown && !videoFullscreen),
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -90,11 +91,16 @@ internal fun MediaDetailScreen(
                         ViewerSurfaceTransform()
                     },
                     trackSurfaceBounds = item.mediaId == currentItem?.mediaId && motion.trackSurfaceBounds,
+                    controlsVisible = chromeVisible,
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onActivePageStateChange = { state ->
                         if (item.mediaId == currentItem?.mediaId) {
                             activePageState = state
                         }
+                    },
+                    onFullscreenChanged = { isFullscreen ->
+                        videoFullscreen = isFullscreen
+                        chromeVisible = true
                     },
                     onSurfaceBoundsChange = { bounds ->
                         if (item.mediaId == currentItem?.mediaId) {
@@ -107,7 +113,7 @@ internal fun MediaDetailScreen(
 
         if (motion.chromeAllowed && currentItem != null && items.isNotEmpty()) {
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = chromeVisible && !videoFullscreen,
                 enter = fadeIn(animationSpec = tween(ViewerChromeFadeDurationMillis)),
                 exit = fadeOut(animationSpec = tween(ViewerChromeFadeDurationMillis)),
                 modifier = Modifier.fillMaxSize(),
