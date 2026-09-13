@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -28,7 +29,7 @@ internal fun TimelineGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         state = gridState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("media_grid"),
         contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),

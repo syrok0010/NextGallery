@@ -14,6 +14,22 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ViewerTimelineBridgeTest {
+    @Test fun `album slots retain membership order and restart indexes for each day`() {
+        val first = mediaItem("first", 1)
+        val second = mediaItem("second", 2)
+        val yesterday = mediaItem("yesterday", 3).copy(dayId = DAY_ID - 1)
+        val members = listOf(first, second, yesterday)
+        val slots = members.toMediaSlots()
+        assertEquals(listOf(0, 1, 0), slots.map { it.indexInDay })
+        assertEquals(listOf(DAY_ID, DAY_ID, DAY_ID - 1), slots.map { it.dayId })
+        val controller = ViewerSequenceController()
+        assertEquals(members, controller.updateSlots(slots, second.mediaId).items)
+        val enriched = second.copy(displayName = "canonical.jpg")
+        val updated = controller.updateSlots(listOf(first, enriched, yesterday).toMediaSlots(), second.mediaId)
+        assertSame(enriched, updated.item(second.mediaId))
+        assertEquals(members.map { it.mediaId }, updated.items.map { it.mediaId })
+    }
+
     @Test fun `prefetch uses timeline slots with placeholders and excludes orphan media`() {
         val current = mediaItem("current", 1)
         val orphan = mediaItem("orphan", 2)
