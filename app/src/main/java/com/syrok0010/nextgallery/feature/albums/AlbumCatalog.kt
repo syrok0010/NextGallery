@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 
 internal enum class AlbumOrigin { Nextcloud, Phone }
@@ -32,7 +33,7 @@ internal fun albumCatalog(
 ): List<AlbumSummary> =
     (remote + local).sortedWith(
         compareBy<AlbumSummary> {
-            it.name.lowercase(java.util.Locale.ROOT)
+            it.name.lowercase(Locale.ROOT)
         }.thenBy { it.id },
     )
 

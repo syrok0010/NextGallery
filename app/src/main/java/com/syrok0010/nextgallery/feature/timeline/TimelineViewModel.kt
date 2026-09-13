@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-data class AuthenticatedUiState(
+data class TimelineScreenState(
     val isSignedIn: Boolean = false,
     val timeline: TimelineUiState = TimelineUiState(),
     val isBusy: Boolean = false,
@@ -27,13 +27,13 @@ data class AuthenticatedUiState(
     val localMediaPermissionMode: LocalMediaPermissionMode? = null,
 )
 
-class AuthenticatedViewModel(
+class TimelineViewModel(
     private val sessionStore: SessionStore,
     private val credentialsStore: CredentialsStore,
     private val memoriesRepository: MemoriesRepository,
     private val localMediaSource: LocalMediaSource,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(AuthenticatedUiState())
+    private val mutableState = MutableStateFlow(TimelineScreenState())
     val state = mutableState.asStateFlow()
     private var workflow: TimelineWorkflow? = null
 
@@ -41,7 +41,7 @@ class AuthenticatedViewModel(
         viewModelScope.launch {
             sessionStore.session.collectLatest { session ->
                 workflow = null
-                mutableState.value = AuthenticatedUiState()
+                mutableState.value = TimelineScreenState()
                 if (session is SessionUiState.SignedIn) {
                     coroutineScope {
                         val timeline =
@@ -84,7 +84,7 @@ class AuthenticatedViewModel(
     }
 }
 
-internal fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
+internal fun TimelineWorkflowState.toUiState(): TimelineScreenState {
     // Independent source states survive each other's updates; errors take precedence over progress.
     val error = when {
         remote == TimelineOperation.Failed -> uiText(R.string.error_load_memories_api_failed)
@@ -102,7 +102,7 @@ internal fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
 
         else -> uiText(R.string.status_loaded_items, snapshot?.items?.size ?: 0)
     }
-    return AuthenticatedUiState(
+    return TimelineScreenState(
         isSignedIn = true,
         timeline = TimelineUiState(
             snapshot,
