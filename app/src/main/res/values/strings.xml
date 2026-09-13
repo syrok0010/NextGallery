@@ -100,4 +100,10 @@
     <string name="albums_loading_cloud">Загружаю список альбомов Nextcloud</string>
     <string name="albums_loading_local">Читаю папки телефона</string>
     <string name="diagnostics_local_processed">Последний проход индекса: %1$d из %2$d</string>
+    <string name="album_contents_progress">Загружено %1$d из %2$d элементов</string>
+    <string name="album_contents_empty">В этом альбоме пока нет фото и видео</string>
+    <string name="album_contents_error">Не удалось загрузить содержимое альбома. Повторите попытку.</string>
+    <string name="album_video">Видео</string>
+    <string name="album_contents">Содержимое альбома</string>
+    <string name="album_contents_unique">Медиаобъектов в сетке: %1$d</string>
 </resources>

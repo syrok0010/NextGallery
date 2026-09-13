@@ -21,23 +21,26 @@ import org.junit.runner.RunWith
 class AlbumCatalogUiTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun cardsStretchToTallestInRowWithoutMovingCoversAndDoNotOpen() {
+    @Test fun cardsStretchToTallestInRowWithoutMovingCoversAndOpenTheirOwnAlbum() {
+        var opened: AlbumSummary? = null
         val albums = listOf(
-            AlbumSummary("short", "Отпуск", AlbumOrigin.Nextcloud, 6, "Анна"),
+            AlbumSummary("short", "Отпуск", AlbumOrigin.Nextcloud, 6, "Анна", location = AlbumLocation.Remote("anna/Отпуск")),
             AlbumSummary("long", "Отпуск с очень длинным названием папки", AlbumOrigin.Phone, 12,
-                "Pictures/Путешествия/Отпуск/ · external_primary"),
+                "Pictures/Путешествия/Отпуск/ · external_primary", location = AlbumLocation.Folder("external_primary", "Pictures/Путешествия/Отпуск/")),
         )
         rule.setContent {
             NextGalleryTheme {
-                Box(Modifier.width(340.dp)) { AlbumCardRow(albums, cover = {}) }
+                Box(Modifier.width(340.dp)) { AlbumCardRow(albums, onOpen = { opened = it }, cover = {}) }
             }
         }
         val left = rule.onNodeWithTag("album_card:short").fetchSemanticsNode().boundsInRoot
         val right = rule.onNodeWithTag("album_card:long").fetchSemanticsNode().boundsInRoot
         assertEquals(left.height, right.height, .5f)
         assertEquals(left.top, right.top, .5f)
-        rule.onNodeWithTag("album_card:short").assertHasNoClickAction()
-        rule.onNodeWithTag("album_card:long").assertHasNoClickAction()
+        rule.onNodeWithTag("album_card:short").performClick()
+        rule.runOnIdle { assertEquals(albums[0], opened) }
+        rule.onNodeWithTag("album_card:long").performClick()
+        rule.runOnIdle { assertEquals(albums[1], opened) }
     }
 
     @Test fun menuOpensLiveDiagnosticsAndNavigationChangesSelection() {

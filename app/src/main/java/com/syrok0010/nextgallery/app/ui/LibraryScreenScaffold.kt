@@ -6,6 +6,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
 import kotlinx.coroutines.flow.combine
@@ -18,6 +19,10 @@ internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
     onLogout: () -> Unit,
     viewerVisible: Boolean = false,
+    contents: AlbumContentsState? = null,
+    onRefreshContents: () -> Unit = {},
+    onBack: (() -> Unit)? = null,
+    title: String? = null,
     timeline: TimelineRepository = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     content: @Composable BoxScope.() -> Unit,
@@ -30,22 +35,16 @@ internal fun LibraryScreenScaffold(
     }
     val hasProblem by problems.collectAsState(false)
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        Box(Modifier
-            .alpha(if (viewerVisible) 0f else 1f)
-            .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)
-        ) {
-            LibraryHeader(
-                destination,
-                hasProblem,
-                { diagnostics = true },
-                { timeline.refresh(); catalog.refresh() },
-                onLogout)
+        Box(Modifier.alpha(if (viewerVisible) 0f else 1f)
+            .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
+            LibraryHeader(destination, hasProblem || contents?.failed == true, { diagnostics = true },
+                { timeline.refresh(); catalog.refresh(); onRefreshContents() }, onLogout, onBack, title)
         }
         Box(Modifier.weight(1f), content = content)
     }
     if (diagnostics) {
         val photos by timeline.state.collectAsState()
         val albums by catalog.state.collectAsState()
-        LibraryDiagnostics(photos, albums, onDismiss = { diagnostics = false })
+        LibraryDiagnostics(photos, albums, onDismiss = { diagnostics = false }, contents = contents)
     }
 }

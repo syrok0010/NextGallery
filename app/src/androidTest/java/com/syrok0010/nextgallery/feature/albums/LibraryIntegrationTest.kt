@@ -75,7 +75,24 @@ class LibraryIntegrationTest {
                 rule.onNodeWithTag("library_island").assertIsDisplayed()
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 rule.waitUntil(10_000) { rule.onAllNodesWithTag("album_card:remote:1").fetchSemanticsNodes().isNotEmpty() }
-                rule.onNodeWithTag("album_card:remote:1").assertHasNoClickAction()
+                rule.onNodeWithTag("album_card:remote:1").assertHasClickAction()
+                rule.onNodeWithTag("album_card:remote:1").performClick()
+                rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("album-160.jpg").fetchSemanticsNodes().isNotEmpty() }
+                rule.onNodeWithTag("library_island").assertDoesNotExist()
+                rule.onNodeWithContentDescription("fixture-1.jpg").assertDoesNotExist()
+                rule.onNodeWithTag("album_contents_grid").performScrollToIndex(40)
+                val albumAnchor = rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top
+                restoration.emulateSavedInstanceStateRestore()
+                assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
+                screenshot("album-contents")
+                rule.onNodeWithContentDescription("album-120.jpg").performClick()
+                restoration.emulateSavedInstanceStateRestore()
+                rule.onNodeWithText("album-120.jpg").assertIsDisplayed()
+                rule.onNodeWithContentDescription("Назад").performClick()
+                rule.onNodeWithTag("album_contents_grid").assertIsDisplayed()
+                assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
+                Espresso.pressBack()
+                rule.onNodeWithTag("album_catalog").assertIsDisplayed()
                 screenshot("albums")
                 rule.onNodeWithTag("album_catalog").performScrollToIndex(5)
                 val anchor = rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top
@@ -112,7 +129,10 @@ class LibraryIntegrationTest {
         }
     }
     private fun screenshot(name: String) {
-        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "redesign-81").apply { mkdirs() }
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
+        val directory = (output?.let(::File)
+            ?: File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "redesign-81"))
+            .apply { mkdirs() }
         rule.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
             File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
@@ -149,8 +169,9 @@ private class LibraryFixture : AutoCloseable {
                         val body = when {
                             path.endsWith("/config") -> """{"version":"fixture","albums_enabled":true,"timeline_path":"/Photos/Fixture"}""".toByteArray()
                             path.endsWith("/clusters/albums") -> (1..16).joinToString(prefix = "[", postfix = "]") {
-                                """{"album_id":$it,"name":"${it.toString().padStart(2,'0')} ${if(it==2) "Отпуск с длинным названием" else "Альбом"}","count":24,"cover":$it,"cover_etag":"v1","user_display":"Анна"}"""
+                                """{"album_id":$it,"name":"${it.toString().padStart(2,'0')} ${if(it==2) "Отпуск с длинным названием" else "Альбом"}","count":24,"cover":$it,"cover_etag":"v1","user":"anna","user_display":"Анна"}"""
                             }.toByteArray()
+                            path.contains("/days?albums=") -> """[{"dayid":20709,"count":60,"detail":[${(101..160).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"album-$it.jpg","etag":"v1","epoch":${1789257600 + it},"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
                             path.endsWith("/days") -> """[{"dayid":20709,"count":24,"detail":[${(1..24).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"fixture-$it.jpg","etag":"v1","epoch":1789257600,"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
                             path.contains("multipreview") -> ByteArrayOutputStream().apply {
                                 val json = Json.parseToJsonElement(String(requestBody)) as JsonObject

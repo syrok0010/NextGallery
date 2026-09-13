@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,28 +23,23 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumsUiState
 import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 
 @Composable
-internal fun LibraryHeader(
-    destination: TopLevelDestination,
-    hasProblem: Boolean,
-    onDiagnostics: () -> Unit,
-    onRefresh: () -> Unit,
-    onLogout: () -> Unit,
-) {
+internal fun LibraryHeader(destination: TopLevelDestination, hasProblem: Boolean, onDiagnostics: () -> Unit,
+    onRefresh: () -> Unit, onLogout: () -> Unit, onBack: (() -> Unit)? = null, title: String? = null) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.labelLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
+            } else Text(stringResource(R.string.app_name), style = MaterialTheme.typography.labelLarge)
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.testTag("library_menu")) {
                     BadgedBox(badge = { if (hasProblem) Badge() }) {
@@ -90,11 +86,8 @@ internal fun LibraryHeader(
                 }
             }
         }
-        Text(
-            stringResource(destination.titleRes),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-        )
+        Text(title ?: stringResource(destination.titleRes),
+            style = MaterialTheme.typography.headlineLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         if (hasProblem) TextButton(onClick = onDiagnostics, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.library_problem), color = MaterialTheme.colorScheme.error)
         }
@@ -147,15 +140,8 @@ internal fun LibraryIsland(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LibraryDiagnostics(
-    state: TimelineScreenState,
-    albums: AlbumsUiState,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+internal fun LibraryDiagnostics(state: TimelineScreenState, albums: AlbumsUiState, onDismiss: () -> Unit, contents: AlbumContentsState? = null) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         SelectionContainer {
             Column(
                 Modifier
@@ -250,6 +236,15 @@ internal fun LibraryDiagnostics(
                     color = MaterialTheme.colorScheme.error,
                 )
                 if (!albums.remote.supported) Text(stringResource(R.string.albums_unsupported))
+                contents?.let { content ->
+                    HorizontalDivider()
+                    Text(stringResource(R.string.album_contents), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.album_contents_progress, content.loaded, content.total))
+                    Text(stringResource(R.string.album_contents_unique, content.items.size))
+                    if (content.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (content.failed) Text(stringResource(R.string.album_contents_error), color = MaterialTheme.colorScheme.error)
+                    if (content.permissionRequired) Text(stringResource(R.string.albums_permission))
+                }
                 Spacer(Modifier.height(20.dp))
             }
         }

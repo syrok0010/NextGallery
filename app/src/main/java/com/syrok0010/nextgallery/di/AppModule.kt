@@ -10,9 +10,14 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
+import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
@@ -70,6 +75,26 @@ val appModule = module {
         )
     }
     viewModel { AlbumsViewModel(get()) }
+    single { MemoriesAlbumContents(get(), get()) }
+    single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
+    single<AlbumContentsSource> {
+        val remote = get<MemoriesAlbumContents>()
+        val local = get<AndroidAlbumContents>()
+        AlbumContentsSource { location, credentials ->
+            when (location) {
+                is AlbumLocation.Remote -> remote.load(location, credentials)
+                is AlbumLocation.Folder -> local.load(location)
+            }
+        }
+    }
+    viewModel {
+        AlbumContentsViewModel(
+            get(),
+            get(),
+            get<TimelineRepository>().state,
+            get<LocalMediaPermissionCoordinator>().mode,
+        )
+    }
 
     single {
         Json {

@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -17,6 +18,9 @@ internal sealed interface NextGalleryRoute : NavKey {
 
     @Serializable
     data object Albums : NextGalleryRoute
+
+    @Serializable
+    data class Album(val location: AlbumLocation, val title: String) : NextGalleryRoute
 }
 
 internal enum class TopLevelDestination(
