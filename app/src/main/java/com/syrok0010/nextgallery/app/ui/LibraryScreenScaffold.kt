@@ -34,11 +34,28 @@ internal fun LibraryScreenScaffold(
         }.distinctUntilChanged()
     }
     val hasProblem by problems.collectAsState(false)
-    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        Box(Modifier.alpha(if (viewerVisible) 0f else 1f)
-            .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
-            LibraryHeader(destination, hasProblem || contents?.failed == true, { diagnostics = true },
-                { timeline.refresh(); catalog.refresh(); onRefreshContents() }, onLogout, onBack, title)
+    Column(Modifier
+        .fillMaxSize()
+        .safeDrawingPadding()
+    ) {
+        Box(
+            Modifier
+                .alpha(if (viewerVisible) 0f else 1f)
+                .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier),
+        ) {
+            LibraryHeader(
+                destination = destination,
+                hasProblem = hasProblem || contents?.failed == true,
+                onDiagnostics = { diagnostics = true },
+                onRefresh = {
+                    timeline.refresh()
+                    catalog.refresh()
+                    onRefreshContents()
+                },
+                onLogout = onLogout,
+                onBack = onBack,
+                title = title,
+            )
         }
         Box(Modifier.weight(1f), content = content)
     }

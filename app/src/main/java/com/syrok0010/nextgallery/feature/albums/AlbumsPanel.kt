@@ -28,11 +28,26 @@ import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import org.koin.compose.koinInject
 
 @Composable
-internal fun AlbumsPanel(state: AlbumsUiState, listState: LazyListState, filter: AlbumOrigin?,
-    onFilter: (AlbumOrigin?) -> Unit, onRetry: () -> Unit, onOpen: (AlbumSummary) -> Unit = {}) {
-    val visible = remember(state.items, filter) { state.items.filter { filter == null || it.origin == filter } }
-    LazyColumn(state = listState, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 110.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().testTag("album_catalog")) {
+internal fun AlbumsPanel(
+    state: AlbumsUiState,
+    listState: LazyListState,
+    filter: AlbumOrigin?,
+    onFilter: (AlbumOrigin?) -> Unit,
+    onRetry: () -> Unit,
+    onOpen: (AlbumSummary) -> Unit = {},
+) {
+    val visible = remember(state.items, filter) {
+        state.items.filter { filter == null || it.origin == filter }
+    }
+
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 110.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("album_catalog"),
+    ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(null, AlbumOrigin.Nextcloud, AlbumOrigin.Phone).forEach { origin ->
@@ -82,13 +97,37 @@ internal fun AlbumsPanel(state: AlbumsUiState, listState: LazyListState, filter:
 }
 
 @Composable
-internal fun AlbumCardRow(albums: List<AlbumSummary>, onOpen: (AlbumSummary) -> Unit = {}, cover: @Composable (AlbumSummary) -> Unit = { AlbumCoverImage(it) }) {
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+internal fun AlbumCardRow(
+    albums: List<AlbumSummary>,
+    onOpen: (AlbumSummary) -> Unit = {},
+    cover: @Composable (AlbumSummary) -> Unit = { AlbumCoverImage(it) },
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         albums.forEach { album ->
-            Column(Modifier.weight(1f).fillMaxHeight().testTag("album_card:${album.id}").clickable(enabled = album.location != null) { onOpen(album) }) {
-                Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.albums_cover_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag("album_card:${album.id}")
+                    .clickable(enabled = album.location != null) { onOpen(album) },
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(R.string.albums_cover_placeholder),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     cover(album)
                     Surface(
                         Modifier

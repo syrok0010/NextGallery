@@ -61,9 +61,11 @@ internal class AlbumContentsViewModel(
             )
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState())
+
     fun select(location: AlbumLocation?) {
         selection.value = location
     }
+
     fun refresh() {
         refreshes.update { it + 1 }
     }

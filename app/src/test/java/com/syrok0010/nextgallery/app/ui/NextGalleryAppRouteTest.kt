@@ -125,7 +125,8 @@ class NextGalleryAppRouteTest {
         val restored = Json.decodeFromString<NextGalleryRoute>(
             Json.encodeToString<NextGalleryRoute>(album),
         )
-        val stack = destinationBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums), restored)
+        val stack =
+            destinationBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums), restored)
         assertEquals(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, album), stack)
         assertEquals(stack, syncedBackStack(stack, SessionUiState.SignedIn(credentials())))
         assertEquals(
