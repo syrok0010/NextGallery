@@ -6,6 +6,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
 import kotlinx.coroutines.flow.combine
@@ -18,6 +19,9 @@ internal fun LibraryScreenScaffold(
     page: NextGalleryRoute,
     onLogout: () -> Unit,
     viewerVisible: Boolean = false,
+    contents: AlbumContentsState? = null,
+    onRefreshContents: () -> Unit = {},
+    onBack: () -> Unit = {},
     timeline: TimelineRepository = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     content: @Composable BoxScope.() -> Unit,
@@ -32,13 +36,14 @@ internal fun LibraryScreenScaffold(
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         Box(Modifier.alpha(if (viewerVisible) 0f else 1f)
             .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
-            LibraryHeader(page, hasProblem, { diagnostics = true }, { timeline.refresh(); catalog.refresh() }, onLogout)
+            LibraryHeader(page, hasProblem || contents?.failed == true, { diagnostics = true },
+                { timeline.refresh(); catalog.refresh(); onRefreshContents() }, onLogout, onBack)
         }
         Box(Modifier.weight(1f), content = content)
     }
     if (diagnostics) {
         val photos by timeline.state.collectAsState()
         val albums by catalog.state.collectAsState()
-        LibraryDiagnostics(photos, albums, onDismiss = { diagnostics = false })
+        LibraryDiagnostics(photos, albums, onDismiss = { diagnostics = false }, contents = contents)
     }
 }

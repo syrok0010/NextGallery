@@ -51,6 +51,8 @@ internal fun remoteAlbumSummary(json: JsonObject): AlbumSummary {
         origin = AlbumOrigin.Nextcloud,
         count = json.number("count")?.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt(),
         detail = json.text("user_display") ?: json.text("user").orEmpty(),
+        location = (json.text("cluster_id") ?: json.text("user")?.let { "$it/$name" })
+            ?.let(AlbumLocation::Remote),
         cover = fileId?.let {
             AlbumCover.Remote(
                 it,
