@@ -1,5 +1,12 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.HorizontalPager
+import org.koin.core.context.GlobalContext
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import android.content.pm.ActivityInfo
 import android.content.ContentValues
 import android.content.res.Configuration
@@ -12,6 +19,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -58,7 +67,6 @@ class VideoPlaybackIntegrationTest {
             MaterialTheme {
                 VideoPlaybackSurface(
                     item = item,
-                    contentUri = (item.assetRef as MediaAssetRef.LocalContent).contentUri,
                     modifier = Modifier.fillMaxSize(),
                     onToggleChrome = {},
                     createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } },
@@ -79,8 +87,13 @@ class VideoPlaybackIntegrationTest {
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performTouchInput {
             swipe(Offset(width * 0.2f, centerY), Offset(width * 0.5f, centerY), durationMillis = 500)
         }
+        // Drag coordinates include the slider touch slop; verify the gesture separately
+        // from the precise seek contract, which uses the accessibility progress action.
+        waitForPlayer { player.currentPosition in 5_000L..7_000L }
         screenshot("after-seek")
-        rule.runOnIdle { assertEquals("Seek after touch drag", 6_000.0, player.currentPosition.toDouble(), 200.0) }
+        rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        waitForPlayer { player.currentPosition in 5_800L..6_200L }
+        rule.runOnIdle { assertEquals("Seek to half duration", 6_000.0, player.currentPosition.toDouble(), 200.0) }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
         rule.runOnIdle { assertEquals(0f, player.volume) }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
@@ -156,7 +169,7 @@ class VideoPlaybackIntegrationTest {
             if (visible.value) {
                 MaterialTheme {
                     VideoPlaybackSurface(
-                        item, (item.assetRef as MediaAssetRef.LocalContent).contentUri,
+                        item,
                         Modifier.fillMaxSize(), onToggleChrome = {},
                         createPlayer = { ExoPlayer.Builder(it).build().also(players::add) },
                     )
@@ -185,7 +198,7 @@ class VideoPlaybackIntegrationTest {
         val uri = Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri)
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(item, uri.toString(), Modifier.fillMaxSize(), onToggleChrome = {})
+                VideoPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
             }
         }
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
@@ -200,6 +213,128 @@ class VideoPlaybackIntegrationTest {
             !rule.onNodeWithTag(VideoPlaybackSeekTestTag).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_pause)).assertIsDisplayed()
+    }
+
+    @Test fun remoteOriginalPlaysAndPagerChangeReleasesPlayer() = withRemote { fixture, remote ->
+        val players = mutableListOf<ExoPlayer>()
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            val pagerState = rememberPagerState { 2 }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize().then(Modifier.testTag("remote-pager")),
+            ) { page ->
+                if (page == pagerState.currentPage) MaterialTheme {
+                    VideoPlaybackSurface(
+                        item = remote.copy(mediaId = MediaId("remote-$page")),
+                        onToggleChrome = {},
+                        createPlayer = { factory.create(it).also(players::add) },
+                    )
+                }
+            }
+        }
+        rule.runOnIdle { assertFalse(players.single().playWhenReady) }
+        assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { players.single().isPlaying && players.single().currentPosition > 300 }
+        rule.runOnIdle { assertTrue(players.single().duration in 11_900L..12_100L) }
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        waitForPlayer { players.single().currentPosition in 5_800L..6_200L }
+        rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
+        rule.runOnIdle { assertEquals(0f, players.single().volume) }
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        waitForPlayer { players.single().isPlaying }
+        rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        waitForPlayer { !players.single().playWhenReady }
+        rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        waitForPlayer { !players.single().isPlaying }
+        screenshot("remote-playing")
+        assertTrue(fixture.requests.any { it[":request"] == "GET /apps/memories/api/stream/42 HTTP/1.1" && it["authorization"] == fixture.authorization })
+        rule.onNodeWithTag("remote-pager").performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(2, players.size)
+            assertTrue(players.first().isReleased)
+            assertFalse(players.last().playWhenReady)
+            assertEquals(0L, players.last().currentPosition)
+        }
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+    }
+
+    @Test fun corruptLocalFallsBackToRemoteAndAuthRetryUsesNewSession() = withRemote { fixture, remote ->
+        val local = sample(corrupt = true)
+        val merged = local.copy(assetRef = MediaAssetRef.LocalFirst(
+            local.assetRef as MediaAssetRef.LocalContent, remote.assetRef as MediaAssetRef.MemoriesFile,
+        ))
+        fixture.authorization = okhttp3.Credentials.basic("fixture", "renewed")
+        lateinit var player: ExoPlayer
+        val koin = GlobalContext.get()
+        val factory = koin.get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_auth_error)).fetchSemanticsNodes().isNotEmpty()
+        }
+        screenshot("remote-auth-error")
+        koin.get<SessionStore>().signIn(
+            AccountCredentials(fixture.url, "fixture", "renewed"),
+        )
+        fixture.status = 404
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_remote_error)).fetchSemanticsNodes().isNotEmpty()
+        }
+        screenshot("remote-unavailable")
+        fixture.status = 200
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 300 }
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        screenshot("remote-fallback-playing")
+        assertTrue(fixture.requests.any { it["authorization"] == fixture.authorization })
+    }
+
+    @Test fun readableLocalCopyDoesNotRequestRemoteOriginal() = withRemote { fixture, remote ->
+        val local = sample()
+        val merged = local.copy(assetRef = MediaAssetRef.LocalFirst(
+            local.assetRef as MediaAssetRef.LocalContent, remote.assetRef as MediaAssetRef.MemoriesFile,
+        ))
+        lateinit var player: ExoPlayer
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 300 }
+        assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
+    }
+
+    private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
+        val session = GlobalContext.get().get<SessionStore>()
+        val previous = session.session.value
+        val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("local-video.mp4").use { it.readBytes() }
+        RemoteVideoFixture(bytes).use { fixture ->
+            try {
+                session.signIn(AccountCredentials(fixture.url, "fixture", "password"))
+                val remote = sample().copy(assetRef = MediaAssetRef.MemoriesFile(42))
+                block(fixture, remote)
+            } finally {
+                when (previous) {
+                    is SessionUiState.SignedIn -> session.signIn(previous.credentials)
+                    else -> session.signOut()
+                }
+            }
+        }
     }
 
     private fun waitForPlayer(predicate: () -> Boolean) {

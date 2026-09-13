@@ -90,15 +90,9 @@ internal fun MediaViewerPage(
                 }
             }
 
-            val localAsset = when (val asset = item.assetRef) {
-                is MediaAssetRef.LocalContent -> asset
-                is MediaAssetRef.LocalFirst -> asset.local
-                is MediaAssetRef.MemoriesFile -> null
-            }
-            if (isCurrentPage && localAsset != null) {
+            if (isCurrentPage) {
                 VideoPlaybackSurface(
                     item = item,
-                    contentUri = localAsset.contentUri,
                     modifier = Modifier.fillMaxSize(),
                     controlsVisible = controlsVisible,
                     contentModifier = contentSurfaceModifier

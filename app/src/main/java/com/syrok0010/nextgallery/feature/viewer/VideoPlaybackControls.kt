@@ -37,6 +37,7 @@ internal fun VideoPlaybackCenterAction(
     phase: VideoPlaybackPhase,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    error: VideoPlaybackError? = null,
 ) {
     when (phase) {
         VideoPlaybackPhase.Loading -> {
@@ -86,7 +87,11 @@ internal fun VideoPlaybackCenterAction(
                 }
                 if (phase == VideoPlaybackPhase.Error) {
                     Text(
-                        text = stringResource(R.string.video_playback_error),
+                        text = stringResource(when (error) {
+                            VideoPlaybackError.AuthenticationRequired -> R.string.video_playback_auth_error
+                            VideoPlaybackError.RemoteUnavailable -> R.string.video_playback_remote_error
+                            else -> R.string.video_playback_error
+                        }),
                         color = Color.White,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)

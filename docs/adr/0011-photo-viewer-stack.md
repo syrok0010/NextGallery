@@ -48,14 +48,35 @@ screen нарушил бы общий pager/return transition, а готовый
 - Viewer сам сообщает viewport prefetch range существующему timeline loader; originals соседей явно не prefetch.
 - `ViewerTransitionCoordinator` связывает tile bounds, reveal и current media.
 - Swipe-down и predictive back используют одну return-to-grid модель; viewer chrome не является transition surface.
-- Текущее локальное видео в активной detail-page воспроизводится через Media3/ExoPlayer; cloud-only video до remote playback остаётся preview.
-- `VideoPlaybackSession` отделяет typed playback state/effects от Media3: сессия создаётся только для активной локальной video-page, при уходе получает `Leave` и освобождает player.
+- Текущее видео в активной detail-page воспроизводится через Media3/ExoPlayer из локальной копии либо Memories original.
+- `VideoPlaybackSession` отделяет typed playback state/effects от Media3: сессия создаётся только для активной video-page, при уходе получает `Leave` и освобождает player.
 - Воспроизведение запускается только явным действием. Position не сохраняется при смене pager page или возвращении к ней; новая сессия начинается с нуля.
 - Управление (play/pause, seek, duration, mute, fullscreen, loading/error/retry) остаётся Compose UI поверх `ContentFrame` с сохранением пропорций видео.
 - Fullscreen остаётся в текущей page: временно разрешает landscape, скрывает viewer chrome и system bars; Back сначала выходит из fullscreen. Исходная ориентация и видимость system bars восстанавливаются при выходе/уничтожении surface. Activity обрабатывает смену ориентации без пересоздания, чтобы не потерять playback session.
 - При уходе приложения в фон playback ставится на паузу, включая отмену play intent во время загрузки. Возврат не запускает видео автоматически.
 - Для video surface используется TextureView, чтобы поверхность следовала Compose-transform при возврате в tile. Это обмен эффективности SurfaceView на совместимость с существующей анимацией viewer; controls в transform не входят.
-- В первом приближении используются только platform decoders Media3; transcoding и remote source ladder вынесены в отдельные задачи.
+- В первом приближении используются только platform decoders Media3; transcoding/HLS и выбор качества вынесены в отдельные задачи.
+
+### Источники video original
+
+Local-first выбирает локальную копию первой. При ошибке чтения или декодирования
+сессия один раз переключает тот же player на remote original, сохраняя позицию,
+play/pause intent, mute и fullscreen. `MediaId` и pager sequence не меняются.
+Явный retry начинает выбор источников заново; ошибка remote завершает попытку.
+
+UI получает только логическую ссылку на remote file ID. `OkHttpDataSource`
+использует общий `NextcloudTransport`; interceptor разрешает ссылку в Memories
+`/stream/{fileid}` и берёт актуальные credentials из `SessionStore` на каждый
+запрос, включая range и retry. Передача готового URL с auth headers через Compose
+отклонена: она связывает UI с transport и удерживает устаревший app password.
+Предварительное скачивание целого original отклонено из-за задержки запуска и
+лишнего трафика; byte ranges backend позволяют обычный streaming и seek.
+
+Redirects для видео отключены: клиент обращается к каноническому stream endpoint
+и не переносит credentials на login page или другой host. Сервер, перенаправляющий
+этот endpoint, сейчас даст ошибку с retry. 401/403 дают
+сообщение о необходимости авторизации; сетевые/HTTP ошибки — о недоступности
+облачного видео. Logout убирает authenticated viewer по общей границе приложения.
 
 Версии библиотек определяет version catalog.
 
@@ -64,9 +85,9 @@ screen нарушил бы общий pager/return transition, а готовый
 - Проект не поддерживает собственный image engine.
 - Gesture conflicts проверяются automation tests и на реальном устройстве.
 - Ultra HDR остаётся best-effort и зависит от gain map, Android и display.
-- WebDAV fallback, remote video playback, transcoding и prefetch originals остаются отдельными решениями.
+- WebDAV fallback, transcoding и prefetch originals остаются отдельными решениями.
 
 ## Открытые вопросы
 
-- Как Memories API отдаёт remote original и какие server-side variants доступны для transcoding/HLS.
+- Какие server-side variants доступны для transcoding/HLS.
 - Какой client-side filmstrip projection даст scrubbing без изменений серверного API.
