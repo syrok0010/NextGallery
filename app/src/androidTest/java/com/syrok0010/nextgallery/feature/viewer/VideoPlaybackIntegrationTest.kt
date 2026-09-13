@@ -1,5 +1,9 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import org.koin.compose.koinInject
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import android.content.Context
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import org.koin.core.context.GlobalContext
@@ -15,6 +19,8 @@ import android.net.Uri
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
@@ -46,6 +52,7 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaId
 import java.io.File
+import kotlinx.coroutines.flow.toList
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -65,7 +72,7 @@ class VideoPlaybackIntegrationTest {
         lateinit var player: ExoPlayer
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(
+                TestPlaybackSurface(
                     item = item,
                     modifier = Modifier.fillMaxSize(),
                     onToggleChrome = {},
@@ -78,11 +85,11 @@ class VideoPlaybackIntegrationTest {
             assertEquals(0L, player.currentPosition)
         }
         screenshot("poster")
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300L }
         rule.runOnIdle { assertTrue(player.duration in 11_900L..12_100L) }
         screenshot("playing")
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { !player.playWhenReady }
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performTouchInput {
             swipe(Offset(width * 0.2f, centerY), Offset(width * 0.5f, centerY), durationMillis = 500)
@@ -98,16 +105,16 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { assertEquals(0f, player.volume) }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
         rule.runOnIdle { assertEquals(1f, player.volume) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         waitForPlayer { !player.playWhenReady }
         rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         waitForPlayer { !player.isPlaying }
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.97f) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_ENDED }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition < 2_000L }
     }
 
@@ -132,13 +139,13 @@ class VideoPlaybackIntegrationTest {
                 )
             }
         }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
         screenshot("viewer-poster")
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             !rule.onNodeWithTag(VideoPlaybackSeekTestTag).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackFullscreenTestTag).performClick()
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_exit_fullscreen)).assertIsDisplayed()
@@ -153,11 +160,11 @@ class VideoPlaybackIntegrationTest {
             assertEquals(video.mediaId, current?.mediaId)
         }
         rule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithText("0:00 / 0:00").assertIsDisplayed()
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithText("0:00 / 0:00").assertIsDisplayed()
     }
 
@@ -168,7 +175,7 @@ class VideoPlaybackIntegrationTest {
         rule.setContent {
             if (visible.value) {
                 MaterialTheme {
-                    VideoPlaybackSurface(
+                    TestPlaybackSurface(
                         item,
                         Modifier.fillMaxSize(), onToggleChrome = {},
                         createPlayer = { ExoPlayer.Builder(it).build().also(players::add) },
@@ -176,7 +183,7 @@ class VideoPlaybackIntegrationTest {
                 }
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().currentPosition > 300L }
         rule.runOnIdle { visible.value = false }
         rule.waitForIdle()
@@ -190,7 +197,7 @@ class VideoPlaybackIntegrationTest {
             assertFalse(players.last().playWhenReady)
             assertEquals(0L, players.last().currentPosition)
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test fun unreadableVideoShowsRetryAndCanRecover() {
@@ -198,10 +205,10 @@ class VideoPlaybackIntegrationTest {
         val uri = Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri)
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
+                TestPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -225,7 +232,7 @@ class VideoPlaybackIntegrationTest {
                 modifier = Modifier.fillMaxSize().then(Modifier.testTag("remote-pager")),
             ) { page ->
                 if (page == pagerState.currentPage) MaterialTheme {
-                    VideoPlaybackSurface(
+                    TestPlaybackSurface(
                         item = remote.copy(mediaId = MediaId("remote-$page")),
                         onToggleChrome = {},
                         createPlayer = { factory.create(it).also(players::add) },
@@ -235,15 +242,15 @@ class VideoPlaybackIntegrationTest {
         }
         rule.runOnIdle { assertFalse(players.single().playWhenReady) }
         assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().isPlaying && players.single().currentPosition > 300 }
         rule.runOnIdle { assertTrue(players.single().duration in 11_900L..12_100L) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         waitForPlayer { players.single().currentPosition in 5_800L..6_200L }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
         rule.runOnIdle { assertEquals(0f, players.single().volume) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().isPlaying }
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         waitForPlayer { !players.single().playWhenReady }
@@ -259,7 +266,7 @@ class VideoPlaybackIntegrationTest {
             assertFalse(players.last().playWhenReady)
             assertEquals(0L, players.last().currentPosition)
         }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test fun corruptLocalFallsBackToRemoteAndAuthRetryUsesNewSession() = withRemote { fixture, remote ->
@@ -273,12 +280,12 @@ class VideoPlaybackIntegrationTest {
         val factory = koin.get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_auth_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -295,7 +302,7 @@ class VideoPlaybackIntegrationTest {
         fixture.status = 200
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
         screenshot("remote-fallback-playing")
         assertTrue(fixture.requests.any { it["authorization"] == fixture.authorization })
     }
@@ -309,12 +316,12 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
         assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
     }
@@ -325,7 +332,7 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
@@ -333,9 +340,9 @@ class VideoPlaybackIntegrationTest {
         assertTrue(fixture.requests.none {
             it[":request"]?.let { request -> request.contains("/stream/") || request.contains("/video/transcode/") } == true
         })
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         waitForPlayer { player.currentPosition in 5800L..6200L }
         rule.waitUntil(10_000) { rule.onAllNodesWithTag("video_quality").fetchSemanticsNodes().isNotEmpty() }
@@ -347,9 +354,9 @@ class VideoPlaybackIntegrationTest {
             assertTrue(player.currentPosition in 5800L..6200L)
         }
         screenshot("hls-paused-quality-switch")
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         fixture.hlsStatus = 500
         rule.onNodeWithTag("video_quality").performClick()
         rule.onNodeWithText("Auto").performClick()
@@ -376,12 +383,12 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
         screenshot("hls-automatic-fallback")
@@ -395,12 +402,12 @@ class VideoPlaybackIntegrationTest {
         val factory = GlobalContext.get().get<VideoPlayerFactory>()
         rule.setContent {
             MaterialTheme {
-                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -408,6 +415,150 @@ class VideoPlaybackIntegrationTest {
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
         waitForPlayer { player.isPlaying }
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
+    }
+
+    @Test fun viewerPlaybackOwnsOneSessionAndRejectsNeighborAndClosedSessionCommands() {
+        val first = sample()
+        val second = first.copy(mediaId = MediaId("second-video"))
+        var selected by mutableStateOf(first)
+        lateinit var owner: ViewerPlaybackState
+        rule.setContent {
+            owner = rememberViewerPlaybackState(selected)
+        }
+        rule.waitForIdle()
+        lateinit var previous: VideoPlaybackController
+        rule.runOnIdle {
+            previous = checkNotNull(owner.current)
+            assertNotNull(previous.sourceFor(first.mediaId))
+            assertNull(previous.sourceFor(second.mediaId))
+            previous.seek(second.mediaId, 500, true)
+            assertEquals(VideoPlaybackPhase.Poster, previous.state.phase)
+            selected = second
+        }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertTrue(previous.player.isReleased)
+            assertNull(previous.sourceFor(first.mediaId))
+            previous.seek(first.mediaId, 500, true)
+            assertEquals(second.mediaId, owner.current?.mediaId)
+            assertFalse(checkNotNull(owner.current).player.isReleased)
+            owner.close()
+            assertNull(owner.current)
+        }
+    }
+
+    @Test fun localFilmstripBuilds24FramesAndScrubsBeforeFirstPlay() {
+        val item = sample()
+        lateinit var player: ExoPlayer
+        rule.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    val playback = rememberViewerPlaybackState(item,
+                        createPlayer = { ExoPlayer.Builder(it).build().also { created -> player = created } })
+                    playback.current?.let { controller ->
+                        TestVideoPage(item, controller)
+                        ViewerChrome(item, playback = controller, onBack = {}, filmstrip = {})
+                    }
+                    Filmstrip(listOf(item), 0, {},
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        playback = playback.current ?: FilmstripPlayback.None)
+                }
+            }
+        }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertFalse(player.playWhenReady) }
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY }
+        rule.runOnIdle {
+            assertFalse(player.playWhenReady)
+            assertEquals(1f, player.volume)
+            assertTrue(player.currentPosition in 5800L..6200L)
+        }
+        screenshot("local-filmstrip-scrub")
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+    }
+
+    @Test fun remoteFrameExtractionAuthenticatesOriginalAndHlsAndFallsBackFromCorruptLocal() = withRemote { fixture, remote ->
+        fixture.hls = true
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val provider = RemoteVideoFrames(rule.activity) { factory.mediaSourceFactory(rule.activity) }
+        val original = checkNotNull(factory.sources(remote.assetRef).remoteOriginal)
+        val originalUri = original.uri
+        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(original, "framesclient") }
+        val hlsUri = qualities.first { it.label == "Auto" }.uri
+        for (uri in listOf(originalUri, hlsUri)) {
+            val frames = kotlinx.coroutines.runBlocking { provider.frames(uri).toList() }
+            assertTrue(frames.first() is VideoFrameEvent.Duration)
+            val bitmaps = frames.filterIsInstance<VideoFrameEvent.Frame>()
+            assertEquals(7, bitmaps.size)
+            assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
+        }
+        val corruptLocal = sample(corrupt = true)
+        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri, originalUri) { qualities }
+        val recovered = kotlinx.coroutines.runBlocking {
+            ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
+        }
+        assertEquals(7, recovered.filterIsInstance<VideoFrameEvent.Frame>().size)
+        fixture.corruptOriginal = true
+        val transcoded = kotlinx.coroutines.runBlocking { ladder.frames(originalUri).toList() }
+        assertEquals(7, transcoded.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertTrue(fixture.requests.filter { it[":request"]?.contains("/stream/") == true ||
+            it[":request"]?.contains("/video/transcode/") == true }.all { it["authorization"] == fixture.authorization })
+    }
+
+    @Test fun remoteFilmstripFailureAndRetryDoNotInterruptPlaybackOrChangeMedia() = withRemote { fixture, remote ->
+        fixture.hls = true
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        lateinit var player: ExoPlayer
+        rule.setContent {
+            MaterialTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    val playback = rememberViewerPlaybackState(remote,
+                        createPlayer = { factory.create(it).also { created -> player = created } })
+                    playback.current?.let { controller ->
+                        TestVideoPage(remote, controller)
+                        ViewerChrome(remote, playback = controller, onBack = {}, filmstrip = {})
+                    }
+                    Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        playback = playback.current ?: FilmstripPlayback.None)
+                }
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
+        waitForPlayer { player.isPlaying }
+        fixture.status = 503
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitUntil(15_000) { rule.onAllNodesWithTag(VideoFilmstripRetryTestTag).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
+        rule.runOnIdle { assertTrue(player.playWhenReady) }
+        fixture.status = 200
+        rule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertTrue(player.playWhenReady) }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        waitForPlayer { player.currentPosition in 6800L..7600L }
+        rule.runOnIdle { assertFalse(player.playWhenReady) }
+        rule.onNodeWithTag("video_quality").performClick()
+        rule.onNodeWithText("360p").performClick()
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY &&
+            player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("360p.m3u8") }
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==
+                rule.activity.getString(R.string.video_filmstrip_ready)
+        }
+        rule.runOnIdle { assertFalse(player.playWhenReady); assertTrue(player.currentPosition in 6800L..7600L) }
+        screenshot("remote-filmstrip-retry-and-scrub")
+        rule.onAllNodesWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
@@ -469,4 +620,40 @@ class VideoPlaybackIntegrationTest {
         val directory = File(rule.activity.getExternalFilesDir(null), "video-review").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+}
+
+
+// Uses the same owner as MediaDetailScreen while allowing tests to observe real players.
+@Composable
+private fun TestPlaybackSurface(
+    item: MediaItem,
+    modifier: Modifier = Modifier,
+    onToggleChrome: () -> Unit,
+    createPlayer: (Context) -> ExoPlayer = koinInject<VideoPlayerFactory>()::create,
+) {
+    val playback = rememberViewerPlaybackState(item, createPlayer = createPlayer)
+    playback.current?.let {
+        Box(modifier) {
+            TestVideoPage(item, it, onToggleChrome)
+            ViewerChrome(item, playback = it, onBack = {}, filmstrip = {}, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
+@Composable
+private fun TestVideoPage(
+    item: MediaItem,
+    controller: VideoPlaybackController,
+    onToggleChrome: () -> Unit = {},
+) {
+    MediaViewerPage(
+        item = item,
+        isCurrentPage = true,
+        surfaceTransform = ViewerSurfaceTransform(),
+        trackSurfaceBounds = false,
+        onToggleChrome = onToggleChrome,
+        onActivePageStateChange = {},
+        onSurfaceBoundsChange = {},
+        playbackController = controller,
+    )
 }

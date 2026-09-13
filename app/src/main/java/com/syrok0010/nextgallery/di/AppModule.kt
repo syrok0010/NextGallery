@@ -30,6 +30,7 @@ import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
@@ -93,6 +94,7 @@ val appModule = module {
     }
     single { SessionStore(get()) }
     single { VideoPlayerFactory(get(), get()) }
+    single { VideoFramesFactory(androidContext(), get()) }
     single { MediaImageRequestFactory(androidContext(), get()) }
 
     viewModelOf(::SessionViewModel)

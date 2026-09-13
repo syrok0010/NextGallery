@@ -35,6 +35,7 @@ internal fun rememberViewerMotionState(
     currentMediaId: MediaId?,
     tileBoundsForMediaId: (MediaId) -> Rect?,
     onClose: () -> Unit,
+    backEnabled: Boolean = true,
 ): ViewerMotionState {
     val openingMediaId = rememberSaveable(saver = MediaIdSaver) { initialMediaId }
     val enterPending = rememberSaveable { mutableStateOf(true) }
@@ -57,7 +58,7 @@ internal fun rememberViewerMotionState(
     LaunchedEffect(currentMediaId, motion.surfaceBounds) {
         motion.enter(currentMediaId)
     }
-    PredictiveBackHandler(enabled = currentMediaId != null) { progress ->
+    PredictiveBackHandler(enabled = backEnabled && currentMediaId != null) { progress ->
         val closed = closeViewer.value
         try {
             progress.collect { motion.onBackProgress(it.progress) }
