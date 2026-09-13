@@ -80,7 +80,7 @@ class LibraryIntegrationTest {
                 rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("album-160.jpg").fetchSemanticsNodes().isNotEmpty() }
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
                 rule.onNodeWithContentDescription("fixture-1.jpg").assertDoesNotExist()
-                rule.onNodeWithTag("album_contents_grid").performScrollToIndex(40)
+                rule.onNodeWithTag("media_grid").performScrollToIndex(41)
                 val albumAnchor = rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top
                 restoration.emulateSavedInstanceStateRestore()
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
@@ -89,7 +89,7 @@ class LibraryIntegrationTest {
                 restoration.emulateSavedInstanceStateRestore()
                 rule.onNodeWithText("album-120.jpg").assertIsDisplayed()
                 rule.onNodeWithContentDescription("Назад").performClick()
-                rule.onNodeWithTag("album_contents_grid").assertIsDisplayed()
+                rule.onNodeWithTag("media_grid").assertIsDisplayed()
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
                 Espresso.pressBack()
                 rule.onNodeWithTag("album_catalog").assertIsDisplayed()

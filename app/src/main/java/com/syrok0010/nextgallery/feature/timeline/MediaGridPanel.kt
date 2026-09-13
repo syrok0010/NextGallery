@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,14 +15,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.res.stringResource
-import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 
 @Composable
-internal fun TimelinePanel(
-    state: TimelineUiState,
+internal fun MediaGridPanel(
+    slots: List<TimelineSlot>,
+    emptyContent: @Composable () -> Unit,
     onViewportObservation: (TimelineViewportObservation) -> Unit,
     revealMediaId: MediaId?,
     onMediaRevealed: () -> Unit,
@@ -31,9 +29,8 @@ internal fun TimelinePanel(
     onSelect: (MediaItem) -> Unit,
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
-    val timeline = state.snapshot
-    val gridItems = remember(timeline?.slots) {
-        timeline?.slots?.toTimelineGridItems().orEmpty()
+    val gridItems = remember(slots) {
+        slots.toTimelineGridItems()
     }
     val slotGridIndexes = remember(gridItems) {
         gridItems.toSlotGridIndexes()
@@ -46,10 +43,6 @@ internal fun TimelinePanel(
     )
 
     LaunchedEffect(gridItems) {
-        if (timeline == null) {
-            return@LaunchedEffect
-        }
-
         snapshotFlow {
             val visibleItems = gridState.layoutInfo.visibleItemsInfo
             val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
@@ -105,9 +98,9 @@ internal fun TimelinePanel(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (timeline?.slots.isNullOrEmpty()) {
+        if (slots.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.timeline_empty))
+                emptyContent()
             }
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -119,7 +112,7 @@ internal fun TimelinePanel(
                 )
 
                 TimelineScrollIndicatorHost(
-                    timeline = timeline,
+                    slots = slots,
                     gridItems = gridItems,
                     slotGridIndexes = slotGridIndexes,
                     gridState = gridState,

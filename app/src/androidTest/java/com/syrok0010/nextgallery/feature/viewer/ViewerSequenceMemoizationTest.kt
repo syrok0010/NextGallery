@@ -46,7 +46,7 @@ class ViewerSequenceMemoizationTest {
 
         composeRule.setContent {
             val unrelatedValue = unrelatedState.intValue
-            val sequence = rememberViewerSequence(snapshotState.value, currentMediaId = null)
+            val sequence = rememberViewerSequence(snapshotState.value.slots, currentMediaId = null)
             SideEffect {
                 check(unrelatedValue >= 0)
                 currentSequence.set(sequence)
@@ -90,7 +90,7 @@ class ViewerSequenceMemoizationTest {
 
         composeRule.setContent {
             val sequence = rememberViewerSequence(
-                snapshot = snapshotState.value,
+                slots = snapshotState.value.slots,
                 currentMediaId = currentMediaIdState.value,
             )
             val state = rememberPagerState(
@@ -142,7 +142,7 @@ class ViewerSequenceMemoizationTest {
 
         composeRule.setContent {
             val sequence = rememberViewerSequence(
-                snapshot = snapshotState.value,
+                slots = snapshotState.value.slots,
                 currentMediaId = currentMediaIdState.value,
             )
             SideEffect { currentSequence.set(sequence) }

@@ -59,6 +59,7 @@ internal class MemoriesAlbumContents(
                     )
                 }
             }
+
             fun batch() =
                 AlbumContentsBatch(
                     items.values

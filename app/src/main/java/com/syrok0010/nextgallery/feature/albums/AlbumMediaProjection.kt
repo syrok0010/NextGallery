@@ -21,11 +21,15 @@ internal fun albumMediaProjection(
         known != null && known.localCopy?.modifiedAtEpochSeconds == member.localCopy?.modifiedAtEpochSeconds -> known
         else -> member
     }
-    canonical.copy(assetRef = when {
-        local != null && remote != null -> MediaAssetRef.LocalFirst(local, remote)
-        remote != null -> remote
-        local != null -> local
-        else -> member.assetRef
-    })
+    canonical.copy(
+        assetRef = when {
+            local != null && remote != null -> MediaAssetRef.LocalFirst(local, remote)
+            remote != null -> remote
+            local != null -> local
+            else -> member.assetRef
+        },
+    )
 }.distinctBy { it.mediaId }.sortedWith(
-    compareByDescending<MediaItem> { it.dayId }.thenByDescending { it.takenAtEpochSeconds }.thenBy { it.mediaId.value })
+    compareByDescending<MediaItem> { it.dayId }.thenByDescending { it.takenAtEpochSeconds }
+        .thenBy { it.mediaId.value },
+)
