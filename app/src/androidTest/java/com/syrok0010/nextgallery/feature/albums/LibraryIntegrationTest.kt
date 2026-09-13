@@ -17,8 +17,9 @@ import coil3.SingletonImageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
-import com.syrok0010.nextgallery.app.ui.LibraryScreen
-import com.syrok0010.nextgallery.app.ui.rememberViewerTransitionCoordinator
+import com.syrok0010.nextgallery.app.ui.NextGalleryNavigation
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
 import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
@@ -38,7 +39,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Exercises the real LibraryScreen, production DI and HTTP adapters with an isolated account. */
+/** Exercises the real NextGalleryNavigation, production DI and HTTP adapters with an isolated account. */
 class LibraryIntegrationTest {
     @get:Rule val rule = createComposeRule()
     @Test fun photosAlbumsMenuAndViewerKeepTheirState() {
@@ -58,7 +59,8 @@ class LibraryIntegrationTest {
             try {
                 val restoration = StateRestorationTester(rule)
                 restoration.setContent {
-                    LibraryScreen(rememberViewerTransitionCoordinator(), viewModel = photos, albumsViewModel = albums)
+                    val session by sessions.session.collectAsState()
+                    NextGalleryNavigation(session, viewModel = photos, albumsViewModel = albums)
                 }
                 // Permission explanation is an existing first-run flow on a fresh automation package.
                 rule.waitForIdle()
@@ -102,6 +104,13 @@ class LibraryIntegrationTest {
                 rule.onNodeWithText("/Photos/Fixture").assertExists()
                 rule.onAllNodesWithText("Загружено 24 элементов").assertCountEquals(1)
                 screenshot("diagnostics")
+                rule.runOnUiThread { sessions.signOut() }
+                rule.onNodeWithText("Подключение к Nextcloud").assertIsDisplayed()
+                rule.onNodeWithTag("library_island").assertDoesNotExist()
+                rule.onNodeWithTag("album_catalog").assertDoesNotExist()
+                rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password")) }
+                rule.onNodeWithTag("library_page:Photos").assertIsSelected()
+                rule.onNodeWithTag("library_diagnostics").assertDoesNotExist()
             } finally {
                 rule.runOnUiThread {
                     store.clear()
