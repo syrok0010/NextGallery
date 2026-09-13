@@ -82,11 +82,9 @@ class MediaDetailScreenTest {
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.action_back)).assertDoesNotExist()
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertDoesNotExist()
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertDoesNotExist()
         rule.onRoot().performTouchInput { cancel() }
         rule.waitForIdle()
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertIsDisplayed()
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertIsDisplayed()
     }
 
@@ -95,11 +93,9 @@ class MediaDetailScreenTest {
         showViewer(listOf(mediaItem("video", isVideo = true)), tileBounds = null, onClose = {})
         rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertDoesNotExist()
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
         rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertIsDisplayed()
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).assertIsDisplayed()
     }
 
     @Test

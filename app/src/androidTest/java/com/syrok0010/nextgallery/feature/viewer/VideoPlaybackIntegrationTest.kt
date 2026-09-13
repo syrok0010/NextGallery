@@ -85,11 +85,11 @@ class VideoPlaybackIntegrationTest {
             assertEquals(0L, player.currentPosition)
         }
         screenshot("poster")
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300L }
         rule.runOnIdle { assertTrue(player.duration in 11_900L..12_100L) }
         screenshot("playing")
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { !player.playWhenReady }
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performTouchInput {
             swipe(Offset(width * 0.2f, centerY), Offset(width * 0.5f, centerY), durationMillis = 500)
@@ -105,16 +105,16 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { assertEquals(0f, player.volume) }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
         rule.runOnIdle { assertEquals(1f, player.volume) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         waitForPlayer { !player.playWhenReady }
         rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         waitForPlayer { !player.isPlaying }
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.97f) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_ENDED }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition < 2_000L }
     }
 
@@ -139,13 +139,13 @@ class VideoPlaybackIntegrationTest {
                 )
             }
         }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
         screenshot("viewer-poster")
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             !rule.onNodeWithTag(VideoPlaybackSeekTestTag).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackFullscreenTestTag).performClick()
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_exit_fullscreen)).assertIsDisplayed()
@@ -160,11 +160,11 @@ class VideoPlaybackIntegrationTest {
             assertEquals(video.mediaId, current?.mediaId)
         }
         rule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithText("0:00 / 0:00").assertIsDisplayed()
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithText("0:00 / 0:00").assertIsDisplayed()
     }
 
@@ -183,7 +183,7 @@ class VideoPlaybackIntegrationTest {
                 }
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().currentPosition > 300L }
         rule.runOnIdle { visible.value = false }
         rule.waitForIdle()
@@ -197,7 +197,7 @@ class VideoPlaybackIntegrationTest {
             assertFalse(players.last().playWhenReady)
             assertEquals(0L, players.last().currentPosition)
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test fun unreadableVideoShowsRetryAndCanRecover() {
@@ -208,7 +208,7 @@ class VideoPlaybackIntegrationTest {
                 TestPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -242,15 +242,15 @@ class VideoPlaybackIntegrationTest {
         }
         rule.runOnIdle { assertFalse(players.single().playWhenReady) }
         assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().isPlaying && players.single().currentPosition > 300 }
         rule.runOnIdle { assertTrue(players.single().duration in 11_900L..12_100L) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         waitForPlayer { players.single().currentPosition in 5_800L..6_200L }
         rule.onNodeWithTag(VideoPlaybackMuteTestTag).performClick()
         rule.runOnIdle { assertEquals(0f, players.single().volume) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { players.single().isPlaying }
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         waitForPlayer { !players.single().playWhenReady }
@@ -266,7 +266,7 @@ class VideoPlaybackIntegrationTest {
             assertFalse(players.last().playWhenReady)
             assertEquals(0L, players.last().currentPosition)
         }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test fun corruptLocalFallsBackToRemoteAndAuthRetryUsesNewSession() = withRemote { fixture, remote ->
@@ -285,7 +285,7 @@ class VideoPlaybackIntegrationTest {
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_auth_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -302,7 +302,7 @@ class VideoPlaybackIntegrationTest {
         fixture.status = 200
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
-        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag).assertCountEquals(1)
+        rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
         screenshot("remote-fallback-playing")
         assertTrue(fixture.requests.any { it["authorization"] == fixture.authorization })
     }
@@ -321,7 +321,7 @@ class VideoPlaybackIntegrationTest {
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
         assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
     }
@@ -340,9 +340,9 @@ class VideoPlaybackIntegrationTest {
         assertTrue(fixture.requests.none {
             it[":request"]?.let { request -> request.contains("/stream/") || request.contains("/video/transcode/") } == true
         })
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         waitForPlayer { player.currentPosition in 5800L..6200L }
         rule.waitUntil(10_000) { rule.onAllNodesWithTag("video_quality").fetchSemanticsNodes().isNotEmpty() }
@@ -354,9 +354,9 @@ class VideoPlaybackIntegrationTest {
             assertTrue(player.currentPosition in 5800L..6200L)
         }
         screenshot("hls-paused-quality-switch")
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         fixture.hlsStatus = 500
         rule.onNodeWithTag("video_quality").performClick()
         rule.onNodeWithText("Auto").performClick()
@@ -388,7 +388,7 @@ class VideoPlaybackIntegrationTest {
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 300 }
         rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
         screenshot("hls-automatic-fallback")
@@ -407,7 +407,7 @@ class VideoPlaybackIntegrationTest {
                 })
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.waitUntil(10_000) {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -479,7 +479,7 @@ class VideoPlaybackIntegrationTest {
             assertTrue(player.currentPosition in 5800L..6200L)
         }
         screenshot("local-filmstrip-scrub")
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
     }
 
@@ -530,7 +530,7 @@ class VideoPlaybackIntegrationTest {
                 }
             }
         }
-        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
         fixture.status = 503
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
@@ -544,7 +544,7 @@ class VideoPlaybackIntegrationTest {
                 rule.activity.getString(R.string.video_filmstrip_ready)
         }
         rule.runOnIdle { assertTrue(player.playWhenReady) }
-        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
         waitForPlayer { player.currentPosition in 6800L..7600L }
         rule.runOnIdle { assertFalse(player.playWhenReady) }

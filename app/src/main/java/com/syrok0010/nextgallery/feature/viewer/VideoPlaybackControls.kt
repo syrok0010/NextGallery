@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,10 +34,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.text.style.TextOverflow
 import java.util.Locale
 
 internal const val VideoPlaybackPlayPauseTestTag = "video_playback_play_pause"
-internal const val VideoPlaybackControlsPlayPauseTestTag = "video_playback_controls_play_pause"
 internal const val VideoPlaybackSeekTestTag = "video_playback_seek"
 internal const val VideoPlaybackMuteTestTag = "video_playback_mute"
 internal const val VideoPlaybackFullscreenTestTag = "video_playback_fullscreen"
@@ -49,77 +57,59 @@ internal fun VideoPlaybackCenterAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     error: VideoPlaybackError? = null,
+    showsPauseAction: Boolean = phase == VideoPlaybackPhase.Playing,
 ) {
-    when (phase) {
-        VideoPlaybackPhase.Loading -> {
-            Column(
-                modifier = modifier.background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp), color = Color.White)
-                Text(
-                    text = stringResource(R.string.video_playback_loading),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                )
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(64.dp)
+                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                .testTag(VideoPlaybackPlayPauseTestTag),
+        ) {
+            if (phase == VideoPlaybackPhase.Loading) {
+                CircularProgressIndicator(Modifier.size(60.dp), color = Color.White, strokeWidth = 2.dp)
             }
+            Icon(
+                painter = painterResource(
+                    if (phase == VideoPlaybackPhase.Error) R.drawable.ic_video_replay else if (showsPauseAction) R.drawable.ic_video_pause else R.drawable.ic_video_play,
+                ),
+                contentDescription = stringResource(
+                    if (phase == VideoPlaybackPhase.Error) {
+                        R.string.video_playback_retry
+                    } else if (showsPauseAction) {
+                        R.string.video_playback_pause
+                    } else {
+                        R.string.video_playback_play
+                    },
+                ),
+                tint = Color.White,
+            )
         }
-        VideoPlaybackPhase.Poster,
-        VideoPlaybackPhase.Paused,
-        VideoPlaybackPhase.Error,
-        -> {
-            Column(
-                modifier = modifier,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                IconButton(
-                    onClick = onClick,
-                    modifier = Modifier.size(64.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        .testTag(VideoPlaybackPlayPauseTestTag),
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (phase == VideoPlaybackPhase.Error) R.drawable.ic_video_replay else R.drawable.ic_video_play,
-                        ),
-                        contentDescription = stringResource(
-                            if (phase == VideoPlaybackPhase.Error) {
-                                R.string.video_playback_retry
-                            } else {
-                                R.string.video_playback_play
-                            },
-                        ),
-                        tint = Color.White,
-                    )
-                }
-                if (phase == VideoPlaybackPhase.Error) {
-                    Text(
-                        text = stringResource(when (error) {
-                            VideoPlaybackError.AuthenticationRequired -> R.string.video_playback_auth_error
-                            VideoPlaybackError.TranscodeFailed -> R.string.video_playback_transcode_error
-                            VideoPlaybackError.RemoteUnavailable -> R.string.video_playback_remote_error
-                            else -> R.string.video_playback_error
-                        }),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
-                }
-            }
+        if (phase == VideoPlaybackPhase.Error) {
+            Text(
+                text = stringResource(when (error) {
+                    VideoPlaybackError.AuthenticationRequired -> R.string.video_playback_auth_error
+                    VideoPlaybackError.TranscodeFailed -> R.string.video_playback_transcode_error
+                    VideoPlaybackError.RemoteUnavailable -> R.string.video_playback_remote_error
+                    else -> R.string.video_playback_error
+                }),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
         }
-
-        VideoPlaybackPhase.Playing -> Unit
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun VideoPlaybackControls(
     state: VideoPlaybackState,
-    onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleMute: () -> Unit,
     onToggleFullscreen: () -> Unit,
@@ -135,115 +125,81 @@ internal fun VideoPlaybackControls(
         0f
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.72f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        Slider(
-            value = scrubFraction ?: sliderValue,
-            onValueChange = { scrubFraction = it },
-            onValueChangeFinished = {
-                scrubFraction?.let { fraction -> onSeek((fraction * durationMillis).toLong()) }
-                scrubFraction = null
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(alpha = 0.28f),
-                disabledThumbColor = Color.White.copy(alpha = 0.38f),
-                disabledActiveTrackColor = Color.White.copy(alpha = 0.38f),
-                disabledInactiveTrackColor = Color.White.copy(alpha = 0.18f),
-            ),
-            enabled = durationMillis > 0L && state.phase in setOf(VideoPlaybackPhase.Playing, VideoPlaybackPhase.Paused),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(VideoPlaybackSeekTestTag)
-                .semantics { contentDescription = seekDescription },
-        )
+    Box(modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.Center)
+            .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(18.dp)))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconButton(
-                onClick = onPlayPause,
-                modifier = Modifier.testTag(VideoPlaybackControlsPlayPauseTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.showsPauseAction) {
-                            R.drawable.ic_video_pause
-                        } else {
-                            R.drawable.ic_video_play
-                        },
-                    ),
-                    contentDescription = stringResource(
-                        if (state.showsPauseAction) {
-                            R.string.video_playback_pause
-                        } else {
-                            R.string.video_playback_play
-                        },
-                    ),
-                    tint = Color.White,
-                )
-            }
             Text(
-                text = stringResource(
-                    R.string.video_playback_position,
+                text = stringResource(R.string.video_playback_position,
                     formatVideoTime(scrubFraction?.let { (it * durationMillis).toLong() } ?: state.positionMillis),
-                    formatVideoTime(durationMillis),
-                ),
+                    formatVideoTime(durationMillis)),
                 color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+            val enabled = durationMillis > 0L && state.phase in setOf(VideoPlaybackPhase.Playing, VideoPlaybackPhase.Paused)
+            Slider(
+                value = scrubFraction ?: sliderValue,
+                onValueChange = { scrubFraction = it },
+                onValueChangeFinished = {
+                    scrubFraction?.let { onSeek((it * durationMillis).toLong()) }
+                    scrubFraction = null
+                },
+                enabled = enabled,
+                thumb = {
+                    Box(Modifier.size(width = 8.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(8.dp).background(
+                            Color.White.copy(alpha = if (enabled) 1f else 0.38f), CircleShape))
+                    }
+                },
+                track = { slider ->
+                    Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.25f), CircleShape)) {
+                        Box(Modifier.fillMaxWidth(slider.value.coerceIn(0f, 1f)).height(3.dp)
+                            .background(Color.White.copy(alpha = if (enabled) 1f else 0.38f), CircleShape))
+                    }
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    .testTag(VideoPlaybackSeekTestTag).semantics { contentDescription = seekDescription },
             )
             if (state.qualities.isNotEmpty()) Box {
                 var expanded by remember { mutableStateOf(false) }
-                TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("video_quality")) {
-                    Text(state.quality, color = Color.White)
+                TextButton(
+                    onClick = { expanded = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                    modifier = Modifier.testTag("video_quality").widthIn(max = 88.dp),
+                ) {
+                    Text(state.quality, color = Color.White, style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null,
+                        tint = Color.White, modifier = Modifier.size(12.dp))
                 }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                    shape = RoundedCornerShape(16.dp), containerColor = Color(0xF5202528)) {
                     state.qualities.forEach { quality ->
-                        DropdownMenuItem(text = { Text(quality.label) }, onClick = {
-                            expanded = false
-                            onSelectQuality(quality)
-                        })
+                        DropdownMenuItem(
+                            text = { Text(quality.label, color = Color.White) },
+                            trailingIcon = {
+                                if (state.quality == quality.label) Icon(Icons.Default.Check, null, tint = Color.White)
+                            },
+                            onClick = { expanded = false; onSelectQuality(quality) },
+                        )
                     }
                 }
             }
-            IconButton(
-                onClick = onToggleMute,
-                modifier = Modifier.testTag(VideoPlaybackMuteTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.isMuted) R.drawable.ic_video_volume_off else R.drawable.ic_video_volume_up,
-                    ),
-                    contentDescription = stringResource(
-                        if (state.isMuted) R.string.video_playback_unmute else R.string.video_playback_mute,
-                    ),
-                    tint = Color.White,
-                )
+            IconButton(onClick = onToggleMute,
+                modifier = Modifier.width(40.dp).testTag(VideoPlaybackMuteTestTag)) {
+                Icon(painterResource(if (state.isMuted) R.drawable.ic_video_volume_off else R.drawable.ic_video_volume_up),
+                    stringResource(if (state.isMuted) R.string.video_playback_unmute else R.string.video_playback_mute),
+                    tint = Color.White, modifier = Modifier.size(18.dp))
             }
-            IconButton(
-                onClick = onToggleFullscreen,
-                modifier = Modifier.testTag(VideoPlaybackFullscreenTestTag),
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (state.isFullscreen) R.drawable.ic_video_fullscreen_exit else R.drawable.ic_video_fullscreen,
-                    ),
-                    contentDescription = stringResource(
-                        if (state.isFullscreen) {
-                            R.string.video_playback_exit_fullscreen
-                        } else {
-                            R.string.video_playback_fullscreen
-                        },
-                    ),
-                    tint = Color.White,
-                )
+            IconButton(onClick = onToggleFullscreen,
+                modifier = Modifier.width(40.dp).testTag(VideoPlaybackFullscreenTestTag)) {
+                Icon(painterResource(if (state.isFullscreen) R.drawable.ic_video_fullscreen_exit else R.drawable.ic_video_fullscreen),
+                    stringResource(if (state.isFullscreen) R.string.video_playback_exit_fullscreen else R.string.video_playback_fullscreen),
+                    tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }
     }

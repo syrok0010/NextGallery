@@ -26,13 +26,17 @@ internal fun VideoPlaybackChrome(controller: VideoPlaybackController, controlsVi
     val density = LocalDensity.current
     var controlsHeight by remember { mutableStateOf(0.dp) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        if (playbackState.phase != VideoPlaybackPhase.Playing &&
-            (controlsVisible || playbackState.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error, VideoPlaybackPhase.Loading))
+        if (controlsVisible || playbackState.phase in setOf(VideoPlaybackPhase.Poster, VideoPlaybackPhase.Error, VideoPlaybackPhase.Loading)
         ) VideoPlaybackCenterAction(
             phase = playbackState.phase,
             error = playbackState.error,
+            showsPauseAction = playbackState.showsPauseAction,
             onClick = {
-                dispatch(if (playbackState.phase == VideoPlaybackPhase.Error) VideoPlaybackInput.Retry else VideoPlaybackInput.Play)
+                dispatch(when {
+                    playbackState.phase == VideoPlaybackPhase.Error -> VideoPlaybackInput.Retry
+                    playbackState.showsPauseAction -> VideoPlaybackInput.Pause
+                    else -> VideoPlaybackInput.Play
+                })
             },
             modifier = Modifier.align(Alignment.Center)
                 .offset {
@@ -43,13 +47,6 @@ internal fun VideoPlaybackChrome(controller: VideoPlaybackController, controlsVi
 
         if (controlsVisible) VideoPlaybackControls(
             state = playbackState,
-            onPlayPause = {
-                if (playbackState.showsPauseAction) {
-                    dispatch(VideoPlaybackInput.Pause)
-                } else {
-                    dispatch(VideoPlaybackInput.Play)
-                }
-            },
             onSelectQuality = controller::selectQuality,
             onSeek = { positionMillis -> dispatch(VideoPlaybackInput.SeekTo(positionMillis)) },
             onToggleMute = { dispatch(VideoPlaybackInput.ToggleMute) },
@@ -65,7 +62,7 @@ internal fun VideoPlaybackChrome(controller: VideoPlaybackController, controlsVi
             modifier = Modifier.align(Alignment.BottomCenter)
                 .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(bottom = if (playbackState.isFullscreen) 0.dp else FilmstripRowHeight),
+                .padding(bottom = if (playbackState.isFullscreen) 8.dp else FilmstripRowHeight + 8.dp),
         )
     }
 }
