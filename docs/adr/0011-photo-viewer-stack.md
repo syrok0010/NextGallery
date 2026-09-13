@@ -55,14 +55,15 @@ screen нарушил бы общий pager/return transition, а готовый
 - Fullscreen остаётся в текущей page: временно разрешает landscape, скрывает viewer chrome и system bars; Back сначала выходит из fullscreen. Исходная ориентация и видимость system bars восстанавливаются при выходе/уничтожении surface. Activity обрабатывает смену ориентации без пересоздания, чтобы не потерять playback session.
 - При уходе приложения в фон playback ставится на паузу, включая отмену play intent во время загрузки. Возврат не запускает видео автоматически.
 - Для video surface используется TextureView, чтобы поверхность следовала Compose-transform при возврате в tile. Это обмен эффективности SurfaceView на совместимость с существующей анимацией viewer; controls в transform не входят.
-- В первом приближении используются только platform decoders Media3; transcoding/HLS и выбор качества вынесены в отдельные задачи.
+- Используются platform decoders Media3 и его HLS-модуль; bundled software decoders не подключаются.
 
 ### Источники video original
 
 Local-first выбирает локальную копию первой. При ошибке чтения или декодирования
 сессия один раз переключает тот же player на remote original, сохраняя позицию,
 play/pause intent, mute и fullscreen. `MediaId` и pager sequence не меняются.
-Явный retry начинает выбор источников заново; ошибка remote завершает попытку.
+Для original явный retry начинает выбор источников заново. Несовместимый remote
+original допускает ещё один переход к обнаруженному Memories HLS.
 
 UI получает только логическую ссылку на remote file ID. `OkHttpDataSource`
 использует общий `NextcloudTransport`; interceptor разрешает ссылку в Memories
@@ -78,6 +79,29 @@ Redirects для видео отключены: клиент обращаетс�
 сообщение о необходимости авторизации; сетевые/HTTP ошибки — о недоступности
 облачного видео. Logout убирает authenticated viewer по общей границе приложения.
 
+### Remote quality и HLS
+
+Критерии: сохранить local-first по умолчанию, поддержать несовместимые originals
+без изменения backend, не обещать несуществующие серверные профили и не терять
+позицию или play/pause intent при переключении источника.
+
+После явного Play discovery читает config и master playlist параллельно обычному
+playback. При `vod_disable` или ошибке discovery menu скрыто. `Direct` адресует
+remote original, `Original` существует только при `max.m3u8`, `Auto` выбирает
+master, остальные варианты берутся из manifest. Явный quality override у
+local+cloud объекта переключает на remote; локальное перекодирование отсутствует.
+
+Альтернатива с фиксированным списком разрешений отклонена: backend может не
+предоставлять выбранный профиль. HLS по умолчанию отклонён: оригинал предпочтителен,
+а transcode создаёт лишнюю серверную работу. Переключение заменяет source в том же
+player через loading state, сохраняя position, play intent, mute и fullscreen.
+Ошибка HLS завершает автоматический ladder; retry повторяет выбранный HLS с той
+же позицией и intent. Уход в фон отменяет play intent даже во время загрузки.
+
+Последствие: доступность menu определяется также конкретным файлом и storage,
+а не только конфигурацией сервера. Discovery отменяется при закрытии сессии;
+credentials разрешаются заново для manifest, segments и повторных запросов.
+
 Версии библиотек определяет version catalog.
 
 ## Последствия
@@ -85,9 +109,9 @@ Redirects для видео отключены: клиент обращаетс�
 - Проект не поддерживает собственный image engine.
 - Gesture conflicts проверяются automation tests и на реальном устройстве.
 - Ultra HDR остаётся best-effort и зависит от gain map, Android и display.
-- WebDAV fallback, transcoding и prefetch originals остаются отдельными решениями.
+- WebDAV fallback и prefetch originals остаются отдельными решениями.
 
 ## Открытые вопросы
 
-- Какие server-side variants доступны для transcoding/HLS.
+- Совместимость VOD-контракта с другими версиями Memories и storage backends.
 - Какой client-side filmstrip projection даст scrubbing без изменений серверного API.

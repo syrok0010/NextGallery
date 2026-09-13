@@ -231,4 +231,28 @@ UnifiedTimelineProjection -> published timeline
   не браузерный request token в URL. Instrumentation fixture проверяет этот
   HTTP-контракт отдельно от доступности личного сервера.
 
-Transcoding/HLS и quality profiles требуют отдельного контракта в следующем срезе.
+## Video HLS: контракт Memories VOD
+
+Проверено по checkout `abea4165`: `VideoController.php::transcode`,
+`src/services/API.ts::VIDEO_TRANSCODE`, `src/components/viewer/PsVideo.ts` и
+`go-vod/transcoder/manager.go::ServeIndex`.
+
+- `/config.vod_disable` запрещает VOD. При выключенном VOD native-клиент не
+  запрашивает manifest и скрывает quality menu.
+- `GET /apps/memories/api/video/transcode/{client}/{fileid}/index.m3u8` возвращает
+  master playlist. `client` имеет минимум 8 символов и остаётся одним для текущей
+  playback session; native-клиент использует случайный UUID.
+- Master содержит `EXT-X-STREAM-INF` с `BANDWIDTH`, `RESOLUTION`, `FRAME-RATE`
+  и относительные `{quality}.m3u8`, включая query string. Playlist и сегменты
+  проходят через тот же authenticated transport; query сохраняется.
+- `Direct` означает исходный `/stream`, `Original` — только обнаруженный
+  `max.m3u8`, `Auto` — master playlist. Resolution label равен меньшей стороне
+  `RESOLUTION`, в том числе для portrait. Фиксированные профили клиент не создаёт.
+- Сервер отклоняет external storage и временные файлы; `vod_disable=false` ещё
+  не гарантирует доступность transcode для конкретного файла. Ошибка discovery
+  оставляет original без quality menu, ошибка выбранного HLS даёт явный retry.
+- При смене процесса transcoder возможен HTTP 409. Native-клиент не создаёт
+  бесконечный цикл source fallback; после исчерпания попыток Media3 нужен retry.
+- URI master/variants/segments остаются логическими ссылками до запроса.
+  Клиент принимает только соседние variants текущего VOD path и отключает
+  redirects, чтобы не переносить app credentials на произвольные manifest URL.

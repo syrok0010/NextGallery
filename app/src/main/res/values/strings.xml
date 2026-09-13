@@ -67,4 +67,5 @@
     <string name="video_playback_position">%1$s / %2$s</string>
     <string name="video_playback_auth_error">Для просмотра видео войдите в аккаунт заново</string>
     <string name="video_playback_remote_error">Облачное видео недоступно. Проверьте подключение и повторите попытку</string>
+    <string name="video_playback_transcode_error">Server could not transcode this video. Try again.</string>
 </resources>

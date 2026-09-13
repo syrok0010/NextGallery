@@ -319,6 +319,97 @@ class VideoPlaybackIntegrationTest {
         assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
     }
 
+    @Test fun remoteHlsSwitchKeepsPausedPositionAndRetryRecovers() = withRemote { fixture, remote ->
+        fixture.hls = true
+        lateinit var player: ExoPlayer
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        assertTrue(fixture.requests.none {
+            it[":request"]?.let { request -> request.contains("/stream/") || request.contains("/video/transcode/") } == true
+        })
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying }
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        rule.onNodeWithTag(VideoPlaybackSeekTestTag).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        waitForPlayer { player.currentPosition in 5800L..6200L }
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("video_quality").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("video_quality").performClick()
+        rule.onNodeWithText("360p").performClick()
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY && player.currentMediaItem?.localConfiguration?.uri.toString().contains("360p.m3u8") }
+        rule.runOnIdle {
+            assertFalse(player.playWhenReady)
+            assertTrue(player.currentPosition in 5800L..6200L)
+        }
+        screenshot("hls-paused-quality-switch")
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+        rule.onNodeWithTag(VideoPlaybackControlsPlayPauseTestTag).performClick()
+        fixture.hlsStatus = 500
+        rule.onNodeWithTag("video_quality").performClick()
+        rule.onNodeWithText("Auto").performClick()
+        rule.waitUntil(20_000) {
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_remote_error)).fetchSemanticsNodes().isNotEmpty()
+        }
+        screenshot("hls-transcode-error")
+        fixture.hlsStatus = 200
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
+        waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY }
+        rule.runOnIdle {
+            assertFalse(player.playWhenReady)
+            assertTrue(player.currentPosition > 6500)
+        }
+        assertTrue(fixture.requests.any { it[":request"]?.contains(".ts") == true })
+        assertTrue(fixture.requests.filter { it[":request"]?.contains("/video/transcode/") == true }
+            .all { it["authorization"] == fixture.authorization })
+    }
+
+    @Test fun incompatibleRemoteAutomaticallyFallsBackToHls() = withRemote { fixture, remote ->
+        fixture.hls = true
+        fixture.corruptOriginal = true
+        lateinit var player: ExoPlayer
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        waitForPlayer { player.isPlaying && player.currentPosition > 300 }
+        rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
+        screenshot("hls-automatic-fallback")
+    }
+
+    @Test fun retryRediscoversHlsAfterTransientManifestFailure() = withRemote { fixture, remote ->
+        fixture.hls = true
+        fixture.corruptOriginal = true
+        fixture.hlsStatus = 503
+        lateinit var player: ExoPlayer
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        rule.setContent {
+            MaterialTheme {
+                VideoPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
+                    factory.create(it).also { created -> player = created }
+                })
+            }
+        }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_error)).fetchSemanticsNodes().isNotEmpty()
+        }
+        fixture.hlsStatus = 200
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
+        waitForPlayer { player.isPlaying }
+        rule.runOnIdle { assertTrue(player.currentMediaItem?.localConfiguration?.uri.toString().endsWith("index.m3u8")) }
+    }
+
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
         val session = GlobalContext.get().get<SessionStore>()
         val previous = session.session.value

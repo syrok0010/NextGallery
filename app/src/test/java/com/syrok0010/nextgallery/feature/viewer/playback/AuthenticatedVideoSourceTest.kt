@@ -46,6 +46,30 @@ class AuthenticatedVideoSourceTest {
         }
     }
 
+    @Test fun `HLS playlists and segments retain logical base and authenticate each request`() {
+        var account = AccountCredentials("https://cloud.example/nextcloud", "alice", "first")
+        val requests = mutableListOf<Request>()
+        val transport = NextcloudTransport(Json, OkHttpClient())
+        val client = transport.baseClient.newBuilder()
+            .addInterceptor(AuthenticatedVideoSource(transport) { account })
+            .addInterceptor { chain ->
+                requests += chain.request()
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body("fixture".toResponseBody()).build()
+            }.build()
+        for (profile in listOf("index.m3u8", "360p.m3u8", "360p-00001.ts")) {
+            val logical = "https://memories.invalid/vod/client123/42/$profile?session=abc"
+            client.newCall(Request.Builder().url(logical).build()).execute().use {
+                assertEquals(logical, it.request.url.toString())
+            }
+            account = account.copy(appPassword = "second")
+        }
+        assertEquals("/nextcloud/apps/memories/api/video/transcode/client123/42/360p-00001.ts", requests.last().url.encodedPath)
+        assertEquals("session=abc", requests.last().url.encodedQuery)
+        assertEquals(Credentials.basic("alice", "first"), requests.first().header("Authorization"))
+        assertEquals(Credentials.basic("alice", "second"), requests.last().header("Authorization"))
+    }
+
     @Test fun `source plan prefers local and exposes only one remote fallback`() {
         val local = MediaAssetRef.LocalContent("content://media/42", null)
         val remote = MediaAssetRef.MemoriesFile(42)
