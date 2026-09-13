@@ -41,7 +41,7 @@ fun NextGalleryApp(viewModel: SessionViewModel = koinViewModel()) {
             entry<NextGalleryRoute.Login> { LoginScreen() }
 
             entry<NextGalleryRoute.Authenticated> {
-                HomeScreen(viewerTransitionCoordinator = viewerTransitionCoordinator)
+                LibraryScreen(viewerTransitionCoordinator = viewerTransitionCoordinator)
             }
         },
     )

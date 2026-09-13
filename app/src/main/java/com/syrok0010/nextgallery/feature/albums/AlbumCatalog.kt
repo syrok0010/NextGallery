@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 
 internal enum class AlbumOrigin { Nextcloud, Phone }
@@ -25,7 +26,7 @@ internal interface LocalAlbumSource {
 
 /** Containers are never reconciled through media identity or display names. */
 internal fun albumCatalog(remote: List<AlbumSummary>, local: List<AlbumSummary>): List<AlbumSummary> =
-    (remote + local).sortedWith(compareBy<AlbumSummary> { it.name.lowercase(java.util.Locale.ROOT) }.thenBy { it.id })
+    (remote + local).sortedWith(compareBy<AlbumSummary> { it.name.lowercase(Locale.ROOT) }.thenBy { it.id })
 
 internal data class LocalAlbumEntry(val volume: String, val path: String, val uri: String, val modified: Long)
 internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<AlbumSummary> {

@@ -1,65 +1,67 @@
 package com.syrok0010.nextgallery.app.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.background
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
-import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
-import com.syrok0010.nextgallery.feature.albums.AlbumsPanel
-import com.syrok0010.nextgallery.feature.albums.AlbumOrigin
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.runtime.DisposableEffect
-import androidx.core.view.WindowCompat
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.ui.NavDisplay
 import com.syrok0010.nextgallery.core.ui.NextGalleryScaffold
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedViewModel
+import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.feature.albums.AlbumOrigin
+import com.syrok0010.nextgallery.feature.albums.AlbumsPanel
+import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import com.syrok0010.nextgallery.feature.timeline.TimelinePanel
+import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 @Composable
-internal fun HomeScreen(
+internal fun LibraryScreen(
     viewerTransitionCoordinator: ViewerTransitionCoordinator,
-    viewModel: AuthenticatedViewModel = koinViewModel(),
+    viewModel: TimelineViewModel = koinViewModel(),
     permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
     albumsViewModel: AlbumsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val albums by albumsViewModel.state.collectAsState()
-    var page by rememberSaveable { mutableStateOf(LibraryPage.Photos) }
+    val backStack = rememberNavBackStack(LibraryRoute.Photos)
+    val page = backStack.last() as LibraryRoute
     var filter by rememberSaveable { mutableStateOf<AlbumOrigin?>(null) }
     var diagnostics by rememberSaveable { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val albumListState = rememberLazyListState()
-    val savedPages = rememberSaveableStateHolder()
     LaunchedEffect(state.localMediaPermissionMode) {
         state.localMediaPermissionMode?.let(albumsViewModel::updatePermission)
     }
@@ -100,24 +102,36 @@ internal fun HomeScreen(
                     Box(Modifier.weight(1f).onGloballyPositioned {
                         viewerTransitionCoordinator.onAppBoundsChanged(it.boundsInRoot())
                     }) {
-                        savedPages.SaveableStateProvider(page) {
-                            when (page) {
-                                LibraryPage.Photos -> TimelinePanel(
-                                    state = state.timeline,
-                                    onViewportObservation = viewModel::observeTimelineViewport,
-                                    revealMediaId = viewerTransitionCoordinator.revealMediaId,
-                                    onMediaRevealed = viewerTransitionCoordinator::onTimelineMediaRevealed,
-                                    registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
-                                    onSelect = { item -> viewerTransitionCoordinator.open(item.mediaId) },
-                                    gridState = gridState,
-                                )
-                                LibraryPage.Albums -> AlbumsPanel(albums, albumListState, filter, { filter = it }, albumsViewModel::refresh)
-                            }
-                        }
+                        NavDisplay(
+                            backStack = backStack,
+                            onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                            entryProvider = entryProvider {
+                                entry<LibraryRoute.Photos> {
+                                    TimelinePanel(
+                                        state = state.timeline,
+                                        onViewportObservation = viewModel::observeTimelineViewport,
+                                        revealMediaId = viewerTransitionCoordinator.revealMediaId,
+                                        onMediaRevealed = viewerTransitionCoordinator::onTimelineMediaRevealed,
+                                        registerTimelineTile = viewerTransitionCoordinator::registerTimelineTile,
+                                        onSelect = { item -> viewerTransitionCoordinator.open(item.mediaId) },
+                                        gridState = gridState,
+                                    )
+                                }
+                                entry<LibraryRoute.Albums> {
+                                    AlbumsPanel(albums, albumListState, filter, { filter = it }, albumsViewModel::refresh)
+                                }
+                            },
+                        )
                     }
                 }
                 if (visibleViewerMediaId == null) {
-                    LibraryIsland(page, { page = it }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 16.dp))
+                    LibraryIsland(page, { destination ->
+                        val target = libraryBackStack(destination)
+                        if (backStack.toList() != target) {
+                            if (destination == LibraryRoute.Photos) backStack.removeLastOrNull()
+                            else backStack.add(LibraryRoute.Albums)
+                        }
+                    }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 16.dp))
                 }
                 if (diagnostics) LibraryDiagnostics(state, albums, onDismiss = { diagnostics = false })
 

@@ -12,20 +12,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.feature.albums.AlbumsUiState
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedUiState
-
-internal enum class LibraryPage { Photos, Albums }
+import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 
 @Composable
-internal fun LibraryHeader(page: LibraryPage, hasProblem: Boolean, onDiagnostics: () -> Unit,
+internal fun LibraryHeader(page: LibraryRoute, hasProblem: Boolean, onDiagnostics: () -> Unit,
     onRefresh: () -> Unit, onLogout: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp)) {
@@ -44,7 +43,7 @@ internal fun LibraryHeader(page: LibraryPage, hasProblem: Boolean, onDiagnostics
                 }
             }
         }
-        Text(stringResource(if (page == LibraryPage.Photos) R.string.library_photos else R.string.library_albums),
+        Text(stringResource(if (page == LibraryRoute.Photos) R.string.library_photos else R.string.library_albums),
             style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         if (hasProblem) TextButton(onClick = onDiagnostics, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.library_problem), color = MaterialTheme.colorScheme.error)
@@ -53,13 +52,13 @@ internal fun LibraryHeader(page: LibraryPage, hasProblem: Boolean, onDiagnostics
 }
 
 @Composable
-internal fun LibraryIsland(page: LibraryPage, onPage: (LibraryPage) -> Unit, modifier: Modifier = Modifier) {
+internal fun LibraryIsland(page: LibraryRoute, onPage: (LibraryRoute) -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.testTag("library_island"), shape = RoundedCornerShape(32.dp), shadowElevation = 10.dp,
         tonalElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .97f)) {
         Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            LibraryPage.entries.forEach { item ->
+            listOf(LibraryRoute.Photos, LibraryRoute.Albums).forEach { item ->
                 val selected = page == item
-                val text = stringResource(if (item == LibraryPage.Photos) R.string.library_photos else R.string.library_albums)
+                val text = stringResource(if (item == LibraryRoute.Photos) R.string.library_photos else R.string.library_albums)
                 Surface(onClick = { onPage(item) }, shape = CircleShape,
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -73,7 +72,7 @@ internal fun LibraryIsland(page: LibraryPage, onPage: (LibraryPage) -> Unit, mod
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LibraryDiagnostics(state: AuthenticatedUiState, albums: AlbumsUiState, onDismiss: () -> Unit) {
+internal fun LibraryDiagnostics(state: TimelineScreenState, albums: AlbumsUiState, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         SelectionContainer {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).testTag("library_diagnostics"),
@@ -88,7 +87,7 @@ internal fun LibraryDiagnostics(state: AuthenticatedUiState, albums: AlbumsUiSta
                 state.sourceDiagnostics.forEach { Text(it.asString()) }
                 state.message.status?.takeUnless { message ->
                     message in state.sourceDiagnostics || (state.timeline.snapshot != null &&
-                        (message as? com.syrok0010.nextgallery.core.ui.UiText.Resource)?.id == R.string.status_loaded_items)
+                        (message as? UiText.Resource)?.id == R.string.status_loaded_items)
                 }?.let { Text(it.asString()) }
                 state.message.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
                 Text(stringResource(R.string.diagnostics_permission, state.localMediaPermissionMode?.name ?: "—"))

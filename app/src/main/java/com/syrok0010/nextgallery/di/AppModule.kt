@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.di
 
+import android.provider.MediaStore
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
@@ -8,6 +9,11 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
+import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
+import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
+import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
@@ -16,7 +22,7 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedViewModel
+import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
 import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
@@ -39,9 +45,9 @@ import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val appModule = module {
-    single<com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource> { com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource(get()) }
-    single<com.syrok0010.nextgallery.feature.albums.LocalAlbumSource> { com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource(androidContext().contentResolver) }
-    viewModel { com.syrok0010.nextgallery.feature.albums.AlbumsViewModel(get(), get(), get()) }
+    single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
+    single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
+    viewModel { AlbumsViewModel(get(), get(), get()) }
 
     single {
         Json {
@@ -67,15 +73,10 @@ val appModule = module {
             context.contentResolver,
             get<NextGalleryDatabase>().localMediaMetadataDao(),
             volumeVersions = {
-                check(permissions.currentMode() == LocalMediaPermissionMode.Full) {
-                    "Full media permission required"
-                }
-                android.provider.MediaStore
-                    .getExternalVolumeNames(
-                        context,
-                    ).associateWith { volume ->
-                        checkNotNull(android.provider.MediaStore.getVersion(context, volume))
-                    }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
+                check(permissions.currentMode() == LocalMediaPermissionMode.Full) { "Full media permission required" }
+                MediaStore.getExternalVolumeNames(context).associateWith { volume ->
+                    checkNotNull(MediaStore.getVersion(context, volume))
+                }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
             },
         )
     }
@@ -108,5 +109,5 @@ val appModule = module {
 
     viewModelOf(::SessionViewModel)
     viewModel { LoginViewModel(get(), get(), get<NextcloudLoginRepository>()) }
-    viewModelOf(::AuthenticatedViewModel)
+    viewModelOf(::TimelineViewModel)
 }
