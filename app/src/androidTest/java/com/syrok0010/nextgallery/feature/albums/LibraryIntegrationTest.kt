@@ -17,9 +17,7 @@ import coil3.SingletonImageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
-import com.syrok0010.nextgallery.app.ui.NextGalleryNavigation
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import com.syrok0010.nextgallery.app.ui.NextGalleryApp
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
 import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
@@ -39,7 +37,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Exercises the real NextGalleryNavigation, production DI and HTTP adapters with an isolated account. */
+/** Exercises the real NextGalleryApp, production DI and HTTP adapters with an isolated account. */
 class LibraryIntegrationTest {
     @get:Rule val rule = createComposeRule()
     @Test fun photosAlbumsMenuAndViewerKeepTheirState() {
@@ -59,8 +57,7 @@ class LibraryIntegrationTest {
             try {
                 val restoration = StateRestorationTester(rule)
                 restoration.setContent {
-                    val session by sessions.session.collectAsState()
-                    NextGalleryNavigation(session, viewModel = photos, albumsViewModel = albums)
+                    NextGalleryApp(viewModel = photos, albumsViewModel = albums)
                 }
                 // Permission explanation is an existing first-run flow on a fresh automation package.
                 rule.waitForIdle()

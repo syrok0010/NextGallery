@@ -51,18 +51,13 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 @Composable
-fun NextGalleryApp(viewModel: SessionViewModel = koinViewModel()) {
-    val session by viewModel.session.collectAsState()
-    NextGalleryNavigation(session)
-}
-
-@Composable
-internal fun NextGalleryNavigation(
-    session: SessionUiState,
+internal fun NextGalleryApp(
+    sessionViewModel: SessionViewModel = koinViewModel(),
     viewModel: TimelineViewModel = koinViewModel(),
     permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
     albumsViewModel: AlbumsViewModel = koinViewModel(),
 ) {
+    val session by sessionViewModel.session.collectAsState()
     val viewerTransitionCoordinator = rememberViewerTransitionCoordinator()
     val state by viewModel.state.collectAsState()
     val albums by albumsViewModel.state.collectAsState()
