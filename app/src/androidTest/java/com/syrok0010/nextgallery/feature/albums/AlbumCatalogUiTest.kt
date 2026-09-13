@@ -11,7 +11,7 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.ui.*
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.core.ui.uiText
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedUiState
+import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -41,9 +41,9 @@ class AlbumCatalogUiTest {
     }
 
     @Test fun menuOpensLiveDiagnosticsAndNavigationChangesSelection() {
-        val state = mutableStateOf(AuthenticatedUiState(sourceDiagnostics = listOf(uiText(R.string.status_indexing_local_media, 1, 100))))
+        val state = mutableStateOf(TimelineScreenState(sourceDiagnostics = listOf(uiText(R.string.status_indexing_local_media, 1, 100))))
         val diagnostics = mutableStateOf(false)
-        val page = mutableStateOf(LibraryPage.Photos)
+        val page = mutableStateOf<LibraryRoute>(LibraryRoute.Photos)
         rule.setContent {
             NextGalleryTheme(darkTheme = true, dynamicColor = false) {
                 Column {
@@ -54,7 +54,7 @@ class AlbumCatalogUiTest {
             }
         }
         rule.onNodeWithTag("library_page:Albums").performClick()
-        rule.runOnIdle { assertEquals(LibraryPage.Albums, page.value) }
+        rule.runOnIdle { assertEquals(LibraryRoute.Albums, page.value) }
         rule.onNodeWithTag("library_menu").performClick()
         rule.onNodeWithText("Диагностика").performClick()
         rule.onNodeWithText("Индексирую фото и видео с устройства: 1 из 100").assertIsDisplayed()

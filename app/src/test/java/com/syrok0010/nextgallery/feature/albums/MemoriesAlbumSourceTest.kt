@@ -2,14 +2,17 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import java.io.IOException
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import org.junit.Assert.*
 import org.junit.Test
-import java.net.ServerSocket
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
+import retrofit2.HttpException
 
 class MemoriesAlbumSourceTest {
     @Test fun `authenticated list supports numeric strings and respects server hidden setting`() = runBlocking {
@@ -32,17 +35,17 @@ class MemoriesAlbumSourceTest {
     @Test fun `http failure is not a successful empty catalog`() = runBlocking {
         Fixture("""{"albums_enabled":1}""", "[]", 503).use {
             try { it.load(); fail("Expected an HTTP error") }
-            catch (error: retrofit2.HttpException) { assertEquals(503, error.code()) }
+            catch (error: HttpException) { assertEquals(503, error.code()) }
         }
     }
     private class Fixture(val config: String, val albums: String, val code: Int = 200) : AutoCloseable {
-        val server = ServerSocket(0, 10, java.net.InetAddress.getLoopbackAddress())
+        val server = ServerSocket(0, 10, InetAddress.getLoopbackAddress())
         val executor = Executors.newSingleThreadExecutor()
         val requests = CopyOnWriteArrayList<List<String>>()
         init {
             executor.execute {
                 while (!server.isClosed) {
-                    val socket = try { server.accept() } catch (_: java.io.IOException) { break }
+                    val socket = try { server.accept() } catch (_: IOException) { break }
                     socket.use {
                         val reader = it.getInputStream().bufferedReader()
                         val lines = generateSequence { reader.readLine()?.takeIf(String::isNotEmpty) }.toList()

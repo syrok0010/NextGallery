@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState
