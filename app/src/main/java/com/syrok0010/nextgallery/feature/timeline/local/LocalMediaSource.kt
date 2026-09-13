@@ -58,6 +58,7 @@ data class LocalMediaIndexState(
     val items: List<MediaItem>,
     val progress: LocalMediaIndexProgress?,
     val failure: Boolean = false,
+    val processed: LocalMediaIndexProgress? = progress,
 )
 
 fun interface LocalMediaReader {
@@ -118,7 +119,7 @@ class LocalMediaSource(
                     dirty = false
                     lastPublication = TimeSource.Monotonic.markNow()
                 }
-                send(LocalMediaIndexState(publishedItems, if (completed) null else batch.progress))
+                send(LocalMediaIndexState(publishedItems, if (completed) null else batch.progress, processed = batch.progress))
             }
             check(completed) { "MediaStore scan ended without a complete result" }
         }

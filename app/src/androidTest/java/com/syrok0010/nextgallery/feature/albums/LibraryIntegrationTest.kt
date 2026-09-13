@@ -11,7 +11,6 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.test.espresso.Espresso
-import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import coil3.SingletonImageLoader
 import coil3.request.ErrorResult
@@ -20,7 +19,6 @@ import coil3.request.SuccessResult
 import com.syrok0010.nextgallery.app.ui.NextGalleryApp
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -44,20 +42,15 @@ class LibraryIntegrationTest {
         val koin = GlobalContext.get()
         val sessions = koin.get<SessionStore>()
         val previousSession = sessions.session.value
-        val store = ViewModelStore()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         LibraryFixture().use { fixture ->
-            lateinit var photos: TimelineViewModel
-            lateinit var albums: AlbumsViewModel
             rule.runOnUiThread {
                 sessions.signIn(AccountCredentials(fixture.url, "fixture", "password"))
-                photos = koin.get(); albums = koin.get()
-                store.put("photos", photos); store.put("albums", albums)
             }
             try {
                 val restoration = StateRestorationTester(rule)
                 restoration.setContent {
-                    NextGalleryApp(viewModel = photos, albumsViewModel = albums)
+                    NextGalleryApp()
                 }
                 // Permission explanation is an existing first-run flow on a fresh automation package.
                 rule.waitForIdle()
@@ -110,7 +103,6 @@ class LibraryIntegrationTest {
                 rule.onNodeWithTag("library_diagnostics").assertDoesNotExist()
             } finally {
                 rule.runOnUiThread {
-                    store.clear()
                     when (previousSession) {
                         is SessionUiState.SignedIn -> sessions.signIn(previousSession.credentials)
                         else -> sessions.signOut()
