@@ -34,11 +34,7 @@ interface ThumbnailCacheDao {
         WHERE fileId IN (:fileIds) AND width = :width AND height = :height
         """,
     )
-    suspend fun delete(
-        fileIds: Collection<Long>,
-        width: Int,
-        height: Int,
-    )
+    suspend fun delete(fileIds: Collection<Long>, width: Int, height: Int)
 
     @Query("DELETE FROM thumbnail_cache")
     suspend fun deleteAll()

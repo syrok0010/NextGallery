@@ -30,16 +30,15 @@ abstract class NextGalleryDatabase : RoomDatabase() {
     abstract fun thumbnailCacheDao(): ThumbnailCacheDao
 
     companion object {
-        fun create(context: Context): NextGalleryDatabase {
-            return Room.databaseBuilder(
-                context,
-                NextGalleryDatabase::class.java,
-                DATABASE_NAME,
-            )
-                .addMigrations(MIGRATION_9_10)
+        fun create(context: Context): NextGalleryDatabase =
+            Room
+                .databaseBuilder(
+                    context,
+                    NextGalleryDatabase::class.java,
+                    DATABASE_NAME,
+                ).addMigrations(MIGRATION_9_10)
                 .fallbackToDestructiveMigration(true)
                 .build()
-        }
 
         internal val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -49,7 +48,8 @@ abstract class NextGalleryDatabase : RoomDatabase() {
                         fingerprint TEXT NOT NULL,
                         metadataJson TEXT NOT NULL,
                         exifComplete INTEGER NOT NULL
-                    )""".trimIndent(),
+                    )
+                    """.trimIndent(),
                 )
             }
         }

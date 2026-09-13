@@ -101,15 +101,15 @@ internal fun rememberFallbackImageRequest(
     val currentOnError by rememberUpdatedState(onError)
     val activeRequest = if (useFallback) plan.fallback ?: plan.primary else plan.primary
     return remember(activeRequest, plan.fallback) {
-        activeRequest.newBuilder(context)
+        activeRequest
+            .newBuilder(context)
             .listener(
                 onSuccess = { _, result -> currentOnSuccess(result.image) },
                 onError = { _, _ ->
                     currentOnError()
                     if (!useFallback && plan.fallback != null) useFallback = true
                 },
-            )
-            .build()
+            ).build()
     }
 }
 
@@ -118,31 +118,34 @@ private fun mediaImageRequestPlan(
     item: MediaItem,
     credentials: AccountCredentials?,
     purpose: MediaImagePurpose,
-): MediaImageRequestPlan = when (val assetRef = item.assetRef) {
-    is MediaAssetRef.MemoriesFile -> remoteRequestPlan(
-        context,
-        item,
-        assetRef,
-        requireNotNull(credentials) { "Remote media requires an authenticated session" },
-        purpose,
-    )
-    is MediaAssetRef.LocalContent -> MediaImageRequestPlan(
-        primary = localRequest(context, assetRef, purpose),
-    )
-    is MediaAssetRef.LocalFirst -> {
-        val remote = remoteRequestPlan(
+): MediaImageRequestPlan =
+    when (val assetRef = item.assetRef) {
+        is MediaAssetRef.MemoriesFile -> remoteRequestPlan(
             context,
             item,
-            assetRef.remote,
-            requireNotNull(credentials) { "Remote fallback requires an authenticated session" },
+            assetRef,
+            requireNotNull(credentials) { "Remote media requires an authenticated session" },
             purpose,
         )
-        MediaImageRequestPlan(
-            primary = localRequest(context, assetRef.local, purpose),
-            fallback = remote.primary,
+
+        is MediaAssetRef.LocalContent -> MediaImageRequestPlan(
+            primary = localRequest(context, assetRef, purpose),
         )
+
+        is MediaAssetRef.LocalFirst -> {
+            val remote = remoteRequestPlan(
+                context,
+                item,
+                assetRef.remote,
+                requireNotNull(credentials) { "Remote fallback requires an authenticated session" },
+                purpose,
+            )
+            MediaImageRequestPlan(
+                primary = localRequest(context, assetRef.local, purpose),
+                fallback = remote.primary,
+            )
+        }
     }
-}
 
 private fun remoteRequestPlan(
     context: Context,
@@ -154,16 +157,20 @@ private fun remoteRequestPlan(
     val urls = MemoriesAssetUrlFactory.urlsFor(assetRef, credentials.serverUrl)
     return when (purpose) {
         MediaImagePurpose.TimelineThumbnail -> MediaImageRequestPlan(
-            primary = ImageRequest.Builder(context)
+            primary = ImageRequest
+                .Builder(context)
                 .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
                 .build(),
         )
+
         MediaImagePurpose.DetailPreview -> MediaImageRequestPlan(
             primary = authenticatedImageRequest(context, urls.detailPreviewUrl, credentials),
-            preview = ImageRequest.Builder(context)
+            preview = ImageRequest
+                .Builder(context)
                 .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
                 .build(),
         )
+
         MediaImagePurpose.Original -> MediaImageRequestPlan(
             primary = authenticatedImageRequest(context, urls.originalUrl, credentials),
         )
@@ -176,7 +183,8 @@ private fun localRequest(
     purpose: MediaImagePurpose,
 ): ImageRequest {
     val cacheKey = assetRef.coilCacheKey()
-    return ImageRequest.Builder(context)
+    return ImageRequest
+        .Builder(context)
         .data(assetRef.contentUri)
         .memoryCacheKey("$cacheKey:$purpose")
         .diskCacheKey("$cacheKey:$purpose")
@@ -184,6 +192,5 @@ private fun localRequest(
             if (purpose != MediaImagePurpose.TimelineThumbnail) {
                 placeholderMemoryCacheKey("$cacheKey:${MediaImagePurpose.TimelineThumbnail}")
             }
-        }
-        .build()
+        }.build()
 }

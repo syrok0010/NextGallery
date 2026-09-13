@@ -58,8 +58,7 @@ internal class TimelineScrollAnchorController {
                     canonicalTime = mediaItem.takenAtEpochSeconds
                         ?: (mediaItem.dayId.toLong() * SECONDS_PER_DAY),
                 )
-            }
-            .let { candidates ->
+            }.let { candidates ->
                 candidates.firstOrNull { it.mediaId == anchor.mediaId }
                     ?: candidates.minByOrNull { it.canonicalTime.distanceTo(anchor.canonicalTime) }
             }

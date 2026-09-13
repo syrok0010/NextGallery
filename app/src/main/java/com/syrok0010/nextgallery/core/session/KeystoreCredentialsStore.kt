@@ -14,10 +14,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import kotlinx.serialization.json.Json
 
-class KeystoreCredentialsStore(
-    context: Context,
-    json: Json,
-) : CredentialsStore {
+class KeystoreCredentialsStore(context: Context, json: Json) : CredentialsStore {
     private val encryptedStore = JsonCredentialsStore(
         textStore = KeystoreEncryptedTextStore(
             preferences = context.applicationContext.getSharedPreferences(
@@ -87,13 +84,16 @@ private class KeystoreEncryptedTextStore(
             return existingKey
         }
 
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+        val keyGenerator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            ANDROID_KEYSTORE,
+        )
         keyGenerator.init(
-            KeyGenParameterSpec.Builder(
-                keyAlias,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            KeyGenParameterSpec
+                .Builder(
+                    keyAlias,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
                 .build(),

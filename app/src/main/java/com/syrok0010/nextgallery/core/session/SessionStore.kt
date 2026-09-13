@@ -4,9 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SessionStore(
-    credentialsStore: CredentialsStore,
-) {
+class SessionStore(credentialsStore: CredentialsStore) {
     private val _session = MutableStateFlow(
         credentialsStore.load()?.let(SessionUiState::SignedIn) ?: SessionUiState.SignedOut,
     )

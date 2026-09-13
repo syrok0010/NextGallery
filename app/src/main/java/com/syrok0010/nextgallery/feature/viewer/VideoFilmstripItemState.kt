@@ -43,7 +43,8 @@ internal class VideoFilmstripItemState(
             loader = VideoFilmstripLoader(provider, nextSource, scope).also { it.retry() }
         }
         loader?.scroll(
-            placement.fraction, placement.scrolling && placement.selected,
+            placement.fraction,
+            placement.scrolling && placement.selected,
             uptimeMillis(),
             { position, final -> playback.seek(item.mediaId, position, final) },
             { playback.finish(item.mediaId) },

@@ -12,10 +12,7 @@ data class MemoriesImageUrlSet(
 )
 
 object MemoriesAssetUrlFactory {
-    fun urlsFor(
-        assetRef: MediaAssetRef.MemoriesFile,
-        serverUrl: String,
-    ): MemoriesImageUrlSet {
+    fun urlsFor(assetRef: MediaAssetRef.MemoriesFile, serverUrl: String): MemoriesImageUrlSet {
         val normalizedServerUrl = NextcloudTransport.normalizeServerOrigin(serverUrl)
         val fileId = assetRef.photoFileId
         return MemoriesImageUrlSet(
@@ -25,11 +22,6 @@ object MemoriesAssetUrlFactory {
         )
     }
 
-    private fun buildPreviewUrl(
-        normalizedServerUrl: String,
-        fileId: Long,
-        size: Int,
-    ): String {
-        return "$normalizedServerUrl/apps/memories/api/image/preview/$fileId?x=$size&y=$size&$PREVIEW_AUTH_QUERY"
-    }
+    private fun buildPreviewUrl(normalizedServerUrl: String, fileId: Long, size: Int): String =
+        "$normalizedServerUrl/apps/memories/api/image/preview/$fileId?x=$size&y=$size&$PREVIEW_AUTH_QUERY"
 }

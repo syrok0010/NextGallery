@@ -18,15 +18,16 @@ internal data class ViewerSurfaceTransform(
     val clipShape: Shape? = null,
 )
 
-internal fun Modifier.viewerSurfaceTransform(transform: ViewerSurfaceTransform): Modifier = graphicsLayer {
-    translationX = transform.offset.x
-    translationY = transform.offset.y
-    scaleX = transform.scale
-    scaleY = transform.scale
-    alpha = transform.alpha
-    clip = transform.clipShape != null
-    shape = transform.clipShape ?: RectangleShape
-}
+internal fun Modifier.viewerSurfaceTransform(transform: ViewerSurfaceTransform): Modifier =
+    graphicsLayer {
+        translationX = transform.offset.x
+        translationY = transform.offset.y
+        scaleX = transform.scale
+        scaleY = transform.scale
+        alpha = transform.alpha
+        clip = transform.clipShape != null
+        shape = transform.clipShape ?: RectangleShape
+    }
 
 internal fun resolveViewerSurfaceTransform(
     dragOffset: Offset,
@@ -46,17 +47,20 @@ internal fun resolveViewerSurfaceTransform(
             progress = settleProgress,
             opening = false,
         )
+
         predictiveProgress > 0f && predictiveTarget != null -> ViewerTransitionClipShape(
             transform = predictiveTarget,
             progress = predictiveProgress,
             opening = false,
             startScaleOverride = 1f,
         )
+
         enterTarget != null -> ViewerTransitionClipShape(
             transform = enterTarget,
             progress = enterProgress,
             opening = true,
         )
+
         else -> null
     }
 
@@ -69,11 +73,13 @@ internal fun resolveViewerSurfaceTransform(
                 clipShape = clipShape,
             )
         }
+
         predictiveProgress > 0f && predictiveTarget != null -> ViewerSurfaceTransform(
             offset = lerpOffset(Offset.Zero, predictiveTarget.targetOffset, predictiveProgress),
             scale = lerpFloat(1f, predictiveTarget.targetScale, predictiveProgress),
             clipShape = clipShape,
         )
+
         enterTarget != null -> {
             val progress = enterProgress.coerceIn(0f, 1f)
             ViewerSurfaceTransform(
@@ -82,7 +88,9 @@ internal fun resolveViewerSurfaceTransform(
                 clipShape = clipShape,
             )
         }
+
         enterPending -> ViewerSurfaceTransform(alpha = 0f)
+
         else -> ViewerSurfaceTransform(offset = dragOffset, scale = dragScale)
     }
 }

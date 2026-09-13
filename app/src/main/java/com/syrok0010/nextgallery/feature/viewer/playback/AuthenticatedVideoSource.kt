@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer.playback
 
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
@@ -24,15 +24,17 @@ internal class AuthenticatedVideoSource(
             url.username.isNotEmpty() ||
             url.password.isNotEmpty() ||
             !url.encodedPath.startsWith(apiPath)
-        ) throw IOException("Invalid video server")
+        ) {
+            throw IOException("Invalid video server")
+        }
 
-        val authenticated = transport.authenticatedRequestBuilder(account, url.toString(), "*/*")
+        val authenticated = transport
+            .authenticatedRequestBuilder(account, url.toString(), "*/*")
             .get()
             .apply {
                 request.header("Range")?.let { header("Range", it) }
                 request.header("User-Agent")?.let { header("User-Agent", it) }
-            }
-            .build()
+            }.build()
         return chain.proceed(authenticated)
     }
 }

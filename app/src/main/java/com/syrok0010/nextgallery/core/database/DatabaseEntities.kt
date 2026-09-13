@@ -22,11 +22,7 @@ data class MemoriesCacheMetadataEntity(
 )
 
 @Entity(tableName = "memories_timeline_days")
-data class TimelineDayEntity(
-    @PrimaryKey val dayId: Int,
-    val count: Int,
-    val sortOrder: Int,
-)
+data class TimelineDayEntity(@PrimaryKey val dayId: Int, val count: Int, val sortOrder: Int)
 
 @Entity(
     tableName = "memories_media",
@@ -51,10 +47,7 @@ data class MemoriesMediaEntity(
     val isHidden: Boolean,
 )
 
-data class IdentifiedMemoriesMedia(
-    @Embedded val media: MemoriesMediaEntity,
-    val mediaId: String,
-)
+data class IdentifiedMemoriesMedia(@Embedded val media: MemoriesMediaEntity, val mediaId: String)
 
 enum class MediaIdentifierKind {
     MemoriesFile,
@@ -104,16 +97,10 @@ data class LocalMediaEntity(
     val buid: String?,
 )
 
-data class IdentifiedLocalMedia(
-    @Embedded val media: LocalMediaEntity,
-    val mediaId: String,
-)
+data class IdentifiedLocalMedia(@Embedded val media: LocalMediaEntity, val mediaId: String)
 
 @Entity(tableName = "memories_loaded_days")
-data class LoadedDayEntity(
-    @PrimaryKey val dayId: Int,
-    val loadedAtEpochMillis: Long,
-)
+data class LoadedDayEntity(@PrimaryKey val dayId: Int, val loadedAtEpochMillis: Long)
 
 @Entity(
     tableName = "thumbnail_cache",
@@ -129,9 +116,6 @@ data class ThumbnailCacheEntity(
     val cachedAtEpochMillis: Long,
 )
 
-data class TimelineDayCount(
-    val dayId: Int,
-    val count: Int,
-)
+data class TimelineDayCount(val dayId: Int, val count: Int)
 
 const val CACHE_METADATA_ID = 1

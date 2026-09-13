@@ -3,10 +3,7 @@ package com.syrok0010.nextgallery.feature.timeline.local
 import java.math.BigInteger
 import java.security.MessageDigest
 
-data class MediaAliases(
-    val auid: String,
-    val buid: String,
-)
+data class MediaAliases(val auid: String, val buid: String)
 
 object MemoriesMediaIdentity {
     fun calculate(

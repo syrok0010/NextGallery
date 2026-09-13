@@ -4,13 +4,13 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
@@ -88,7 +88,10 @@ class FilmstripTest {
         composeRule.runOnIdle { pageAtRelease = currentPage.intValue }
         composeRule.mainClock.advanceTimeBy(250)
         composeRule.runOnIdle {
-            assertTrue("Fling should continue selecting later photos", currentPage.intValue > pageAtRelease + 1)
+            assertTrue(
+                "Fling should continue selecting later photos",
+                currentPage.intValue > pageAtRelease + 1,
+            )
         }
 
         composeRule.mainClock.autoAdvance = true
@@ -116,13 +119,28 @@ class FilmstripTest {
         val provider = VideoFrameProvider {
             kotlinx.coroutines.flow.flow {
                 emit(VideoFrameEvent.Duration(12_000))
-                emit(VideoFrameEvent.Frame(0, android.graphics.Bitmap.createBitmap(16, 16, android.graphics.Bitmap.Config.ARGB_8888)))
+                emit(
+                    VideoFrameEvent.Frame(
+                        0,
+                        android.graphics.Bitmap.createBitmap(
+                            16,
+                            16,
+                            android.graphics.Bitmap.Config.ARGB_8888,
+                        ),
+                    ),
+                )
                 throw java.io.IOException("temporary frame failure")
             }
         }
         composeRule.setContent {
-            Filmstrip(items, currentPage.intValue, { currentPage.intValue = it },
-                playback = playback, frameProvider = provider, lazyListState = listState)
+            Filmstrip(
+                items,
+                currentPage.intValue,
+                { currentPage.intValue = it },
+                playback = playback,
+                frameProvider = provider,
+                lazyListState = listState,
+            )
         }
         composeRule.waitForIdle()
         val initialLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset
@@ -131,7 +149,10 @@ class FilmstripTest {
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.mainClock.advanceTimeBy(100)
         composeRule.runOnIdle {
-            assertEquals(initialLeft, listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset)
+            assertEquals(
+                initialLeft,
+                listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset,
+            )
             assertTrue(listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.size > 100)
         }
         composeRule.mainClock.autoAdvance = true
@@ -144,14 +165,22 @@ class FilmstripTest {
         composeRule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
         composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput {
-            swipeWithVelocity(Offset(width * 0.7f, height * 0.8f), Offset(width * 0.3f, height * 0.8f), 1500f, 200)
+            swipeWithVelocity(
+                Offset(width * 0.7f, height * 0.8f),
+                Offset(width * 0.3f, height * 0.8f),
+                1500f,
+                200,
+            )
         }
         composeRule.mainClock.advanceTimeByFrame()
         var positionAtRelease = 0L
         composeRule.runOnIdle { positionAtRelease = seeks.last().first }
         composeRule.mainClock.advanceTimeBy(250)
         composeRule.runOnIdle {
-            assertTrue("Fling continues seeking after release", seeks.last().first > positionAtRelease)
+            assertTrue(
+                "Fling continues seeking after release",
+                seeks.last().first > positionAtRelease,
+            )
             assertEquals(1, currentPage.intValue)
         }
         composeRule.mainClock.autoAdvance = true
@@ -169,40 +198,47 @@ class FilmstripTest {
         assertTrue(middleWidth > 60 && middleWidth < expandedWidth)
         composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertDoesNotExist()
+        composeRule
+            .onNodeWithTag(
+                VideoFilmstripTestTag,
+                useUnmergedTree = true,
+            ).assertDoesNotExist()
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).performSemanticsAction(
-            androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(1f) }
+        composeRule
+            .onNodeWithTag(
+                VideoFilmstripTestTag,
+                useUnmergedTree = true,
+            ).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) {
+                it(1f)
+            }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput { swipeLeft() }
         composeRule.runOnIdle { assertEquals(2, currentPage.intValue) }
         composeRule.onNodeWithTag(filmstripTileTestTag(2)).assertIsDisplayed()
     }
 
-    private fun mediaItem(
-        id: String,
-        dayId: Int,
-    ) = MediaItem(
-        mediaId = MediaId(id),
-        dayId = dayId,
-        displayName = "$id.jpg",
-        mimeType = "image/jpeg",
-        width = 1_024,
-        height = 768,
-        etag = null,
-        livePhotoId = null,
-        auid = "auid-$id",
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = 1_728_000_000L,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.LocalContent(
-            contentUri = "content://filmstrip/$id",
-            modifiedAtEpochSeconds = 1_728_000_000L,
-        ),
-    )
+    private fun mediaItem(id: String, dayId: Int) =
+        MediaItem(
+            mediaId = MediaId(id),
+            dayId = dayId,
+            displayName = "$id.jpg",
+            mimeType = "image/jpeg",
+            width = 1_024,
+            height = 768,
+            etag = null,
+            livePhotoId = null,
+            auid = "auid-$id",
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = 1_728_000_000L,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.LocalContent(
+                contentUri = "content://filmstrip/$id",
+                modifiedAtEpochSeconds = 1_728_000_000L,
+            ),
+        )
 }

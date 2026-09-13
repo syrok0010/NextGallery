@@ -11,23 +11,31 @@ internal data class VideoSources(
     val remoteOriginal: RemoteVideoOriginal? = null,
 ) {
     companion object {
-        fun from(asset: MediaAssetRef, serverUrl: String? = null): VideoSources = when (asset) {
-            is MediaAssetRef.LocalContent -> VideoSources(asset.contentUri)
-            is MediaAssetRef.MemoriesFile -> {
-                val original = RemoteVideoOriginal(asset.photoFileId, checkNotNull(serverUrl))
-                VideoSources(original.uri, remoteOriginal = original)
+        fun from(asset: MediaAssetRef, serverUrl: String? = null): VideoSources =
+            when (asset) {
+                is MediaAssetRef.LocalContent -> VideoSources(asset.contentUri)
+
+                is MediaAssetRef.MemoriesFile -> {
+                    val original = RemoteVideoOriginal(asset.photoFileId, checkNotNull(serverUrl))
+                    VideoSources(original.uri, remoteOriginal = original)
+                }
+
+                is MediaAssetRef.LocalFirst -> {
+                    val original =
+                        RemoteVideoOriginal(asset.remote.photoFileId, checkNotNull(serverUrl))
+                    VideoSources(asset.local.contentUri, original.uri, original)
+                }
             }
-            is MediaAssetRef.LocalFirst -> {
-                val original = RemoteVideoOriginal(asset.remote.photoFileId, checkNotNull(serverUrl))
-                VideoSources(asset.local.contentUri, original.uri, original)
-            }
-        }
     }
 }
 
 /** File identity is explicit: discovery never extracts it from a URL. */
 internal data class RemoteVideoOriginal(val fileId: Long, private val serverUrl: String) {
-    val uri: String = MemoriesAssetUrlFactory.urlsFor(MediaAssetRef.MemoriesFile(fileId), serverUrl).originalUrl
+    val uri: String = MemoriesAssetUrlFactory
+        .urlsFor(
+            MediaAssetRef.MemoriesFile(fileId),
+            serverUrl,
+        ).originalUrl
     private val api = NextcloudTransport.normalizeServerOrigin(serverUrl) + "/apps/memories/api"
     val configurationUri: String get() = "$api/config"
 

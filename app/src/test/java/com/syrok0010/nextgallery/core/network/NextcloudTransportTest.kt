@@ -30,10 +30,12 @@ class NextcloudTransportTest {
 
     @Test
     fun `authenticated request builder defaults to json policy`() {
-        val request = transport.authenticatedRequestBuilder(
-            credentials = credentials,
-            url = "https://cloud.example.com/apps/memories/api/days",
-        ).get().build()
+        val request = transport
+            .authenticatedRequestBuilder(
+                credentials = credentials,
+                url = "https://cloud.example.com/apps/memories/api/days",
+            ).get()
+            .build()
 
         assertAuthenticatedHeaders(request)
         assertEquals("application/json", request.header("Accept"))
@@ -41,11 +43,13 @@ class NextcloudTransportTest {
 
     @Test
     fun `authenticated request builder supports binary accept override`() {
-        val request = transport.authenticatedRequestBuilder(
-            credentials = credentials,
-            url = "https://cloud.example.com/apps/memories/api/image/multipreview",
-            accept = "application/octet-stream",
-        ).post("{}".toRequestBody()).build()
+        val request = transport
+            .authenticatedRequestBuilder(
+                credentials = credentials,
+                url = "https://cloud.example.com/apps/memories/api/image/multipreview",
+                accept = "application/octet-stream",
+            ).post("{}".toRequestBody())
+            .build()
 
         assertAuthenticatedHeaders(request)
         assertEquals("application/octet-stream", request.header("Accept"))
@@ -65,9 +69,15 @@ class NextcloudTransportTest {
 
         assertSame(transport.baseClient.connectionPool, authenticatedClient.connectionPool)
         assertSame(transport.baseClient.dispatcher, authenticatedClient.dispatcher)
-        assertEquals(transport.baseClient.connectTimeoutMillis, authenticatedClient.connectTimeoutMillis)
+        assertEquals(
+            transport.baseClient.connectTimeoutMillis,
+            authenticatedClient.connectTimeoutMillis,
+        )
         assertEquals(transport.baseClient.readTimeoutMillis, authenticatedClient.readTimeoutMillis)
-        assertEquals(transport.baseClient.writeTimeoutMillis, authenticatedClient.writeTimeoutMillis)
+        assertEquals(
+            transport.baseClient.writeTimeoutMillis,
+            authenticatedClient.writeTimeoutMillis,
+        )
     }
 
     @Test

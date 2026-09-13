@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.activity.compose.BackHandler
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -19,9 +19,7 @@ import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import org.koin.compose.koinInject
 
 /** One active player shared by the page and filmstrip; adjacent pages own no players. */
-internal class ViewerPlaybackState(
-    private val create: (MediaItem) -> VideoPlaybackController,
-) {
+internal class ViewerPlaybackState(private val create: (MediaItem) -> VideoPlaybackController) {
     var current by mutableStateOf<VideoPlaybackController?>(null)
         private set
     private var activeItem: MediaItem? = null
@@ -34,7 +32,9 @@ internal class ViewerPlaybackState(
         if (video != null) current = create(video).also { it.start() }
     }
 
-    fun pause() { current?.dispatch(VideoPlaybackInput.Pause) }
+    fun pause() {
+        current?.dispatch(VideoPlaybackInput.Pause)
+    }
 
     fun close() {
         current?.close()
@@ -53,7 +53,13 @@ internal fun rememberViewerPlaybackState(
     val scope = rememberCoroutineScope()
     val state = remember(context, factory) {
         ViewerPlaybackState { video ->
-            VideoPlaybackController(video.mediaId, createPlayer(context), factory.sources(video.assetRef), factory, scope)
+            VideoPlaybackController(
+                video.mediaId,
+                createPlayer(context),
+                factory.sources(video.assetRef),
+                factory,
+                scope,
+            )
         }
     }
     val fullscreen = state.current?.state?.isFullscreen == true

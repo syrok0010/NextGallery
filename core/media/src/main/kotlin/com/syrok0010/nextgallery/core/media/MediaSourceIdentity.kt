@@ -5,7 +5,4 @@ enum class MediaSourceKind {
     Local,
 }
 
-data class MediaSourceIdentity(
-    val source: MediaSourceKind,
-    val sourceKey: String,
-)
+data class MediaSourceIdentity(val source: MediaSourceKind, val sourceKey: String)

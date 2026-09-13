@@ -208,41 +208,39 @@ class TimelineScrollAnchorControllerTest {
     }
 
     private fun gridItems(vararg mediaItems: MediaItem): List<TimelineGridItem> =
-        mediaItems.mapIndexed { index, item ->
-            TimelineSlot(
-                key = TimelineSlotKey(dayId = item.dayId, indexInDay = index),
-                dayId = item.dayId,
-                indexInDay = index,
-                mediaItem = item,
-            )
-        }.toTimelineGridItems()
+        mediaItems
+            .mapIndexed { index, item ->
+                TimelineSlot(
+                    key = TimelineSlotKey(dayId = item.dayId, indexInDay = index),
+                    dayId = item.dayId,
+                    indexInDay = index,
+                    mediaItem = item,
+                )
+            }.toTimelineGridItems()
 
     private fun List<TimelineGridItem>.indexOfMedia(mediaId: MediaId): Int =
         indexOfFirst { item ->
             item is TimelineGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
         }
 
-    private fun mediaItem(
-        id: String,
-        dayId: Int,
-        takenAtEpochSeconds: Long,
-    ) = MediaItem(
-        mediaId = MediaId(id),
-        dayId = dayId,
-        displayName = "$id.jpg",
-        mimeType = "image/jpeg",
-        width = 1_024,
-        height = 768,
-        etag = null,
-        livePhotoId = null,
-        auid = "auid-$id",
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = takenAtEpochSeconds,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(id.hashCode().toLong()),
-    )
+    private fun mediaItem(id: String, dayId: Int, takenAtEpochSeconds: Long) =
+        MediaItem(
+            mediaId = MediaId(id),
+            dayId = dayId,
+            displayName = "$id.jpg",
+            mimeType = "image/jpeg",
+            width = 1_024,
+            height = 768,
+            etag = null,
+            livePhotoId = null,
+            auid = "auid-$id",
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = takenAtEpochSeconds,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.MemoriesFile(id.hashCode().toLong()),
+        )
 }

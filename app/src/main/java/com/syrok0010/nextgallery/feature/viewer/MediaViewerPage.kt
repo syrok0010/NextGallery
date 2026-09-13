@@ -2,10 +2,6 @@ package com.syrok0010.nextgallery.feature.viewer
 
 import android.os.Build
 import androidx.annotation.OptIn
-import androidx.compose.ui.platform.testTag
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.compose.ContentFrame
-import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,7 +24,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.compose.ContentFrame
+import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import coil3.BitmapImage
 import coil3.Image
 import com.syrok0010.nextgallery.core.media.MediaAssetRef

@@ -1,4 +1,5 @@
 [versions]
+spotless = "8.10.2"
 agp = "9.2.1"
 coreKtx = "1.10.1"
 exifinterface = "1.4.1"
@@ -67,6 +68,7 @@ androidx-media3-inspector-frame = { group = "androidx.media3", name = "media3-in
 androidx-media3-inspector = { group = "androidx.media3", name = "media3-inspector", version.ref = "media3" }
 
 [plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

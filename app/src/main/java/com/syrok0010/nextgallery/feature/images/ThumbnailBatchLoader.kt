@@ -166,22 +166,13 @@ internal class ThumbnailBatchLoader(
             val result: CompletableDeferred<Boolean>,
         ) : Command
 
-        data class Flush(
-            val identity: BatchIdentity,
-            val batchId: Long,
-        ) : Command
+        data class Flush(val identity: BatchIdentity, val batchId: Long) : Command
 
-        data class BatchCompleted(
-            val keys: List<ThumbnailKey>,
-            val readyKeys: Set<ThumbnailKey>,
-        ) : Command
+        data class BatchCompleted(val keys: List<ThumbnailKey>, val readyKeys: Set<ThumbnailKey>) :
+            Command
     }
 
-    private data class BatchIdentity(
-        val accountScope: String,
-        val width: Int,
-        val height: Int,
-    ) {
+    private data class BatchIdentity(val accountScope: String, val width: Int, val height: Int) {
         constructor(key: ThumbnailKey) : this(
             accountScope = key.accountScope,
             width = key.width,
@@ -196,9 +187,7 @@ internal class ThumbnailBatchLoader(
         var flushJob: Job? = null,
     )
 
-    private class InFlightRequest(
-        val waiters: MutableList<CompletableDeferred<Boolean>>,
-    )
+    private class InFlightRequest(val waiters: MutableList<CompletableDeferred<Boolean>>)
 
     private companion object {
         const val DEFAULT_BATCH_WINDOW_MILLIS = 20L

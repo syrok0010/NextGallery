@@ -76,7 +76,9 @@ internal class TimelineWorkflow(
                 if (currentGeneration != generation) return@launch
                 val result = projection.replaceRemoteSnapshot(remote)
                 mutableState.update { it.copy(snapshot = result.snapshot, remote = TimelineOperation.Idle) }
-                if (viewport == null) viewport = TimelineViewportObservation(0, 11, TimelineViewportLoadingMode.Immediate)
+                if (viewport == null) {
+                    viewport = TimelineViewportObservation(0, 11, TimelineViewportLoadingMode.Immediate)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

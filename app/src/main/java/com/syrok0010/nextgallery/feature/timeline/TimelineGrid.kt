@@ -45,6 +45,7 @@ internal fun TimelineGrid(
         ) { _, item ->
             when (item) {
                 is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
+
                 is TimelineGridItem.Slot -> TimelineSlotTile(
                     slot = item.slot,
                     registerTimelineTile = registerTimelineTile,

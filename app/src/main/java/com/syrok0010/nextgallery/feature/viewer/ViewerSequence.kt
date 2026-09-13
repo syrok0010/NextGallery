@@ -11,11 +11,9 @@ internal class ViewerSequence(
 
     fun pageIndex(mediaId: MediaId): Int? = pageIndexByMediaId[mediaId]
 
-
     fun pageKey(page: Int): String = items[page].mediaId.value
 
-    fun item(mediaId: MediaId): MediaItem? =
-        pageIndexByMediaId[mediaId]?.let(items::get)
+    fun item(mediaId: MediaId): MediaItem? = pageIndexByMediaId[mediaId]?.let(items::get)
 
     fun retainOrphan(item: MediaItem, page: Int): ViewerSequence {
         check(item.mediaId !in this)

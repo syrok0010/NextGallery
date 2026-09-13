@@ -13,10 +13,7 @@ internal class ViewerSequenceController {
     private var liveSequence = ViewerSequence.Empty
     private var displayedSequence = ViewerSequence.Empty
 
-    fun update(
-        snapshot: TimelineSnapshot?,
-        currentMediaId: MediaId?,
-    ): ViewerSequence {
+    fun update(snapshot: TimelineSnapshot?, currentMediaId: MediaId?): ViewerSequence {
         if (snapshot !== sourceSnapshot) {
             sourceSnapshot = snapshot
             liveSequence = snapshot.toViewerSequence()
@@ -72,9 +69,12 @@ internal class ViewerTimelineIndex(snapshot: TimelineSnapshot?) {
 
     fun slotIndex(mediaId: MediaId): Int? = slotsByMediaId[mediaId]
 
-    fun prefetchRange(mediaId: MediaId): IntRange? = slotIndex(mediaId)?.let { slot ->
-        (slot - PREFETCH_SLOTS).coerceAtLeast(0)..(slot + PREFETCH_SLOTS)
-    }
+    fun prefetchRange(mediaId: MediaId): IntRange? =
+        slotIndex(mediaId)?.let { slot ->
+            (slot - PREFETCH_SLOTS).coerceAtLeast(0)..(slot + PREFETCH_SLOTS)
+        }
 
-    private companion object { const val PREFETCH_SLOTS = 240 }
+    private companion object {
+        const val PREFETCH_SLOTS = 240
+    }
 }

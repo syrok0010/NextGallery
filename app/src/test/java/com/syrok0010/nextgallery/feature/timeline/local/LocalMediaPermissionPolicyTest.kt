@@ -13,7 +13,11 @@ class LocalMediaPermissionPolicyTest {
             LocalMediaPermissionMode.Full,
             LocalMediaPermissionPolicy.mode(
                 Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
-                LocalMediaPermissionGrants(images = true, videos = true, selectedVisualMedia = true),
+                LocalMediaPermissionGrants(
+                    images = true,
+                    videos = true,
+                    selectedVisualMedia = true,
+                ),
             ),
         )
         assertEquals(

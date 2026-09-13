@@ -135,10 +135,16 @@ private fun MediaTile(
             .aspectRatio(1f)
             .onGloballyPositioned { coordinates ->
                 coordinatesHolder.coordinates = coordinates
-            }
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (copyDescription.isNotEmpty()) Modifier.copyAvailabilitySemantics(copyDescription) else Modifier)
-            .clickable(onClick = onClick),
+            }.background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(
+                if (copyDescription.isNotEmpty()) {
+                    Modifier.copyAvailabilitySemantics(
+                        copyDescription,
+                    )
+                } else {
+                    Modifier
+                },
+            ).clickable(onClick = onClick),
     ) {
         MediaAssetImage(
             item = item,
@@ -174,8 +180,7 @@ private fun MediaTile(
                     .background(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                         shape = MaterialTheme.shapes.extraSmall,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    ).padding(horizontal = 6.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -241,9 +246,8 @@ private fun Modifier.copyAvailabilitySemantics(description: String): Modifier =
 private class TimelineTileCoordinates {
     var coordinates: LayoutCoordinates? = null
 
-    fun boundsInRoot(): Rect? {
-        return coordinates
+    fun boundsInRoot(): Rect? =
+        coordinates
             ?.takeIf(LayoutCoordinates::isAttached)
             ?.boundsInRoot()
-    }
 }

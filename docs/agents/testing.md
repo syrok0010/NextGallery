@@ -16,3 +16,5 @@ ANDROID_SERIAL=<serial> ./gradlew :app:connectedAutomationAndroidTest
 > сбрасывающие его состояние. Для тестов используй отдельный пакет
 > `com.syrok0010.nextgallery.automation`. `connectedDebugAndroidTest` на телефоне
 > запрещён: он может удалить или переустановить основное приложение с потерей данных.
+
+Проверка и автоматическое исправление оформления Kotlin описаны в [kotlin-formatting.md](kotlin-formatting.md).

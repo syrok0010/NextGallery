@@ -52,36 +52,42 @@ internal fun VideoFilmstripCard(
             VideoFilmstripPhase.Loading -> R.string.video_filmstrip_loading
             VideoFilmstripPhase.Ready -> R.string.video_filmstrip_ready
             VideoFilmstripPhase.Degraded -> R.string.video_filmstrip_degraded
-        }
+        },
     )
 
     Box(modifier) {
-        Row(Modifier
-            .fillMaxSize()
-            .testTag(VideoFilmstripTestTag)
-            .semantics {
-                contentDescription = label
-                stateDescription = phaseLabel
-                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
-                setProgress(action = onSeek)
-            }) {
+        Row(
+            Modifier
+                .fillMaxSize()
+                .testTag(VideoFilmstripTestTag)
+                .semantics {
+                    contentDescription = label
+                    stateDescription = phaseLabel
+                    progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+                    setProgress(action = onSeek)
+                },
+        ) {
             repeat(state.positionsMillis.size.coerceAtLeast(1)) { index ->
                 val frame = state.frames[index]
                 val cell = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                if (frame == null) MediaAssetImage(
-                    item = item,
-                    purpose = MediaImagePurpose.TimelineThumbnail,
-                    contentDescription = null,
-                    modifier = cell,
-                    contentScale = ContentScale.Crop,
-                ) else Image(
-                    frame.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = cell,
-                    contentScale = ContentScale.Crop
-                )
+                if (frame == null) {
+                    MediaAssetImage(
+                        item = item,
+                        purpose = MediaImagePurpose.TimelineThumbnail,
+                        contentDescription = null,
+                        modifier = cell,
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Image(
+                        frame.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = cell,
+                        contentScale = ContentScale.Crop,
+                    )
+                }
             }
         }
         if (state.phase == VideoFilmstripPhase.Degraded) {
@@ -90,7 +96,7 @@ internal fun VideoFilmstripCard(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .background(Color.Black.copy(alpha = 0.8f))
-                    .testTag(VideoFilmstripRetryTestTag)
+                    .testTag(VideoFilmstripRetryTestTag),
             ) {
                 Text(stringResource(R.string.video_filmstrip_retry), color = Color.White)
             }

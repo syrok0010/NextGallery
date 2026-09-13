@@ -51,7 +51,13 @@ internal class VideoFilmstripLoader(
         }
     }
 
-    fun scroll(fraction: Float, isScrolling: Boolean, uptimeMillis: Long, seek: (Long, Boolean) -> Unit, finish: () -> Unit) {
+    fun scroll(
+        fraction: Float,
+        isScrolling: Boolean,
+        uptimeMillis: Long,
+        seek: (Long, Boolean) -> Unit,
+        finish: () -> Unit,
+    ) {
         if (isScrolling || wasScrolling) {
             projection.scrub(fraction, uptimeMillis, finished = !isScrolling)?.let {
                 seek(it, !isScrolling)
@@ -64,5 +70,7 @@ internal class VideoFilmstripLoader(
     fun seek(fraction: Float, uptimeMillis: Long): Long? =
         projection.scrub(fraction, uptimeMillis, finished = true)
 
-    fun close() { loading?.cancel() }
+    fun close() {
+        loading?.cancel()
+    }
 }

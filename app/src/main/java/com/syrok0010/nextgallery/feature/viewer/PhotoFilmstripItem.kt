@@ -30,7 +30,10 @@ internal fun PhotoFilmstripItem(
         item = item,
         purpose = MediaImagePurpose.TimelineThumbnail,
         contentDescription = item.displayName,
-        modifier = modifier.size(tileWidth, tileHeight).clip(RoundedCornerShape(4.dp)).clickable(onClick = onClick),
+        modifier = modifier
+            .size(tileWidth, tileHeight)
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick),
         contentScale = ContentScale.Crop,
     )
 }

@@ -40,7 +40,12 @@ class LocalMediaIndexingRegressionTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
-        database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
+        database = Room
+            .databaseBuilder(
+                context,
+                NextGalleryDatabase::class.java,
+                DATABASE_NAME,
+            ).build()
     }
 
     @After
@@ -50,73 +55,84 @@ class LocalMediaIndexingRegressionTest {
     }
 
     @Test
-    fun incrementalIndexingReconcilesEachIdentityOnceInRoom() = runBlocking {
-        val registry = CountingMediaIdentityRegistry(RoomMediaIdentityRegistry(database))
-        val source = LocalMediaSource(
-            reader = LocalMediaReader {
-                flowOf(
-                    *Array(BATCH_COUNT) { batchIndex ->
-                        val indexedCount = (batchIndex + 1) * BATCH_SIZE
-                        LocalMediaBatch(
-                            metadata = List(BATCH_SIZE) { itemIndex ->
-                                metadata(batchIndex * BATCH_SIZE + itemIndex)
-                            },
-                            progress = LocalMediaIndexProgress(indexedCount, BATCH_COUNT * BATCH_SIZE),
-                        )
-                    },
-                )
-            },
-            projectionStore = LocalMediaProjectionRepository(database),
-            identityRegistry = registry,
-            changeObserver = LocalMediaChangeObserver { emptyFlow() },
-            batchSize = BATCH_SIZE,
-        )
-        val projection = UnifiedTimelineProjection()
+    fun incrementalIndexingReconcilesEachIdentityOnceInRoom() =
+        runBlocking {
+            val registry = CountingMediaIdentityRegistry(RoomMediaIdentityRegistry(database))
+            val source = LocalMediaSource(
+                reader = LocalMediaReader {
+                    flowOf(
+                        *Array(BATCH_COUNT) { batchIndex ->
+                            val indexedCount = (batchIndex + 1) * BATCH_SIZE
+                            LocalMediaBatch(
+                                metadata = List(BATCH_SIZE) { itemIndex ->
+                                    metadata(batchIndex * BATCH_SIZE + itemIndex)
+                                },
+                                progress = LocalMediaIndexProgress(
+                                    indexedCount,
+                                    BATCH_COUNT * BATCH_SIZE,
+                                ),
+                            )
+                        },
+                    )
+                },
+                projectionStore = LocalMediaProjectionRepository(database),
+                identityRegistry = registry,
+                changeObserver = LocalMediaChangeObserver { emptyFlow() },
+                batchSize = BATCH_SIZE,
+            )
+            val projection = UnifiedTimelineProjection()
 
-        suspend fun scan(): Int {
-            var previous: List<MediaItem>? = null
-            var builds = 0
-            var projectionNanos = 0L
-            val elapsed = measureNanoTime {
-                source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
-                    if (previous !== state.items) {
-                        projectionNanos += measureNanoTime { projection.replaceLocalItems(LocalMediaProjection(state.items)) }
-                        builds++
-                        previous = state.items
+            suspend fun scan(): Int {
+                var previous: List<MediaItem>? = null
+                var builds = 0
+                var projectionNanos = 0L
+                val elapsed = measureNanoTime {
+                    source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
+                        if (previous !== state.items) {
+                            projectionNanos += measureNanoTime {
+                                projection.replaceLocalItems(LocalMediaProjection(state.items))
+                            }
+                            builds++
+                            previous = state.items
+                        }
                     }
                 }
+                Log.i(
+                    "LocalIndexRegression",
+                    "items=${BATCH_COUNT * BATCH_SIZE} builds=$builds projectionMs=${projectionNanos / 1_000_000} scanMs=${elapsed / 1_000_000}",
+                )
+                return builds
             }
-            Log.i("LocalIndexRegression", "items=${BATCH_COUNT * BATCH_SIZE} builds=$builds projectionMs=${projectionNanos / 1_000_000} scanMs=${elapsed / 1_000_000}")
-            return builds
+            scan()
+            assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
+            assertEquals(1, scan())
+            assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
         }
-        scan()
-        assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
-        assertEquals(1, scan())
-        assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
-    }
 
-    private fun metadata(index: Int) = LocalMediaMetadata(
-        contentUri = "content://media/external/images/media/$index",
-        displayName = "IMG_$index.jpg",
-        mimeType = "image/jpeg",
-        width = 4_032,
-        height = 3_024,
-        sizeBytes = 4_000_000,
-        dateTakenMillis = 1_728_000_000_000L + index * 1_000L,
-        memoriesTimelineEpochSeconds = null,
-        imageUniqueId = null,
-        dateModifiedSeconds = 1_728_000_000L + index,
-        dateAddedSeconds = 1_728_000_000L + index,
-        durationMillis = null,
-        isVideo = false,
-    )
+    private fun metadata(index: Int) =
+        LocalMediaMetadata(
+            contentUri = "content://media/external/images/media/$index",
+            displayName = "IMG_$index.jpg",
+            mimeType = "image/jpeg",
+            width = 4_032,
+            height = 3_024,
+            sizeBytes = 4_000_000,
+            dateTakenMillis = 1_728_000_000_000L + index * 1_000L,
+            memoriesTimelineEpochSeconds = null,
+            imageUniqueId = null,
+            dateModifiedSeconds = 1_728_000_000L + index,
+            dateAddedSeconds = 1_728_000_000L + index,
+            durationMillis = null,
+            isVideo = false,
+        )
 
-    private class CountingMediaIdentityRegistry(
-        private val delegate: MediaIdentityRegistry,
-    ) : MediaIdentityRegistry {
+    private class CountingMediaIdentityRegistry(private val delegate: MediaIdentityRegistry) :
+        MediaIdentityRegistry {
         var resolvedCandidateCount = 0
 
-        override suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution {
+        override suspend fun resolve(
+            candidates: List<MediaIdentityCandidate>,
+        ): MediaIdentityResolution {
             resolvedCandidateCount += candidates.size
             return delegate.resolve(candidates)
         }

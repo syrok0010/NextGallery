@@ -16,8 +16,8 @@ import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionItem
 fun MemoriesConfig.toCacheMetadataEntity(
     serverUrl: String,
     cachedAtEpochMillis: Long,
-): MemoriesCacheMetadataEntity {
-    return MemoriesCacheMetadataEntity(
+): MemoriesCacheMetadataEntity =
+    MemoriesCacheMetadataEntity(
         serverUrl = serverUrl,
         memoriesVersion = version,
         timelinePath = timelinePath,
@@ -29,10 +29,9 @@ fun MemoriesConfig.toCacheMetadataEntity(
         dedupIdentical = dedupIdentical,
         cachedAtEpochMillis = cachedAtEpochMillis,
     )
-}
 
-fun MemoriesCacheMetadataEntity.toMemoriesConfig(): MemoriesConfig {
-    return MemoriesConfig(
+fun MemoriesCacheMetadataEntity.toMemoriesConfig(): MemoriesConfig =
+    MemoriesConfig(
         version = memoriesVersion,
         timelinePath = timelinePath,
         albumsEnabled = albumsEnabled,
@@ -42,22 +41,19 @@ fun MemoriesCacheMetadataEntity.toMemoriesConfig(): MemoriesConfig {
         stackRawFiles = stackRawFiles,
         dedupIdentical = dedupIdentical,
     )
-}
 
-fun TimelineDay.toEntity(sortOrder: Int): TimelineDayEntity {
-    return TimelineDayEntity(
+fun TimelineDay.toEntity(sortOrder: Int): TimelineDayEntity =
+    TimelineDayEntity(
         dayId = dayId,
         count = count,
         sortOrder = sortOrder,
     )
-}
 
-fun TimelineDayEntity.toTimelineDay(): TimelineDay {
-    return TimelineDay(
+fun TimelineDayEntity.toTimelineDay(): TimelineDay =
+    TimelineDay(
         dayId = dayId,
         count = count,
     )
-}
 
 fun MediaItem.toMemoriesMediaEntity(): MemoriesMediaEntity {
     val mediaAssetRef = assetRef as? MediaAssetRef.MemoriesFile
@@ -82,8 +78,8 @@ fun MediaItem.toMemoriesMediaEntity(): MemoriesMediaEntity {
     )
 }
 
-fun IdentifiedMemoriesMedia.toMediaItem(): MediaItem {
-    return MediaItem(
+fun IdentifiedMemoriesMedia.toMediaItem(): MediaItem =
+    MediaItem(
         mediaId = MediaId(mediaId),
         dayId = media.dayId,
         displayName = media.displayName,
@@ -102,7 +98,6 @@ fun IdentifiedMemoriesMedia.toMediaItem(): MediaItem {
         isHidden = media.isHidden,
         assetRef = MediaAssetRef.MemoriesFile(photoFileId = media.fileId),
     )
-}
 
 fun MediaItem.toLocalMediaEntity(): LocalMediaEntity {
     val localContent = assetRef as? MediaAssetRef.LocalContent
@@ -122,17 +117,18 @@ fun MediaItem.toLocalMediaEntity(): LocalMediaEntity {
     )
 }
 
-fun IdentifiedLocalMedia.toMediaItem(): MediaItem = LocalMediaProjectionItem(
-    mediaId = MediaId(mediaId),
-    contentUri = media.contentUri,
-    displayName = media.displayName,
-    mimeType = media.mimeType,
-    width = media.width,
-    height = media.height,
-    takenAtEpochSeconds = media.takenAtEpochSeconds,
-    modifiedAtEpochSeconds = media.modifiedAtEpochSeconds,
-    isVideo = media.isVideo,
-    videoDurationSeconds = media.videoDurationSeconds,
-    auid = media.auid,
-    buid = media.buid,
-).toMediaItem()
+fun IdentifiedLocalMedia.toMediaItem(): MediaItem =
+    LocalMediaProjectionItem(
+        mediaId = MediaId(mediaId),
+        contentUri = media.contentUri,
+        displayName = media.displayName,
+        mimeType = media.mimeType,
+        width = media.width,
+        height = media.height,
+        takenAtEpochSeconds = media.takenAtEpochSeconds,
+        modifiedAtEpochSeconds = media.modifiedAtEpochSeconds,
+        isVideo = media.isVideo,
+        videoDurationSeconds = media.videoDurationSeconds,
+        auid = media.auid,
+        buid = media.buid,
+    ).toMediaItem()

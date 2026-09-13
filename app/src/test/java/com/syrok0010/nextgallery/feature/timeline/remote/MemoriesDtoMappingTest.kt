@@ -81,14 +81,19 @@ class MemoriesDtoMappingTest {
         assertTrue(item.isHidden)
         assertEquals(12L, item.videoDurationSeconds)
         assertEquals(MediaAssetRef.MemoriesFile(photoFileId = 43L), item.assetRef)
-        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=512&y=512&a=1", imageUrls.thumbnailUrl)
-        assertEquals("https://cloud.example.com/apps/memories/api/image/preview/43?x=1600&y=1600&a=1", imageUrls.detailPreviewUrl)
+        assertEquals(
+            "https://cloud.example.com/apps/memories/api/image/preview/43?x=512&y=512&a=1",
+            imageUrls.thumbnailUrl,
+        )
+        assertEquals(
+            "https://cloud.example.com/apps/memories/api/image/preview/43?x=1600&y=1600&a=1",
+            imageUrls.detailPreviewUrl,
+        )
         assertEquals("https://cloud.example.com/apps/memories/api/stream/43", imageUrls.originalUrl)
     }
 
-    private fun fixture(name: String): String {
-        return checkNotNull(javaClass.classLoader?.getResource("memories/$name")) {
+    private fun fixture(name: String): String =
+        checkNotNull(javaClass.classLoader?.getResource("memories/$name")) {
             "Missing fixture: $name"
         }.readText()
-    }
 }

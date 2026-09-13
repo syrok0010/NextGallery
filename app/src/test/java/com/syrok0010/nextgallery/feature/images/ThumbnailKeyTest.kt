@@ -21,7 +21,9 @@ class ThumbnailKeyTest {
 
         assertNotEquals(
             original.coilMemoryCacheKey(),
-            thumbnailKey(accountScope = "https://cloud.example.com|other-user").coilMemoryCacheKey(),
+            thumbnailKey(
+                accountScope = "https://cloud.example.com|other-user",
+            ).coilMemoryCacheKey(),
         )
         assertNotEquals(
             original.coilMemoryCacheKey(),
@@ -68,13 +70,12 @@ class ThumbnailKeyTest {
         width: Int = 512,
         height: Int = 512,
         etag: String? = "etag",
-    ): ThumbnailKey {
-        return ThumbnailKey(
+    ): ThumbnailKey =
+        ThumbnailKey(
             accountScope = accountScope,
             fileId = 42,
             width = width,
             height = height,
             etag = etag,
         )
-    }
 }

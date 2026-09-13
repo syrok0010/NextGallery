@@ -7,10 +7,7 @@ internal sealed interface TimelineGridItem {
         override val key: String = "day-header:$dayId"
     }
 
-    data class Slot(
-        val slotIndex: Int,
-        val slot: TimelineSlot,
-    ) : TimelineGridItem {
+    data class Slot(val slotIndex: Int, val slot: TimelineSlot) : TimelineGridItem {
         override val key: String = slot.mediaItem
             ?.let { "media:${it.mediaId.value}" }
             ?: "slot:${slot.key.dayId}:${slot.key.indexInDay}"

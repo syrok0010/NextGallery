@@ -27,11 +27,11 @@ import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionStor
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
+import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
-import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -63,10 +63,15 @@ val appModule = module {
             context.contentResolver,
             get<NextGalleryDatabase>().localMediaMetadataDao(),
             volumeVersions = {
-                check(permissions.currentMode() == LocalMediaPermissionMode.Full) { "Full media permission required" }
-                android.provider.MediaStore.getExternalVolumeNames(context).associateWith { volume ->
-                    checkNotNull(android.provider.MediaStore.getVersion(context, volume))
-                }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
+                check(permissions.currentMode() == LocalMediaPermissionMode.Full) {
+                    "Full media permission required"
+                }
+                android.provider.MediaStore
+                    .getExternalVolumeNames(
+                        context,
+                    ).associateWith { volume ->
+                        checkNotNull(android.provider.MediaStore.getVersion(context, volume))
+                    }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
             },
         )
     }

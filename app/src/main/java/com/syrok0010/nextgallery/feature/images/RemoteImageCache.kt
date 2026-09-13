@@ -88,5 +88,4 @@ internal class RemoteImageCache(
 
         thumbnailDao.upsert(rows)
     }
-
 }

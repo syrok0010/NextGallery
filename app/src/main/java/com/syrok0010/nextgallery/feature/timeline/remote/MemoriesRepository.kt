@@ -19,9 +19,8 @@ class MemoriesRepository(
     private val cacheRepository: TimelineCacheRepository,
     private val identityRegistry: MediaIdentityRegistry,
 ) : RemoteTimelineSource {
-    override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? {
-        return bestEffort { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
-    }
+    override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? =
+        bestEffort { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
 
     override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
         val api = transport.memoriesApi(credentials)
@@ -64,7 +63,8 @@ class MemoriesRepository(
         }
 
         val api = transport.memoriesApi(credentials)
-        val photoDtos = api.dayDetails(dayIds.joinToString(","))
+        val photoDtos = api
+            .dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
         val items = photoDtos.toIdentifiedMediaItems()
 
@@ -92,8 +92,9 @@ class MemoriesRepository(
         }
     }
 
-    private fun MemoriesPhotoDto.sourceIdentity() = MediaSourceIdentity(
-        source = MediaSourceKind.Memories,
-        sourceKey = fileid.toString(),
-    )
+    private fun MemoriesPhotoDto.sourceIdentity() =
+        MediaSourceIdentity(
+            source = MediaSourceKind.Memories,
+            sourceKey = fileid.toString(),
+        )
 }

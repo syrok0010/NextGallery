@@ -17,10 +17,22 @@ class ViewerSurfaceTransformTest {
             val opening = requireNotNull(surface.enterTarget(tile))
             val closing = requireNotNull(surface.settleTarget(tile, Offset.Zero, 0f))
 
-            assertRectEquals(tile, screenBounds(surface, resolve(enter = opening, enterProgress = 0f)))
-            assertRectEquals(surface, screenBounds(surface, resolve(enter = opening, enterProgress = 1f)))
-            assertRectEquals(surface, screenBounds(surface, resolve(settle = closing, settleProgress = 0f)))
-            assertRectEquals(tile, screenBounds(surface, resolve(settle = closing, settleProgress = 1f)))
+            assertRectEquals(
+                tile,
+                screenBounds(surface, resolve(enter = opening, enterProgress = 0f)),
+            )
+            assertRectEquals(
+                surface,
+                screenBounds(surface, resolve(enter = opening, enterProgress = 1f)),
+            )
+            assertRectEquals(
+                surface,
+                screenBounds(surface, resolve(settle = closing, settleProgress = 0f)),
+            )
+            assertRectEquals(
+                tile,
+                screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+            )
         }
     }
 
@@ -34,7 +46,10 @@ class ViewerSurfaceTransformTest {
 
         assertEquals(before.offset, after.offset)
         assertEquals(before.scale, after.scale, 0.0001f)
-        assertRectEquals(tile, screenBounds(surface, resolve(settle = closing, settleProgress = 1f)))
+        assertRectEquals(
+            tile,
+            screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+        )
     }
 
     @Test
@@ -47,7 +62,10 @@ class ViewerSurfaceTransformTest {
 
         assertEquals(before.offset, after.offset)
         assertEquals(before.scale, after.scale, 0.0001f)
-        assertRectEquals(tile, screenBounds(surface, resolve(settle = closing, settleProgress = 1f)))
+        assertRectEquals(
+            tile,
+            screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+        )
     }
 
     @Test
@@ -79,9 +97,13 @@ class ViewerSurfaceTransformTest {
     )
 
     private fun screenBounds(surface: Rect, transform: ViewerSurfaceTransform): Rect {
-        val local = (transform.clipShape?.createOutline(
-            Size(surface.width, surface.height), LayoutDirection.Ltr, Density(1f),
-        ) as? Outline.Rectangle)?.rect ?: Rect(0f, 0f, surface.width, surface.height)
+        val local = (
+            transform.clipShape?.createOutline(
+                Size(surface.width, surface.height),
+                LayoutDirection.Ltr,
+                Density(1f),
+            ) as? Outline.Rectangle
+            )?.rect ?: Rect(0f, 0f, surface.width, surface.height)
         val center = surface.center + transform.offset
         return Rect(
             center.x + (local.left - surface.width / 2f) * transform.scale,

@@ -48,7 +48,8 @@ internal fun HomeScreen(
         snapshot = state.timeline.snapshot,
         currentMediaId = viewerTransitionCoordinator.viewerMediaId,
     )
-    val timelineIndex = remember(state.timeline.snapshot) { ViewerTimelineIndex(state.timeline.snapshot) }
+    val timelineIndex =
+        remember(state.timeline.snapshot) { ViewerTimelineIndex(state.timeline.snapshot) }
     val visibleViewerMediaId = viewerTransitionCoordinator.viewerMediaId?.takeIf { mediaId ->
         mediaId in viewerSequence
     }
@@ -66,7 +67,7 @@ internal fun HomeScreen(
     ) { padding ->
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxSize(),
         ) {
             Box(
                 modifier = Modifier

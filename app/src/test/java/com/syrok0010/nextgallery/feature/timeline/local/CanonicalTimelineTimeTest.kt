@@ -10,8 +10,10 @@ import org.junit.Test
 class CanonicalTimelineTimeTest {
     @Test fun `EXIF is a calendar coordinate independent of device locale and zone`() {
         withDefaults(Locale.forLanguageTag("th-TH"), "Pacific/Honolulu") {
-            assertEquals(Instant.parse("2024-03-31T01:30:00Z").epochSecond,
-                canonicalTimelineSeconds("2024:03:31 01:30:00", 1))
+            assertEquals(
+                Instant.parse("2024-03-31T01:30:00Z").epochSecond,
+                canonicalTimelineSeconds("2024:03:31 01:30:00", 1),
+            )
         }
     }
 
@@ -22,8 +24,10 @@ class CanonicalTimelineTimeTest {
                 "2024-03-31T01:30:00Z" to "2024-03-31T03:30:00Z",
                 "2024-03-31T23:30:00Z" to "2024-04-01T01:30:00Z",
             ).forEach { (capture, calendar) ->
-                assertEquals(Instant.parse(calendar).epochSecond,
-                    canonicalTimelineSeconds("invalid", Instant.parse(capture).toEpochMilli()))
+                assertEquals(
+                    Instant.parse(calendar).epochSecond,
+                    canonicalTimelineSeconds("invalid", Instant.parse(capture).toEpochMilli()),
+                )
             }
             assertNull(canonicalTimelineSeconds(null, 0))
             assertNull(canonicalTimelineSeconds(null, null))

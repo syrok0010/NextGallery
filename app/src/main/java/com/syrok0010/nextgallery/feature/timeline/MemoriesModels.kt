@@ -26,10 +26,7 @@ data class TimelineSnapshot(
     val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
 }
 
-data class TimelineDay(
-    val dayId: Int,
-    val count: Int,
-)
+data class TimelineDay(val dayId: Int, val count: Int)
 
 data class TimelineSlot(
     val key: TimelineSlotKey,
@@ -38,7 +35,4 @@ data class TimelineSlot(
     val mediaItem: MediaItem?,
 )
 
-data class TimelineSlotKey(
-    val dayId: Int,
-    val indexInDay: Int,
-)
+data class TimelineSlotKey(val dayId: Int, val indexInDay: Int)

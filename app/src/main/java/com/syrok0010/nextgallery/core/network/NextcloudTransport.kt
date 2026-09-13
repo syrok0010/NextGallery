@@ -16,12 +16,11 @@ class NextcloudTransport(
     internal val baseClient: OkHttpClient = defaultBaseClient(),
 ) {
 
-    fun normalizeBaseUrl(input: String): String {
-        return normalizeServerOrigin(input) + "/"
-    }
+    fun normalizeBaseUrl(input: String): String = normalizeServerOrigin(input) + "/"
 
-    fun authenticatedClient(credentials: AccountCredentials): OkHttpClient {
-        return baseClient.newBuilder()
+    fun authenticatedClient(credentials: AccountCredentials): OkHttpClient =
+        baseClient
+            .newBuilder()
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
                 val request = applyAuthenticatedHeaders(
@@ -30,21 +29,18 @@ class NextcloudTransport(
                     accept = originalRequest.header("Accept") ?: "application/json",
                 ).build()
                 chain.proceed(request)
-            }
-            .build()
-    }
+            }.build()
 
     fun authenticatedRequestBuilder(
         credentials: AccountCredentials,
         url: String,
         accept: String? = null,
-    ): Request.Builder {
-        return applyAuthenticatedHeaders(
+    ): Request.Builder =
+        applyAuthenticatedHeaders(
             builder = Request.Builder().url(url),
             credentials = credentials,
             accept = accept,
         )
-    }
 
     companion object {
         fun defaultBaseClient(): OkHttpClient {
@@ -52,18 +48,19 @@ class NextcloudTransport(
                 level = HttpLoggingInterceptor.Level.BASIC
             }
 
-            return OkHttpClient.Builder()
+            return OkHttpClient
+                .Builder()
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
-                    val request = chain.request()
+                    val request = chain
+                        .request()
                         .newBuilder()
                         .header("User-Agent", "NextGallery/0.1 Android")
                         .build()
                     chain.proceed(request)
-                }
-                .addInterceptor(logging)
+                }.addInterceptor(logging)
                 .build()
         }
 
@@ -82,24 +79,22 @@ class NextcloudTransport(
             builder: Request.Builder,
             credentials: AccountCredentials,
             accept: String? = null,
-        ): Request.Builder {
-            return builder
+        ): Request.Builder =
+            builder
                 .header("Authorization", authorizationHeader(credentials))
                 .header("Accept", accept ?: "application/json")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("OCS-APIRequest", "true")
-        }
 
-        internal fun authorizationHeader(credentials: AccountCredentials): String {
-            return Credentials.basic(credentials.loginName, credentials.appPassword)
-        }
+        internal fun authorizationHeader(credentials: AccountCredentials): String =
+            Credentials.basic(credentials.loginName, credentials.appPassword)
     }
 
-    fun retrofit(baseUrl: String, client: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
+    fun retrofit(baseUrl: String, client: OkHttpClient): Retrofit =
+        Retrofit
+            .Builder()
             .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-    }
 }
