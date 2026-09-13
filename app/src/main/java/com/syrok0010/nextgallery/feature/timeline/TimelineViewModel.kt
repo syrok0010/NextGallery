@@ -1,22 +1,11 @@
 package com.syrok0010.nextgallery.feature.timeline
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.session.CredentialsStore
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.AppMessageUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
-import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 data class TimelineScreenState(
     val isSignedIn: Boolean = false,
@@ -27,40 +16,12 @@ data class TimelineScreenState(
     val localMediaPermissionMode: LocalMediaPermissionMode? = null,
 )
 
-class TimelineViewModel(
-    private val sessionStore: SessionStore,
-    private val credentialsStore: CredentialsStore,
-    private val memoriesRepository: MemoriesRepository,
-    private val localMediaSource: LocalMediaSource,
-) : ViewModel() {
-    private val mutableState = MutableStateFlow(TimelineScreenState())
-    val state = mutableState.asStateFlow()
-    private var workflow: TimelineWorkflow? = null
-
-    init {
-        viewModelScope.launch {
-            sessionStore.session.collectLatest { session ->
-                workflow = null
-                mutableState.value = TimelineScreenState()
-                if (session is SessionUiState.SignedIn) coroutineScope {
-                    val timeline = TimelineWorkflow(session.credentials, memoriesRepository, localMediaSource::updates, this)
-                    workflow = timeline
-                    timeline.state.collect { mutableState.value = it.toUiState() }
-                }
-            }
-        }
-    }
-
-    fun refresh() { workflow?.refresh() }
-    fun onLocalMediaPermissionChanged(mode: LocalMediaPermissionMode) { workflow?.updateLocalAccess(mode) }
-    internal fun observeTimelineViewport(observation: TimelineViewportObservation) { workflow?.observeViewport(observation) }
+internal class TimelineViewModel(private val timeline: TimelineRepository) : ViewModel() {
+    val state = timeline.state
+    fun refresh() = timeline.refresh()
+    internal fun observeTimelineViewport(observation: TimelineViewportObservation) = timeline.observeViewport(observation)
     fun loadVisibleTimelineRange(firstVisibleIndex: Int, lastVisibleIndex: Int) {
         observeTimelineViewport(TimelineViewportObservation(firstVisibleIndex, lastVisibleIndex, TimelineViewportLoadingMode.Immediate))
-    }
-    fun logout() {
-        credentialsStore.clear()
-        viewModelScope.launch { memoriesRepository.clearCache() }
-        sessionStore.signOut()
     }
 }
 

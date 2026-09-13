@@ -111,6 +111,7 @@ class LocalMediaSourceTest {
             states[2].items.map(MediaItem::localContentUri),
         )
         assertNull(states[2].progress)
+        assertEquals(LocalMediaIndexProgress(3, 3), states[2].processed)
         assertEquals(states[2].items, store.items)
     }
 
@@ -138,6 +139,7 @@ class LocalMediaSourceTest {
 
         val finalState = source.updates(emptyFlow()).take(2).toList().last()
 
+        assertEquals(LocalMediaIndexProgress(4, 4), finalState.processed)
         assertEquals(listOf(300L, 250L, 175L), finalState.items.map { it.takenAtEpochSeconds })
         assertEquals("fc04c0511168c77b574e1114c979c5b8", finalState.items[0].auid)
         assertEquals("93f49276c1fbb6e6f65519f19343f9ea", finalState.items[0].buid)

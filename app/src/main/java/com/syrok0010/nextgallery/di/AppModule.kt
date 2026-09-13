@@ -43,11 +43,17 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
+import org.koin.core.qualifier.named
+import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 
 val appModule = module {
     single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
-    viewModel { AlbumsViewModel(get(), get(), get()) }
+    single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    single { AlbumCatalogRepository(get(), get(), get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope"))) }
+    single { TimelineRepository(get(), get<MemoriesRepository>(), get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope"))) }
+    viewModel { AlbumsViewModel(get()) }
 
     single {
         Json {
