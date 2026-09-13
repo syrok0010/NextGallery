@@ -71,12 +71,12 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                     entryProvider = entryProvider {
                         entry<NextGalleryRoute.Login> { LoginScreen() }
                         entry<NextGalleryRoute.Photos> {
-                            screenStates.SaveableStateProvider("photos") {
+                            if (signedIn) screenStates.SaveableStateProvider("photos") {
                                 PhotosScreen(onLogout = sessionViewModel::logout, onViewerVisibilityChanged = { viewerVisible = it })
                             }
                         }
                         entry<NextGalleryRoute.Albums> {
-                            screenStates.SaveableStateProvider("albums") { AlbumsScreen(onLogout = sessionViewModel::logout) }
+                            if (signedIn) screenStates.SaveableStateProvider("albums") { AlbumsScreen(onLogout = sessionViewModel::logout) }
                         }
                     },
                 )
