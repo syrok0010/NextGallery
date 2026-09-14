@@ -1,22 +1,22 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.assertWidthIsAtLeast
-import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -54,7 +54,8 @@ class VideoPlaybackControlsTest {
 
         assertEquals(1, muteClicks)
         assertEquals(1, fullscreenClicks)
-        composeRule.onNodeWithTag(VideoPlaybackSeekTestTag)
+        composeRule
+            .onNodeWithTag(VideoPlaybackSeekTestTag)
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         assertEquals(2_000L, seekPosition)
     }
@@ -68,9 +69,15 @@ class VideoPlaybackControlsTest {
             MaterialTheme {
                 Box(Modifier.width(360.dp)) {
                     VideoPlaybackControls(
-                        state = VideoPlaybackState(phase = VideoPlaybackPhase.Paused,
-                            durationMillis = 42_000L, quality = original.label, qualities = listOf(original, hd)),
-                        onSeek = {}, onToggleMute = {}, onToggleFullscreen = {},
+                        state = VideoPlaybackState(
+                            phase = VideoPlaybackPhase.Paused,
+                            durationMillis = 42_000L,
+                            quality = original.label,
+                            qualities = listOf(original, hd),
+                        ),
+                        onSeek = {},
+                        onToggleMute = {},
+                        onToggleFullscreen = {},
                         onSelectQuality = { selected = it },
                     )
                 }

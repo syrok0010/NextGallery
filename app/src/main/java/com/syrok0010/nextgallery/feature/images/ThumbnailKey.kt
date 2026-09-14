@@ -11,8 +11,8 @@ data class ThumbnailKey(
     val height: Int,
     val etag: String?,
 ) {
-    internal fun coilMemoryCacheKey(): String {
-        return buildString {
+    internal fun coilMemoryCacheKey(): String =
+        buildString {
             append("nextgallery-thumbnail:")
             append(accountScope)
             append(':')
@@ -24,13 +24,9 @@ data class ThumbnailKey(
             append(':')
             append(etag.orEmpty())
         }
-    }
 }
 
-data class ThumbnailRequest(
-    val key: ThumbnailKey,
-    val credentials: AccountCredentials,
-)
+data class ThumbnailRequest(val key: ThumbnailKey, val credentials: AccountCredentials)
 
 fun thumbnailRequest(
     credentials: AccountCredentials,
@@ -38,8 +34,8 @@ fun thumbnailRequest(
     etag: String?,
     width: Int = DEFAULT_THUMBNAIL_SIZE,
     height: Int = DEFAULT_THUMBNAIL_SIZE,
-): ThumbnailRequest {
-    return ThumbnailRequest(
+): ThumbnailRequest =
+    ThumbnailRequest(
         key = ThumbnailKey(
             accountScope = credentials.thumbnailAccountScope(),
             fileId = fileId,
@@ -49,17 +45,16 @@ fun thumbnailRequest(
         ),
         credentials = credentials,
     )
-}
 
-internal fun AccountCredentials.thumbnailAccountScope(): String {
-    return "${NextcloudTransport.normalizeServerOrigin(serverUrl)}|$loginName"
-}
+internal fun AccountCredentials.thumbnailAccountScope(): String =
+    "${NextcloudTransport.normalizeServerOrigin(serverUrl)}|$loginName"
 
 const val DEFAULT_THUMBNAIL_SIZE = 512
 
-internal fun MediaAssetRef.LocalContent.coilCacheKey(): String = buildString {
-    append("nextgallery-local-media:")
-    append(contentUri)
-    append(':')
-    append(modifiedAtEpochSeconds ?: "unknown")
-}
+internal fun MediaAssetRef.LocalContent.coilCacheKey(): String =
+    buildString {
+        append("nextgallery-local-media:")
+        append(contentUri)
+        append(':')
+        append(modifiedAtEpochSeconds ?: "unknown")
+    }

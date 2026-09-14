@@ -15,10 +15,16 @@ internal class MemoriesVideoDiscovery(
     private val transport: NextcloudTransport,
     private val client: OkHttpClient,
 ) {
-    suspend fun qualities(original: RemoteVideoOriginal, clientId: String): List<RemoteVideoQuality> {
+    suspend fun qualities(
+        original: RemoteVideoOriginal,
+        clientId: String,
+    ): List<RemoteVideoQuality> {
         val master = original.masterPlaylist(clientId)
-        val api = transport.retrofit(original.configurationUri.toHttpUrl().resolve(".")!!.toString(), client)
-            .create(MemoriesVideoApi::class.java)
+        val api = transport
+            .retrofit(
+                original.configurationUri.toHttpUrl().resolve(".")!!.toString(),
+                client,
+            ).create(MemoriesVideoApi::class.java)
         try {
             val config = api.configuration(original.configurationUri)
             if (config.vodDisable) return emptyList()

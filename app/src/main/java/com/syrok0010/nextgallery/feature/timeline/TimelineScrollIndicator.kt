@@ -153,8 +153,7 @@ private fun TimelineScrollTooltip(
             .background(
                 color = MaterialTheme.colorScheme.inverseSurface,
                 shape = MaterialTheme.shapes.small,
-            )
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            ).padding(horizontal = 10.dp, vertical = 6.dp),
         color = MaterialTheme.colorScheme.inverseOnSurface,
         style = MaterialTheme.typography.labelLarge,
         maxLines = 1,
@@ -186,8 +185,7 @@ internal fun TimelineScrollIndicatorHost(
                 .mapNotNull { visibleItem ->
                     (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
                         ?.let { it.slotIndex to it.slot.dayId }
-                }
-                .minByOrNull { it.first }
+                }.minByOrNull { it.first }
             val totalSlots = timeline.slots.size
             val fraction = if (visibleSlot == null || totalSlots <= 1) {
                 0f
@@ -251,10 +249,7 @@ internal fun TimelineScrollIndicatorHost(
     )
 }
 
-private data class TimelineScrollInfo(
-    val dayId: Int?,
-    val fraction: Float,
-)
+private data class TimelineScrollInfo(val dayId: Int?, val fraction: Float)
 
 private fun TimelineSnapshot.dayIdAtFraction(fraction: Float): Int? {
     if (slots.isEmpty()) {

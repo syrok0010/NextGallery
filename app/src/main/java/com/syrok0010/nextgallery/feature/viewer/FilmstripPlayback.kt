@@ -14,4 +14,3 @@ internal interface FilmstripPlayback {
         override fun finish(id: MediaId) = Unit
     }
 }
-

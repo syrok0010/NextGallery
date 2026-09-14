@@ -18,26 +18,24 @@ internal fun createNextGalleryImageLoader(
     context: Context,
     thumbnailBatchLoader: ThumbnailBatchLoader,
     thumbnailFileStore: ThumbnailFileStore,
-): ImageLoader {
-    return ImageLoader.Builder(context)
+): ImageLoader =
+    ImageLoader
+        .Builder(context)
         .components {
             add(LocalMediaRequestInterceptor())
             add(ThumbnailRequestKeyer)
             add(ThumbnailFetcher.Factory(thumbnailBatchLoader, thumbnailFileStore))
             add(VideoFrameDecoder.Factory())
-        }
-        .memoryCache {
-            MemoryCache.Builder()
+        }.memoryCache {
+            MemoryCache
+                .Builder()
                 .maxSizePercent(context, THUMBNAIL_MEMORY_CACHE_PERCENT)
                 .build()
-        }
-        .build()
-}
+        }.build()
 
 internal object ThumbnailRequestKeyer : Keyer<ThumbnailRequest> {
-    override fun key(data: ThumbnailRequest, options: Options): String {
-        return data.key.coilMemoryCacheKey()
-    }
+    override fun key(data: ThumbnailRequest, options: Options): String =
+        data.key.coilMemoryCacheKey()
 }
 
 private class ThumbnailFetcher(
@@ -71,14 +69,13 @@ private class ThumbnailFetcher(
             data: ThumbnailRequest,
             options: Options,
             imageLoader: ImageLoader,
-        ): Fetcher {
-            return ThumbnailFetcher(
+        ): Fetcher =
+            ThumbnailFetcher(
                 data = data,
                 options = options,
                 thumbnailBatchLoader = thumbnailBatchLoader,
                 thumbnailFileStore = thumbnailFileStore,
             )
-        }
     }
 }
 

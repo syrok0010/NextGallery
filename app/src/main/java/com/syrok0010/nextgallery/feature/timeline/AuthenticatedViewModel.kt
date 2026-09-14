@@ -40,20 +40,40 @@ class AuthenticatedViewModel(
             sessionStore.session.collectLatest { session ->
                 workflow = null
                 mutableState.value = AuthenticatedUiState()
-                if (session is SessionUiState.SignedIn) coroutineScope {
-                    val timeline = TimelineWorkflow(session.credentials, memoriesRepository, localMediaSource::updates, this)
-                    workflow = timeline
-                    timeline.state.collect { mutableState.value = it.toUiState() }
+                if (session is SessionUiState.SignedIn) {
+                    coroutineScope {
+                        val timeline =
+                            TimelineWorkflow(
+                                session.credentials,
+                                memoriesRepository,
+                                localMediaSource::updates,
+                                this,
+                            )
+                        workflow = timeline
+                        timeline.state.collect { mutableState.value = it.toUiState() }
+                    }
                 }
             }
         }
     }
 
-    fun refresh() { workflow?.refresh() }
-    fun onLocalMediaPermissionChanged(mode: LocalMediaPermissionMode) { workflow?.updateLocalAccess(mode) }
-    internal fun observeTimelineViewport(observation: TimelineViewportObservation) { workflow?.observeViewport(observation) }
+    fun refresh() {
+        workflow?.refresh()
+    }
+    fun onLocalMediaPermissionChanged(mode: LocalMediaPermissionMode) {
+        workflow?.updateLocalAccess(mode)
+    }
+    internal fun observeTimelineViewport(observation: TimelineViewportObservation) {
+        workflow?.observeViewport(observation)
+    }
     fun loadVisibleTimelineRange(firstVisibleIndex: Int, lastVisibleIndex: Int) {
-        observeTimelineViewport(TimelineViewportObservation(firstVisibleIndex, lastVisibleIndex, TimelineViewportLoadingMode.Immediate))
+        observeTimelineViewport(
+            TimelineViewportObservation(
+                firstVisibleIndex,
+                lastVisibleIndex,
+                TimelineViewportLoadingMode.Immediate,
+            ),
+        )
     }
     fun logout() {
         credentialsStore.clear()
@@ -71,13 +91,23 @@ private fun TimelineWorkflowState.toUiState(): AuthenticatedUiState {
     }
     val status = when {
         remote == TimelineOperation.Loading -> uiText(R.string.status_loading_memories_api)
-        local is TimelineOperation.Indexing -> uiText(R.string.status_indexing_local_media, local.indexed, local.total)
+
+        local is TimelineOperation.Indexing -> uiText(
+            R.string.status_indexing_local_media,
+            local.indexed,
+            local.total,
+        )
+
         else -> uiText(R.string.status_loaded_items, snapshot?.items?.size ?: 0)
     }
     return AuthenticatedUiState(
         isSignedIn = true,
-        timeline = TimelineUiState(snapshot, loadingDayIds, failedDayIds,
-            if (failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed)),
+        timeline = TimelineUiState(
+            snapshot,
+            loadingDayIds,
+            failedDayIds,
+            if (failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed),
+        ),
         isBusy = remote == TimelineOperation.Loading,
         message = AppMessageUiState(status = status, error = error),
         localMediaPermissionMode = permission,

@@ -28,10 +28,7 @@ data class ThumbnailPreview(
     }
 }
 
-fun parseMemoriesMultipreviewResponse(
-    bytes: ByteArray,
-    json: Json,
-): List<ThumbnailPreview> {
+fun parseMemoriesMultipreviewResponse(bytes: ByteArray, json: Json): List<ThumbnailPreview> {
     val previews = mutableListOf<ThumbnailPreview>()
     var index = 0
 

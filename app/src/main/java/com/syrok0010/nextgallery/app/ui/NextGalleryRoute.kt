@@ -13,12 +13,11 @@ internal sealed interface NextGalleryRoute : NavKey {
     data object Authenticated : NextGalleryRoute
 }
 
-internal fun SessionUiState.rootRoute(): NextGalleryRoute {
-    return when (this) {
+internal fun SessionUiState.rootRoute(): NextGalleryRoute =
+    when (this) {
         is SessionUiState.SignedOut -> NextGalleryRoute.Login
         is SessionUiState.SignedIn -> NextGalleryRoute.Authenticated
     }
-}
 
 internal fun syncedBackStack(
     currentBackStack: List<NavKey>,

@@ -6,5 +6,8 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 interface RemoteTimelineSource {
     suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot?
     suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot
-    suspend fun loadTimelineDays(credentials: AccountCredentials, dayIds: List<Int>): List<MediaItem>
+    suspend fun loadTimelineDays(
+        credentials: AccountCredentials,
+        dayIds: List<Int>,
+    ): List<MediaItem>
 }

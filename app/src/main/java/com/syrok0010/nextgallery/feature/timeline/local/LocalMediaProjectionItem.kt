@@ -18,8 +18,8 @@ internal data class LocalMediaProjectionItem(
     val auid: String?,
     val buid: String?,
 ) {
-    fun toMediaItem(): MediaItem {
-        return MediaItem(
+    fun toMediaItem(): MediaItem =
+        MediaItem(
             mediaId = mediaId,
             dayId = Math.floorDiv(takenAtEpochSeconds, SECONDS_PER_DAY).toInt(),
             displayName = displayName,
@@ -41,7 +41,6 @@ internal data class LocalMediaProjectionItem(
                 modifiedAtEpochSeconds = modifiedAtEpochSeconds,
             ),
         )
-    }
 
     private companion object {
         const val SECONDS_PER_DAY = 86_400L

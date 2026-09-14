@@ -72,10 +72,7 @@ object TimelineSnapshotAssembler {
         )
     }
 
-    fun addSourceItems(
-        snapshot: TimelineSnapshot,
-        items: List<MediaItem>,
-    ): TimelineSnapshot {
+    fun addSourceItems(snapshot: TimelineSnapshot, items: List<MediaItem>): TimelineSnapshot {
         if (items.isEmpty()) return snapshot
 
         val daysById = snapshot.days.associateBy { it.dayId }
@@ -92,12 +89,13 @@ object TimelineSnapshotAssembler {
             )
         }
         val mergedItemsByDay = dayIds.associateWith { dayId ->
-            (currentSlotsByDay[dayId].orEmpty().mapNotNull { it.mediaItem } +
-                additionalItemsByDay[dayId].orEmpty())
-                .sortedWith(
-                    compareByDescending<MediaItem> { it.takenAtEpochSeconds }
-                        .thenByDescending { it.mediaId.value },
-                )
+            (
+                currentSlotsByDay[dayId].orEmpty().mapNotNull { it.mediaItem } +
+                    additionalItemsByDay[dayId].orEmpty()
+                ).sortedWith(
+                compareByDescending<MediaItem> { it.takenAtEpochSeconds }
+                    .thenByDescending { it.mediaId.value },
+            )
         }
         val placeholderCountsByDay = currentSlotsByDay.mapValues { (_, slots) ->
             slots.count { it.mediaItem == null }
@@ -115,10 +113,16 @@ object TimelineSnapshotAssembler {
         days: List<TimelineDay>,
         itemsByDay: Map<Int, List<MediaItem>>,
         placeholderCountsByDay: Map<Int, Int>? = null,
-    ): List<TimelineSlot> {
-        return days.flatMap { day ->
+    ): List<TimelineSlot> =
+        days.flatMap { day ->
             val items = itemsByDay[day.dayId].orEmpty()
-            val slotCount = placeholderCountsByDay?.let { items.size + it.getOrDefault(day.dayId, 0) }
+            val slotCount = placeholderCountsByDay?.let {
+                items.size +
+                    it.getOrDefault(
+                        day.dayId,
+                        0,
+                    )
+            }
                 ?: maxOf(day.count, items.size)
 
             List(slotCount) { index ->
@@ -130,7 +134,6 @@ object TimelineSnapshotAssembler {
                 )
             }
         }
-    }
 
     private fun Int?.orZero(): Int = this ?: 0
 }

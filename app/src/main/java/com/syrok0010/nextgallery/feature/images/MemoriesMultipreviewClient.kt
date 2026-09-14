@@ -32,14 +32,17 @@ class MemoriesMultipreviewClient(
                 reqid = index + 1,
             )
         }
-        val body = json.encodeToString(MemoriesMultipreviewRequest(files = requests))
+        val body = json
+            .encodeToString(MemoriesMultipreviewRequest(files = requests))
             .toRequestBody("application/json".toMediaType())
-        val request = transport.authenticatedRequestBuilder(
-            credentials = credentials,
-            url = "${transport.normalizeBaseUrl(credentials.serverUrl)}apps/memories/api/image/multipreview",
-            accept = "application/octet-stream",
-        )
-            .post(body)
+        val request = transport
+            .authenticatedRequestBuilder(
+                credentials = credentials,
+                url = "${transport.normalizeBaseUrl(
+                    credentials.serverUrl,
+                )}apps/memories/api/image/multipreview",
+                accept = "application/octet-stream",
+            ).post(body)
             .build()
         return withContext(Dispatchers.IO) {
             val response = transport.authenticatedClient(credentials).newCall(request).execute()
@@ -65,9 +68,7 @@ class MemoriesMultipreviewClient(
 }
 
 @Serializable
-private data class MemoriesMultipreviewRequest(
-    val files: List<MemoriesMultipreviewFileRequest>,
-)
+private data class MemoriesMultipreviewRequest(val files: List<MemoriesMultipreviewFileRequest>)
 
 @Serializable
 private data class MemoriesMultipreviewFileRequest(

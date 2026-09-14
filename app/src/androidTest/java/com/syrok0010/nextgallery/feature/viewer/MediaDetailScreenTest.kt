@@ -53,7 +53,10 @@ class MediaDetailScreenTest {
             assertEquals(items[1], current)
         }
         saveScreenshot("photo")
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.action_back)).performClick()
+        rule
+            .onNodeWithContentDescription(
+                rule.activity.getString(R.string.action_back),
+            ).performClick()
         rule.waitForIdle()
         rule.runOnIdle { assertEquals(items[1], closed) }
     }
@@ -80,7 +83,10 @@ class MediaDetailScreenTest {
             moveBy(Offset(0f, 100f), delayMillis = 200)
         }
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.action_back)).assertDoesNotExist()
+        rule
+            .onNodeWithContentDescription(
+                rule.activity.getString(R.string.action_back),
+            ).assertDoesNotExist()
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertDoesNotExist()
         rule.onRoot().performTouchInput { cancel() }
         rule.waitForIdle()
@@ -124,7 +130,11 @@ class MediaDetailScreenTest {
         rule.runOnIdle {
             sequenceState.value = ViewerSequence(
                 items = listOf(prepended, first, second),
-                pageIndexByMediaId = mapOf(prepended.mediaId to 0, first.mediaId to 1, second.mediaId to 2),
+                pageIndexByMediaId = mapOf(
+                    prepended.mediaId to 0,
+                    first.mediaId to 1,
+                    second.mediaId to 2,
+                ),
             )
         }
         rule.waitForIdle()
@@ -203,16 +213,22 @@ class MediaDetailScreenTest {
 
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         rule.waitForIdle()
-        rule.runOnIdle { assertEquals(ActivityInfo.COLOR_MODE_DEFAULT, rule.activity.window.colorMode) }
+        rule.runOnIdle {
+            assertEquals(
+                ActivityInfo.COLOR_MODE_DEFAULT,
+                rule.activity.window.colorMode,
+            )
+        }
         rule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         rule.waitForIdle()
         rule.runOnIdle { assertEquals(ActivityInfo.COLOR_MODE_HDR, rule.activity.window.colorMode) }
     }
 
-    private fun sequenceOf(vararg items: MediaItem) = ViewerSequence(
-        items = items.toList(),
-        pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
-    )
+    private fun sequenceOf(vararg items: MediaItem) =
+        ViewerSequence(
+            items = items.toList(),
+            pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
+        )
 
     private fun showViewer(
         items: List<MediaItem>,
@@ -236,7 +252,11 @@ class MediaDetailScreenTest {
         rule.waitForIdle()
     }
 
-    private fun mediaItem(name: String, isVideo: Boolean = false, hasGainmap: Boolean = false): MediaItem {
+    private fun mediaItem(
+        name: String,
+        isVideo: Boolean = false,
+        hasGainmap: Boolean = false,
+    ): MediaItem {
         val file = File(rule.activity.cacheDir, "$name.jpg")
         val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(60, 100, 160))
@@ -264,7 +284,12 @@ class MediaDetailScreenTest {
 
     private fun saveScreenshot(name: String) {
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
-        val directory = File(rule.activity.getExternalFilesDir(null), "detail-refactor").apply { mkdirs() }
-        File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val directory = File(
+            rule.activity.getExternalFilesDir(null),
+            "detail-refactor",
+        ).apply { mkdirs() }
+        File(directory, "$name.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
     }
 }

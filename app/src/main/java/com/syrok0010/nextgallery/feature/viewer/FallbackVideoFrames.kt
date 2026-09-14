@@ -14,26 +14,27 @@ internal class FallbackVideoFrames(
     private val originalUri: String?,
     private val qualities: suspend (String) -> List<RemoteVideoQuality>,
 ) : VideoFrameProvider {
-    override fun frames(uri: String): Flow<VideoFrameEvent> = flow {
-        var remoteUri = uri
-        if (uri.startsWith("content://")) {
+    override fun frames(uri: String): Flow<VideoFrameEvent> =
+        flow {
+            var remoteUri = uri
+            if (uri.startsWith("content://")) {
+                try {
+                    emitAll(local.frames(uri))
+                    return@flow
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    remoteUri = fallbackUri ?: throw failure
+                }
+            }
             try {
-                emitAll(local.frames(uri))
-                return@flow
+                emitAll(remote.frames(remoteUri))
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (failure: Exception) {
-                remoteUri = fallbackUri ?: throw failure
+            } catch (failure: UnsupportedVideoFrames) {
+                if (remoteUri != originalUri) throw failure
+                val hls = qualities(remoteUri).firstOrNull { it.isAdaptive } ?: throw failure
+                emitAll(remote.frames(hls.uri))
             }
         }
-        try {
-            emitAll(remote.frames(remoteUri))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: UnsupportedVideoFrames) {
-            if (remoteUri != originalUri) throw failure
-            val hls = qualities(remoteUri).firstOrNull { it.isAdaptive } ?: throw failure
-            emitAll(remote.frames(hls.uri))
-        }
-    }
 }

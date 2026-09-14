@@ -15,7 +15,9 @@ class InMemoryMediaIdentityRegistry(
     private val sourceMediaIds = mutableMapOf<MediaSourceIdentity, MediaId>()
     private val aliasMediaIds = mutableMapOf<MediaAlias, MediaId>()
 
-    override suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution {
+    override suspend fun resolve(
+        candidates: List<MediaIdentityCandidate>,
+    ): MediaIdentityResolution {
         val reconciliation = reconcileMediaIdentities(
             candidates = candidates,
             initialSourceMediaIds = sourceMediaIds,

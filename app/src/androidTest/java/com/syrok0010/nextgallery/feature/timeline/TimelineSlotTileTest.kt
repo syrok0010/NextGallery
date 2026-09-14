@@ -33,16 +33,19 @@ class TimelineSlotTileTest {
     fun remotePhotoShowsCloudIndicatorAndExposesCloudCopyOnTile() {
         showSlot(mediaItem = mediaItem(isVideo = false))
 
-        composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
+        composeRule
+            .onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
             .assertIsDisplayed()
-        composeRule.onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
+        composeRule
+            .onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
             .assertDoesNotExist()
-        composeRule.onNode(
-            SemanticsMatcher.expectValue(
-                SemanticsProperties.StateDescription,
-                CLOUD_COPY_DESCRIPTION,
-            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
-        ).assertIsDisplayed()
+        composeRule
+            .onNode(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    CLOUD_COPY_DESCRIPTION,
+                ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
+            ).assertIsDisplayed()
     }
 
     @Test
@@ -56,12 +59,13 @@ class TimelineSlotTileTest {
 
         assertFalse(indicator.config.contains(SemanticsActions.OnClick))
         assertFalse(indicator.config.contains(SemanticsProperties.ContentDescription))
-        composeRule.onNode(
-            SemanticsMatcher.expectValue(
-                SemanticsProperties.StateDescription,
-                CLOUD_COPY_DESCRIPTION,
-            ),
-        ).assertIsDisplayed()
+        composeRule
+            .onNode(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    CLOUD_COPY_DESCRIPTION,
+                ),
+            ).assertIsDisplayed()
     }
 
     @Test
@@ -96,17 +100,21 @@ class TimelineSlotTileTest {
 
         showSlot(mediaItem = localItem)
 
-        composeRule.onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
+        composeRule
+            .onNodeWithTag(CLOUD_INDICATOR_TAG, useUnmergedTree = true)
             .assertDoesNotExist()
-        composeRule.onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
+        composeRule
+            .onNodeWithTag(LOCAL_INDICATOR_TAG, useUnmergedTree = true)
             .assertIsDisplayed()
-        composeRule.onNode(
-            SemanticsMatcher.expectValue(
-                SemanticsProperties.StateDescription,
-                LOCAL_COPY_DESCRIPTION,
-            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
-        ).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("local.jpg")
+        composeRule
+            .onNode(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    LOCAL_COPY_DESCRIPTION,
+                ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
+            ).assertIsDisplayed()
+        composeRule
+            .onNodeWithContentDescription("local.jpg")
             .assertIsDisplayed()
     }
 
@@ -139,12 +147,13 @@ class TimelineSlotTileTest {
 
         assertTrue(localBounds.right <= cloudBounds.left)
         assertTrue(localBounds.top == cloudBounds.top)
-        composeRule.onNode(
-            SemanticsMatcher.expectValue(
-                SemanticsProperties.StateDescription,
-                "$LOCAL_COPY_DESCRIPTION, $CLOUD_COPY_DESCRIPTION",
-            ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
-        ).assertIsDisplayed()
+        composeRule
+            .onNode(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "$LOCAL_COPY_DESCRIPTION, $CLOUD_COPY_DESCRIPTION",
+                ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
+            ).assertIsDisplayed()
     }
 
     private fun showSlot(mediaItem: MediaItem?) {
@@ -174,25 +183,26 @@ class TimelineSlotTileTest {
         }
     }
 
-    private fun mediaItem(isVideo: Boolean): MediaItem = MediaItem(
-        mediaId = MediaId("remote-42"),
-        dayId = DAY_ID,
-        displayName = "remote.jpg",
-        mimeType = if (isVideo) "video/mp4" else "image/jpeg",
-        width = 1200,
-        height = 800,
-        etag = "etag",
-        livePhotoId = null,
-        auid = null,
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = null,
-        isVideo = isVideo,
-        videoDurationSeconds = if (isVideo) 12 else null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(photoFileId = 42),
-    )
+    private fun mediaItem(isVideo: Boolean): MediaItem =
+        MediaItem(
+            mediaId = MediaId("remote-42"),
+            dayId = DAY_ID,
+            displayName = "remote.jpg",
+            mimeType = if (isVideo) "video/mp4" else "image/jpeg",
+            width = 1200,
+            height = 800,
+            etag = "etag",
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = null,
+            isVideo = isVideo,
+            videoDurationSeconds = if (isVideo) 12 else null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = 42),
+        )
 
     private companion object {
         const val DAY_ID = 20_660

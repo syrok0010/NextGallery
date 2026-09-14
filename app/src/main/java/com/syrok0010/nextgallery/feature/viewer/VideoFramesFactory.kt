@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.feature.viewer
 
 import android.content.Context
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
-import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
+import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
 
 /** Shared dependencies; each expanded card gets its own extraction request identity. */
 internal class VideoFramesFactory(

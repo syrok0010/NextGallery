@@ -11,8 +11,10 @@ class MediaContractTest {
         val old = MediaId("remote")
         val result = reconcileMediaIdentities(
             candidates = listOf(MediaIdentityCandidate(local, MediaId("local"), setOf(alias))),
-            initialSourceMediaIds = mapOf(remote to old), initialAliasMediaIds = mapOf(alias to old),
-            initialLocalMediaIds = emptySet(), mediaIdFactory = { error("published ID is present") },
+            initialSourceMediaIds = mapOf(remote to old),
+            initialAliasMediaIds = mapOf(alias to old),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = { error("published ID is present") },
         )
         assertEquals(MediaId("local"), result.resolution.mediaIds[local])
         assertEquals(MediaId("local"), result.sourceMediaIds[remote])
@@ -27,7 +29,13 @@ class MediaContractTest {
     }
 
     @Test fun `unified output is rejected by source projection boundaries`() {
-        val item = item(MediaAssetRef.LocalFirst(MediaAssetRef.LocalContent("content://media/1", 1), MediaAssetRef.MemoriesFile(42)))
+        val item =
+            item(
+                MediaAssetRef.LocalFirst(
+                    MediaAssetRef.LocalContent("content://media/1", 1),
+                    MediaAssetRef.MemoriesFile(42),
+                ),
+            )
         assertThrows(IllegalArgumentException::class.java) { LocalMediaProjection(listOf(item)) }
         assertThrows(IllegalArgumentException::class.java) { RemoteMediaProjection(listOf(item)) }
     }
@@ -42,8 +50,9 @@ class MediaContractTest {
         }
     }
 
-    private fun item(asset: MediaAssetRef) = MediaItem(
-        MediaId("one"), 20_000, "one.jpg", "image/jpeg", 10, 10,
-        null, null, null, null, null, 1, false, null, false, false, asset,
-    )
+    private fun item(asset: MediaAssetRef) =
+        MediaItem(
+            MediaId("one"), 20_000, "one.jpg", "image/jpeg", 10, 10,
+            null, null, null, null, null, 1, false, null, false, false, asset,
+        )
 }

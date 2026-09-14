@@ -31,19 +31,12 @@ data class MediaItem(
 }
 
 sealed interface MediaAssetRef {
-    data class MemoriesFile(
-        val photoFileId: Long,
-    ) : MediaAssetRef
+    data class MemoriesFile(val photoFileId: Long) : MediaAssetRef
 
-    data class LocalContent(
-        val contentUri: String,
-        val modifiedAtEpochSeconds: Long?,
-    ) : MediaAssetRef
+    data class LocalContent(val contentUri: String, val modifiedAtEpochSeconds: Long?) :
+        MediaAssetRef
 
-    data class LocalFirst(
-        val local: LocalContent,
-        val remote: MemoriesFile,
-    ) : MediaAssetRef
+    data class LocalFirst(val local: LocalContent, val remote: MemoriesFile) : MediaAssetRef
 }
 
 val MediaItem.hasRemoteCopy: Boolean
@@ -56,7 +49,11 @@ val MediaItem.hasLocalCopy: Boolean
 class LocalMediaProjection(items: List<MediaItem>) {
     val items: List<MediaItem> = java.util.Collections.unmodifiableList(items.toList())
     init {
-        require(this.items.all { it.assetRef is MediaAssetRef.LocalContent && it.takenAtEpochSeconds != null }) {
+        require(
+            this.items.all {
+                it.assetRef is MediaAssetRef.LocalContent && it.takenAtEpochSeconds != null
+            },
+        ) {
             "Local projection requires local copies with canonical time"
         }
     }
@@ -64,7 +61,13 @@ class LocalMediaProjection(items: List<MediaItem>) {
 
 class RemoteMediaProjection(items: List<MediaItem>) {
     val items: List<MediaItem> = java.util.Collections.unmodifiableList(items.toList())
-    init { require(this.items.all { it.assetRef is MediaAssetRef.MemoriesFile }) { "Remote projection requires remote copies" } }
+    init {
+        require(
+            this.items.all {
+                it.assetRef is MediaAssetRef.MemoriesFile
+            },
+        ) { "Remote projection requires remote copies" }
+    }
 }
 
 val MediaItem.localCopy: MediaAssetRef.LocalContent?

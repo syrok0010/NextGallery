@@ -144,7 +144,8 @@ class ViewerMotionStateTest {
                 onClose = { closedIds += id },
             )
             Box(
-                Modifier.size(200.dp)
+                Modifier
+                    .size(200.dp)
                     .background(Color.Black.copy(alpha = motion.backgroundAlpha))
                     .viewerSurfaceTransform(motion.surfaceTransform(id)),
             )
@@ -161,7 +162,8 @@ class ViewerMotionStateTest {
         rule.waitForIdle()
     }
 
-    private fun backEvent(progress: Float) = BackEventCompat(0f, 300f, progress, BackEventCompat.EDGE_LEFT)
+    private fun backEvent(progress: Float) =
+        BackEventCompat(0f, 300f, progress, BackEventCompat.EDGE_LEFT)
 
     private fun finishAnimations() {
         rule.mainClock.advanceTimeBy(1_000)

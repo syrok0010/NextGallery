@@ -20,16 +20,10 @@ interface NextcloudAuthApi {
 }
 
 @Serializable
-data class LoginFlowInitDto(
-    val poll: LoginFlowPollDto,
-    val login: String,
-)
+data class LoginFlowInitDto(val poll: LoginFlowPollDto, val login: String)
 
 @Serializable
-data class LoginFlowPollDto(
-    val token: String,
-    val endpoint: String,
-)
+data class LoginFlowPollDto(val token: String, val endpoint: String)
 
 @Serializable
 data class LoginFlowCredentialsDto(

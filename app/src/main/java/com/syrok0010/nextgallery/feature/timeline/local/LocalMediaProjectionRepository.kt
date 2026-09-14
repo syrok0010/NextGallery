@@ -7,9 +7,8 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.timeline.persistence.toLocalMediaEntity
 import com.syrok0010.nextgallery.feature.timeline.persistence.toMediaItem
 
-class LocalMediaProjectionRepository(
-    private val database: NextGalleryDatabase,
-) : LocalMediaProjectionStore {
+class LocalMediaProjectionRepository(private val database: NextGalleryDatabase) :
+    LocalMediaProjectionStore {
     private val dao = database.localMediaDao()
 
     override suspend fun loadLocalMediaProjection(): List<MediaItem> =

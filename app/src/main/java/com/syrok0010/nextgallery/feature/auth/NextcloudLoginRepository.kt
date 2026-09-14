@@ -6,9 +6,7 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 
-class NextcloudLoginRepository(
-    private val transport: NextcloudTransport,
-) : LoginGateway {
+class NextcloudLoginRepository(private val transport: NextcloudTransport) : LoginGateway {
     override suspend fun startLogin(serverUrl: String): LoginSession {
         val normalizedServerUrl = transport.normalizeBaseUrl(serverUrl)
         val api = transport.nextcloudAuthApi(normalizedServerUrl)
@@ -22,8 +20,8 @@ class NextcloudLoginRepository(
         )
     }
 
-    override suspend fun pollLogin(session: LoginSession): LoginPollResult {
-        return try {
+    override suspend fun pollLogin(session: LoginSession): LoginPollResult =
+        try {
             val api = transport.nextcloudAuthApi(session.serverUrl)
             val response = api.pollLogin(session.pollEndpoint, session.pollToken)
             LoginPollResult.Ready(
@@ -46,7 +44,6 @@ class NextcloudLoginRepository(
         } catch (_: Exception) {
             LoginPollResult.Failed(LoginPollFailure.Unknown)
         }
-    }
 }
 
 data class LoginSession(
@@ -59,10 +56,8 @@ data class LoginSession(
 sealed interface LoginPollResult {
     data object Pending : LoginPollResult
     data class Ready(val credentials: AccountCredentials) : LoginPollResult
-    data class Failed(
-        val failure: LoginPollFailure,
-        val isRecoverable: Boolean = false,
-    ) : LoginPollResult
+    data class Failed(val failure: LoginPollFailure, val isRecoverable: Boolean = false) :
+        LoginPollResult
 }
 
 sealed interface LoginPollFailure {

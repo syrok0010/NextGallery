@@ -25,32 +25,34 @@ class TimelineGridItemsTest {
         assertEquals(firstKey, movedKey)
     }
 
-    private fun slot(index: Int, item: MediaItem) = TimelineSlot(
-        key = TimelineSlotKey(dayId = DAY_ID, indexInDay = index),
-        dayId = DAY_ID,
-        indexInDay = index,
-        mediaItem = item,
-    )
+    private fun slot(index: Int, item: MediaItem) =
+        TimelineSlot(
+            key = TimelineSlotKey(dayId = DAY_ID, indexInDay = index),
+            dayId = DAY_ID,
+            indexInDay = index,
+            mediaItem = item,
+        )
 
-    private fun mediaItem(mediaId: MediaId, fileId: Long) = MediaItem(
-        mediaId = mediaId,
-        dayId = DAY_ID,
-        displayName = "file-$fileId",
-        mimeType = "image/jpeg",
-        width = null,
-        height = null,
-        etag = null,
-        livePhotoId = null,
-        auid = null,
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = null,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-    )
+    private fun mediaItem(mediaId: MediaId, fileId: Long) =
+        MediaItem(
+            mediaId = mediaId,
+            dayId = DAY_ID,
+            displayName = "file-$fileId",
+            mimeType = "image/jpeg",
+            width = null,
+            height = null,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = null,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
+        )
 
     private companion object {
         const val DAY_ID = 20_645

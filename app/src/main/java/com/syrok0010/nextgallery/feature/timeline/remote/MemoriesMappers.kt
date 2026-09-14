@@ -9,8 +9,8 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
-fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig {
-    return MemoriesConfig(
+fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig =
+    MemoriesConfig(
         version = version,
         timelinePath = timelinePath,
         albumsEnabled = albumsEnabled,
@@ -20,7 +20,6 @@ fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig {
         stackRawFiles = stackRawFiles,
         dedupIdentical = dedupIdentical,
     )
-}
 
 fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
     val isVideoValue = isVideo.asFlexibleBoolean() || mimetype?.startsWith("video/") == true
@@ -50,6 +49,6 @@ private fun JsonElement?.asFlexibleBoolean(): Boolean {
     val primitive = this?.jsonPrimitive ?: return false
     return primitive.booleanOrNull
         ?: primitive.intOrNull?.let { it != 0 }
-        ?: primitive.content.equals("true", ignoreCase = true)
-        || primitive.content == "1"
+        ?: primitive.content.equals("true", ignoreCase = true) ||
+        primitive.content == "1"
 }

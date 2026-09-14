@@ -9,12 +9,13 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class BestEffortTest {
-    @Test fun `cache miss and recoverable storage failure keep different results`() = runTest {
-        val miss = bestEffort<String?> { null }
-        assertNull(miss.getOrThrow())
-        val failure = IOException("disk unavailable")
-        assertSame(failure, bestEffort<String> { throw failure }.exceptionOrNull())
-    }
+    @Test fun `cache miss and recoverable storage failure keep different results`() =
+        runTest {
+            val miss = bestEffort<String?> { null }
+            assertNull(miss.getOrThrow())
+            val failure = IOException("disk unavailable")
+            assertSame(failure, bestEffort<String> { throw failure }.exceptionOrNull())
+        }
 
     @Test fun `cancellation is rethrown rather than turned into cache miss`() {
         val cancellation = CancellationException("cancelled")

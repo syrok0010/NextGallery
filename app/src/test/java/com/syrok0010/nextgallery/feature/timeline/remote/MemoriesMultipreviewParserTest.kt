@@ -51,11 +51,7 @@ class MemoriesMultipreviewParserTest {
         parseMemoriesMultipreviewResponse(response, json)
     }
 
-    private fun previewBlock(
-        reqid: Int,
-        type: String,
-        image: ByteArray,
-    ): ByteArray {
+    private fun previewBlock(reqid: Int, type: String, image: ByteArray): ByteArray {
         val header = """{"reqid":$reqid,"len":${image.size},"type":"$type"}""".encodeToByteArray()
         require(header.size <= 255)
 

@@ -34,7 +34,7 @@ android {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }
@@ -112,14 +112,37 @@ val verifyFeatureBoundaries by tasks.registering {
             val owner = Regex("(?m)^package (.+)").find(text)!!.groupValues[1]
             importPattern.findAll(text).forEach { match ->
                 val dependency = match.groupValues[1]
-                check(!(owner.startsWith(prefix + "core.") &&
-                    (dependency.startsWith(prefix + "feature.") || dependency.startsWith(prefix + "app.")))) {
+                check(
+                    !(
+                        owner.startsWith(prefix + "core.") &&
+                            (
+                                dependency.startsWith(
+                                    prefix + "feature.",
+                                ) ||
+                                    dependency.startsWith(prefix + "app.")
+                                )
+                        ),
+                ) {
                     "${source.name}: core must not depend on $dependency"
                 }
-                check(!(owner.startsWith(prefix + "feature.") && dependency.startsWith(prefix + "app."))) {
+                check(
+                    !(
+                        owner.startsWith(
+                            prefix + "feature.",
+                        ) &&
+                            dependency.startsWith(prefix + "app.")
+                        ),
+                ) {
                     "${source.name}: app composes features, not the reverse ($dependency)"
                 }
-                check(!(owner.startsWith(prefix + "feature.viewer") && dependency.startsWith(prefix + "feature.timeline"))) {
+                check(
+                    !(
+                        owner.startsWith(
+                            prefix + "feature.viewer",
+                        ) &&
+                            dependency.startsWith(prefix + "feature.timeline")
+                        ),
+                ) {
                     "${source.name}: viewer accepts media sequence, not timeline internals"
                 }
             }

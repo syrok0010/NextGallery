@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedViewModel
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import com.syrok0010.nextgallery.feature.timeline.AuthenticatedViewModel
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext

@@ -31,94 +31,101 @@ class MediaAssetImageTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun projectedMediaFallsBackToCloudAfterLocalReadErrorWithoutChangingMediaId() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val localAsset = MediaAssetRef.LocalContent(
-            contentUri = "content://missing/images/42",
-            modifiedAtEpochSeconds = 1_700_000_000,
-        )
-        val local = mediaItem(localAsset).copy(
-            mediaId = MediaId("published-local"),
-            auid = "shared-auid",
-        )
-        val remote = mediaItem(MediaAssetRef.MemoriesFile(42)).copy(
-            mediaId = MediaId("generated-remote"),
-            auid = "shared-auid",
-        )
-        val item = remote.copy(
-            mediaId = local.mediaId,
-            assetRef = MediaAssetRef.LocalFirst(
-                local = localAsset,
-                remote = remote.assetRef as MediaAssetRef.MemoriesFile,
-            ),
-        )
-        val requestedData = CopyOnWriteArrayList<Any>()
-        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
-        val imageLoader = ImageLoader.Builder(context)
-            .components {
-                add(
-                    Interceptor { chain ->
-                        requestedData += chain.request.data
-                        if (chain.request.data == localAsset.contentUri) {
-                            ErrorResult(null, chain.request, IllegalStateException("Local URI is unreadable"))
-                        } else {
-                            SuccessResult(bitmap.asImage(), chain.request)
-                        }
-                    },
-                )
-            }
-            .build()
-
-        try {
-            composeRule.setContent {
-                MediaAssetImage(
-                    item = item,
-                    purpose = MediaImagePurpose.Original,
-                    contentDescription = null,
-                    imageLoader = imageLoader,
-                    requestFactory = requestFactory(),
-                )
-            }
-            composeRule.waitUntil(timeoutMillis = 5_000) { requestedData.size >= 2 }
-
-            assertEquals(MediaId("published-local"), item.mediaId)
-            assertEquals(
-                listOf(
-                    localAsset.contentUri,
-                    "https://cloud.example.com/apps/memories/api/stream/42",
-                ),
-                requestedData.take(2),
+    fun projectedMediaFallsBackToCloudAfterLocalReadErrorWithoutChangingMediaId() =
+        runBlocking {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val localAsset = MediaAssetRef.LocalContent(
+                contentUri = "content://missing/images/42",
+                modifiedAtEpochSeconds = 1_700_000_000,
             )
-        } finally {
-            imageLoader.shutdown()
-            bitmap.recycle()
+            val local = mediaItem(localAsset).copy(
+                mediaId = MediaId("published-local"),
+                auid = "shared-auid",
+            )
+            val remote = mediaItem(MediaAssetRef.MemoriesFile(42)).copy(
+                mediaId = MediaId("generated-remote"),
+                auid = "shared-auid",
+            )
+            val item = remote.copy(
+                mediaId = local.mediaId,
+                assetRef = MediaAssetRef.LocalFirst(
+                    local = localAsset,
+                    remote = remote.assetRef as MediaAssetRef.MemoriesFile,
+                ),
+            )
+            val requestedData = CopyOnWriteArrayList<Any>()
+            val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+            val imageLoader = ImageLoader
+                .Builder(context)
+                .components {
+                    add(
+                        Interceptor { chain ->
+                            requestedData += chain.request.data
+                            if (chain.request.data == localAsset.contentUri) {
+                                ErrorResult(
+                                    null,
+                                    chain.request,
+                                    IllegalStateException("Local URI is unreadable"),
+                                )
+                            } else {
+                                SuccessResult(bitmap.asImage(), chain.request)
+                            }
+                        },
+                    )
+                }.build()
+
+            try {
+                composeRule.setContent {
+                    MediaAssetImage(
+                        item = item,
+                        purpose = MediaImagePurpose.Original,
+                        contentDescription = null,
+                        imageLoader = imageLoader,
+                        requestFactory = requestFactory(),
+                    )
+                }
+                composeRule.waitUntil(timeoutMillis = 5_000) { requestedData.size >= 2 }
+
+                assertEquals(MediaId("published-local"), item.mediaId)
+                assertEquals(
+                    listOf(
+                        localAsset.contentUri,
+                        "https://cloud.example.com/apps/memories/api/stream/42",
+                    ),
+                    requestedData.take(2),
+                )
+            } finally {
+                imageLoader.shutdown()
+                bitmap.recycle()
+            }
         }
-    }
 
-    private fun mediaItem(assetRef: MediaAssetRef): MediaItem = MediaItem(
-        mediaId = MediaId("local:42"),
-        dayId = 1,
-        displayName = "local.jpg",
-        mimeType = "image/jpeg",
-        width = 4000,
-        height = 3000,
-        etag = null,
-        livePhotoId = null,
-        auid = null,
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = null,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = assetRef,
-    )
+    private fun mediaItem(assetRef: MediaAssetRef): MediaItem =
+        MediaItem(
+            mediaId = MediaId("local:42"),
+            dayId = 1,
+            displayName = "local.jpg",
+            mimeType = "image/jpeg",
+            width = 4000,
+            height = 3000,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = null,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = assetRef,
+        )
 
-    private fun requestFactory(): MediaImageRequestFactory = MediaImageRequestFactory(
-        context = InstrumentationRegistry.getInstrumentation().targetContext,
-        sessionStore = sessionStore(credentials),
-    )
+    private fun requestFactory(): MediaImageRequestFactory =
+        MediaImageRequestFactory(
+            context = InstrumentationRegistry.getInstrumentation().targetContext,
+            sessionStore = sessionStore(credentials),
+        )
 
     private fun sessionStore(initialCredentials: AccountCredentials): SessionStore =
         SessionStore(

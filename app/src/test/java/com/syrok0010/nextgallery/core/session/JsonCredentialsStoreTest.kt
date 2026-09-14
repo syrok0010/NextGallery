@@ -41,9 +41,7 @@ class JsonCredentialsStoreTest {
     }
 }
 
-private class FakeCredentialsTextStore(
-    initialValue: String? = null,
-) : CredentialsTextStore {
+private class FakeCredentialsTextStore(initialValue: String? = null) : CredentialsTextStore {
     private var value = initialValue
 
     override fun loadText(): String? = value

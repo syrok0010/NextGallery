@@ -42,57 +42,60 @@ class LocalMediaProjectionRepositoryTest {
     }
 
     @Test
-    fun localProjectionSurvivesRestartAndReconciliation() = runBlocking {
-        val newest = localItem(
-            contentUri = "content://media/external/images/media/42",
-            mediaId = MediaId("persistent-42"),
-            modifiedAtEpochSeconds = 1_700_000_042L,
-        )
-        val removed = localItem(
-            contentUri = "content://media/external/video/media/7",
-            mediaId = MediaId("persistent-7"),
-            modifiedAtEpochSeconds = 1_700_000_007L,
-        )
-        registerLocalIdentity(newest)
-        registerLocalIdentity(removed)
-        repository.saveLocalMediaBatch(listOf(newest, removed))
+    fun localProjectionSurvivesRestartAndReconciliation() =
+        runBlocking {
+            val newest = localItem(
+                contentUri = "content://media/external/images/media/42",
+                mediaId = MediaId("persistent-42"),
+                modifiedAtEpochSeconds = 1_700_000_042L,
+            )
+            val removed = localItem(
+                contentUri = "content://media/external/video/media/7",
+                mediaId = MediaId("persistent-7"),
+                modifiedAtEpochSeconds = 1_700_000_007L,
+            )
+            registerLocalIdentity(newest)
+            registerLocalIdentity(removed)
+            repository.saveLocalMediaBatch(listOf(newest, removed))
 
-        database.close()
-        openRepository()
+            database.close()
+            openRepository()
 
-        assertEquals(listOf(newest, removed), repository.loadLocalMediaProjection())
+            assertEquals(listOf(newest, removed), repository.loadLocalMediaProjection())
 
-        repository.finishLocalMediaReconciliation(setOf(newest.localContentUri()))
+            repository.finishLocalMediaReconciliation(setOf(newest.localContentUri()))
 
-        assertEquals(listOf(newest), repository.loadLocalMediaProjection())
-    }
+            assertEquals(listOf(newest), repository.loadLocalMediaProjection())
+        }
 
     @Test
-    fun clearingCloudCacheKeepsDeviceProjectionAndIdentity() = runBlocking {
-        val contentUri = "content://media/external/images/media/42"
-        val persistentMediaId = resolveLocalMediaId(contentUri)
-        val item = localItem(
-            contentUri = contentUri,
-            mediaId = persistentMediaId,
-            modifiedAtEpochSeconds = 1_700_000_042L,
-        )
-        repository.saveLocalMediaBatch(listOf(item))
+    fun clearingCloudCacheKeepsDeviceProjectionAndIdentity() =
+        runBlocking {
+            val contentUri = "content://media/external/images/media/42"
+            val persistentMediaId = resolveLocalMediaId(contentUri)
+            val item = localItem(
+                contentUri = contentUri,
+                mediaId = persistentMediaId,
+                modifiedAtEpochSeconds = 1_700_000_042L,
+            )
+            repository.saveLocalMediaBatch(listOf(item))
 
-        cacheRepository.clear()
+            cacheRepository.clear()
 
-        assertEquals(listOf(item), repository.loadLocalMediaProjection())
-        assertEquals(
-            persistentMediaId,
-            resolveLocalMediaId(item.localContentUri()),
-        )
-    }
+            assertEquals(listOf(item), repository.loadLocalMediaProjection())
+            assertEquals(
+                persistentMediaId,
+                resolveLocalMediaId(item.localContentUri()),
+            )
+        }
 
     private fun openRepository() {
-        database = Room.databaseBuilder(
-            context,
-            NextGalleryDatabase::class.java,
-            DATABASE_NAME,
-        ).build()
+        database = Room
+            .databaseBuilder(
+                context,
+                NextGalleryDatabase::class.java,
+                DATABASE_NAME,
+            ).build()
         identityRegistry = RoomMediaIdentityRegistry(
             database = database,
             mediaIdFactory = { MediaId("unexpected-new-id") },
@@ -117,14 +120,17 @@ class LocalMediaProjectionRepositoryTest {
         )
     }
 
-    private suspend fun resolveLocalMediaId(contentUri: String): MediaId = identityRegistry.resolve(
-        listOf(
-            MediaIdentityCandidate(
-                source = contentUri.localSourceIdentity(),
-                aliases = emptySet(),
-            ),
-        ),
-    ).mediaIds.getValue(contentUri.localSourceIdentity())
+    private suspend fun resolveLocalMediaId(contentUri: String): MediaId =
+        identityRegistry
+            .resolve(
+                listOf(
+                    MediaIdentityCandidate(
+                        source = contentUri.localSourceIdentity(),
+                        aliases = emptySet(),
+                    ),
+                ),
+            ).mediaIds
+            .getValue(contentUri.localSourceIdentity())
 
     private fun String.localSourceIdentity() = MediaSourceIdentity(MediaSourceKind.Local, this)
 

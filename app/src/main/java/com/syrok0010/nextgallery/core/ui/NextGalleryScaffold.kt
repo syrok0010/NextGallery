@@ -43,8 +43,12 @@ internal fun NextGalleryScaffold(
 
                 AnimatedVisibility(
                     visible = showTopBar,
-                    enter = fadeIn(animationSpec = tween(durationMillis = TopBarFadeDurationMillis)),
-                    exit = fadeOut(animationSpec = tween(durationMillis = TopBarFadeDurationMillis)),
+                    enter = fadeIn(
+                        animationSpec = tween(durationMillis = TopBarFadeDurationMillis),
+                    ),
+                    exit = fadeOut(
+                        animationSpec = tween(durationMillis = TopBarFadeDurationMillis),
+                    ),
                 ) {
                     TopAppBar(
                         title = { Text(stringResource(R.string.app_name)) },

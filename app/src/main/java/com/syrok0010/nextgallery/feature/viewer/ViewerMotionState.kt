@@ -90,29 +90,35 @@ internal class ViewerMotionState(
     private val backgroundOpacity = Animatable(if (enterPending) 0f else 1f)
 
     val trackSurfaceBounds: Boolean
-        get() = dragOffset.value == Offset.Zero && predictiveBackProgress == 0f &&
-            enterTarget == null && settleTarget == null
+        get() = dragOffset.value == Offset.Zero &&
+            predictiveBackProgress == 0f &&
+            enterTarget == null &&
+            settleTarget == null
 
     val chromeAllowed: Boolean
         get() = !enterPending && trackSurfaceBounds
 
     val backgroundAlpha: Float
         get() {
-            val dragProgress = (dragOffset.value.y / ViewerDismissBackgroundDistancePx).coerceIn(0f, 1f)
+            val dragProgress = (dragOffset.value.y / ViewerDismissBackgroundDistancePx).coerceIn(
+                0f,
+                1f,
+            )
             val progress = maxOf(dragProgress, predictiveBackProgress.coerceIn(0f, 1f))
             return backgroundOpacity.value * (1f - progress * 0.55f).coerceIn(0.45f, 1f)
         }
 
-    fun surfaceTransform(mediaId: MediaId): ViewerSurfaceTransform = resolveViewerSurfaceTransform(
-        dragOffset = dragOffset.value,
-        predictiveBackProgress = predictiveBackProgress,
-        enterPending = enterPending && mediaId == openingMediaId,
-        enterTarget = enterTarget,
-        enterProgress = enterProgress.value,
-        settleTarget = settleTarget,
-        settleProgress = settleProgress.value,
-        predictiveTarget = surfaceBounds?.settleTarget(tileBounds(), Offset.Zero, 0f),
-    )
+    fun surfaceTransform(mediaId: MediaId): ViewerSurfaceTransform =
+        resolveViewerSurfaceTransform(
+            dragOffset = dragOffset.value,
+            predictiveBackProgress = predictiveBackProgress,
+            enterPending = enterPending && mediaId == openingMediaId,
+            enterTarget = enterTarget,
+            enterProgress = enterProgress.value,
+            settleTarget = settleTarget,
+            settleProgress = settleProgress.value,
+            predictiveTarget = surfaceBounds?.settleTarget(tileBounds(), Offset.Zero, 0f),
+        )
 
     fun onSurfaceBoundsChange(bounds: Rect?) {
         surfaceBounds = bounds
@@ -156,13 +162,20 @@ internal class ViewerMotionState(
 
     fun close(onClosed: () -> Unit = onClose.value) {
         // Capture the destination and callback before starting the animation.
-        val target = surfaceBounds?.settleTarget(tileBounds(), dragOffset.value, predictiveBackProgress)
+        val target = surfaceBounds?.settleTarget(
+            tileBounds(),
+            dragOffset.value,
+            predictiveBackProgress,
+        )
         scope.launch {
             if (target != null) {
                 settleProgress.snapTo(0f)
                 settleTarget = target
                 launch {
-                    backgroundOpacity.animateTo(0f, tween(durationMillis = ViewerBackgroundExitDurationMillis))
+                    backgroundOpacity.animateTo(
+                        0f,
+                        tween(durationMillis = ViewerBackgroundExitDurationMillis),
+                    )
                 }
                 settleProgress.animateTo(1f, tween(durationMillis = ViewerSettleDurationMillis))
             } else {
@@ -182,7 +195,13 @@ internal class ViewerMotionState(
 
     fun dragBy(amount: Offset): Boolean {
         val nextOffset = dragOffset.value + amount
-        if (nextOffset.y < 0f || kotlin.math.abs(nextOffset.y) < kotlin.math.abs(nextOffset.x)) return false
+        if (nextOffset.y < 0f ||
+            kotlin.math.abs(
+                nextOffset.y,
+            ) < kotlin.math.abs(nextOffset.x)
+        ) {
+            return false
+        }
         scope.launch { dragOffset.snapTo(nextOffset) }
         return true
     }

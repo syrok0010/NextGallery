@@ -52,11 +52,10 @@ class NextGalleryAppRouteTest {
         )
     }
 
-    private fun credentials(): AccountCredentials {
-        return AccountCredentials(
+    private fun credentials(): AccountCredentials =
+        AccountCredentials(
             serverUrl = "https://cloud.example.com",
             loginName = "user",
             appPassword = "secret",
         )
-    }
 }

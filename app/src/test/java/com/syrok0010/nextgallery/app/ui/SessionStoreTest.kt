@@ -35,18 +35,16 @@ class SessionStoreTest {
         assertEquals(SessionUiState.SignedOut, store.session.value)
     }
 
-    private fun credentials(): AccountCredentials {
-        return AccountCredentials(
+    private fun credentials(): AccountCredentials =
+        AccountCredentials(
             serverUrl = "https://cloud.example.com",
             loginName = "user",
             appPassword = "secret",
         )
-    }
 }
 
-private class FakeCredentialsStore(
-    private val credentials: AccountCredentials?,
-) : CredentialsStore {
+private class FakeCredentialsStore(private val credentials: AccountCredentials?) :
+    CredentialsStore {
     override fun load(): AccountCredentials? = credentials
 
     override fun save(credentials: AccountCredentials) = Unit

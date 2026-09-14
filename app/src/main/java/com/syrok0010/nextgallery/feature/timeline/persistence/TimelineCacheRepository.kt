@@ -37,10 +37,7 @@ class TimelineCacheRepository(
         )
     }
 
-    suspend fun saveTimelineSnapshot(
-        credentials: AccountCredentials,
-        snapshot: TimelineSnapshot,
-    ) {
+    suspend fun saveTimelineSnapshot(credentials: AccountCredentials, snapshot: TimelineSnapshot) {
         val normalizedServerUrl = credentials.normalizedServerUrl()
         val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
         val newCounts = snapshot.days.associate { it.dayId to it.count }
@@ -56,7 +53,9 @@ class TimelineCacheRepository(
                     .toCacheMetadataEntity(normalizedServerUrl, now),
             )
             timelineDao.deleteTimelineDays()
-            timelineDao.upsertTimelineDays(snapshot.days.mapIndexed { index, day -> day.toEntity(index) })
+            timelineDao.upsertTimelineDays(
+                snapshot.days.mapIndexed { index, day -> day.toEntity(index) },
+            )
 
             if (invalidatedDayIds.isNotEmpty()) {
                 timelineDao.deleteLoadedDays(invalidatedDayIds)
@@ -72,10 +71,7 @@ class TimelineCacheRepository(
         thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
     }
 
-    suspend fun saveDayDetails(
-        items: List<MediaItem>,
-        loadedDayIds: Set<Int>,
-    ) {
+    suspend fun saveDayDetails(items: List<MediaItem>, loadedDayIds: Set<Int>) {
         val now = System.currentTimeMillis()
         database.withTransaction {
             if (items.isNotEmpty()) {
@@ -114,22 +110,23 @@ class TimelineCacheRepository(
         return thumbnailDao.rowsForFileIds(fileIds)
     }
 
-    private suspend fun saveSnapshotDetailsInTransaction(
-        snapshot: TimelineSnapshot,
-        now: Long,
-    ) {
+    private suspend fun saveSnapshotDetailsInTransaction(snapshot: TimelineSnapshot, now: Long) {
         val items = snapshot.items
         if (items.isNotEmpty()) {
             timelineDao.upsertMediaItems(items.map { it.toMemoriesMediaEntity() })
         }
         if (snapshot.loadedDayIds.isNotEmpty()) {
             timelineDao.upsertLoadedDays(
-                snapshot.loadedDayIds.map { LoadedDayEntity(dayId = it, loadedAtEpochMillis = now) },
+                snapshot.loadedDayIds.map {
+                    LoadedDayEntity(
+                        dayId = it,
+                        loadedAtEpochMillis = now,
+                    )
+                },
             )
         }
     }
 
-    private fun AccountCredentials.normalizedServerUrl(): String {
-        return NextcloudTransport.normalizeServerOrigin(serverUrl)
-    }
+    private fun AccountCredentials.normalizedServerUrl(): String =
+        NextcloudTransport.normalizeServerOrigin(serverUrl)
 }

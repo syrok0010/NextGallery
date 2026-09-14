@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.app.ui
 
-import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
@@ -9,6 +8,7 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
 import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
+import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -17,7 +17,10 @@ class ViewerTimelineBridgeTest {
     @Test fun `prefetch uses timeline slots with placeholders and excludes orphan media`() {
         val current = mediaItem("current", 1)
         val orphan = mediaItem("orphan", 2)
-        val index = ViewerTimelineIndex(snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()))
+        val index =
+            ViewerTimelineIndex(
+                snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()),
+            )
         assertEquals(0..341, index.prefetchRange(current.mediaId))
         assertEquals(null, index.prefetchRange(orphan.mediaId))
     }
@@ -40,7 +43,10 @@ class ViewerTimelineBridgeTest {
         assertEquals(0, sequence.pageIndex(first.mediaId))
         assertEquals(1, sequence.pageIndex(second.mediaId))
         assertEquals(0, ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(first.mediaId))
-        assertEquals(2, ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(second.mediaId))
+        assertEquals(
+            2,
+            ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(second.mediaId),
+        )
     }
 
     @Test
@@ -171,25 +177,26 @@ class ViewerTimelineBridgeTest {
         )
     }
 
-    private fun mediaItem(id: String, fileId: Long): MediaItem = MediaItem(
-        mediaId = MediaId("media-$id"),
-        dayId = DAY_ID,
-        displayName = "$id.jpg",
-        mimeType = "image/jpeg",
-        width = null,
-        height = null,
-        etag = null,
-        livePhotoId = null,
-        auid = null,
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = null,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-    )
+    private fun mediaItem(id: String, fileId: Long): MediaItem =
+        MediaItem(
+            mediaId = MediaId("media-$id"),
+            dayId = DAY_ID,
+            displayName = "$id.jpg",
+            mimeType = "image/jpeg",
+            width = null,
+            height = null,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = null,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
+        )
 
     private companion object {
         const val DAY_ID = 20_645

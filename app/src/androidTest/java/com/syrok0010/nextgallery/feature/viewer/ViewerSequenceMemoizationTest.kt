@@ -186,25 +186,26 @@ class ViewerSequenceMemoizationTest {
         )
     }
 
-    private fun mediaItem(id: String, fileId: Long): MediaItem = MediaItem(
-        mediaId = MediaId("media-$id"),
-        dayId = DAY_ID,
-        displayName = "$id.jpg",
-        mimeType = "image/jpeg",
-        width = null,
-        height = null,
-        etag = null,
-        livePhotoId = null,
-        auid = null,
-        buid = null,
-        sharedBy = null,
-        takenAtEpochSeconds = null,
-        isVideo = false,
-        videoDurationSeconds = null,
-        isFavorite = false,
-        isHidden = false,
-        assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
-    )
+    private fun mediaItem(id: String, fileId: Long): MediaItem =
+        MediaItem(
+            mediaId = MediaId("media-$id"),
+            dayId = DAY_ID,
+            displayName = "$id.jpg",
+            mimeType = "image/jpeg",
+            width = null,
+            height = null,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = null,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileId),
+        )
 
     private companion object {
         const val DAY_ID = 20_645

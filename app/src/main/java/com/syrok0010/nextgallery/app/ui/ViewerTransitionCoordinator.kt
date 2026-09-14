@@ -25,10 +25,7 @@ internal interface ViewerTransitionCoordinator {
 
     fun onTimelineMediaRevealed()
 
-    fun registerTimelineTile(
-        mediaId: MediaId,
-        boundsProvider: () -> Rect?,
-    ): () -> Unit
+    fun registerTimelineTile(mediaId: MediaId, boundsProvider: () -> Rect?): () -> Unit
 
     fun timelineTileBounds(mediaId: MediaId): Rect?
 
@@ -36,11 +33,10 @@ internal interface ViewerTransitionCoordinator {
 }
 
 @Composable
-internal fun rememberViewerTransitionCoordinator(): ViewerTransitionCoordinator {
-    return rememberSaveable(saver = DefaultViewerTransitionCoordinator.Saver) {
+internal fun rememberViewerTransitionCoordinator(): ViewerTransitionCoordinator =
+    rememberSaveable(saver = DefaultViewerTransitionCoordinator.Saver) {
         DefaultViewerTransitionCoordinator()
     }
-}
 
 internal class DefaultViewerTransitionCoordinator(
     initialViewerMediaId: MediaId? = null,
@@ -92,21 +88,17 @@ internal class DefaultViewerTransitionCoordinator(
         revealMediaId = null
     }
 
-    override fun registerTimelineTile(
-        mediaId: MediaId,
-        boundsProvider: () -> Rect?,
-    ): () -> Unit {
+    override fun registerTimelineTile(mediaId: MediaId, boundsProvider: () -> Rect?): () -> Unit {
         timelineTileBoundsProvidersByMediaId[mediaId] = boundsProvider
         return {
             timelineTileBoundsProvidersByMediaId.remove(mediaId, boundsProvider)
         }
     }
 
-    override fun timelineTileBounds(mediaId: MediaId): Rect? {
-        return timelineTileBoundsProvidersByMediaId[mediaId]
+    override fun timelineTileBounds(mediaId: MediaId): Rect? =
+        timelineTileBoundsProvidersByMediaId[mediaId]
             ?.invoke()
             ?.takeIf(::isVisibleInAppBounds)
-    }
 
     override fun onAppBoundsChanged(bounds: Rect) {
         appBounds = bounds
