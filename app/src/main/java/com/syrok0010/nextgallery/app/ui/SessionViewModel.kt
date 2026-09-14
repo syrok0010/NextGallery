@@ -1,13 +1,13 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.core.session.CredentialsStore
-import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
-import kotlinx.coroutines.launch
-import androidx.lifecycle.ViewModel
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class SessionViewModel(
     private val sessionStore: SessionStore,

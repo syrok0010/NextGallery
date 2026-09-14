@@ -60,24 +60,35 @@ class NextGalleryAppRouteTest {
 
     @Test
     fun `logout from albums discards both library destinations`() {
-        assertEquals(listOf(NextGalleryRoute.Login), syncedBackStack(
-            listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums), SessionUiState.SignedOut))
+        assertEquals(
+            listOf(NextGalleryRoute.Login),
+            syncedBackStack(
+                listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
+                SessionUiState.SignedOut,
+            ),
+        )
     }
 
     @Test
     fun `login and duplicated destinations are discarded on restoration`() {
         val session = SessionUiState.SignedIn(credentials())
-        assertEquals(listOf(NextGalleryRoute.Photos), syncedBackStack(
-            listOf(NextGalleryRoute.Photos, NextGalleryRoute.Login), session))
-        assertEquals(listOf(NextGalleryRoute.Photos), syncedBackStack(
-            listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, NextGalleryRoute.Albums), session))
+        assertEquals(
+            listOf(NextGalleryRoute.Photos),
+            syncedBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Login), session),
+        )
+        assertEquals(
+            listOf(NextGalleryRoute.Photos),
+            syncedBackStack(
+                listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, NextGalleryRoute.Albums),
+                session,
+            ),
+        )
     }
 
-    private fun credentials(): AccountCredentials {
-        return AccountCredentials(
+    private fun credentials(): AccountCredentials =
+        AccountCredentials(
             serverUrl = "https://cloud.example.com",
             loginName = "user",
             appPassword = "secret",
         )
-    }
 }

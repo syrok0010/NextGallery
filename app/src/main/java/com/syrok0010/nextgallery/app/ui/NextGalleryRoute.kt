@@ -29,14 +29,17 @@ internal fun syncedBackStack(
     val routes = currentBackStack.filterIsInstance<NextGalleryRoute>()
     return when {
         session is SessionUiState.SignedOut -> listOf(NextGalleryRoute.Login)
+
         routes == listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums) &&
             routes.size == currentBackStack.size -> routes
+
         else -> listOf(NextGalleryRoute.Photos)
     }
 }
 
-internal fun destinationBackStack(destination: NextGalleryRoute): List<NextGalleryRoute> = when (destination) {
-    NextGalleryRoute.Login -> listOf(NextGalleryRoute.Login)
-    NextGalleryRoute.Photos -> listOf(NextGalleryRoute.Photos)
-    NextGalleryRoute.Albums -> listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
-}
+internal fun destinationBackStack(destination: NextGalleryRoute): List<NextGalleryRoute> =
+    when (destination) {
+        NextGalleryRoute.Login -> listOf(NextGalleryRoute.Login)
+        NextGalleryRoute.Photos -> listOf(NextGalleryRoute.Photos)
+        NextGalleryRoute.Albums -> listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
+    }

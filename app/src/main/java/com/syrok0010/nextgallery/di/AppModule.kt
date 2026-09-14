@@ -9,6 +9,7 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
@@ -22,6 +23,7 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
 import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
 import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
@@ -42,17 +44,31 @@ import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
-import org.koin.dsl.module
 import org.koin.core.qualifier.named
-import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
-import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
+import org.koin.dsl.module
 
 val appModule = module {
     single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    single { AlbumCatalogRepository(get(), get(), get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope"))) }
-    single { TimelineRepository(get(), get<MemoriesRepository>(), get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope"))) }
+    single {
+        AlbumCatalogRepository(
+            get(),
+            get(),
+            get(),
+            get<LocalMediaPermissionCoordinator>().mode,
+            get(named("libraryScope")),
+        )
+    }
+    single {
+        TimelineRepository(
+            get(),
+            get<MemoriesRepository>(),
+            get(),
+            get<LocalMediaPermissionCoordinator>().mode,
+            get(named("libraryScope")),
+        )
+    }
     viewModel { AlbumsViewModel(get()) }
 
     single {
@@ -79,10 +95,14 @@ val appModule = module {
             context.contentResolver,
             get<NextGalleryDatabase>().localMediaMetadataDao(),
             volumeVersions = {
-                check(permissions.currentMode() == LocalMediaPermissionMode.Full) { "Full media permission required" }
-                MediaStore.getExternalVolumeNames(context).associateWith { volume ->
-                    checkNotNull(MediaStore.getVersion(context, volume))
-                }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
+                check(permissions.currentMode() == LocalMediaPermissionMode.Full) {
+                    "Full media permission required"
+                }
+                MediaStore
+                    .getExternalVolumeNames(context)
+                    .associateWith { volume ->
+                        checkNotNull(MediaStore.getVersion(context, volume))
+                    }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
             },
         )
     }

@@ -19,9 +19,16 @@ data class TimelineScreenState(
 internal class TimelineViewModel(private val timeline: TimelineRepository) : ViewModel() {
     val state = timeline.state
     fun refresh() = timeline.refresh()
-    internal fun observeTimelineViewport(observation: TimelineViewportObservation) = timeline.observeViewport(observation)
+    internal fun observeTimelineViewport(observation: TimelineViewportObservation) =
+        timeline.observeViewport(observation)
     fun loadVisibleTimelineRange(firstVisibleIndex: Int, lastVisibleIndex: Int) {
-        observeTimelineViewport(TimelineViewportObservation(firstVisibleIndex, lastVisibleIndex, TimelineViewportLoadingMode.Immediate))
+        observeTimelineViewport(
+            TimelineViewportObservation(
+                firstVisibleIndex,
+                lastVisibleIndex,
+                TimelineViewportLoadingMode.Immediate,
+            ),
+        )
     }
 }
 
@@ -34,13 +41,23 @@ internal fun TimelineWorkflowState.toUiState(): TimelineScreenState {
     }
     val status = when {
         remote == TimelineOperation.Loading -> uiText(R.string.status_loading_memories_api)
-        local is TimelineOperation.Indexing -> uiText(R.string.status_indexing_local_media, local.indexed, local.total)
+
+        local is TimelineOperation.Indexing -> uiText(
+            R.string.status_indexing_local_media,
+            local.indexed,
+            local.total,
+        )
+
         else -> uiText(R.string.status_loaded_items, snapshot?.items?.size ?: 0)
     }
     return TimelineScreenState(
         isSignedIn = true,
-        timeline = TimelineUiState(snapshot, loadingDayIds, failedDayIds,
-            if (failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed)),
+        timeline = TimelineUiState(
+            snapshot,
+            loadingDayIds,
+            failedDayIds,
+            if (failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed),
+        ),
         isBusy = remote == TimelineOperation.Loading,
         sourceDiagnostics = listOfNotNull(
             when (remote) {
@@ -49,11 +66,23 @@ internal fun TimelineWorkflowState.toUiState(): TimelineScreenState {
                 else -> uiText(R.string.diagnostics_remote_idle)
             },
             when (local) {
-                is TimelineOperation.Indexing -> uiText(R.string.status_indexing_local_media, local.indexed, local.total)
+                is TimelineOperation.Indexing -> uiText(
+                    R.string.status_indexing_local_media,
+                    local.indexed,
+                    local.total,
+                )
+
                 TimelineOperation.Failed -> uiText(R.string.error_load_local_media_failed)
+
                 else -> uiText(R.string.diagnostics_local_idle)
             },
-            lastLocalProgress?.let { uiText(R.string.diagnostics_local_processed, it.indexed, it.total) },
+            lastLocalProgress?.let {
+                uiText(
+                    R.string.diagnostics_local_processed,
+                    it.indexed,
+                    it.total,
+                )
+            },
         ),
         message = AppMessageUiState(status = status, error = error),
         localMediaPermissionMode = permission,
