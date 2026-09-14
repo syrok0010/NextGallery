@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.di
 
+import android.provider.MediaStore
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
@@ -8,6 +9,17 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
+import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
+import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
+import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
+import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
@@ -16,7 +28,8 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.timeline.AuthenticatedViewModel
+import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
+import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
 import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
@@ -36,9 +49,53 @@ import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val appModule = module {
+    single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
+    single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
+    single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    single {
+        AlbumCatalogRepository(
+            get(),
+            get(),
+            get(),
+            get<LocalMediaPermissionCoordinator>().mode,
+            get(named("libraryScope")),
+        )
+    }
+    single {
+        TimelineRepository(
+            get(),
+            get<MemoriesRepository>(),
+            get(),
+            get<LocalMediaPermissionCoordinator>().mode,
+            get(named("libraryScope")),
+        )
+    }
+    viewModel { AlbumsViewModel(get()) }
+    single { MemoriesAlbumContents(get(), get()) }
+    single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
+    single<AlbumContentsSource> {
+        val remote = get<MemoriesAlbumContents>()
+        val local = get<AndroidAlbumContents>()
+        AlbumContentsSource { location, credentials ->
+            when (location) {
+                is AlbumLocation.Remote -> remote.load(location, credentials)
+                is AlbumLocation.Folder -> local.load(location)
+            }
+        }
+    }
+    viewModel {
+        AlbumContentsViewModel(
+            get(),
+            get(),
+            get<TimelineRepository>().state,
+            get<LocalMediaPermissionCoordinator>().mode,
+        )
+    }
+
     single {
         Json {
             ignoreUnknownKeys = true
@@ -66,11 +123,10 @@ val appModule = module {
                 check(permissions.currentMode() == LocalMediaPermissionMode.Full) {
                     "Full media permission required"
                 }
-                android.provider.MediaStore
-                    .getExternalVolumeNames(
-                        context,
-                    ).associateWith { volume ->
-                        checkNotNull(android.provider.MediaStore.getVersion(context, volume))
+                MediaStore
+                    .getExternalVolumeNames(context)
+                    .associateWith { volume ->
+                        checkNotNull(MediaStore.getVersion(context, volume))
                     }.also { check(it.isNotEmpty()) { "No mounted media volumes" } }
             },
         )
@@ -104,5 +160,5 @@ val appModule = module {
 
     viewModelOf(::SessionViewModel)
     viewModel { LoginViewModel(get(), get(), get<NextcloudLoginRepository>()) }
-    viewModelOf(::AuthenticatedViewModel)
+    viewModelOf(::TimelineViewModel)
 }

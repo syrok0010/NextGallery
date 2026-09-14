@@ -13,6 +13,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - сохраняет единственную авторизованную сессию в Android Keystore;
 - загружает Memories timeline и remote thumbnails;
 - индексирует доступные локальные фото и видео из MediaStore;
+- показывает каталог серверных альбомов и локальных папок, открывает их содержимое и листает медиа внутри выбранного альбома;
 - объединяет локальные и облачные копии по устойчивому `MediaId` и приблизительным `AUID`/`BUID`;
 - показывает cached local projection и материализованную cloud metadata до завершения refresh;
 - воспроизводит локальные и облачные video originals в detail view после явного запуска; при ошибке локальной копии переключается на Memories original в той же playback session;
@@ -41,7 +42,6 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 
 ### Альбомы и sharing
 
-- просмотр серверных альбомов;
 - добавление фото в альбомы;
 - удобный UI для sharing альбомов и фото.
 

@@ -162,7 +162,7 @@ private fun TimelineScrollTooltip(
 
 @Composable
 internal fun TimelineScrollIndicatorHost(
-    timeline: TimelineSnapshot,
+    slots: List<TimelineSlot>,
     gridItems: List<TimelineGridItem>,
     slotGridIndexes: IntArray,
     gridState: LazyGridState,
@@ -179,14 +179,14 @@ internal fun TimelineScrollIndicatorHost(
         )
     }
     var dragFraction by remember { mutableStateOf<Float?>(null) }
-    val scrollInfo = remember(timeline, gridItems, gridState) {
+    val scrollInfo = remember(slots, gridItems, gridState) {
         derivedStateOf {
             val visibleSlot = gridState.layoutInfo.visibleItemsInfo
                 .mapNotNull { visibleItem ->
                     (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
                         ?.let { it.slotIndex to it.slot.dayId }
                 }.minByOrNull { it.first }
-            val totalSlots = timeline.slots.size
+            val totalSlots = slots.size
             val fraction = if (visibleSlot == null || totalSlots <= 1) {
                 0f
             } else {
@@ -204,10 +204,10 @@ internal fun TimelineScrollIndicatorHost(
             dragFraction ?: scrollInfo.value.fraction
         }
     }
-    val displayDayIdState = remember(timeline, scrollInfo) {
+    val displayDayIdState = remember(slots, scrollInfo) {
         derivedStateOf {
             dragFraction
-                ?.let { timeline.dayIdAtFraction(it) }
+                ?.let { slots.dayIdAtFraction(it) }
                 ?: scrollInfo.value.dayId
         }
     }
@@ -251,13 +251,13 @@ internal fun TimelineScrollIndicatorHost(
 
 private data class TimelineScrollInfo(val dayId: Int?, val fraction: Float)
 
-private fun TimelineSnapshot.dayIdAtFraction(fraction: Float): Int? {
-    if (slots.isEmpty()) {
+private fun List<TimelineSlot>.dayIdAtFraction(fraction: Float): Int? {
+    if (isEmpty()) {
         return null
     }
 
-    val slotIndex = ((slots.size - 1) * fraction.coerceIn(0f, 1f)).toInt()
-    return slots.getOrNull(slotIndex)?.dayId
+    val slotIndex = ((size - 1) * fraction.coerceIn(0f, 1f)).toInt()
+    return getOrNull(slotIndex)?.dayId
 }
 
 private class TimelineHandleScrollDispatcher(

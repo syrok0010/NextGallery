@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -14,27 +15,27 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import org.koin.compose.koinInject
 
 @Composable
 internal fun LocalMediaPermissionFlow(
     isSignedIn: Boolean,
-    permissionMode: LocalMediaPermissionMode?,
-    permissionCoordinator: LocalMediaPermissionCoordinator,
-    onPermissionModeChanged: (LocalMediaPermissionMode) -> Unit,
+    permissionCoordinator: LocalMediaPermissionCoordinator = koinInject(),
 ) {
+    val permissionMode by permissionCoordinator.mode.collectAsState()
     var showExplanation by rememberSaveable { mutableStateOf(false) }
     var permissionRequestInFlight by rememberSaveable { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->
-        onPermissionModeChanged(permissionCoordinator.currentMode())
+        permissionCoordinator.refresh()
     }
 
     DisposableEffect(lifecycleOwner, isSignedIn) {
         fun synchronizePermission() {
             if (isSignedIn) {
-                onPermissionModeChanged(permissionCoordinator.currentMode())
+                permissionCoordinator.refresh()
             }
         }
 
