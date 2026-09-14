@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.timeline
 
-import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState
@@ -35,6 +35,7 @@ internal data class TimelineWorkflowState(
     val remote: TimelineOperation = TimelineOperation.Idle,
     val local: TimelineOperation = TimelineOperation.Idle,
     val permission: LocalMediaPermissionMode? = null,
+    val lastLocalProgress: TimelineOperation.Indexing? = null,
 )
 
 /** One session owns all timeline mutations. Intents and state collection use the Main scope. */
@@ -56,13 +57,21 @@ internal class TimelineWorkflow(
     private var viewport: TimelineViewportObservation? = null
     private var generation = 0L
 
-    init { refresh() }
+    init {
+        refresh()
+    }
 
     fun refresh() {
         val currentGeneration = ++generation
         refreshJob?.cancel()
         hydrationJob?.cancel()
-        mutableState.update { it.copy(remote = TimelineOperation.Loading, loadingDayIds = emptySet(), failedDayIds = emptySet()) }
+        mutableState.update {
+            it.copy(
+                remote = TimelineOperation.Loading,
+                loadingDayIds = emptySet(),
+                failedDayIds = emptySet(),
+            )
+        }
         refreshJob = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 if (state.value.snapshot == null) {
@@ -75,9 +84,18 @@ internal class TimelineWorkflow(
                 val remote = source.loadInitialTimeline(credentials)
                 if (currentGeneration != generation) return@launch
                 val result = projection.replaceRemoteSnapshot(remote)
-                mutableState.update { it.copy(snapshot = result.snapshot, remote = TimelineOperation.Idle) }
+                mutableState.update {
+                    it.copy(
+                        snapshot = result.snapshot,
+                        remote = TimelineOperation.Idle,
+                    )
+                }
                 if (viewport == null) {
-                    viewport = TimelineViewportObservation(0, 11, TimelineViewportLoadingMode.Immediate)
+                    viewport = TimelineViewportObservation(
+                        0,
+                        11,
+                        TimelineViewportLoadingMode.Immediate,
+                    )
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -123,13 +141,26 @@ internal class TimelineWorkflow(
                 try {
                     val items = source.loadTimelineDays(credentials, dayIds)
                     if (currentGeneration != generation) return@launch
-                    val result = projection.mergeRemoteItems(RemoteMediaProjection(items), dayIds.toSet())
-                    mutableState.update { it.copy(snapshot = result.snapshot, loadingDayIds = emptySet()) }
+                    val result = projection.mergeRemoteItems(
+                        RemoteMediaProjection(items),
+                        dayIds.toSet(),
+                    )
+                    mutableState.update {
+                        it.copy(
+                            snapshot = result.snapshot,
+                            loadingDayIds = emptySet(),
+                        )
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
                     if (currentGeneration == generation) {
-                        mutableState.update { it.copy(loadingDayIds = emptySet(), failedDayIds = it.failedDayIds + dayIds) }
+                        mutableState.update {
+                            it.copy(
+                                loadingDayIds = emptySet(),
+                                failedDayIds = it.failedDayIds + dayIds,
+                            )
+                        }
                     }
                 }
             }
@@ -144,7 +175,13 @@ internal class TimelineWorkflow(
             localJob?.cancel()
             localJob = scope.launch {
                 val result = projection.replaceLocalItems(LocalMediaProjection(emptyList()))
-                mutableState.update { it.copy(snapshot = result.snapshot, local = TimelineOperation.Idle) }
+                mutableState.update {
+                    it.copy(
+                        snapshot = result.snapshot,
+                        local = TimelineOperation.Idle,
+                        lastLocalProgress = null,
+                    )
+                }
             }
             return
         }
@@ -154,23 +191,37 @@ internal class TimelineWorkflow(
         }
         localJob?.cancel()
         var previousItems: List<MediaItem>? = null
-        localJob = localUpdates(localRequests).onEach { update ->
-            if (previousItems !== update.items) {
-                projection.replaceLocalItems(LocalMediaProjection(update.items))
-                previousItems = update.items
-            }
-            val localOperation = when {
-                update.failure -> TimelineOperation.Failed
-                update.progress != null -> TimelineOperation.Indexing(
-                    update.progress.indexedCount,
-                    update.progress.totalCount,
-                )
-                else -> TimelineOperation.Idle
-            }
-            mutableState.update { it.copy(snapshot = projection.snapshot, local = localOperation) }
-        }.catch {
-            mutableState.update { it.copy(local = TimelineOperation.Failed) }
-        }.launchIn(scope)
+        localJob = localUpdates(localRequests)
+            .onEach { update ->
+                if (previousItems !== update.items) {
+                    projection.replaceLocalItems(LocalMediaProjection(update.items))
+                    previousItems = update.items
+                }
+                val localOperation = when {
+                    update.failure -> TimelineOperation.Failed
+
+                    update.progress != null -> TimelineOperation.Indexing(
+                        update.progress.indexedCount,
+                        update.progress.totalCount,
+                    )
+
+                    else -> TimelineOperation.Idle
+                }
+                mutableState.update {
+                    it.copy(
+                        snapshot = projection.snapshot,
+                        local = localOperation,
+                        lastLocalProgress = update.processed?.let { progress ->
+                            TimelineOperation.Indexing(
+                                progress.indexedCount,
+                                progress.totalCount,
+                            )
+                        } ?: it.lastLocalProgress,
+                    )
+                }
+            }.catch {
+                mutableState.update { it.copy(local = TimelineOperation.Failed) }
+            }.launchIn(scope)
     }
 }
 
@@ -183,6 +234,12 @@ internal fun daysForViewport(
     val start = (observation.firstVisibleSlotIndex - 12).coerceAtLeast(0)
     val end = (observation.lastVisibleSlotIndex + 12).coerceAtMost(snapshot.slots.lastIndex)
     if (start > end) return emptyList()
-    return snapshot.slots.subList(start, end + 1).asSequence().map { it.dayId }.distinct()
-        .filterNot { it in snapshot.loadedDayIds || it in failedDays }.take(4).toList()
+    return snapshot.slots
+        .subList(start, end + 1)
+        .asSequence()
+        .map { it.dayId }
+        .distinct()
+        .filterNot { it in snapshot.loadedDayIds || it in failedDays }
+        .take(4)
+        .toList()
 }
