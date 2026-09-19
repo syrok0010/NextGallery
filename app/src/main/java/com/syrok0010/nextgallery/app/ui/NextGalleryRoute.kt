@@ -1,6 +1,9 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import kotlinx.serialization.Serializable
 
@@ -10,29 +13,54 @@ internal sealed interface NextGalleryRoute : NavKey {
     data object Login : NextGalleryRoute
 
     @Serializable
-    data object Authenticated : NextGalleryRoute
+    data object Photos : NextGalleryRoute
+
+    @Serializable
+    data object Albums : NextGalleryRoute
+}
+
+internal enum class TopLevelDestination(
+    val route: NextGalleryRoute,
+    @get:StringRes val titleRes: Int,
+    @get:DrawableRes val iconRes: Int,
+) {
+    Photos(NextGalleryRoute.Photos, R.string.library_photos, R.drawable.ic_photos),
+    Albums(NextGalleryRoute.Albums, R.string.library_albums, R.drawable.ic_albums),
+    ;
+
+    val position: Int
+        get() = entries.indexOf(this)
 }
 
 internal fun SessionUiState.rootRoute(): NextGalleryRoute =
     when (this) {
         is SessionUiState.SignedOut -> NextGalleryRoute.Login
-        is SessionUiState.SignedIn -> NextGalleryRoute.Authenticated
+        is SessionUiState.SignedIn -> NextGalleryRoute.Photos
     }
 
 internal fun syncedBackStack(
     currentBackStack: List<NavKey>,
     session: SessionUiState,
 ): List<NextGalleryRoute> {
-    val requiredRoot = session.rootRoute()
-    val typedBackStack = currentBackStack.filterIsInstance<NextGalleryRoute>()
-    val currentRoot = typedBackStack.firstOrNull()
-    return if (
-        currentRoot == requiredRoot &&
-        typedBackStack.isNotEmpty() &&
-        typedBackStack.size == currentBackStack.size
-    ) {
-        typedBackStack
-    } else {
-        listOf(requiredRoot)
+    val routes = currentBackStack.filterIsInstance<NextGalleryRoute>()
+    return when {
+        session is SessionUiState.SignedOut -> listOf(NextGalleryRoute.Login)
+
+        routes.isNotEmpty() &&
+            routes.all { it != NextGalleryRoute.Login } &&
+            routes.distinct().size == routes.size &&
+            routes.size == currentBackStack.size -> routes
+
+        else -> listOf(NextGalleryRoute.Photos)
     }
 }
+
+internal fun destinationBackStack(
+    currentBackStack: List<NextGalleryRoute>,
+    destination: NextGalleryRoute,
+): List<NextGalleryRoute> =
+    currentBackStack
+        .indexOf(destination)
+        .takeIf { it >= 0 }
+        ?.let { index -> currentBackStack.take(index + 1) }
+        ?: (currentBackStack + destination)

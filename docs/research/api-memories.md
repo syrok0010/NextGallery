@@ -256,3 +256,40 @@ UnifiedTimelineProjection -> published timeline
 - URI master/variants/segments остаются логическими ссылками до запроса.
   Клиент принимает только соседние variants текущего VOD path и отключает
   redirects, чтобы не переносить app credentials на произвольные manifest URL.
+
+## Каталог альбомов (issue #81)
+
+Проверено по Memories `abea4165`: `src/services/API.ts::ALBUM_LIST`,
+`lib/ClustersBackend/AlbumsBackend.php::getClustersInternal`,
+`lib/Db/AlbumsQuery.php::getList`, `src/services/dav/albums.ts::getAlbums`
+и `src/services/dav/clusters.ts::getClusterPreview`.
+
+- `GET /apps/memories/api/clusters/albums` возвращает одним списком собственные
+  альбомы Photos и альбомы, доступные через collaborators. Сервер убирает повторы
+  по `album_id`. Это подборки, а не серверные файловые папки.
+- До запроса проверяется `/config.albums_enabled`. Пустой успешный список,
+  отключённая возможность и ошибка HTTP — разные состояния. Каталог работает
+  через существующий app-password transport; нативному клиенту DAV не нужен.
+- Идентификатор контейнера — `album_id` в пределах сессии. `cluster_id` содержит
+  `user/name`; одинаковое имя не является основанием объединять подборки.
+  `user_display` (fallback `user`) позволяет показать владельца.
+- `count` считается по distinct `memories.fileid`, то есть по индексированным
+  Memories объектам, а не по гарантированному полному составу Photos album.
+  SQL-поля могут быть числовыми строками. Неизвестный счётчик не заменяется нулём.
+- Обложка — `cover` + `cover_etag`, fallback — `last_added_photo` +
+  `last_added_photo_etag`. Сервер подставляет owner cover для shared album.
+  Нулевой ID не запрашивается. Обложки используют существующие authenticated
+  thumbnail requests; возможность прочитать обложку не обещает доступ к оригиналу.
+- Скрытые имена с точкой учитывают `/config.show_hidden_albums`, как web-клиент.
+- В первой реализации каталог находится в памяти сессии. При ошибке обновления
+  успешный предыдущий список остаётся с явным сообщением об устаревании;
+  это не дисковый offline-каталог и не обещание доступности содержимого.
+
+Локальный каталог читает только доступные MediaStore rows изображений и видео
+с `IS_PENDING=0` и `IS_TRASHED=0`, без повторной EXIF-индексации. Контейнер задаётся
+парой `VOLUME_NAME` + `RELATIVE_PATH`; одинаковое последнее имя пути на другом
+томе/в другой папке остаётся отдельным. URI обложки строится для конкретного тома.
+Счётчик означает число доступных MediaStore rows, не результат media identity
+reconciliation. Переименование или перенос папки меняет её ключ — сохранённой
+идентичности папки и синхронизации с Nextcloud этот каталог не обещает.
+При partial/denied access локальный каталог скрыт до полной поддержки #19.

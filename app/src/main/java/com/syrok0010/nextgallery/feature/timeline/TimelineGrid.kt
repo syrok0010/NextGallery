@@ -26,10 +26,10 @@ internal fun TimelineGrid(
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 116.dp),
+        columns = GridCells.Adaptive(116.dp),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(6.dp),
+        contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
