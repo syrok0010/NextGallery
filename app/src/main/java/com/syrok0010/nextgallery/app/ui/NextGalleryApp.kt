@@ -49,48 +49,84 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Box(Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+            ) {
                 NavDisplay(
                     backStack = routes,
                     onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
                     transitionSpec = {
                         if (initialState.entries.last().contentKey == NextGalleryRoute.Photos.toString() &&
-                            targetState.entries.last().contentKey == NextGalleryRoute.Albums.toString()) {
-                            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) togetherWith
-                                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                            targetState.entries.last().contentKey == NextGalleryRoute.Albums.toString()
+                        ) {
+                            slideIntoContainer(
+                                AnimatedContentTransitionScope.SlideDirection.Left,
+                                tween(300),
+                            ) togetherWith
+                                    slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Left,
+                                        tween(300),
+                                    )
                         } else fadeIn(tween(200)) togetherWith fadeOut(tween(200))
                     },
                     popTransitionSpec = {
-                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) togetherWith
-                            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Right,
+                            tween(300),
+                        ) togetherWith
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Right,
+                                    tween(300),
+                                )
                     },
                     predictivePopTransitionSpec = {
-                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) togetherWith
-                            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Right,
+                            tween(300),
+                        ) togetherWith
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Right,
+                                    tween(300),
+                                )
                     },
                     entryProvider = entryProvider {
                         entry<NextGalleryRoute.Login> { LoginScreen() }
                         entry<NextGalleryRoute.Photos> {
                             if (signedIn) screenStates.SaveableStateProvider("photos") {
-                                PhotosScreen(onLogout = sessionViewModel::logout, onViewerVisibilityChanged = { viewerVisible = it })
+                                PhotosScreen(
+                                    onLogout = sessionViewModel::logout,
+                                    onViewerVisibilityChanged = { viewerVisible = it },
+                                )
                             }
                         }
                         entry<NextGalleryRoute.Albums> {
-                            if (signedIn) screenStates.SaveableStateProvider("albums") { AlbumsScreen(onLogout = sessionViewModel::logout) }
+                            if (signedIn) screenStates.SaveableStateProvider("albums") {
+                                AlbumsScreen(
+                                    onLogout = sessionViewModel::logout,
+                                )
+                            }
                         }
                     },
                 )
                 if (signedIn && !viewerVisible) {
-                    LibraryIsland(page, { destination ->
-                        val target = destinationBackStack(
-                            backStack.toList().filterIsInstance<NextGalleryRoute>(),
-                            destination.route,
-                        )
-                        if (backStack.toList() != target) {
-                            backStack.clear()
-                            backStack.addAll(target)
-                        }
-                    }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 16.dp))
+                    LibraryIsland(
+                        page,
+                        { destination ->
+                            val target = destinationBackStack(
+                                backStack.toList().filterIsInstance<NextGalleryRoute>(),
+                                destination.route,
+                            )
+                            if (backStack.toList() != target) {
+                                backStack.clear()
+                                backStack.addAll(target)
+                            }
+                        },
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .safeDrawingPadding()
+                            .padding(bottom = 16.dp),
+                    )
                 }
             }
         }
@@ -101,8 +137,8 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
 private fun LibrarySystemBars() {
     val view = LocalView.current
     DisposableEffect(view) {
-        val activity = generateSequence<Context>(view.context) { (it as? ContextWrapper)?.baseContext }
-            .filterIsInstance<Activity>().firstOrNull()
+        val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
+                .filterIsInstance<Activity>().firstOrNull()
         val controller = activity?.let { WindowCompat.getInsetsController(it.window, view) }
         val oldStatus = controller?.isAppearanceLightStatusBars
         val oldNavigation = controller?.isAppearanceLightNavigationBars

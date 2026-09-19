@@ -13,6 +13,7 @@ internal interface AlbumApi {
     @GET("apps/memories/api/clusters/albums")
     suspend fun albums(): List<JsonObject>
 }
+
 internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : RemoteAlbumSource {
     override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
         val api = transport
@@ -37,9 +38,12 @@ internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : 
         )
     }
 }
+
 private fun JsonObject.text(key: String): String? =
     (get(key) as? JsonPrimitive)?.takeUnless { it.content == "null" }?.content
+
 private fun JsonObject.number(key: String): Long? = text(key)?.toLongOrNull()
+
 internal fun remoteAlbumSummary(json: JsonObject): AlbumSummary {
     val id = requireNotNull(json.number("album_id")) { "Missing album id" }
     val name = requireNotNull(json.text("name")) { "Missing album name" }

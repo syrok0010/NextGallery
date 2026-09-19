@@ -13,14 +13,17 @@ internal data class AlbumSummary(
     val detail: String,
     val cover: AlbumCover? = null,
 )
+
 internal sealed interface AlbumCover {
     data class Remote(val fileId: Long, val etag: String?) : AlbumCover
     data class Local(val uri: String, val modified: Long) : AlbumCover
 }
+
 internal data class RemoteAlbums(val albums: List<AlbumSummary>, val supported: Boolean = true)
 internal interface RemoteAlbumSource {
     suspend fun load(credentials: AccountCredentials): RemoteAlbums
 }
+
 internal interface LocalAlbumSource {
     suspend fun load(): List<AlbumSummary>
     fun changes(): Flow<Unit>
@@ -43,13 +46,14 @@ internal data class LocalAlbumEntry(
     val uri: String,
     val modified: Long,
 )
+
 internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<AlbumSummary> {
     val groups = linkedMapOf<Pair<String, String>, AlbumSummary>()
     entries.forEach { entry ->
         val key = entry.volume to entry.path
         val previous = groups[key]
-        groups[key] = if (previous == null) {
-            AlbumSummary(
+        groups[key] = previous?.copy(count = requireNotNull(previous.count) + 1)
+            ?: AlbumSummary(
                 id = "local:${entry.volume.length}:${entry.volume}:${entry.path}",
                 name = entry.path.trimEnd('/').substringAfterLast('/').ifEmpty { entry.volume },
                 origin = AlbumOrigin.Phone,
@@ -57,9 +61,6 @@ internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<Album
                 detail = "${entry.path} · ${entry.volume}",
                 cover = AlbumCover.Local(entry.uri, entry.modified),
             )
-        } else {
-            previous.copy(count = requireNotNull(previous.count) + 1)
-        }
     }
     return groups.values.toList()
 }

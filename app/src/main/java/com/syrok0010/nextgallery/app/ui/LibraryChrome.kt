@@ -29,11 +29,20 @@ import com.syrok0010.nextgallery.feature.albums.AlbumsUiState
 import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 
 @Composable
-internal fun LibraryHeader(destination: TopLevelDestination, hasProblem: Boolean, onDiagnostics: () -> Unit,
-    onRefresh: () -> Unit, onLogout: () -> Unit) {
+internal fun LibraryHeader(
+    destination: TopLevelDestination,
+    hasProblem: Boolean,
+    onDiagnostics: () -> Unit,
+    onRefresh: () -> Unit,
+    onLogout: () -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.labelLarge)
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.testTag("library_menu")) {
@@ -48,14 +57,44 @@ internal fun LibraryHeader(destination: TopLevelDestination, hasProblem: Boolean
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
-                    DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }, text = { Text(stringResource(R.string.library_diagnostics)) }, onClick = { menu = false; onDiagnostics() })
-                    DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, text = { Text(stringResource(R.string.action_refresh)) }, onClick = { menu = false; onRefresh() })
-                    DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) }, text = { Text(stringResource(R.string.action_logout)) }, onClick = { menu = false; onLogout() })
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text(stringResource(R.string.library_diagnostics)) },
+                        onClick = { menu = false; onDiagnostics() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text(stringResource(R.string.action_refresh)) },
+                        onClick = { menu = false; onRefresh() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text(stringResource(R.string.action_logout)) },
+                        onClick = { menu = false; onLogout() },
+                    )
                 }
             }
         }
-        Text(stringResource(destination.titleRes),
-            style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
+        Text(
+            stringResource(destination.titleRes),
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+        )
         if (hasProblem) TextButton(onClick = onDiagnostics, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.library_problem), color = MaterialTheme.colorScheme.error)
         }
@@ -63,17 +102,31 @@ internal fun LibraryHeader(destination: TopLevelDestination, hasProblem: Boolean
 }
 
 @Composable
-internal fun LibraryIsland(page: NextGalleryRoute, onPage: (TopLevelDestination) -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier.testTag("library_island"), shape = RoundedCornerShape(32.dp), shadowElevation = 10.dp,
-        tonalElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .97f)) {
+internal fun LibraryIsland(
+    page: NextGalleryRoute,
+    onPage: (TopLevelDestination) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier.testTag("library_island"),
+        shape = RoundedCornerShape(32.dp),
+        shadowElevation = 10.dp,
+        tonalElevation = 4.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .97f),
+    ) {
         Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TopLevelDestination.entries.forEach { item ->
                 val selected = page == item.route
                 val text = stringResource(item.titleRes)
-                Surface(onClick = { onPage(item) }, shape = CircleShape,
+                Surface(
+                    onClick = { onPage(item) },
+                    shape = CircleShape,
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("library_page:$item").semantics { this.selected = selected }) {
+                    modifier = Modifier
+                        .testTag("library_page:$item")
+                        .semantics { this.selected = selected },
+                ) {
                     Row(
                         Modifier.padding(horizontal = 18.dp, vertical = 15.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -94,38 +147,108 @@ internal fun LibraryIsland(page: NextGalleryRoute, onPage: (TopLevelDestination)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LibraryDiagnostics(state: TimelineScreenState, albums: AlbumsUiState, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+internal fun LibraryDiagnostics(
+    state: TimelineScreenState,
+    albums: AlbumsUiState,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         SelectionContainer {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).testTag("library_diagnostics"),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.library_diagnostics), style = MaterialTheme.typography.titleLarge)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp)
+                    .testTag("library_diagnostics"),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    stringResource(R.string.library_diagnostics),
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 state.timeline.snapshot?.let { snapshot ->
-                    Text(stringResource(R.string.timeline_summary, snapshot.memoriesVersion, snapshot.totalMediaCountHint, snapshot.totalDayCount))
+                    Text(
+                        stringResource(
+                            R.string.timeline_summary,
+                            snapshot.memoriesVersion,
+                            snapshot.totalMediaCountHint,
+                            snapshot.totalDayCount,
+                        ),
+                    )
                     snapshot.timelinePath?.let { Text(it) }
                     Text(stringResource(R.string.status_loaded_items, snapshot.items.size))
-                    Text(stringResource(R.string.diagnostics_days, snapshot.loadedDayIds.size, snapshot.totalDayCount))
+                    Text(
+                        stringResource(
+                            R.string.diagnostics_days,
+                            snapshot.loadedDayIds.size,
+                            snapshot.totalDayCount,
+                        ),
+                    )
                 }
                 state.sourceDiagnostics.forEach { Text(it.asString()) }
                 state.message.status?.takeUnless { message ->
-                    message in state.sourceDiagnostics || (state.timeline.snapshot != null &&
-                        (message as? UiText.Resource)?.id == R.string.status_loaded_items)
+                    message in state.sourceDiagnostics ||
+                            (state.timeline.snapshot != null &&
+                            (message as? UiText.Resource)?.id == R.string.status_loaded_items)
                 }?.let { Text(it.asString()) }
-                state.message.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
-                Text(stringResource(R.string.diagnostics_permission, state.localMediaPermissionMode?.name ?: "—"))
+                state.message.error?.let {
+                    Text(
+                        it.asString(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Text(
+                    stringResource(
+                        R.string.diagnostics_permission,
+                        state.localMediaPermissionMode?.name ?: "—",
+                    ),
+                )
                 if (state.timeline.loadingDayIds.isNotEmpty()) {
                     Text(stringResource(R.string.status_loading_timeline_batch))
-                    Text(stringResource(R.string.diagnostics_day_ids, state.timeline.loadingDayIds.sorted().joinToString()))
+                    Text(
+                        stringResource(
+                            R.string.diagnostics_day_ids,
+                            state.timeline.loadingDayIds.sorted().joinToString(),
+                        ),
+                    )
                 }
-                state.timeline.loadMoreError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
-                if (state.timeline.failedDayIds.isNotEmpty()) Text(stringResource(R.string.diagnostics_failed_days, state.timeline.failedDayIds.sorted().joinToString()))
+                state.timeline.loadMoreError?.let {
+                    Text(
+                        it.asString(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (state.timeline.failedDayIds.isNotEmpty()) Text(
+                    stringResource(
+                        R.string.diagnostics_failed_days,
+                        state.timeline.failedDayIds.sorted().joinToString(),
+                    ),
+                )
                 HorizontalDivider()
-                Text(stringResource(R.string.library_albums), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.diagnostics_catalog, albums.remote.items.size, albums.local.items.size))
+                Text(
+                    stringResource(R.string.library_albums),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    stringResource(
+                        R.string.diagnostics_catalog,
+                        albums.remote.items.size,
+                        albums.local.items.size,
+                    ),
+                )
                 if (albums.remote.loading) Text(stringResource(R.string.albums_loading_cloud))
                 if (albums.local.loading) Text(stringResource(R.string.albums_loading_local))
-                if (albums.remote.failed) Text(stringResource(R.string.albums_remote_error), color = MaterialTheme.colorScheme.error)
-                if (albums.local.failed) Text(stringResource(R.string.albums_local_error), color = MaterialTheme.colorScheme.error)
+                if (albums.remote.failed) Text(
+                    stringResource(R.string.albums_remote_error),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                if (albums.local.failed) Text(
+                    stringResource(R.string.albums_local_error),
+                    color = MaterialTheme.colorScheme.error,
+                )
                 if (!albums.remote.supported) Text(stringResource(R.string.albums_unsupported))
                 Spacer(Modifier.height(20.dp))
             }
