@@ -2,6 +2,10 @@ package com.syrok0010.nextgallery.app.ui
 
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -110,6 +114,24 @@ class NextGalleryAppRouteTest {
                 listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
                 NextGalleryRoute.Photos,
             ),
+        )
+    }
+
+    @Test fun `album destination survives serialization and is removed on logout`() {
+        val album = NextGalleryRoute.Album(
+            AlbumLocation.Folder("external_primary", "Pictures/Отпуск/"),
+            "Отпуск",
+        )
+        val restored = Json.decodeFromString<NextGalleryRoute>(
+            Json.encodeToString<NextGalleryRoute>(album),
+        )
+        val stack =
+            destinationBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums), restored)
+        assertEquals(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, album), stack)
+        assertEquals(stack, syncedBackStack(stack, SessionUiState.SignedIn(credentials())))
+        assertEquals(
+            listOf(NextGalleryRoute.Login),
+            syncedBackStack(stack, SessionUiState.SignedOut),
         )
     }
 

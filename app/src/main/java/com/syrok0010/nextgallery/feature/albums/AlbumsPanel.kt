@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,10 +34,12 @@ internal fun AlbumsPanel(
     filter: AlbumOrigin?,
     onFilter: (AlbumOrigin?) -> Unit,
     onRetry: () -> Unit,
+    onOpen: (AlbumSummary) -> Unit = {},
 ) {
     val visible = remember(state.items, filter) {
         state.items.filter { filter == null || it.origin == filter }
     }
+
     LazyColumn(
         state = listState,
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 110.dp),
@@ -88,7 +91,7 @@ internal fun AlbumsPanel(
             }
         }
         items(visible.chunked(2), key = { it.first().id }) { row ->
-            AlbumCardRow(row)
+            AlbumCardRow(row, onOpen = onOpen)
         }
     }
 }
@@ -96,6 +99,7 @@ internal fun AlbumsPanel(
 @Composable
 internal fun AlbumCardRow(
     albums: List<AlbumSummary>,
+    onOpen: (AlbumSummary) -> Unit = {},
     cover: @Composable (AlbumSummary) -> Unit = { AlbumCoverImage(it) },
 ) {
     Row(
@@ -105,10 +109,13 @@ internal fun AlbumCardRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         albums.forEach { album ->
-            Column(Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .testTag("album_card:${album.id}")) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag("album_card:${album.id}")
+                    .clickable(enabled = album.location != null) { onOpen(album) },
+            ) {
                 Box(
                     Modifier
                         .fillMaxWidth()
