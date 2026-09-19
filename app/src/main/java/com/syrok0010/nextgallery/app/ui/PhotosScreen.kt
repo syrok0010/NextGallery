@@ -27,12 +27,19 @@ internal fun PhotosScreen(
     SideEffect { onViewerVisibilityChanged(viewerId != null) }
     DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }
     Box(Modifier.fillMaxSize()) {
-        LibraryScreenScaffold(NextGalleryRoute.Photos, onLogout, viewerVisible = viewerId != null) {
-            Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
+        LibraryScreenScaffold(TopLevelDestination.Photos, onLogout, viewerVisible = viewerId != null) {
+            Box(Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }
+            ) {
                 TimelinePanel(
-                    state.timeline, viewModel::observeTimelineViewport, transition.revealMediaId,
-                    transition::onTimelineMediaRevealed, transition::registerTimelineTile,
-                    { transition.open(it.mediaId) }, gridState,
+                    state.timeline,
+                    viewModel::observeTimelineViewport,
+                    transition.revealMediaId,
+                    transition::onTimelineMediaRevealed,
+                    transition::registerTimelineTile,
+                    { transition.open(it.mediaId) },
+                    gridState,
                 )
             }
         }

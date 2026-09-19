@@ -85,6 +85,23 @@ class NextGalleryAppRouteTest {
         )
     }
 
+    @Test
+    fun `albums can be restored as the only authenticated destination`() {
+        val session = SessionUiState.SignedIn(credentials())
+        assertEquals(
+            listOf(NextGalleryRoute.Albums),
+            syncedBackStack(listOf(NextGalleryRoute.Albums), session),
+        )
+    }
+
+    @Test
+    fun `selecting a destination appends it without forcing photos first`() {
+        assertEquals(
+            listOf(NextGalleryRoute.Albums, NextGalleryRoute.Photos),
+            destinationBackStack(listOf(NextGalleryRoute.Albums), NextGalleryRoute.Photos),
+        )
+    }
+
     private fun credentials(): AccountCredentials =
         AccountCredentials(
             serverUrl = "https://cloud.example.com",

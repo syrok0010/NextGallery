@@ -43,18 +43,18 @@ class AlbumCatalogUiTest {
     @Test fun menuOpensLiveDiagnosticsAndNavigationChangesSelection() {
         val state = mutableStateOf(TimelineScreenState(sourceDiagnostics = listOf(uiText(R.string.status_indexing_local_media, 1, 100))))
         val diagnostics = mutableStateOf(false)
-        val page = mutableStateOf<NextGalleryRoute>(NextGalleryRoute.Photos)
+        val page = mutableStateOf(TopLevelDestination.Photos)
         rule.setContent {
             NextGalleryTheme(darkTheme = true, dynamicColor = false) {
                 Column {
                     LibraryHeader(page.value, false, { diagnostics.value = true }, {}, {})
-                    LibraryIsland(page.value, { page.value = it })
+                    LibraryIsland(page.value.route, { page.value = it })
                 }
                 if (diagnostics.value) LibraryDiagnostics(state.value, AlbumsUiState(), { diagnostics.value = false })
             }
         }
         rule.onNodeWithTag("library_page:Albums").performClick()
-        rule.runOnIdle { assertEquals(NextGalleryRoute.Albums, page.value) }
+        rule.runOnIdle { assertEquals(TopLevelDestination.Albums, page.value) }
         rule.onNodeWithTag("library_menu").performClick()
         rule.onNodeWithText("Диагностика").performClick()
         rule.onNodeWithText("Индексирую фото и видео с устройства: 1 из 100").assertIsDisplayed()

@@ -29,7 +29,7 @@ import com.syrok0010.nextgallery.feature.albums.AlbumsUiState
 import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 
 @Composable
-internal fun LibraryHeader(page: NextGalleryRoute, hasProblem: Boolean, onDiagnostics: () -> Unit,
+internal fun LibraryHeader(destination: TopLevelDestination, hasProblem: Boolean, onDiagnostics: () -> Unit,
     onRefresh: () -> Unit, onLogout: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp)) {
@@ -54,7 +54,7 @@ internal fun LibraryHeader(page: NextGalleryRoute, hasProblem: Boolean, onDiagno
                 }
             }
         }
-        Text(stringResource(if (page == NextGalleryRoute.Photos) R.string.library_photos else R.string.library_albums),
+        Text(stringResource(destination.titleRes),
             style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         if (hasProblem) TextButton(onClick = onDiagnostics, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.library_problem), color = MaterialTheme.colorScheme.error)
@@ -63,13 +63,13 @@ internal fun LibraryHeader(page: NextGalleryRoute, hasProblem: Boolean, onDiagno
 }
 
 @Composable
-internal fun LibraryIsland(page: NextGalleryRoute, onPage: (NextGalleryRoute) -> Unit, modifier: Modifier = Modifier) {
+internal fun LibraryIsland(page: NextGalleryRoute, onPage: (TopLevelDestination) -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.testTag("library_island"), shape = RoundedCornerShape(32.dp), shadowElevation = 10.dp,
         tonalElevation = 4.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .97f)) {
         Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums).forEach { item ->
-                val selected = page == item
-                val text = stringResource(if (item == NextGalleryRoute.Photos) R.string.library_photos else R.string.library_albums)
+            TopLevelDestination.entries.forEach { item ->
+                val selected = page == item.route
+                val text = stringResource(item.titleRes)
                 Surface(onClick = { onPage(item) }, shape = CircleShape,
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -80,7 +80,7 @@ internal fun LibraryIsland(page: NextGalleryRoute, onPage: (NextGalleryRoute) ->
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
-                            painterResource(if (item == NextGalleryRoute.Photos) R.drawable.ic_photos else R.drawable.ic_albums),
+                            painterResource(item.iconRes),
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )

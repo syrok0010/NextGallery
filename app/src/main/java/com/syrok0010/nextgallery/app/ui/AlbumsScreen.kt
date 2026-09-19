@@ -13,7 +13,7 @@ internal fun AlbumsScreen(onLogout: () -> Unit, viewModel: AlbumsViewModel = koi
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
     var filter by rememberSaveable { mutableStateOf<AlbumOrigin?>(null) }
-    LibraryScreenScaffold(NextGalleryRoute.Albums, onLogout) {
+    LibraryScreenScaffold(TopLevelDestination.Albums, onLogout) {
         AlbumsPanel(state, listState, filter, { filter = it }, viewModel::refresh)
     }
 }

@@ -15,7 +15,7 @@ import org.koin.compose.koinInject
 /** Shared presentation subscribes only to the error badge; detailed state is read when the panel opens. */
 @Composable
 internal fun LibraryScreenScaffold(
-    page: NextGalleryRoute,
+    destination: TopLevelDestination,
     onLogout: () -> Unit,
     viewerVisible: Boolean = false,
     timeline: TimelineRepository = koinInject(),
@@ -30,9 +30,16 @@ internal fun LibraryScreenScaffold(
     }
     val hasProblem by problems.collectAsState(false)
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        Box(Modifier.alpha(if (viewerVisible) 0f else 1f)
-            .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
-            LibraryHeader(page, hasProblem, { diagnostics = true }, { timeline.refresh(); catalog.refresh() }, onLogout)
+        Box(Modifier
+            .alpha(if (viewerVisible) 0f else 1f)
+            .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier)
+        ) {
+            LibraryHeader(
+                destination,
+                hasProblem,
+                { diagnostics = true },
+                { timeline.refresh(); catalog.refresh() },
+                onLogout)
         }
         Box(Modifier.weight(1f), content = content)
     }

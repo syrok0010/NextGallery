@@ -82,10 +82,13 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                 )
                 if (signedIn && !viewerVisible) {
                     LibraryIsland(page, { destination ->
-                        val target = destinationBackStack(destination)
+                        val target = destinationBackStack(
+                            backStack.toList().filterIsInstance<NextGalleryRoute>(),
+                            destination.route,
+                        )
                         if (backStack.toList() != target) {
-                            if (destination == NextGalleryRoute.Photos) backStack.removeLastOrNull()
-                            else backStack.add(NextGalleryRoute.Albums)
+                            backStack.clear()
+                            backStack.addAll(target)
                         }
                     }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 16.dp))
                 }
