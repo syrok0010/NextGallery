@@ -26,6 +26,10 @@ internal enum class TopLevelDestination(
 ) {
     Photos(NextGalleryRoute.Photos, R.string.library_photos, R.drawable.ic_photos),
     Albums(NextGalleryRoute.Albums, R.string.library_albums, R.drawable.ic_albums),
+    ;
+
+    val position: Int
+        get() = entries.indexOf(this)
 }
 
 internal fun SessionUiState.rootRoute(): NextGalleryRoute =
@@ -55,8 +59,8 @@ internal fun destinationBackStack(
     currentBackStack: List<NextGalleryRoute>,
     destination: NextGalleryRoute,
 ): List<NextGalleryRoute> =
-    if (destination in currentBackStack) {
-        currentBackStack
-    } else {
-        currentBackStack + destination
-    }
+    currentBackStack
+        .indexOf(destination)
+        .takeIf { it >= 0 }
+        ?.let { index -> currentBackStack.take(index + 1) }
+        ?: (currentBackStack + destination)

@@ -102,6 +102,17 @@ class NextGalleryAppRouteTest {
         )
     }
 
+    @Test
+    fun `selecting an existing destination makes it the top of the stack`() {
+        assertEquals(
+            listOf(NextGalleryRoute.Photos),
+            destinationBackStack(
+                listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
+                NextGalleryRoute.Photos,
+            ),
+        )
+    }
+
     private fun credentials(): AccountCredentials =
         AccountCredentials(
             serverUrl = "https://cloud.example.com",

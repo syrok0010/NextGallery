@@ -29,6 +29,34 @@ import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import org.koin.androidx.compose.koinViewModel
 
+private fun routeFromContentKey(contentKey: Any): NextGalleryRoute? =
+    when (contentKey) {
+        NextGalleryRoute.Login.toString() -> NextGalleryRoute.Login
+        NextGalleryRoute.Photos.toString() -> NextGalleryRoute.Photos
+        NextGalleryRoute.Albums.toString() -> NextGalleryRoute.Albums
+        else -> null
+    }
+
+private fun transitionDirection(
+    from: NextGalleryRoute?,
+    to: NextGalleryRoute?,
+): AnimatedContentTransitionScope.SlideDirection? {
+    val fromPosition = TopLevelDestination.entries.firstOrNull { it.route == from }?.position
+    val toPosition = TopLevelDestination.entries.firstOrNull { it.route == to }?.position
+    return when {
+        fromPosition == null || toPosition == null -> null
+        toPosition > fromPosition -> AnimatedContentTransitionScope.SlideDirection.Left
+        toPosition < fromPosition -> AnimatedContentTransitionScope.SlideDirection.Right
+        else -> null
+    }
+}
+
+private fun AnimatedContentTransitionScope<*>.horizontalTransition(
+    direction: AnimatedContentTransitionScope.SlideDirection?,
+) = direction?.let {
+    slideIntoContainer(it, tween(300)) togetherWith slideOutOfContainer(it, tween(300))
+} ?: (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
+
 @Composable
 internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()) {
     val session by sessionViewModel.session.collectAsState()
@@ -48,63 +76,60 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
     LocalMediaPermissionFlow(isSignedIn = signedIn)
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-            Box(Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+        CompositionLocalProvider(
+            LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
             ) {
                 NavDisplay(
                     backStack = routes,
                     onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
                     transitionSpec = {
-                        if (initialState.entries.last().contentKey == NextGalleryRoute.Photos.toString() &&
-                            targetState.entries.last().contentKey == NextGalleryRoute.Albums.toString()
-                        ) {
-                            slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Left,
-                                tween(300),
-                            ) togetherWith
-                                    slideOutOfContainer(
-                                        AnimatedContentTransitionScope.SlideDirection.Left,
-                                        tween(300),
-                                    )
-                        } else fadeIn(tween(200)) togetherWith fadeOut(tween(200))
+                        horizontalTransition(
+                            transitionDirection(
+                                routeFromContentKey(initialState.entries.last().contentKey),
+                                routeFromContentKey(targetState.entries.last().contentKey),
+                            ),
+                        )
                     },
                     popTransitionSpec = {
-                        slideIntoContainer(
-                            AnimatedContentTransitionScope.SlideDirection.Right,
-                            tween(300),
-                        ) togetherWith
-                                slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Right,
-                                    tween(300),
-                                )
+                        horizontalTransition(
+                            transitionDirection(
+                                routeFromContentKey(initialState.entries.last().contentKey),
+                                routeFromContentKey(targetState.entries.last().contentKey),
+                            ),
+                        )
                     },
                     predictivePopTransitionSpec = {
-                        slideIntoContainer(
-                            AnimatedContentTransitionScope.SlideDirection.Right,
-                            tween(300),
-                        ) togetherWith
-                                slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Right,
-                                    tween(300),
-                                )
+                        horizontalTransition(
+                            transitionDirection(
+                                routeFromContentKey(initialState.entries.last().contentKey),
+                                routeFromContentKey(targetState.entries.last().contentKey),
+                            ),
+                        )
                     },
                     entryProvider = entryProvider {
                         entry<NextGalleryRoute.Login> { LoginScreen() }
                         entry<NextGalleryRoute.Photos> {
-                            if (signedIn) screenStates.SaveableStateProvider("photos") {
-                                PhotosScreen(
-                                    onLogout = sessionViewModel::logout,
-                                    onViewerVisibilityChanged = { viewerVisible = it },
-                                )
+                            if (signedIn) {
+                                screenStates.SaveableStateProvider("photos") {
+                                    PhotosScreen(
+                                        onLogout = sessionViewModel::logout,
+                                        onViewerVisibilityChanged = { viewerVisible = it },
+                                    )
+                                }
                             }
                         }
                         entry<NextGalleryRoute.Albums> {
-                            if (signedIn) screenStates.SaveableStateProvider("albums") {
-                                AlbumsScreen(
-                                    onLogout = sessionViewModel::logout,
-                                )
+                            if (signedIn) {
+                                screenStates.SaveableStateProvider("albums") {
+                                    AlbumsScreen(
+                                        onLogout = sessionViewModel::logout,
+                                    )
+                                }
                             }
                         }
                     },
@@ -138,7 +163,8 @@ private fun LibrarySystemBars() {
     val view = LocalView.current
     DisposableEffect(view) {
         val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
-                .filterIsInstance<Activity>().firstOrNull()
+            .filterIsInstance<Activity>()
+            .firstOrNull()
         val controller = activity?.let { WindowCompat.getInsetsController(it.window, view) }
         val oldStatus = controller?.isAppearanceLightStatusBars
         val oldNavigation = controller?.isAppearanceLightNavigationBars
