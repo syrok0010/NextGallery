@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsDiagnostics
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -38,8 +37,6 @@ internal fun AlbumScreen(
             onRefresh = viewModel::refresh,
             onBack = onBack,
             title = album.title,
-            additionalProblem = contents.failed,
-            diagnosticsContent = { AlbumContentsDiagnostics(contents) },
         ) {
             Column(Modifier.fillMaxSize()) {
                 if (contents.items.isNotEmpty() && (contents.loading || contents.failed)) {

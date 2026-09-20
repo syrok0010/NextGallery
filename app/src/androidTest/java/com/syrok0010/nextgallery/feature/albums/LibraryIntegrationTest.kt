@@ -106,18 +106,12 @@ class LibraryIntegrationTest {
                 rule.onNodeWithContentDescription("fixture-1.jpg").assertExists()
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 assertEquals(anchor, rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top, 1f)
-                rule.onNodeWithTag("library_menu").performClick()
-                rule.onNodeWithText("Диагностика").performClick()
-                rule.onNodeWithText("/Photos/Fixture").assertExists()
-                rule.onAllNodesWithText("Загружено 24 элементов").assertCountEquals(1)
-                screenshot("diagnostics")
                 rule.runOnUiThread { sessions.signOut() }
                 rule.onNodeWithText("Подключение к Nextcloud").assertIsDisplayed()
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
                 rule.onNodeWithTag("album_catalog").assertDoesNotExist()
                 rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password")) }
                 rule.onNodeWithTag("library_page:Photos").assertIsSelected()
-                rule.onNodeWithTag("library_diagnostics").assertDoesNotExist()
             } finally {
                 rule.runOnUiThread {
                     when (previousSession) {

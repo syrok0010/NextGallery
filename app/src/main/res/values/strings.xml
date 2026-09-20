@@ -15,8 +15,6 @@
     <string name="detail_missing_item">Элемент не найден</string>
     <string name="detail_size">size: %1$s x %2$s</string>
     <string name="error_enter_nextcloud_url">Укажи адрес Nextcloud</string>
-    <string name="error_load_memories_api_failed">Не удалось загрузить Memories API</string>
-    <string name="error_load_local_media_failed">Не удалось прочитать фото и видео с устройства</string>
     <string name="error_load_timeline_batch_failed">Не удалось дозагрузить часть timeline</string>
     <string name="error_login_cancelled">Вход отменен</string>
     <string name="error_login_confirmation_timeout">Не дождался подтверждения входа. Начни вход заново.</string>
@@ -34,11 +32,7 @@
     <string name="media_local_copy">Локальная копия</string>
     <string name="media_video_badge">VIDEO</string>
     <string name="status_creating_login_flow">Начинаю вход</string>
-    <string name="status_loaded_items">Загружено %1$d элементов</string>
     <string name="status_loaded_timeline_index">Найдено %1$d элементов</string>
-    <string name="status_indexing_local_media">Индексирую фото и видео с устройства: %1$d из %2$d</string>
-    <string name="status_loading_timeline_batch">Дозагружаю фото</string>
-    <string name="status_loading_memories_api">Загружаю Memories API</string>
     <string name="status_loading_memories_timeline">Загружаю Memories timeline</string>
     <string name="status_login_complete_loading_timeline">Вход выполнен, загружаю timeline</string>
     <string name="status_login_not_confirmed_yet">Вход еще не подтвержден в браузере</string>
@@ -49,7 +43,6 @@
     <string name="timeline_day_header_pattern">d MMMM</string>
     <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
     <string name="timeline_scroll_date_with_year_pattern">d MMMM yyyy</string>
-    <string name="timeline_summary">Memories %1$s · %2$d элементов · %3$d дней</string>
     <string name="viewer_position">%1$d / %2$d</string>
     <string name="value_unknown">unknown</string>
     <string name="value_unknown_short">?</string>
@@ -77,15 +70,6 @@
     <string name="library_photos">Фото</string>
     <string name="library_albums">Альбомы</string>
     <string name="library_menu">Меню медиатеки</string>
-    <string name="library_diagnostics">Диагностика</string>
-    <string name="library_problem">Не всё загружено · подробнее</string>
-    <string name="diagnostics_remote_idle">Nextcloud: ожидание запросов</string>
-    <string name="diagnostics_local_idle">Телефон: индексация не выполняется</string>
-    <string name="diagnostics_days">Загружены дни: %1$d из %2$d</string>
-    <string name="diagnostics_day_ids">Загрузка day IDs: %1$s</string>
-    <string name="diagnostics_failed_days">Ошибки day IDs: %1$s</string>
-    <string name="diagnostics_permission">Доступ к телефону: %1$s</string>
-    <string name="diagnostics_catalog">Альбомы Nextcloud: %1$d · Папки телефона: %2$d</string>
     <string name="albums_all">Все</string>
     <string name="albums_cloud">Nextcloud</string>
     <string name="albums_phone">Телефон</string>
@@ -99,7 +83,6 @@
     <string name="albums_empty">Нет доступных альбомов в этом разделе</string>
     <string name="albums_loading_cloud">Загружаю список альбомов Nextcloud</string>
     <string name="albums_loading_local">Читаю папки телефона</string>
-    <string name="diagnostics_local_processed">Последний проход индекса: %1$d из %2$d</string>
     <string name="album_contents_progress">Загружено %1$d из %2$d элементов</string>
     <string name="album_contents_empty">В этом альбоме пока нет фото и видео</string>
     <string name="album_contents_error">Не удалось загрузить содержимое альбома. Повторите попытку.</string>

@@ -1,7 +1,9 @@
 package com.syrok0010.nextgallery.feature.timeline
 
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CoroutineScope
@@ -23,20 +25,37 @@ internal class TimelineRepository(
     private val mutableState = MutableStateFlow(TimelineScreenState())
     val state = mutableState.asStateFlow()
     private var workflow: TimelineWorkflow? = null
+
     init {
         scope.launch {
             sessions.session.collectLatest { session ->
                 workflow = null
                 mutableState.value = TimelineScreenState()
                 if (session is SessionUiState.SignedIn) coroutineScope {
-                    val timeline = TimelineWorkflow(session.credentials, source, localSource::updates, this)
+                    val timeline =
+                        TimelineWorkflow(session.credentials, source, localSource::updates, this)
                     workflow = timeline
                     launch { permissions.collect { it?.let(timeline::updateLocalAccess) } }
-                    timeline.state.collect { mutableState.value = it.toUiState() }
+                    timeline.state.collect {
+                        mutableState.value = TimelineScreenState(
+                            timeline = TimelineUiState(
+                                it.snapshot,
+                                it.loadingDayIds,
+                                it.failedDayIds,
+                                if (it.failedDayIds.isEmpty()) null else uiText(R.string.error_load_timeline_batch_failed),
+                            ),
+                        )
+                    }
                 }
             }
         }
     }
-    fun refresh() { workflow?.refresh() }
-    fun observeViewport(observation: TimelineViewportObservation) { workflow?.observeViewport(observation) }
+
+    fun refresh() {
+        workflow?.refresh()
+    }
+
+    fun observeViewport(observation: TimelineViewportObservation) {
+        workflow?.observeViewport(observation)
+    }
 }
