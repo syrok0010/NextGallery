@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 import com.syrok0010.nextgallery.feature.viewer.reconcileCurrentMedia
 
@@ -26,6 +27,9 @@ internal class ViewerSequenceController {
         )
         return displayedSequence
     }
+
+    internal fun update(snapshot: TimelineSnapshot?, currentMediaId: MediaId?): ViewerSequence =
+        updateSlots(snapshot?.slots.orEmpty(), currentMediaId)
 }
 
 @Composable
@@ -39,7 +43,7 @@ internal fun rememberViewerSequence(
     }
 }
 
-private fun List<TimelineSlot>.toViewerSequence(): ViewerSequence {
+internal fun List<TimelineSlot>.toViewerSequence(): ViewerSequence {
     if (isEmpty()) return ViewerSequence.Empty
     val items = ArrayList<MediaItem>(size)
     val pageIndexByMediaId = LinkedHashMap<MediaId, Int>()
@@ -56,6 +60,9 @@ private fun List<TimelineSlot>.toViewerSequence(): ViewerSequence {
     )
 }
 
+internal fun TimelineSnapshot?.toViewerSequence(): ViewerSequence =
+    this?.slots.orEmpty().toViewerSequence()
+
 /** App-owned mapping: viewer never needs timeline slots or hydration policy. */
 internal class ViewerTimelineIndex(slots: List<TimelineSlot>) {
     private val slotsByMediaId = buildMap {
@@ -70,6 +77,8 @@ internal class ViewerTimelineIndex(slots: List<TimelineSlot>) {
         slotIndex(mediaId)?.let { slot ->
             (slot - PREFETCH_SLOTS).coerceAtLeast(0)..(slot + PREFETCH_SLOTS)
         }
+
+    internal constructor(snapshot: TimelineSnapshot?) : this(snapshot?.slots.orEmpty())
 
     private companion object {
         const val PREFETCH_SLOTS = 240

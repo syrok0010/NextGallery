@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import androidx.lifecycle.ViewModelStore
 import com.syrok0010.nextgallery.core.session.*
-import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +38,7 @@ class AlbumContentsViewModelTest {
                             emit(AlbumContentsBatch(emptyList(), 0))
                         }
                     },
-                    MutableStateFlow(TimelineScreenState()),
+                    MediaLibraryIndex(),
                     permission,
                 )
                 store.put("vm", vm)
@@ -83,7 +83,7 @@ class AlbumContentsViewModelTest {
                             }
                         }
                     },
-                    MutableStateFlow(TimelineScreenState()),
+                    MediaLibraryIndex(),
                     permission,
                 )
                 store.put("vm", vm)

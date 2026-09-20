@@ -20,13 +20,28 @@ class AlbumCatalogUiTest {
     @Test fun cardsStretchToTallestInRowWithoutMovingCoversAndOpenTheirOwnAlbum() {
         var opened: AlbumSummary? = null
         val albums = listOf(
-            AlbumSummary("short", "Отпуск", AlbumOrigin.Nextcloud, 6, "Анна", location = AlbumLocation.Remote("anna/Отпуск")),
-            AlbumSummary("long", "Отпуск с очень длинным названием папки", AlbumOrigin.Phone, 12,
-                "Pictures/Путешествия/Отпуск/ · external_primary", location = AlbumLocation.Folder("external_primary", "Pictures/Путешествия/Отпуск/")),
+            AlbumSummary(
+                "short",
+                "Отпуск",
+                AlbumOrigin.Nextcloud,
+                6,
+                "Анна",
+                location = AlbumLocation.Remote("anna/Отпуск"),
+            ),
+            AlbumSummary(
+                "long",
+                "Отпуск с очень длинным названием папки",
+                AlbumOrigin.Phone,
+                12,
+                "Pictures/Путешествия/Отпуск/ · external_primary",
+                location = AlbumLocation.Folder("external_primary", "Pictures/Путешествия/Отпуск/"),
+            ),
         )
         rule.setContent {
             NextGalleryTheme {
-                Box(Modifier.width(340.dp)) { AlbumCardRow(albums, onOpen = { opened = it }, cover = {}) }
+                Box(
+                    Modifier.width(340.dp),
+                ) { AlbumCardRow(albums, onOpen = { opened = it }, cover = {}) }
             }
         }
         val left = rule.onNodeWithTag("album_card:short").fetchSemanticsNode().boundsInRoot
@@ -38,5 +53,4 @@ class AlbumCatalogUiTest {
         rule.onNodeWithTag("album_card:long").performClick()
         rule.runOnIdle { assertEquals(albums[1], opened) }
     }
-
 }

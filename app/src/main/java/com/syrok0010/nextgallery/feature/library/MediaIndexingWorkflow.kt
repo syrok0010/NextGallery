@@ -1,9 +1,10 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.library
 
 import com.syrok0010.nextgallery.core.media.LocalMediaProjection
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.timeline.*
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
@@ -21,25 +22,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-internal sealed interface TimelineOperation {
-    data object Idle : TimelineOperation
-    data object Loading : TimelineOperation
-    data object Failed : TimelineOperation
-    data class Indexing(val indexed: Int, val total: Int) : TimelineOperation
+internal sealed interface IndexingOperation {
+    data object Idle : IndexingOperation
+    data object Loading : IndexingOperation
+    data object Failed : IndexingOperation
+    data class Indexing(val indexed: Int, val total: Int) : IndexingOperation
 }
 
-internal data class TimelineWorkflowState(
-    val snapshot: TimelineSnapshot? = null,
-    val loadingDayIds: Set<Int> = emptySet(),
-    val failedDayIds: Set<Int> = emptySet(),
-    val remote: TimelineOperation = TimelineOperation.Idle,
-    val local: TimelineOperation = TimelineOperation.Idle,
-    val permission: LocalMediaPermissionMode? = null,
-    val lastLocalProgress: TimelineOperation.Indexing? = null,
-)
-
 /** One session owns all timeline mutations. Intents and state collection use the Main scope. */
-internal class TimelineWorkflow(
+internal class MediaIndexingWorkflow(
     private val credentials: AccountCredentials,
     private val source: RemoteTimelineSource,
     private val localUpdates: (Flow<Unit>) -> Flow<LocalMediaIndexState>,
@@ -47,7 +38,7 @@ internal class TimelineWorkflow(
     private val projection: UnifiedTimelineProjection = UnifiedTimelineProjection(),
     private val debounceMillis: Long = 450,
 ) {
-    private val mutableState = MutableStateFlow(TimelineWorkflowState())
+    private val mutableState = MutableStateFlow(MediaIndexingState())
     val state = mutableState.asStateFlow()
     private val localRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var localJob: Job? = null
@@ -67,7 +58,7 @@ internal class TimelineWorkflow(
         hydrationJob?.cancel()
         mutableState.update {
             it.copy(
-                remote = TimelineOperation.Loading,
+                remote = IndexingOperation.Loading,
                 loadingDayIds = emptySet(),
                 failedDayIds = emptySet(),
             )
@@ -87,7 +78,7 @@ internal class TimelineWorkflow(
                 mutableState.update {
                     it.copy(
                         snapshot = result.snapshot,
-                        remote = TimelineOperation.Idle,
+                        remote = IndexingOperation.Idle,
                     )
                 }
                 if (viewport == null) {
@@ -101,7 +92,7 @@ internal class TimelineWorkflow(
                 throw cancelled
             } catch (_: Exception) {
                 if (currentGeneration == generation) {
-                    mutableState.update { it.copy(remote = TimelineOperation.Failed) }
+                    mutableState.update { it.copy(remote = IndexingOperation.Failed) }
                 }
             } finally {
                 if (currentGeneration == generation) {
@@ -178,7 +169,7 @@ internal class TimelineWorkflow(
                 mutableState.update {
                     it.copy(
                         snapshot = result.snapshot,
-                        local = TimelineOperation.Idle,
+                        local = IndexingOperation.Idle,
                         lastLocalProgress = null,
                     )
                 }
@@ -198,21 +189,21 @@ internal class TimelineWorkflow(
                     previousItems = update.items
                 }
                 val localOperation = when {
-                    update.failure -> TimelineOperation.Failed
+                    update.failure -> IndexingOperation.Failed
 
-                    update.progress != null -> TimelineOperation.Indexing(
+                    update.progress != null -> IndexingOperation.Indexing(
                         update.progress.indexedCount,
                         update.progress.totalCount,
                     )
 
-                    else -> TimelineOperation.Idle
+                    else -> IndexingOperation.Idle
                 }
                 mutableState.update {
                     it.copy(
                         snapshot = projection.snapshot,
                         local = localOperation,
                         lastLocalProgress = update.processed?.let { progress ->
-                            TimelineOperation.Indexing(
+                            IndexingOperation.Indexing(
                                 progress.indexedCount,
                                 progress.totalCount,
                             )
@@ -220,12 +211,12 @@ internal class TimelineWorkflow(
                     )
                 }
             }.catch {
-                mutableState.update { it.copy(local = TimelineOperation.Failed) }
+                mutableState.update { it.copy(local = IndexingOperation.Failed) }
             }.launchIn(scope)
     }
 }
 
-/** Pure viewport policy; data publication remains entirely inside TimelineWorkflow. */
+/** Pure viewport policy; data publication remains entirely inside MediaIndexingWorkflow. */
 internal fun daysForViewport(
     snapshot: TimelineSnapshot,
     observation: TimelineViewportObservation,

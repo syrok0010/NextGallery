@@ -6,8 +6,12 @@ import com.syrok0010.nextgallery.di.appModule
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.images.createNextGalleryImageLoader
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
+import org.koin.core.qualifier.named
 
 class NextGalleryApplication : Application() {
     override fun onCreate() {
@@ -17,6 +21,10 @@ class NextGalleryApplication : Application() {
             androidContext(this@NextGalleryApplication)
             modules(appModule)
         }.koin
+
+        koin.get<CoroutineScope>(named("libraryScope")).launch {
+            koin.get<MediaLibraryIndexer>().run()
+        }
 
         SingletonImageLoader.setSafe { context ->
             createNextGalleryImageLoader(

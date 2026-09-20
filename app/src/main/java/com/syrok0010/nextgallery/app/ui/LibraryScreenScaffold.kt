@@ -6,7 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
-import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
 import org.koin.compose.koinInject
 
 /** Shared presentation for the library chrome and page content. */
@@ -18,13 +18,14 @@ internal fun LibraryScreenScaffold(
     onRefresh: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     title: String? = null,
-    timeline: TimelineRepository = koinInject(),
+    indexer: MediaLibraryIndexer = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Column(Modifier
-        .fillMaxSize()
-        .safeDrawingPadding()
+    Column(
+        Modifier
+            .fillMaxSize()
+            .safeDrawingPadding(),
     ) {
         Box(
             Modifier
@@ -34,7 +35,7 @@ internal fun LibraryScreenScaffold(
             LibraryHeader(
                 destination = destination,
                 onRefresh = {
-                    timeline.refresh()
+                    indexer.refresh()
                     catalog.refresh()
                     onRefresh()
                 },

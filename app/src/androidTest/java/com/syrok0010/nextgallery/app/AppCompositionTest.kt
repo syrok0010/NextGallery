@@ -6,7 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
@@ -19,7 +19,7 @@ class AppCompositionTest {
             val store = ViewModelStore()
             try {
                 store.put("auth", koin.get<LoginViewModel>())
-                store.put("timeline", koin.get<TimelineViewModel>())
+                koin.get<MediaLibraryIndex>()
                 store.put("albums", koin.get<AlbumsViewModel>())
                 koin.get<MediaImageRequestFactory>()
             } finally {

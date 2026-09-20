@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
-import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,16 +32,13 @@ internal data class AlbumContentsState(
 internal class AlbumContentsViewModel(
     sessionStore: SessionStore,
     source: AlbumContentsSource,
-    library: StateFlow<TimelineScreenState>,
+    library: MediaLibraryIndex,
     permission: StateFlow<LocalMediaPermissionMode?>,
 ) : ViewModel() {
     private val selection = MutableStateFlow<AlbumLocation?>(null)
     private val refreshes = MutableStateFlow(0)
     private val mutableState = MutableStateFlow(AlbumContentsState())
-    private val knownItems = library
-        .map { it.timeline.snapshot }
-        .distinctUntilChanged()
-        .map { it?.items.orEmpty().associateBy { media -> media.mediaId } }
+    private val knownItems = library.state
     val state = combine(mutableState, knownItems, permission) { contents, libraryItems, access ->
         if (contents.location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
             contents.copy(

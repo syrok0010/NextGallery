@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.timeline
 
+import com.syrok0010.nextgallery.feature.library.*
+
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
@@ -12,7 +14,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TimelineWorkflowTest {
+class MediaIndexingWorkflowTest {
     @Test fun `failed day is retried by refresh and actual projection is published`() = runTest {
         val source = Source()
         source.fail = true
@@ -80,7 +82,7 @@ class TimelineWorkflowTest {
             assetRef = MediaAssetRef.LocalContent("content://images/99", 1),
             takenAtEpochSeconds = 10 * 86_400L,
         )
-        val workflow = TimelineWorkflow(credentials(), source, {
+        val workflow = MediaIndexingWorkflow(credentials(), source, {
             kotlinx.coroutines.flow.flowOf(
                 com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState(listOf(local), null),
             )
@@ -90,13 +92,13 @@ class TimelineWorkflowTest {
         val denied = com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode.Denied
         workflow.updateLocalAccess(full)
         runCurrent()
-        assertEquals(TimelineOperation.Failed, workflow.state.value.remote)
+        assertEquals(IndexingOperation.Failed, workflow.state.value.remote)
         assertEquals(1, workflow.state.value.snapshot!!.items.size)
         workflow.updateLocalAccess(denied)
         workflow.updateLocalAccess(full)
         runCurrent()
         assertEquals(listOf(local), workflow.state.value.snapshot!!.items)
-        assertEquals(TimelineOperation.Failed, workflow.state.value.remote)
+        assertEquals(IndexingOperation.Failed, workflow.state.value.remote)
         workflow.updateLocalAccess(denied)
         runCurrent()
         assertTrue(workflow.state.value.snapshot?.items.orEmpty().isEmpty())
@@ -106,7 +108,7 @@ class TimelineWorkflowTest {
         val source = Source()
         val immediate = UnconfinedTestDispatcher(testScheduler)
         val scope = kotlinx.coroutines.CoroutineScope(backgroundScope.coroutineContext + immediate)
-        val workflow = TimelineWorkflow(credentials(), source, { emptyFlow() }, scope,
+        val workflow = MediaIndexingWorkflow(credentials(), source, { emptyFlow() }, scope,
             UnifiedTimelineProjection(immediate))
         runCurrent()
         assertEquals(setOf(10), workflow.state.value.snapshot!!.loadedDayIds)
@@ -118,7 +120,7 @@ class TimelineWorkflowTest {
         source.blocked = gate
         val job = kotlinx.coroutines.Job(backgroundScope.coroutineContext[kotlinx.coroutines.Job])
         val scope = kotlinx.coroutines.CoroutineScope(backgroundScope.coroutineContext + job)
-        val workflow = TimelineWorkflow(credentials(), source, { emptyFlow() }, scope,
+        val workflow = MediaIndexingWorkflow(credentials(), source, { emptyFlow() }, scope,
             UnifiedTimelineProjection(StandardTestDispatcher(testScheduler)))
         runCurrent()
         assertEquals(setOf(10), workflow.state.value.loadingDayIds)
@@ -129,7 +131,7 @@ class TimelineWorkflowTest {
         assertEquals(before, workflow.state.value)
     }
 
-    private fun TestScope.workflow(source: Source) = TimelineWorkflow(
+    private fun TestScope.workflow(source: Source) = MediaIndexingWorkflow(
         credentials(), source, { emptyFlow() }, backgroundScope,
         UnifiedTimelineProjection(StandardTestDispatcher(testScheduler)),
     )

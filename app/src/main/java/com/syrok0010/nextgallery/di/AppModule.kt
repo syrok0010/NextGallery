@@ -28,8 +28,9 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
+import com.syrok0010.nextgallery.feature.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
@@ -65,13 +66,16 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
+    single { MediaLibraryIndex() }
+    single { TimelineProjectionStore() }
     single {
-        TimelineRepository(
-            get(),
-            get<MemoriesRepository>(),
-            get(),
-            get<LocalMediaPermissionCoordinator>().mode,
-            get(named("libraryScope")),
+        MediaLibraryIndexer(
+            index = get(),
+            timeline = get(),
+            sessions = get(),
+            source = get<MemoriesRepository>(),
+            localUpdates = get<LocalMediaSource>()::updates,
+            permissions = get<LocalMediaPermissionCoordinator>().mode,
         )
     }
     viewModel { AlbumsViewModel(get()) }
@@ -91,7 +95,7 @@ val appModule = module {
         AlbumContentsViewModel(
             get(),
             get(),
-            get<TimelineRepository>().state,
+            get<MediaLibraryIndex>(),
             get<LocalMediaPermissionCoordinator>().mode,
         )
     }
@@ -160,5 +164,4 @@ val appModule = module {
 
     viewModelOf(::SessionViewModel)
     viewModel { LoginViewModel(get(), get(), get<NextcloudLoginRepository>()) }
-    viewModelOf(::TimelineViewModel)
 }

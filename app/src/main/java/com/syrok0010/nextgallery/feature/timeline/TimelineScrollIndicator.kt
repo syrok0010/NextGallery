@@ -153,8 +153,7 @@ private fun TimelineScrollTooltip(
             .background(
                 color = MaterialTheme.colorScheme.inverseSurface,
                 shape = MaterialTheme.shapes.small,
-            )
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            ).padding(horizontal = 10.dp, vertical = 6.dp),
         color = MaterialTheme.colorScheme.inverseOnSurface,
         style = MaterialTheme.typography.labelLarge,
         maxLines = 1,
