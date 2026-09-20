@@ -6,7 +6,7 @@ import com.syrok0010.nextgallery.di.appModule
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.images.createNextGalleryImageLoader
-import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
+import com.syrok0010.nextgallery.feature.library.MediaLibraryCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
@@ -22,9 +22,9 @@ class NextGalleryApplication : Application() {
             modules(appModule)
         }.koin
 
-        koin.get<CoroutineScope>(named("libraryScope")).launch {
-            koin.get<MediaLibraryIndexer>().run()
-        }
+        val libraryScope = koin.get<CoroutineScope>(named("libraryScope"))
+        val coordinator = koin.get<MediaLibraryCoordinator>()
+        libraryScope.launch { coordinator.run() }
 
         SingletonImageLoader.setSafe { context ->
             createNextGalleryImageLoader(

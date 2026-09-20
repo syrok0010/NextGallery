@@ -28,10 +28,11 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.library.MediaLibraryCommands
+import com.syrok0010.nextgallery.feature.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
-import com.syrok0010.nextgallery.feature.library.TimelineProjectionStore
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
+import com.syrok0010.nextgallery.feature.timeline.TimelineCommands
+import com.syrok0010.nextgallery.feature.timeline.TimelineProjectionStore
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
@@ -69,15 +70,17 @@ val appModule = module {
     single { MediaLibraryIndex() }
     single { TimelineProjectionStore() }
     single {
-        MediaLibraryIndexer(
+        MediaLibraryCoordinator(
             index = get(),
             timeline = get(),
             sessions = get(),
-            source = get<MemoriesRepository>(),
+            remoteSource = get<MemoriesRepository>(),
             localUpdates = get<LocalMediaSource>()::updates,
             permissions = get<LocalMediaPermissionCoordinator>().mode,
         )
     }
+    single<MediaLibraryCommands> { get<MediaLibraryCoordinator>() }
+    single<TimelineCommands> { get<MediaLibraryCoordinator>() }
     viewModel { AlbumsViewModel(get()) }
     single { MemoriesAlbumContents(get(), get()) }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
@@ -115,7 +118,6 @@ val appModule = module {
     single { RoomMediaIdentityRegistry(get()) }
     single<MediaIdentityRegistry> { get<RoomMediaIdentityRegistry>() }
     single { TimelineCacheRepository(get(), get(), get()) }
-    factory { UnifiedTimelineProjection() }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single {
         val context = androidContext()

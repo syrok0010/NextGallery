@@ -6,7 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
-import com.syrok0010.nextgallery.feature.library.MediaLibraryIndexer
+import com.syrok0010.nextgallery.feature.library.MediaLibraryCommands
 import org.koin.compose.koinInject
 
 /** Shared presentation for the library chrome and page content. */
@@ -18,7 +18,7 @@ internal fun LibraryScreenScaffold(
     onRefresh: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     title: String? = null,
-    indexer: MediaLibraryIndexer = koinInject(),
+    library: MediaLibraryCommands = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -35,7 +35,7 @@ internal fun LibraryScreenScaffold(
             LibraryHeader(
                 destination = destination,
                 onRefresh = {
-                    indexer.refresh()
+                    library.refresh()
                     catalog.refresh()
                     onRefresh()
                 },
