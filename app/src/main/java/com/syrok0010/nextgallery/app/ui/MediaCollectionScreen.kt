@@ -37,9 +37,14 @@ internal fun MediaCollectionScreen(
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
                 MediaGridPanel(
-                    slots, emptyContent, onViewportObservation, transition.revealMediaId,
-                    transition::onTimelineMediaRevealed, transition::registerTimelineTile,
-                    { transition.open(it.mediaId) }, gridState,
+                    slots = slots,
+                    emptyContent = emptyContent,
+                    onViewportObservation = onViewportObservation,
+                    revealMediaId = transition.revealMediaId,
+                    onMediaRevealed = transition::onTimelineMediaRevealed,
+                    registerTimelineTile = transition::registerTimelineTile,
+                    onSelect = { transition.open(it.mediaId) },
+                    gridState = gridState,
                 )
             }
         }

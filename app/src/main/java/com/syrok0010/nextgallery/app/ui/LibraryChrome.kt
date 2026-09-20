@@ -27,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumsUiState
 import com.syrok0010.nextgallery.feature.timeline.TimelineScreenState
 
@@ -168,7 +167,7 @@ internal fun LibraryDiagnostics(
     state: TimelineScreenState,
     albums: AlbumsUiState,
     onDismiss: () -> Unit,
-    contents: AlbumContentsState? = null,
+    extraContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -268,27 +267,7 @@ internal fun LibraryDiagnostics(
                     color = MaterialTheme.colorScheme.error,
                 )
                 if (!albums.remote.supported) Text(stringResource(R.string.albums_unsupported))
-                contents?.let { content ->
-                    HorizontalDivider()
-                    Text(
-                        stringResource(R.string.album_contents),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        stringResource(
-                            R.string.album_contents_progress,
-                            content.loaded,
-                            content.total,
-                        ),
-                    )
-                    Text(stringResource(R.string.album_contents_unique, content.items.size))
-                    if (content.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    if (content.failed) Text(
-                        stringResource(R.string.album_contents_error),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    if (content.permissionRequired) Text(stringResource(R.string.albums_permission))
-                }
+                extraContent()
                 Spacer(Modifier.height(20.dp))
             }
         }

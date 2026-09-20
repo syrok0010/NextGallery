@@ -22,7 +22,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 internal fun MediaGridPanel(
     slots: List<TimelineSlot>,
     emptyContent: @Composable () -> Unit,
-    onViewportObservation: (TimelineViewportObservation) -> Unit,
+    onViewportObservation: (TimelineViewportObservation) -> Unit = {},
     revealMediaId: MediaId?,
     onMediaRevealed: () -> Unit,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,

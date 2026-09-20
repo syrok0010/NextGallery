@@ -28,3 +28,20 @@ internal fun AlbumContentsStatus(
         }
     }
 }
+
+@Composable
+internal fun AlbumContentsDiagnostics(state: AlbumContentsState) {
+    HorizontalDivider()
+    Text(
+        stringResource(R.string.album_contents),
+        style = MaterialTheme.typography.titleMedium,
+    )
+    Text(stringResource(R.string.album_contents_progress, state.loaded, state.total))
+    Text(stringResource(R.string.album_contents_unique, state.items.size))
+    if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (state.failed) Text(
+        stringResource(R.string.album_contents_error),
+        color = MaterialTheme.colorScheme.error,
+    )
+    if (state.permissionRequired) Text(stringResource(R.string.albums_permission))
+}

@@ -4,10 +4,14 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
 import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
 
-/** Input is already sorted by canonical day and time by the collection's projection. */
+/** Adapts a collection to the grid's stable day and time ordering. */
 internal fun List<MediaItem>.toMediaSlots(): List<TimelineSlot> {
     val counts = mutableMapOf<Int, Int>()
-    return map { item ->
+    return sortedWith(
+        compareByDescending<MediaItem> { it.dayId }
+            .thenByDescending { it.takenAtEpochSeconds }
+            .thenBy { it.mediaId.value },
+    ).map { item ->
         val index = counts.getOrDefault(item.dayId, 0)
         counts[item.dayId] = index + 1
         TimelineSlot(TimelineSlotKey(item.dayId, index), item.dayId, index, item)

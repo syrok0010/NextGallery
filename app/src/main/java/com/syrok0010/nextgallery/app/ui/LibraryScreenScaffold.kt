@@ -6,7 +6,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
 import kotlinx.coroutines.flow.combine
@@ -19,10 +18,11 @@ internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
     onLogout: () -> Unit,
     viewerVisible: Boolean = false,
-    contents: AlbumContentsState? = null,
-    onRefreshContents: () -> Unit = {},
+    onRefresh: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     title: String? = null,
+    additionalProblem: Boolean = false,
+    diagnosticsContent: @Composable ColumnScope.() -> Unit = {},
     timeline: TimelineRepository = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     content: @Composable BoxScope.() -> Unit,
@@ -45,12 +45,12 @@ internal fun LibraryScreenScaffold(
         ) {
             LibraryHeader(
                 destination = destination,
-                hasProblem = hasProblem || contents?.failed == true,
+                hasProblem = hasProblem || additionalProblem,
                 onDiagnostics = { diagnostics = true },
                 onRefresh = {
                     timeline.refresh()
                     catalog.refresh()
-                    onRefreshContents()
+                    onRefresh()
                 },
                 onLogout = onLogout,
                 onBack = onBack,
@@ -62,6 +62,11 @@ internal fun LibraryScreenScaffold(
     if (diagnostics) {
         val photos by timeline.state.collectAsState()
         val albums by catalog.state.collectAsState()
-        LibraryDiagnostics(photos, albums, onDismiss = { diagnostics = false }, contents = contents)
+        LibraryDiagnostics(
+            photos,
+            albums,
+            onDismiss = { diagnostics = false },
+            extraContent = diagnosticsContent,
+        )
     }
 }

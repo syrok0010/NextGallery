@@ -34,7 +34,7 @@ internal fun AlbumsPanel(
     filter: AlbumOrigin?,
     onFilter: (AlbumOrigin?) -> Unit,
     onRetry: () -> Unit,
-    onOpen: (AlbumSummary) -> Unit = {},
+    onOpen: (AlbumSummary) -> Unit,
 ) {
     val visible = remember(state.items, filter) {
         state.items.filter { filter == null || it.origin == filter }
@@ -99,7 +99,7 @@ internal fun AlbumsPanel(
 @Composable
 internal fun AlbumCardRow(
     albums: List<AlbumSummary>,
-    onOpen: (AlbumSummary) -> Unit = {},
+    onOpen: (AlbumSummary) -> Unit,
     cover: @Composable (AlbumSummary) -> Unit = { AlbumCoverImage(it) },
 ) {
     Row(
