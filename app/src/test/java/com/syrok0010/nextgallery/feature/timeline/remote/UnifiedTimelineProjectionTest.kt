@@ -6,11 +6,13 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
+import com.syrok0010.nextgallery.feature.library.MediaLibraryProjection
+import com.syrok0010.nextgallery.feature.library.sourceIdentity
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -348,5 +350,60 @@ class UnifiedTimelineProjectionTest {
         previewGeneratorEnabled = false,
         stackRawFiles = false,
         dedupIdentical = false,
+    )
+}
+
+private class UnifiedTimelineProjection {
+    private val library = MediaLibraryProjection()
+    private var remote: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
+    private var local = emptyList<MediaItem>()
+    private var projected: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
+
+    val snapshot get() = projected
+
+    suspend fun replaceLocalItems(items: LocalMediaProjection): Result {
+        local = items.items
+        return project()
+    }
+
+    suspend fun replaceRemoteSnapshot(snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?): Result {
+        remote = snapshot
+        return project()
+    }
+
+    suspend fun mergeRemoteItems(items: RemoteMediaProjection, loadedDayIds: Set<Int>): Result {
+        remote = remote?.let {
+            com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler.mergeLoadedItems(
+                it, items.items, loadedDayIds,
+            )
+        }
+        return project()
+    }
+
+    suspend fun clear() {
+        remote = null
+        local = emptyList()
+        projected = null
+    }
+
+    private suspend fun project(): Result {
+        val canonical = library.replaceSources(local, remote?.items.orEmpty())
+        remote = remote?.copy(
+            slots = remote!!.slots.map { slot ->
+                val item = slot.mediaItem ?: return@map slot
+                slot.copy(
+                    mediaItem = item.copy(
+                        mediaId = checkNotNull(canonical.mediaIdsBySource[item.sourceIdentity()]),
+                    ),
+                )
+            },
+        )
+        projected = TimelineSnapshotProjection.project(remote, canonical)
+        return Result(projected, canonical.conflicts)
+    }
+
+    data class Result(
+        val snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?,
+        val conflicts: List<MediaIdentityConflict>,
     )
 }

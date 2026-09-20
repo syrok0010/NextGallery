@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.timeline.local
 
-import com.syrok0010.nextgallery.core.media.LocalMediaProjection
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
@@ -8,7 +7,6 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -60,10 +58,7 @@ class LocalMediaSourceTest {
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
             batchSize = batchSize,
         )
-        val projection = UnifiedTimelineProjection()
-
         source.updates(emptyFlow()).take(batchCount + 1).collect { state ->
-            projection.replaceLocalItems(LocalMediaProjection(state.items))
         }
 
         assertEquals(batchCount * batchSize, registry.resolvedCandidateCount)
