@@ -3,7 +3,6 @@ package com.syrok0010.nextgallery.feature.library
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
-import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
@@ -19,26 +18,14 @@ import kotlinx.coroutines.withContext
 internal data class CanonicalMediaLibrary(
     val items: List<MediaItem> = emptyList(),
     val mediaIdsBySource: Map<MediaSourceIdentity, MediaId> = emptyMap(),
-    val conflicts: List<MediaIdentityConflict> = emptyList(),
 )
 
 /** Reconciles source copies into canonical media objects without knowing any UI collection. */
-internal class MediaLibraryProjection(
-    private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
-) {
-    private var localItems: List<MediaItem> = emptyList()
-    private var remoteItems: List<MediaItem> = emptyList()
-
-    suspend fun replaceSources(
-        local: List<MediaItem>,
-        remote: List<MediaItem>,
-    ): CanonicalMediaLibrary = withContext(computationDispatcher) {
-        localItems = local
-        remoteItems = remote
-        project()
-    }
-
-    private fun project(): CanonicalMediaLibrary {
+internal suspend fun projectMediaLibrary(
+    localItems: List<MediaItem>,
+    remoteItems: List<MediaItem>,
+    computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+): CanonicalMediaLibrary = withContext(computationDispatcher) {
         val candidates = (localItems + remoteItems).map(MediaItem::identityCandidate)
         val identity = reconcileMediaIdentities(
             candidates = candidates,
@@ -61,14 +48,10 @@ internal class MediaLibraryProjection(
             )
         }
         val localOnly = resolvedLocal.distinctBy(MediaItem::mediaId).filterNot { it.mediaId in remoteMediaIds }
-        localItems = resolvedLocal
-        remoteItems = resolvedRemote
-        return CanonicalMediaLibrary(
+        CanonicalMediaLibrary(
             items = canonicalRemote + localOnly,
             mediaIdsBySource = identity.mediaIds,
-            conflicts = identity.conflicts,
         )
-    }
 }
 
 private fun MediaItem.identityCandidate(): MediaIdentityCandidate = mediaIdentityCandidate(

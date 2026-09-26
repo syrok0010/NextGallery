@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope

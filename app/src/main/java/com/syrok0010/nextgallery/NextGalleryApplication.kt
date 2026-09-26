@@ -2,11 +2,11 @@ package com.syrok0010.nextgallery
 
 import android.app.Application
 import coil3.SingletonImageLoader
+import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.di.appModule
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.images.createNextGalleryImageLoader
-import com.syrok0010.nextgallery.feature.library.MediaLibraryCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext

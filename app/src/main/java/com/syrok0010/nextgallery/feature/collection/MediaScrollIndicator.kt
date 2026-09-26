@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -41,7 +41,7 @@ private val TimelineScrollThumbWidth = 4.dp
 private val TimelineScrollDragWidth = 40.dp
 
 @Composable
-internal fun TimelineScrollIndicator(
+internal fun MediaScrollIndicator(
     dayId: () -> Int?,
     fraction: () -> Float,
     isTooltipVisible: () -> Boolean,
@@ -161,9 +161,9 @@ private fun TimelineScrollTooltip(
 }
 
 @Composable
-internal fun TimelineScrollIndicatorHost(
-    slots: List<TimelineSlot>,
-    gridItems: List<TimelineGridItem>,
+internal fun MediaScrollIndicatorHost(
+    slots: List<MediaSlot>,
+    gridItems: List<MediaGridItem>,
     slotGridIndexes: IntArray,
     gridState: LazyGridState,
     isDragging: Boolean,
@@ -183,7 +183,7 @@ internal fun TimelineScrollIndicatorHost(
         derivedStateOf {
             val visibleSlot = gridState.layoutInfo.visibleItemsInfo
                 .mapNotNull { visibleItem ->
-                    (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)
+                    (gridItems.getOrNull(visibleItem.index) as? MediaGridItem.Slot)
                         ?.let { it.slotIndex to it.slot.dayId }
                 }.minByOrNull { it.first }
             val totalSlots = slots.size
@@ -239,7 +239,7 @@ internal fun TimelineScrollIndicatorHost(
         }
     }
 
-    TimelineScrollIndicator(
+    MediaScrollIndicator(
         dayId = displayDayId,
         fraction = displayFraction,
         isTooltipVisible = isTooltipVisible,
@@ -251,7 +251,7 @@ internal fun TimelineScrollIndicatorHost(
 
 private data class TimelineScrollInfo(val dayId: Int?, val fraction: Float)
 
-private fun List<TimelineSlot>.dayIdAtFraction(fraction: Float): Int? {
+private fun List<MediaSlot>.dayIdAtFraction(fraction: Float): Int? {
     if (isEmpty()) {
         return null
     }

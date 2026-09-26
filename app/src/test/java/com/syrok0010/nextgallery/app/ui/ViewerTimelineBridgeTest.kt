@@ -3,10 +3,14 @@ package com.syrok0010.nextgallery.app.ui
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.ViewerMediaIndex
+import com.syrok0010.nextgallery.feature.collection.ViewerSequenceController
+import com.syrok0010.nextgallery.feature.collection.toMediaSlots
+import com.syrok0010.nextgallery.feature.collection.toViewerSequence
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 import org.junit.Assert.assertEquals
@@ -37,8 +41,8 @@ class ViewerTimelineBridgeTest {
         val current = mediaItem("current", 1)
         val orphan = mediaItem("orphan", 2)
         val index =
-            ViewerTimelineIndex(
-                snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()),
+            ViewerMediaIndex(
+                snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()).slots,
             )
         assertEquals(0..341, index.prefetchRange(current.mediaId))
         assertEquals(null, index.prefetchRange(orphan.mediaId))
@@ -46,7 +50,7 @@ class ViewerTimelineBridgeTest {
 
     @Test
     fun `null snapshot creates an empty sequence`() {
-        val sequence = (null as TimelineSnapshot?).toViewerSequence()
+        val sequence = emptyList<MediaSlot>().toViewerSequence()
 
         assertSame(ViewerSequence.Empty, sequence)
     }
@@ -56,15 +60,22 @@ class ViewerTimelineBridgeTest {
         val first = mediaItem("first", fileId = 11)
         val second = mediaItem("second", fileId = 22)
 
-        val sequence = snapshot(first, null, second).toViewerSequence()
+        val sequence = snapshot(first, null, second)
+            .slots
+            .map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            }.toViewerSequence()
 
         assertEquals(listOf(first, second), sequence.items)
         assertEquals(0, sequence.pageIndex(first.mediaId))
         assertEquals(1, sequence.pageIndex(second.mediaId))
-        assertEquals(0, ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(first.mediaId))
+        assertEquals(
+            0,
+            ViewerMediaIndex(snapshot(first, null, second).slots).slotIndex(first.mediaId),
+        )
         assertEquals(
             2,
-            ViewerTimelineIndex(snapshot(first, null, second)).slotIndex(second.mediaId),
+            ViewerMediaIndex(snapshot(first, null, second).slots).slotIndex(second.mediaId),
         )
     }
 
@@ -74,9 +85,9 @@ class ViewerTimelineBridgeTest {
         val first = mediaItem("first", 11)
         val current = mediaItem("current", 22)
         val last = mediaItem("last", 33)
-        controller.update(snapshot(first, current, last), current.mediaId)
+        controller.updateSlots(snapshot(first, current, last).slots, current.mediaId)
 
-        val updated = controller.update(snapshot(last, current, first), current.mediaId)
+        val updated = controller.updateSlots(snapshot(last, current, first).slots, current.mediaId)
 
         assertEquals(listOf(last, current, first), updated.items)
         assertEquals(1, updated.pageIndex(current.mediaId))
@@ -90,7 +101,11 @@ class ViewerTimelineBridgeTest {
             displayName = "second.jpg",
         )
 
-        val sequence = snapshot(first, null, second).toViewerSequence()
+        val sequence = snapshot(first, null, second)
+            .slots
+            .map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            }.toViewerSequence()
 
         assertEquals(listOf(first.mediaId, second.mediaId), sequence.items.map { it.mediaId })
     }
@@ -99,7 +114,12 @@ class ViewerTimelineBridgeTest {
     fun `merge updates current media without changing its identity`() {
         val controller = ViewerSequenceController()
         val current = mediaItem("current", 22)
-        controller.update(snapshot(current), current.mediaId)
+        controller.updateSlots(
+            snapshot(current).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
         val merged = current.copy(
             displayName = "remote-current.jpg",
             assetRef = MediaAssetRef.LocalFirst(
@@ -111,7 +131,12 @@ class ViewerTimelineBridgeTest {
             ),
         )
 
-        val updated = controller.update(snapshot(merged), current.mediaId)
+        val updated = controller.updateSlots(
+            snapshot(merged).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
 
         assertSame(merged, updated.item(current.mediaId))
         assertEquals(current.mediaId.value, updated.pageKey(0))
@@ -123,21 +148,36 @@ class ViewerTimelineBridgeTest {
         val first = mediaItem("first", 11)
         val current = mediaItem("current", 22)
         val next = mediaItem("next", 33)
-        controller.update(snapshot(first, current, next), current.mediaId)
+        controller.updateSlots(
+            snapshot(first, current, next).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
 
-        val updated = controller.update(snapshot(first, next), current.mediaId)
+        val updated = controller.updateSlots(
+            snapshot(first, next).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
 
         assertEquals(listOf(first, current, next), updated.items)
-        assertEquals(null, ViewerTimelineIndex(snapshot(first, next)).slotIndex(current.mediaId))
+        assertEquals(null, ViewerMediaIndex(snapshot(first, next).slots).slotIndex(current.mediaId))
     }
 
     @Test
     fun `removed current remains as the only page when no neighbors survive`() {
         val controller = ViewerSequenceController()
         val current = mediaItem("current", 22)
-        controller.update(snapshot(current), current.mediaId)
+        controller.updateSlots(
+            snapshot(current).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
 
-        val updated = controller.update(snapshot(), current.mediaId)
+        val updated = controller.updateSlots(snapshot().slots, current.mediaId)
 
         assertEquals(listOf(current), updated.items)
     }
@@ -147,10 +187,20 @@ class ViewerTimelineBridgeTest {
         val controller = ViewerSequenceController()
         val current = mediaItem("current", 22)
         val next = mediaItem("next", 33)
-        controller.update(snapshot(current, next), current.mediaId)
-        controller.update(snapshot(next), current.mediaId)
+        controller.updateSlots(snapshot(current, next).slots, current.mediaId)
+        controller.updateSlots(
+            snapshot(next).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            current.mediaId,
+        )
 
-        val updated = controller.update(snapshot(next), next.mediaId)
+        val updated = controller.updateSlots(
+            snapshot(next).slots.map {
+                MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem)
+            },
+            next.mediaId,
+        )
 
         assertEquals(listOf(next), updated.items)
     }
@@ -161,17 +211,18 @@ class ViewerTimelineBridgeTest {
         val first = mediaItem("first", 11)
         val second = mediaItem("second", 22)
         val source = snapshot(first, second)
-        val initial = controller.update(source, first.mediaId)
+        val slots = source.slots.map { MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem) }
+        val initial = controller.updateSlots(slots, first.mediaId)
 
-        val updated = controller.update(source, second.mediaId)
+        val updated = controller.updateSlots(slots, second.mediaId)
 
         assertSame(initial, updated)
     }
 
     private fun snapshot(vararg mediaItems: MediaItem?): TimelineSnapshot {
         val slots = mediaItems.mapIndexed { index, mediaItem ->
-            TimelineSlot(
-                key = TimelineSlotKey(dayId = DAY_ID, indexInDay = index),
+            MediaSlot(
+                key = MediaSlotKey(dayId = DAY_ID, indexInDay = index),
                 dayId = DAY_ID,
                 indexInDay = index,
                 mediaItem = mediaItem,

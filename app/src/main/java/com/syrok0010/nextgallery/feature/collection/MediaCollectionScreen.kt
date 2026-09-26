@@ -1,23 +1,23 @@
-package com.syrok0010.nextgallery.app.ui
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import com.syrok0010.nextgallery.feature.timeline.MediaGridPanel
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewportObservation
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 
 /** Shared grid, scroll restoration and viewer transitions; callers own loading and chrome. */
 @Composable
 internal fun MediaCollectionScreen(
-    slots: List<TimelineSlot>,
+    slots: List<MediaSlot>,
     emptyContent: @Composable () -> Unit,
-    onViewportObservation: (TimelineViewportObservation) -> Unit = {},
+    onViewportObservation: (MediaViewportObservation) -> Unit = {},
     onViewerRange: (IntRange) -> Unit = {},
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
@@ -25,7 +25,7 @@ internal fun MediaCollectionScreen(
     val transition = rememberViewerTransitionCoordinator()
     val gridState = rememberLazyGridState()
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
-    val index = remember(slots) { ViewerTimelineIndex(slots) }
+    val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
     SideEffect { onViewerVisibilityChanged(viewerId != null) }
     DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }

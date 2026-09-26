@@ -12,13 +12,13 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.network.bestEffort
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import com.syrok0010.nextgallery.feature.timeline.local.canonicalTimelineSeconds
+import com.syrok0010.nextgallery.feature.library.local.canonicalTimelineSeconds
 
 /** Reads only the selected folder, without running a second EXIF index. */
 internal class AndroidAlbumContents(

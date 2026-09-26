@@ -17,6 +17,9 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.MediaSlotTile
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -159,9 +162,9 @@ class TimelineSlotTileTest {
     private fun showSlot(mediaItem: MediaItem?) {
         composeRule.setContent {
             MaterialTheme {
-                TimelineSlotTile(
-                    slot = TimelineSlot(
-                        key = TimelineSlotKey(dayId = DAY_ID, indexInDay = 0),
+                MediaSlotTile(
+                    slot = MediaSlot(
+                        key = MediaSlotKey(dayId = DAY_ID, indexInDay = 0),
                         dayId = DAY_ID,
                         indexInDay = 0,
                         mediaItem = mediaItem,

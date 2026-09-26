@@ -3,7 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import org.koin.core.context.GlobalContext
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import android.content.ContentUris
 import android.content.ContentValues
 import android.graphics.Bitmap

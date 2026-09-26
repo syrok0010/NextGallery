@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.collection.ViewerTransitionCoordinator
+import com.syrok0010.nextgallery.feature.collection.rememberViewerTransitionCoordinator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull

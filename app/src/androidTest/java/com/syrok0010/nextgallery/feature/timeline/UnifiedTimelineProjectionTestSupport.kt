@@ -4,12 +4,11 @@ import com.syrok0010.nextgallery.core.media.LocalMediaProjection
 import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
-import com.syrok0010.nextgallery.feature.library.MediaLibraryProjection
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.library.sourceIdentity
 
 /** Test composition for the two production projections; no combined production module is needed. */
 internal class UnifiedTimelineProjection {
-    private val library = MediaLibraryProjection()
     private var remote: TimelineSnapshot? = null
     private var local = emptyList<MediaItem>()
     private var projected: TimelineSnapshot? = null
@@ -44,7 +43,7 @@ internal class UnifiedTimelineProjection {
     }
 
     private suspend fun project(): Result {
-        val canonical = library.replaceSources(local, remote?.items.orEmpty())
+        val canonical = projectMediaLibrary(local, remote?.items.orEmpty())
         remote = remote?.copy(
             slots = remote!!.slots.map { slot ->
                 val item = slot.mediaItem ?: return@map slot
@@ -56,8 +55,8 @@ internal class UnifiedTimelineProjection {
             },
         )
         projected = TimelineSnapshotProjection.project(remote, canonical)
-        return Result(projected, canonical.conflicts)
+        return Result(projected)
     }
 
-    data class Result(val snapshot: TimelineSnapshot?, val conflicts: List<MediaIdentityConflict>)
+    data class Result(val snapshot: TimelineSnapshot?)
 }

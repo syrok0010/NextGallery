@@ -5,8 +5,8 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -30,8 +30,7 @@ class TimelineSnapshotAssemblerTest {
         assertEquals(listOf(TimelineDay(dayId = 19870, count = 1)), snapshot.days)
         assertEquals(1, snapshot.slots.size)
         assertEquals(setOf(19870), snapshot.loadedDayIds)
-        assertEquals(1, snapshot.totalDayCount)
-        assertEquals(1, snapshot.totalMediaCountHint)
+                assertEquals(1, snapshot.totalMediaCountHint)
     }
 
     @Test
@@ -64,11 +63,10 @@ class TimelineSnapshotAssemblerTest {
             days = emptyList(),
         )
 
-        assertEquals(emptyList<TimelineSlot>(), snapshot.slots)
+        assertEquals(emptyList<MediaSlot>(), snapshot.slots)
         assertEquals(emptyList<MediaItem>(), snapshot.items)
         assertEquals(emptySet<Int>(), snapshot.loadedDayIds)
-        assertEquals(0, snapshot.totalDayCount)
-        assertEquals(0, snapshot.totalMediaCountHint)
+                assertEquals(0, snapshot.totalMediaCountHint)
     }
 
     @Test
@@ -82,12 +80,11 @@ class TimelineSnapshotAssemblerTest {
         )
 
         assertEquals(3, snapshot.slots.size)
-        assertEquals(TimelineSlotKey(dayId = 19870, indexInDay = 0), snapshot.slots[0].key)
-        assertEquals(TimelineSlotKey(dayId = 19870, indexInDay = 1), snapshot.slots[1].key)
-        assertEquals(TimelineSlotKey(dayId = 19869, indexInDay = 0), snapshot.slots[2].key)
+        assertEquals(MediaSlotKey(dayId = 19870, indexInDay = 0), snapshot.slots[0].key)
+        assertEquals(MediaSlotKey(dayId = 19870, indexInDay = 1), snapshot.slots[1].key)
+        assertEquals(MediaSlotKey(dayId = 19869, indexInDay = 0), snapshot.slots[2].key)
         assertNull(snapshot.slots[0].mediaItem)
-        assertEquals(2, snapshot.totalDayCount)
-        assertEquals(3, snapshot.totalMediaCountHint)
+                assertEquals(3, snapshot.totalMediaCountHint)
     }
 
     @Test
@@ -202,8 +199,6 @@ class TimelineSnapshotAssemblerTest {
 
         assertEquals(listOf(localItem), snapshot.items)
         assertEquals(setOf(19871), snapshot.loadedDayIds)
-        assertEquals("", snapshot.memoriesVersion)
-        assertEquals(null, snapshot.timelinePath)
     }
 
     private fun memoriesConfig(): MemoriesConfig {

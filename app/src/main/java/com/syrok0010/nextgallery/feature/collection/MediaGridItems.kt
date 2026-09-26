@@ -1,37 +1,37 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
-internal sealed interface TimelineGridItem {
+internal sealed interface MediaGridItem {
     val key: String
 
-    data class DayHeader(val dayId: Int) : TimelineGridItem {
+    data class DayHeader(val dayId: Int) : MediaGridItem {
         override val key: String = "day-header:$dayId"
     }
 
-    data class Slot(val slotIndex: Int, val slot: TimelineSlot) : TimelineGridItem {
+    data class Slot(val slotIndex: Int, val slot: MediaSlot) : MediaGridItem {
         override val key: String = slot.mediaItem
             ?.let { "media:${it.mediaId.value}" }
             ?: "slot:${slot.key.dayId}:${slot.key.indexInDay}"
     }
 }
 
-internal fun List<TimelineSlot>.toTimelineGridItems(): List<TimelineGridItem> {
-    val result = mutableListOf<TimelineGridItem>()
+internal fun List<MediaSlot>.toMediaGridItems(): List<MediaGridItem> {
+    val result = mutableListOf<MediaGridItem>()
     var previousDayId: Int? = null
 
     forEachIndexed { slotIndex, slot ->
         if (slot.dayId != previousDayId) {
-            result += TimelineGridItem.DayHeader(slot.dayId)
+            result += MediaGridItem.DayHeader(slot.dayId)
             previousDayId = slot.dayId
         }
-        result += TimelineGridItem.Slot(slotIndex = slotIndex, slot = slot)
+        result += MediaGridItem.Slot(slotIndex = slotIndex, slot = slot)
     }
 
     return result
 }
 
-internal fun List<TimelineGridItem>.toSlotGridIndexes(): IntArray =
+internal fun List<MediaGridItem>.toSlotGridIndexes(): IntArray =
     mapIndexedNotNull { gridIndex, item ->
-        if (item is TimelineGridItem.Slot) {
+        if (item is MediaGridItem.Slot) {
             gridIndex
         } else {
             null

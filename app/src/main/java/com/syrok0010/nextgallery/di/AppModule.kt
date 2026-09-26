@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.di
 
 import android.provider.MediaStore
+import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
+import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
@@ -28,18 +30,14 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.library.MediaLibraryCommands
-import com.syrok0010.nextgallery.feature.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.timeline.TimelineCommands
-import com.syrok0010.nextgallery.feature.timeline.TimelineProjectionStore
-import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
-import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionStore
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
@@ -68,19 +66,16 @@ val appModule = module {
         )
     }
     single { MediaLibraryIndex() }
-    single { TimelineProjectionStore() }
+    single { TimelineProjectionStore(get(), get(named("libraryScope"))) }
     single {
         MediaLibraryCoordinator(
             index = get(),
-            timeline = get(),
             sessions = get(),
             remoteSource = get<MemoriesRepository>(),
             localUpdates = get<LocalMediaSource>()::updates,
             permissions = get<LocalMediaPermissionCoordinator>().mode,
         )
     }
-    single<MediaLibraryCommands> { get<MediaLibraryCoordinator>() }
-    single<TimelineCommands> { get<MediaLibraryCoordinator>() }
     viewModel { AlbumsViewModel(get()) }
     single { MemoriesAlbumContents(get(), get()) }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }

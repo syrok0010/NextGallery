@@ -1,13 +1,12 @@
-package com.syrok0010.nextgallery.feature.timeline.local
+package com.syrok0010.nextgallery.feature.library.local
 
 import com.syrok0010.nextgallery.core.database.LocalMediaMetadataDao
 import com.syrok0010.nextgallery.core.database.LocalMediaMetadataEntity
-import java.util.TimeZone
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.TimeZone
 
 /** One scan owns the cache view; failed file reads are retried on the next scan. */
 internal class LocalMediaMetadataEnrichment(

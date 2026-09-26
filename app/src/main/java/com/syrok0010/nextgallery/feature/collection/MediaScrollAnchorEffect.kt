@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
@@ -8,12 +8,12 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 
 @Composable
-internal fun PreserveTimelineScrollAnchor(
-    gridItems: List<TimelineGridItem>,
+internal fun PreserveMediaScrollAnchor(
+    gridItems: List<MediaGridItem>,
     gridState: LazyGridState,
     isScrollNavigationActive: Boolean,
 ) {
-    val controller = remember { TimelineScrollAnchorController() }
+    val controller = remember { MediaScrollAnchorController() }
     val baseline = remember { TimelineScrollAnchorBaseline() }
     val restoration = remember(gridItems, isScrollNavigationActive) {
         baseline.gridItems
@@ -24,7 +24,7 @@ internal fun PreserveTimelineScrollAnchor(
                     previousGridItems = previousGridItems,
                     newGridItems = gridItems,
                     visibleItems = gridState.layoutInfo.visibleItemsInfo.map { item ->
-                        TimelineVisibleGridItem(
+                        MediaVisibleGridItem(
                             gridIndex = item.index,
                             key = item.key.toString(),
                             viewportOffsetPx = item.offset.y - viewportStartOffset,
@@ -58,5 +58,5 @@ internal fun PreserveTimelineScrollAnchor(
 }
 
 private class TimelineScrollAnchorBaseline {
-    var gridItems: List<TimelineGridItem>? = null
+    var gridItems: List<MediaGridItem>? = null
 }

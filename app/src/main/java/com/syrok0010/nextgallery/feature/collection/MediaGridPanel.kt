@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +20,9 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 
 @Composable
 internal fun MediaGridPanel(
-    slots: List<TimelineSlot>,
+    slots: List<MediaSlot>,
     emptyContent: @Composable () -> Unit,
-    onViewportObservation: (TimelineViewportObservation) -> Unit = {},
+    onViewportObservation: (MediaViewportObservation) -> Unit = {},
     revealMediaId: MediaId?,
     onMediaRevealed: () -> Unit,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
@@ -30,13 +30,13 @@ internal fun MediaGridPanel(
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val gridItems = remember(slots) {
-        slots.toTimelineGridItems()
+        slots.toMediaGridItems()
     }
     val slotGridIndexes = remember(gridItems) {
         gridItems.toSlotGridIndexes()
     }
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
-    PreserveTimelineScrollAnchor(
+    PreserveMediaScrollAnchor(
         gridItems = gridItems,
         gridState = gridState,
         isScrollNavigationActive = isDraggingScrollIndicator || revealMediaId != null,
@@ -46,7 +46,7 @@ internal fun MediaGridPanel(
         snapshotFlow {
             val visibleItems = gridState.layoutInfo.visibleItemsInfo
             val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
-                (gridItems.getOrNull(visibleItem.index) as? TimelineGridItem.Slot)?.slotIndex
+                (gridItems.getOrNull(visibleItem.index) as? MediaGridItem.Slot)?.slotIndex
             }
             val firstSlotIndex = visibleSlotIndexes.minOrNull()
             val lastSlotIndex = visibleSlotIndexes.maxOrNull()
@@ -65,20 +65,20 @@ internal fun MediaGridPanel(
             when (visibleRange.loadingMode) {
                 TimelineVisibleRangeLoadingMode.Immediate -> {
                     onViewportObservation(
-                        TimelineViewportObservation(
+                        MediaViewportObservation(
                             firstVisibleSlotIndex = visibleRange.firstSlotIndex,
                             lastVisibleSlotIndex = visibleRange.lastSlotIndex,
-                            loadingMode = TimelineViewportLoadingMode.Immediate,
+                            loadingMode = MediaViewportLoadingMode.Immediate,
                         ),
                     )
                 }
 
                 TimelineVisibleRangeLoadingMode.Debounced -> {
                     onViewportObservation(
-                        TimelineViewportObservation(
+                        MediaViewportObservation(
                             firstVisibleSlotIndex = visibleRange.firstSlotIndex,
                             lastVisibleSlotIndex = visibleRange.lastSlotIndex,
-                            loadingMode = TimelineViewportLoadingMode.Debounced,
+                            loadingMode = MediaViewportLoadingMode.Debounced,
                         ),
                     )
                 }
@@ -89,7 +89,7 @@ internal fun MediaGridPanel(
     LaunchedEffect(revealMediaId, gridItems) {
         val mediaId = revealMediaId ?: return@LaunchedEffect
         val targetGridIndex = gridItems.indexOfFirst { item ->
-            item is TimelineGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
+            item is MediaGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
         }
         if (targetGridIndex >= 0) {
             gridState.scrollToItem(targetGridIndex)
@@ -104,14 +104,14 @@ internal fun MediaGridPanel(
             }
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
-                TimelineGrid(
+                MediaGrid(
                     gridItems = gridItems,
                     gridState = gridState,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
                 )
 
-                TimelineScrollIndicatorHost(
+                MediaScrollIndicatorHost(
                     slots = slots,
                     gridItems = gridItems,
                     slotGridIndexes = slotGridIndexes,

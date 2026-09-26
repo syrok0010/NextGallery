@@ -3,8 +3,8 @@ package com.syrok0010.nextgallery.feature.library
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexState
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf

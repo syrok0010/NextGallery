@@ -3,7 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.lifecycle.ViewModelStore
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -60,7 +60,6 @@ class AlbumContentsViewModelTest {
                 store.put("second", secondViewModel)
                 runCurrent()
                 assertTrue(secondViewModel.state.value.failed)
-                assertEquals(second, secondViewModel.state.value.location)
                 fail = false
                 secondViewModel.refresh()
                 runCurrent()

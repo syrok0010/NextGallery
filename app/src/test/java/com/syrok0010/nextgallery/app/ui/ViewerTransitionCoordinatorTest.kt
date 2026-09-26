@@ -4,6 +4,7 @@ import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.geometry.Rect
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.collection.DefaultViewerTransitionCoordinator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

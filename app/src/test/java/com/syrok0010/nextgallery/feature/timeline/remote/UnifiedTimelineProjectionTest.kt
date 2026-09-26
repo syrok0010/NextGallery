@@ -6,9 +6,9 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
-import com.syrok0010.nextgallery.feature.library.MediaLibraryProjection
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.library.sourceIdentity
-import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotProjection
+import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
@@ -43,7 +43,6 @@ class UnifiedTimelineProjectionTest {
         assertEquals(local.assetRef, assets.local)
         assertEquals(remote.assetRef, assets.remote)
         assertTrue(item.hasRemoteCopy)
-        assertEquals(emptyList<MediaIdentityConflict>(), result.conflicts)
     }
 
     @Test
@@ -117,10 +116,8 @@ class UnifiedTimelineProjectionTest {
 
         assertEquals(3, requireNotNull(result.snapshot).items.size)
         assertEquals(MediaId("remote-separate"), result.snapshot.items.first().mediaId)
-        assertEquals(
-            setOf(MediaId("local-first"), MediaId("local-second")),
-            result.conflicts.single().conflictingMediaIds,
-        )
+        assertEquals(setOf(MediaId("local-first"), MediaId("local-second")),
+            result.snapshot.items.drop(1).mapTo(mutableSetOf()) { it.mediaId })
     }
 
     @Test
@@ -354,7 +351,6 @@ class UnifiedTimelineProjectionTest {
 }
 
 private class UnifiedTimelineProjection {
-    private val library = MediaLibraryProjection()
     private var remote: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
     private var local = emptyList<MediaItem>()
     private var projected: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
@@ -387,7 +383,7 @@ private class UnifiedTimelineProjection {
     }
 
     private suspend fun project(): Result {
-        val canonical = library.replaceSources(local, remote?.items.orEmpty())
+        val canonical = projectMediaLibrary(local, remote?.items.orEmpty())
         remote = remote?.copy(
             slots = remote!!.slots.map { slot ->
                 val item = slot.mediaItem ?: return@map slot
@@ -399,11 +395,10 @@ private class UnifiedTimelineProjection {
             },
         )
         projected = TimelineSnapshotProjection.project(remote, canonical)
-        return Result(projected, canonical.conflicts)
+        return Result(projected)
     }
 
     data class Result(
         val snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?,
-        val conflicts: List<MediaIdentityConflict>,
     )
 }

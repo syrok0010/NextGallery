@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.app.ui
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue

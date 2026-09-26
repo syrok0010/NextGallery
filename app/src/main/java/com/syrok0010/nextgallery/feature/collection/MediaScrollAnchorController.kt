@@ -1,43 +1,43 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import com.syrok0010.nextgallery.core.media.MediaId
 
-internal data class TimelineVisibleGridItem(
+internal data class MediaVisibleGridItem(
     val gridIndex: Int,
     val key: String,
     val viewportOffsetPx: Int,
 )
 
-internal data class TimelineScrollRestoration(
+internal data class MediaScrollRestoration(
     val mediaId: MediaId?,
     val gridIndex: Int,
     val scrollOffsetPx: Int,
 )
 
-internal class TimelineScrollAnchorController {
+internal class MediaScrollAnchorController {
     fun restorationForUpdate(
-        previousGridItems: List<TimelineGridItem>,
-        newGridItems: List<TimelineGridItem>,
-        visibleItems: List<TimelineVisibleGridItem>,
+        previousGridItems: List<MediaGridItem>,
+        newGridItems: List<MediaGridItem>,
+        visibleItems: List<MediaVisibleGridItem>,
         isRestorationAllowed: Boolean,
-    ): TimelineScrollRestoration? {
+    ): MediaScrollRestoration? {
         if (!isRestorationAllowed) {
             return null
         }
         if (visibleItems.isAtTimelineStart()) {
-            return TimelineScrollRestoration(
+            return MediaScrollRestoration(
                 mediaId = null,
                 gridIndex = 0,
                 scrollOffsetPx = 0,
             )
         }
 
-        val previousItemsByKey = previousGridItems.associateBy(TimelineGridItem::key)
+        val previousItemsByKey = previousGridItems.associateBy(MediaGridItem::key)
         val anchor = visibleItems
-            .sortedBy(TimelineVisibleGridItem::gridIndex)
+            .sortedBy(MediaVisibleGridItem::gridIndex)
             .firstNotNullOfOrNull { visibleItem ->
                 val item = previousItemsByKey[visibleItem.key]
-                    as? TimelineGridItem.Slot
+                    as? MediaGridItem.Slot
                 item?.slot?.mediaItem?.let { mediaItem ->
                     TimelineScrollAnchor(
                         mediaId = mediaItem.mediaId,
@@ -50,7 +50,7 @@ internal class TimelineScrollAnchorController {
             ?: return null
         val target = newGridItems
             .mapIndexedNotNull { gridIndex, item ->
-                val mediaItem = (item as? TimelineGridItem.Slot)?.slot?.mediaItem
+                val mediaItem = (item as? MediaGridItem.Slot)?.slot?.mediaItem
                     ?: return@mapIndexedNotNull null
                 TimelineScrollTargetCandidate(
                     mediaId = mediaItem.mediaId,
@@ -64,7 +64,7 @@ internal class TimelineScrollAnchorController {
             }
             ?: return null
 
-        return TimelineScrollRestoration(
+        return MediaScrollRestoration(
             mediaId = target.mediaId,
             gridIndex = target.gridIndex,
             scrollOffsetPx = -anchor.viewportOffsetPx,
@@ -72,7 +72,7 @@ internal class TimelineScrollAnchorController {
     }
 }
 
-private fun List<TimelineVisibleGridItem>.isAtTimelineStart(): Boolean =
+private fun List<MediaVisibleGridItem>.isAtTimelineStart(): Boolean =
     any { item -> item.gridIndex == 0 && item.viewportOffsetPx >= 0 }
 
 private data class TimelineScrollAnchor(

@@ -16,10 +16,6 @@ internal data class TimelineWorkflowState(
     val failedDayIds: Set<Int> = emptySet(),
 )
 
-internal data class TimelineLoadRange(val first: Int, val last: Int, val debounced: Boolean = false)
-
-internal interface TimelineCommands { fun requestRange(range: TimelineLoadRange) }
-
 /** Loads the remote timeline structure and hydrates its visible ranges. */
 internal class TimelineWorkflow(
     private val credentials: AccountCredentials,
@@ -32,7 +28,7 @@ internal class TimelineWorkflow(
     private var refreshJob: Job? = null
     private var hydrationJob: Job? = null
     private var rangeJob: Job? = null
-    private var range: TimelineLoadRange? = null
+    private var requestedDays: List<Int>? = null
     private var generation = 0L
 
     init { refresh() }
@@ -53,7 +49,7 @@ internal class TimelineWorkflow(
                 val remote = source.loadInitialTimeline(credentials)
                 if (currentGeneration != generation) return@launch
                 mutableState.update { it.copy(snapshot = remote) }
-                if (range == null) range = TimelineLoadRange(0, 11)
+                if (requestedDays == null) requestedDays = remote.slots.take(24).map { it.dayId }.distinct()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -68,17 +64,17 @@ internal class TimelineWorkflow(
         refreshJob?.start()
     }
 
-    fun requestRange(request: TimelineLoadRange) {
+    fun requestDays(dayIds: List<Int>, debounced: Boolean = false) {
         rangeJob?.cancel()
-        if (request.debounced) {
-            range = null
+        if (debounced) {
+            requestedDays = null
             rangeJob = scope.launch {
                 kotlinx.coroutines.delay(debounceMillis)
-                range = request
+                requestedDays = dayIds.distinct()
                 hydrateRange()
             }
         } else {
-            range = request
+            requestedDays = dayIds.distinct()
             hydrateRange()
         }
     }
@@ -88,9 +84,12 @@ internal class TimelineWorkflow(
         val currentGeneration = generation
         hydrationJob = scope.launch(start = CoroutineStart.LAZY) {
             while (currentGeneration == generation) {
-                val observation = range ?: break
+                val requested = requestedDays ?: break
                 val snapshot = state.value.snapshot ?: break
-                val dayIds = daysForRange(snapshot, observation, state.value.failedDayIds)
+                val remoteDays = snapshot.days.mapTo(mutableSetOf()) { it.dayId }
+                val dayIds = requested.filter { it in remoteDays }
+                    .filterNot { it in snapshot.loadedDayIds || it in state.value.failedDayIds }
+                    .take(4)
                 if (dayIds.isEmpty()) break
                 mutableState.update { it.copy(loadingDayIds = dayIds.toSet()) }
                 try {
@@ -117,18 +116,4 @@ internal class TimelineWorkflow(
         }
         hydrationJob?.start()
     }
-}
-
-internal fun daysForRange(
-    snapshot: TimelineSnapshot,
-    observation: TimelineLoadRange,
-    failedDays: Set<Int>,
-): List<Int> {
-    val start = (observation.first - 12).coerceAtLeast(0)
-    val end = (observation.last + 12).coerceAtMost(snapshot.slots.lastIndex)
-    if (start > end) return emptyList()
-    return snapshot.slots.subList(start, end + 1).asSequence()
-        .map { it.dayId }.distinct()
-        .filterNot { it in snapshot.loadedDayIds || it in failedDays }
-        .take(4).toList()
 }

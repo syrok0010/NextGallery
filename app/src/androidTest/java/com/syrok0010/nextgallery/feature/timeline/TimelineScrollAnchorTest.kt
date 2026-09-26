@@ -18,6 +18,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaGridItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.PreserveMediaScrollAnchor
+import com.syrok0010.nextgallery.feature.collection.toMediaGridItems
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -46,7 +51,7 @@ class TimelineScrollAnchorTest {
             val gridState = rememberLazyGridState()
             val gridItems = gridItemsState.value
             SideEffect { gridStateRef.set(gridState) }
-            PreserveTimelineScrollAnchor(
+            PreserveMediaScrollAnchor(
                 gridItems = gridItems,
                 gridState = gridState,
                 isScrollNavigationActive = false,
@@ -56,10 +61,10 @@ class TimelineScrollAnchorTest {
                 state = gridState,
                 modifier = Modifier.size(width = 320.dp, height = 400.dp),
             ) {
-                items(items = gridItems, key = TimelineGridItem::key) { item ->
+                items(items = gridItems, key = MediaGridItem::key) { item ->
                     Box(
                         modifier = Modifier.height(
-                            if (item is TimelineGridItem.DayHeader) 32.dp else 96.dp,
+                            if (item is MediaGridItem.DayHeader) 32.dp else 96.dp,
                         ),
                     )
                 }
@@ -176,7 +181,7 @@ class TimelineScrollAnchorTest {
                 gridStateRef.set(gridState)
                 scopeRef.set(scope)
             }
-            PreserveTimelineScrollAnchor(
+            PreserveMediaScrollAnchor(
                 gridItems = gridItems,
                 gridState = gridState,
                 isScrollNavigationActive = false,
@@ -186,10 +191,10 @@ class TimelineScrollAnchorTest {
                 state = gridState,
                 modifier = Modifier.size(width = 320.dp, height = 400.dp),
             ) {
-                items(items = gridItems, key = TimelineGridItem::key) { item ->
+                items(items = gridItems, key = MediaGridItem::key) { item ->
                     Box(
                         modifier = Modifier.height(
-                            if (item is TimelineGridItem.DayHeader) 32.dp else 96.dp,
+                            if (item is MediaGridItem.DayHeader) 32.dp else 96.dp,
                         ),
                     )
                 }
@@ -241,20 +246,20 @@ class TimelineScrollAnchorTest {
         return item.offset.y - gridState.layoutInfo.viewportStartOffset
     }
 
-    private fun gridItems(mediaItems: List<MediaItem>): List<TimelineGridItem> =
+    private fun gridItems(mediaItems: List<MediaItem>): List<MediaGridItem> =
         mediaItems
             .mapIndexed { index, item ->
-                TimelineSlot(
-                    key = TimelineSlotKey(dayId = item.dayId, indexInDay = index),
+                MediaSlot(
+                    key = MediaSlotKey(dayId = item.dayId, indexInDay = index),
                     dayId = item.dayId,
                     indexInDay = index,
                     mediaItem = item,
                 )
-            }.toTimelineGridItems()
+            }.toMediaGridItems()
 
-    private fun List<TimelineGridItem>.indexOfMedia(mediaId: MediaId): Int =
+    private fun List<MediaGridItem>.indexOfMedia(mediaId: MediaId): Int =
         indexOfFirst { item ->
-            item is TimelineGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
+            item is MediaGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
         }
 
     private fun mediaItem(id: String, dayId: Int, takenAtEpochSeconds: Long) =

@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,8 +19,8 @@ import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import org.koin.compose.koinInject
 
 @Composable
-internal fun TimelineGrid(
-    gridItems: List<TimelineGridItem>,
+internal fun MediaGrid(
+    gridItems: List<MediaGridItem>,
     gridState: LazyGridState,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
@@ -41,15 +41,15 @@ internal fun TimelineGrid(
             key = { _, item -> item.key },
             span = { _, item ->
                 when (item) {
-                    is TimelineGridItem.DayHeader -> GridItemSpan(maxLineSpan)
-                    is TimelineGridItem.Slot -> GridItemSpan(1)
+                    is MediaGridItem.DayHeader -> GridItemSpan(maxLineSpan)
+                    is MediaGridItem.Slot -> GridItemSpan(1)
                 }
             },
         ) { _, item ->
             when (item) {
-                is TimelineGridItem.DayHeader -> TimelineDayHeader(item.dayId)
+                is MediaGridItem.DayHeader -> MediaDayHeader(item.dayId)
 
-                is TimelineGridItem.Slot -> TimelineSlotTile(
+                is MediaGridItem.Slot -> MediaSlotTile(
                     slot = item.slot,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,

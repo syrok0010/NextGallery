@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.feature.collection
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
@@ -48,7 +48,7 @@ import java.util.Locale
 import org.koin.compose.koinInject
 
 @Composable
-internal fun TimelineDayHeader(dayId: Int) {
+internal fun MediaDayHeader(dayId: Int) {
     val pattern = stringResource(R.string.timeline_day_header_pattern)
     val formatter = remember(pattern) {
         DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
@@ -69,8 +69,8 @@ internal fun TimelineDayHeader(dayId: Int) {
 }
 
 @Composable
-internal fun TimelineSlotTile(
-    slot: TimelineSlot,
+internal fun MediaSlotTile(
+    slot: MediaSlot,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
     requestFactory: MediaImageRequestFactory = koinInject(),

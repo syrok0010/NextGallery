@@ -6,7 +6,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,13 +14,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 internal data class AlbumContentsState(
-    val location: AlbumLocation? = null,
     val items: List<MediaItem> = emptyList(),
     val total: Int = 0,
     val loaded: Int = 0,
@@ -37,10 +35,10 @@ internal class AlbumContentsViewModel(
     private val location: AlbumLocation,
 ) : ViewModel() {
     private val refreshes = MutableStateFlow(0)
-    private val mutableState = MutableStateFlow(AlbumContentsState(location = location))
+    private val mutableState = MutableStateFlow(AlbumContentsState())
     private val knownItems = library.state
     val state = combine(mutableState, knownItems, permission) { contents, libraryItems, access ->
-        if (contents.location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
+        if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
             contents.copy(
                 items = emptyList(),
                 total = 0,
@@ -57,7 +55,7 @@ internal class AlbumContentsViewModel(
                 ),
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState(location = location))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState())
 
     fun refresh() {
         refreshes.update { it + 1 }
@@ -77,11 +75,10 @@ internal class AlbumContentsViewModel(
                     refresh,
                 )
             }.distinctUntilChanged().collectLatest { (session, location, needsPermission) ->
-                mutableState.value = AlbumContentsState(location = location)
+                mutableState.value = AlbumContentsState()
                 if (session !is SessionUiState.SignedIn) return@collectLatest
                 if (needsPermission) {
                     mutableState.value = AlbumContentsState(
-                        location = location,
                         permissionRequired = true,
                     )
                     return@collectLatest

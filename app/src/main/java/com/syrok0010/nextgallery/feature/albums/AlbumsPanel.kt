@@ -24,7 +24,7 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import org.koin.compose.koinInject
 
 @Composable

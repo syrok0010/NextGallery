@@ -1,7 +1,9 @@
-package com.syrok0010.nextgallery.feature.timeline
+package com.syrok0010.nextgallery.app.library
 
 import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
 import com.syrok0010.nextgallery.feature.library.sourceIdentity
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 
 /** Projects the canonical media library onto the ordering and loading state of a remote timeline. */
 internal object TimelineSnapshotProjection {

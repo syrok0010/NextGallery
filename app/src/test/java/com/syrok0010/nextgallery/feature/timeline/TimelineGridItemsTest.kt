@@ -3,6 +3,9 @@ package com.syrok0010.nextgallery.feature.timeline
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.toMediaGridItems
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,16 +21,16 @@ class TimelineGridItemsTest {
             item = mediaItem(MediaId("stable-media-id"), fileId = 99L),
         )
 
-        val firstKey = listOf(firstSlot).toTimelineGridItems().last().key
-        val movedKey = listOf(movedSlot).toTimelineGridItems().last().key
+        val firstKey = listOf(firstSlot).toMediaGridItems().last().key
+        val movedKey = listOf(movedSlot).toMediaGridItems().last().key
 
         assertEquals("media:stable-media-id", firstKey)
         assertEquals(firstKey, movedKey)
     }
 
     private fun slot(index: Int, item: MediaItem) =
-        TimelineSlot(
-            key = TimelineSlotKey(dayId = DAY_ID, indexInDay = index),
+        MediaSlot(
+            key = MediaSlotKey(dayId = DAY_ID, indexInDay = index),
             dayId = DAY_ID,
             indexInDay = index,
             mediaItem = item,

@@ -3,6 +3,12 @@ package com.syrok0010.nextgallery.feature.timeline
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaGridItem
+import com.syrok0010.nextgallery.feature.collection.MediaScrollAnchorController
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.MediaVisibleGridItem
+import com.syrok0010.nextgallery.feature.collection.toMediaGridItems
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,7 +16,7 @@ import org.junit.Test
 class TimelineScrollAnchorControllerTest {
     @Test
     fun `adding remote media during initial load keeps viewport at timeline top`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val local = mediaItem("local", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val initialItems = gridItems(local)
         val remoteOnly = mediaItem(
@@ -23,12 +29,12 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = initialItems,
             newGridItems = gridItems(remoteOnly, local),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = 0,
                     key = initialItems[0].key,
                     viewportOffsetPx = 0,
                 ),
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = 1,
                     key = "media:${local.mediaId.value}",
                     viewportOffsetPx = 32,
@@ -45,7 +51,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `adding media above viewport restores the same media and pixel offset`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val anchor = mediaItem("anchor", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val initialItems = gridItems(anchor)
 
@@ -55,7 +61,7 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = initialItems,
             newGridItems = gridItems(newer, anchor),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = anchorGridIndex,
                     key = "media:${anchor.mediaId.value}",
                     viewportOffsetPx = -24,
@@ -72,7 +78,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `removing media above viewport restores the same media and pixel offset`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val newer = mediaItem("newer", dayId = 20_001, takenAtEpochSeconds = 1_728_086_400)
         val anchor = mediaItem("anchor", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val initialItems = gridItems(newer, anchor)
@@ -80,7 +86,7 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = initialItems,
             newGridItems = gridItems(anchor),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = initialItems.indexOfMedia(anchor.mediaId),
                     key = "media:${anchor.mediaId.value}",
                     viewportOffsetPx = 18,
@@ -97,7 +103,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `merging source copies follows the stable media id`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val local = mediaItem("stable", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000).copy(
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
@@ -116,7 +122,7 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = initialItems,
             newGridItems = gridItems(merged),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = initialItems.indexOfMedia(local.mediaId),
                     key = "media:${local.mediaId.value}",
                     viewportOffsetPx = -12,
@@ -132,7 +138,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `removed anchor falls back to media nearest by canonical time`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val anchor = mediaItem("removed", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val initialItems = gridItems(anchor)
         val farther = mediaItem("farther", dayId = 20_000, takenAtEpochSeconds = 1_727_999_000)
@@ -143,7 +149,7 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = initialItems,
             newGridItems = updatedItems,
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = initialItems.indexOfMedia(anchor.mediaId),
                     key = "media:${anchor.mediaId.value}",
                     viewportOffsetPx = -8,
@@ -160,7 +166,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `timeline rebuild does not override active scrollbar navigation`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val anchor = mediaItem("anchor", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val initialItems = gridItems(anchor)
         val restoration = controller.restorationForUpdate(
@@ -170,7 +176,7 @@ class TimelineScrollAnchorControllerTest {
                 anchor,
             ),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = initialItems.indexOfMedia(anchor.mediaId),
                     key = "media:${anchor.mediaId.value}",
                     viewportOffsetPx = 0,
@@ -184,7 +190,7 @@ class TimelineScrollAnchorControllerTest {
 
     @Test
     fun `measured item key identifies anchor when a rapid update makes its index stale`() {
-        val controller = TimelineScrollAnchorController()
+        val controller = MediaScrollAnchorController()
         val newer = mediaItem("newer", dayId = 20_001, takenAtEpochSeconds = 1_728_086_400)
         val anchor = mediaItem("anchor", dayId = 20_000, takenAtEpochSeconds = 1_728_000_000)
         val previousItems = gridItems(newer, anchor)
@@ -193,7 +199,7 @@ class TimelineScrollAnchorControllerTest {
             previousGridItems = previousItems,
             newGridItems = gridItems(anchor),
             visibleItems = listOf(
-                TimelineVisibleGridItem(
+                MediaVisibleGridItem(
                     gridIndex = 1,
                     key = "media:${anchor.mediaId.value}",
                     viewportOffsetPx = -6,
@@ -207,20 +213,20 @@ class TimelineScrollAnchorControllerTest {
         assertEquals(6, restoration.scrollOffsetPx)
     }
 
-    private fun gridItems(vararg mediaItems: MediaItem): List<TimelineGridItem> =
+    private fun gridItems(vararg mediaItems: MediaItem): List<MediaGridItem> =
         mediaItems
             .mapIndexed { index, item ->
-                TimelineSlot(
-                    key = TimelineSlotKey(dayId = item.dayId, indexInDay = index),
+                MediaSlot(
+                    key = MediaSlotKey(dayId = item.dayId, indexInDay = index),
                     dayId = item.dayId,
                     indexInDay = index,
                     mediaItem = item,
                 )
-            }.toTimelineGridItems()
+            }.toMediaGridItems()
 
-    private fun List<TimelineGridItem>.indexOfMedia(mediaId: MediaId): Int =
+    private fun List<MediaGridItem>.indexOfMedia(mediaId: MediaId): Int =
         indexOfFirst { item ->
-            item is TimelineGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
+            item is MediaGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
         }
 
     private fun mediaItem(id: String, dayId: Int, takenAtEpochSeconds: Long) =

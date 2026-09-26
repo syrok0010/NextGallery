@@ -9,9 +9,9 @@ import com.syrok0010.nextgallery.core.database.TimelineDayEntity
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionItem
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionItem
 
 fun MemoriesConfig.toCacheMetadataEntity(
     serverUrl: String,

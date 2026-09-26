@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.timeline
 
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
 
 data class MemoriesConfig(
     val version: String,
@@ -16,23 +17,11 @@ data class MemoriesConfig(
 data class TimelineSnapshot(
     val config: MemoriesConfig?,
     val days: List<TimelineDay>,
-    val slots: List<TimelineSlot>,
+    val slots: List<MediaSlot>,
     val loadedDayIds: Set<Int>,
     val totalMediaCountHint: Int,
 ) {
-    val totalDayCount: Int get() = days.size
-    val memoriesVersion: String = config?.version.orEmpty()
-    val timelinePath: String? = config?.timelinePath
     val items: List<MediaItem> = slots.mapNotNull { it.mediaItem }
 }
 
 data class TimelineDay(val dayId: Int, val count: Int)
-
-data class TimelineSlot(
-    val key: TimelineSlotKey,
-    val dayId: Int,
-    val indexInDay: Int,
-    val mediaItem: MediaItem?,
-)
-
-data class TimelineSlotKey(val dayId: Int, val indexInDay: Int)

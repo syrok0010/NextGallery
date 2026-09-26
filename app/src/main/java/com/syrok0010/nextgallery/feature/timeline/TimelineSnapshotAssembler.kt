@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.feature.timeline
 
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 
 object TimelineSnapshotAssembler {
     fun assemble(
@@ -113,7 +115,7 @@ object TimelineSnapshotAssembler {
         days: List<TimelineDay>,
         itemsByDay: Map<Int, List<MediaItem>>,
         placeholderCountsByDay: Map<Int, Int>? = null,
-    ): List<TimelineSlot> =
+    ): List<MediaSlot> =
         days.flatMap { day ->
             val items = itemsByDay[day.dayId].orEmpty()
             val slotCount = placeholderCountsByDay?.let {
@@ -126,8 +128,8 @@ object TimelineSnapshotAssembler {
                 ?: maxOf(day.count, items.size)
 
             List(slotCount) { index ->
-                TimelineSlot(
-                    key = TimelineSlotKey(dayId = day.dayId, indexInDay = index),
+                MediaSlot(
+                    key = MediaSlotKey(dayId = day.dayId, indexInDay = index),
                     dayId = day.dayId,
                     indexInDay = index,
                     mediaItem = items.getOrNull(index),

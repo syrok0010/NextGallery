@@ -13,14 +13,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.app.ui.rememberViewerSequence
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.collection.MediaSlot
+import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
+import com.syrok0010.nextgallery.feature.collection.rememberViewerSequence
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlot
-import com.syrok0010.nextgallery.feature.timeline.TimelineSlotKey
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
@@ -160,8 +160,8 @@ class ViewerSequenceMemoizationTest {
 
     private fun snapshot(vararg mediaItems: MediaItem?): TimelineSnapshot {
         val slots = mediaItems.mapIndexed { index, item ->
-            TimelineSlot(
-                key = TimelineSlotKey(dayId = DAY_ID, indexInDay = index),
+            MediaSlot(
+                key = MediaSlotKey(dayId = DAY_ID, indexInDay = index),
                 dayId = DAY_ID,
                 indexInDay = index,
                 mediaItem = item,

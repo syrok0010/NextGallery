@@ -47,10 +47,10 @@ class TimelineWorkflowTest {
         val source = Source(days = (10..100).map { TimelineDay(it, 1) })
         val workflow = workflow(source)
         runCurrent()
-        workflow.requestRange(TimelineLoadRange(80, 80, debounced = true))
+        workflow.requestDays((78..100).toList(), debounced = true)
         advanceTimeBy(200)
         val before = source.requests.size
-        workflow.requestRange(TimelineLoadRange(78, 80, debounced = true))
+        workflow.requestDays((76..100).toList(), debounced = true)
         advanceTimeBy(449)
         runCurrent()
         assertEquals(before, source.requests.size)
@@ -67,7 +67,7 @@ class TimelineWorkflowTest {
         assertEquals((10..33).toSet(), workflow.state.value.failedDayIds)
         assertTrue(source.requests.all { it.size <= 4 })
         val count = source.requests.size
-        workflow.requestRange(TimelineLoadRange(0, 11))
+        workflow.requestDays((10..33).toList())
         runCurrent()
         assertEquals(count, source.requests.size)
     }

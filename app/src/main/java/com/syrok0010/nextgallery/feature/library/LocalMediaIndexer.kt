@@ -1,8 +1,8 @@
 package com.syrok0010.nextgallery.feature.library
 
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaIndexState
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexState
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow

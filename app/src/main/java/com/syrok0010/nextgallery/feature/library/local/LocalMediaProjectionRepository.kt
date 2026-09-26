@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline.local
+package com.syrok0010.nextgallery.feature.library.local
 
 import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.IdentifiedLocalMedia

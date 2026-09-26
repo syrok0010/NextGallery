@@ -13,8 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
 import org.koin.compose.koinInject
 
 @Composable

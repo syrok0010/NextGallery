@@ -3,7 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.provider.MediaStore
-import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
