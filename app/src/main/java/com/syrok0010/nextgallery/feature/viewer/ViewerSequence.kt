@@ -42,7 +42,7 @@ internal fun reconcileCurrentMedia(
     previous: ViewerSequence,
     currentMediaId: MediaId?,
 ): ViewerSequence {
-    if (currentMediaId == null || currentMediaId in live) {
+    if (currentMediaId == null || currentMediaId in live || live.items.isEmpty()) {
         return live
     }
 

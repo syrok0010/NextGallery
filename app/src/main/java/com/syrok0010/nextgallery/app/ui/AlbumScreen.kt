@@ -24,7 +24,6 @@ internal fun AlbumScreen(
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
     MediaCollectionScreen(
         slots = slots,
-        accessAllowed = !contents.permissionRequired,
         emptyContent = { AlbumContentsStatus(contents, viewModel::refresh) },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(

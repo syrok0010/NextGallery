@@ -19,7 +19,6 @@ internal fun MediaCollectionScreen(
     emptyContent: @Composable () -> Unit,
     onViewportObservation: (TimelineViewportObservation) -> Unit = {},
     onViewerRange: (IntRange) -> Unit = {},
-    accessAllowed: Boolean = true,
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
@@ -27,12 +26,9 @@ internal fun MediaCollectionScreen(
     val gridState = rememberLazyGridState()
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
     val index = remember(slots) { ViewerTimelineIndex(slots) }
-    val viewerId = transition.viewerMediaId?.takeIf { accessAllowed && it in sequence }
+    val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
     SideEffect { onViewerVisibilityChanged(viewerId != null) }
     DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }
-    LaunchedEffect(accessAllowed) {
-        if (!accessAllowed) transition.viewerMediaId?.let { transition.close(it, false) }
-    }
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
