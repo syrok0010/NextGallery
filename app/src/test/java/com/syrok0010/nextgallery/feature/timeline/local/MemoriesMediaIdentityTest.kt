@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.timeline.local
+package com.syrok0010.nextgallery.feature.library.local
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

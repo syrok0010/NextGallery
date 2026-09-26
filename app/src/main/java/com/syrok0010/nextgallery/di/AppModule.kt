@@ -1,6 +1,9 @@
 package com.syrok0010.nextgallery.di
 
 import android.provider.MediaStore
+import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
+import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
+import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
@@ -10,9 +13,14 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
+import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
@@ -23,16 +31,14 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.timeline.TimelineRepository
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
-import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreChangeObserver
-import com.syrok0010.nextgallery.feature.timeline.local.AndroidMediaStoreReader
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionCoordinator
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionStore
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaSource
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
@@ -60,16 +66,40 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
+    single { MediaLibraryIndex() }
+    single { LibraryPublicationStore() }
+    single { TimelineProjectionStore(get(), get(named("libraryScope"))) }
     single {
-        TimelineRepository(
-            get(),
-            get<MemoriesRepository>(),
-            get(),
-            get<LocalMediaPermissionCoordinator>().mode,
-            get(named("libraryScope")),
+        MediaLibraryCoordinator(
+            index = get(),
+            sessions = get(),
+            remoteSource = get<MemoriesRepository>(),
+            localMedia = get(),
+            permissions = get<LocalMediaPermissionCoordinator>().mode,
         )
     }
     viewModel { AlbumsViewModel(get()) }
+    single { MemoriesAlbumContents(get(), get()) }
+    single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
+    single<AlbumContentsSource> {
+        val remote = get<MemoriesAlbumContents>()
+        val local = get<AndroidAlbumContents>()
+        AlbumContentsSource { location, credentials ->
+            when (location) {
+                is AlbumLocation.Remote -> remote.load(location, credentials)
+                is AlbumLocation.Folder -> local.load(location)
+            }
+        }
+    }
+    viewModel { (location: AlbumLocation) ->
+        AlbumContentsViewModel(
+            get(),
+            get(),
+            get<MediaLibraryIndex>(),
+            get<LocalMediaPermissionCoordinator>().mode,
+            location,
+        )
+    }
 
     single {
         Json {
@@ -86,7 +116,6 @@ val appModule = module {
     single { RoomMediaIdentityRegistry(get()) }
     single<MediaIdentityRegistry> { get<RoomMediaIdentityRegistry>() }
     single { TimelineCacheRepository(get(), get(), get()) }
-    factory { UnifiedTimelineProjection() }
     single { LocalMediaPermissionCoordinator(androidContext()) }
     single {
         val context = androidContext()
@@ -135,5 +164,4 @@ val appModule = module {
 
     viewModelOf(::SessionViewModel)
     viewModel { LoginViewModel(get(), get(), get<NextcloudLoginRepository>()) }
-    viewModelOf(::TimelineViewModel)
 }

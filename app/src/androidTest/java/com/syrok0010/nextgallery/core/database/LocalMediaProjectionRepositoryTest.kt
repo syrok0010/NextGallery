@@ -11,7 +11,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After

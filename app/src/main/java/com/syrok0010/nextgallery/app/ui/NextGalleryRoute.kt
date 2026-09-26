@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -17,7 +18,33 @@ internal sealed interface NextGalleryRoute : NavKey {
 
     @Serializable
     data object Albums : NextGalleryRoute
+
+    @Serializable
+    data class Album(val location: AlbumLocation, val title: String) : NextGalleryRoute
+
+    fun navContentKey(): String =
+        when (this) {
+            Login -> "login"
+
+            Photos -> "photos"
+
+            Albums -> "albums"
+
+            is Album ->
+                when (val location = location) {
+                    is AlbumLocation.Remote -> "album:remote:${location.clusterId}"
+                    is AlbumLocation.Folder -> "album:folder:${location.volume}:${location.path}"
+                }
+        }
 }
+
+internal fun topLevelRouteFromContentKey(contentKey: Any): NextGalleryRoute? =
+    when (contentKey) {
+        "login" -> NextGalleryRoute.Login
+        "photos" -> NextGalleryRoute.Photos
+        "albums" -> NextGalleryRoute.Albums
+        else -> null
+    }
 
 internal enum class TopLevelDestination(
     val route: NextGalleryRoute,

@@ -1,0 +1,117 @@
+package com.syrok0010.nextgallery.feature.albums
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+internal data class AlbumContentsState(
+    val items: List<MediaItem> = emptyList(),
+    val total: Int = 0,
+    val loaded: Int = 0,
+    val loading: Boolean = false,
+    val failed: Boolean = false,
+    val permissionRequired: Boolean = false,
+)
+
+internal class AlbumContentsViewModel(
+    sessionStore: SessionStore,
+    source: AlbumContentsSource,
+    library: MediaLibraryIndex,
+    permission: StateFlow<LocalMediaPermissionMode?>,
+    private val location: AlbumLocation,
+) : ViewModel() {
+    private val refreshes = MutableStateFlow(0)
+    private val mutableState = MutableStateFlow(AlbumContentsState())
+    private val knownItems = library.state
+    val state = combine(mutableState, knownItems, permission) { contents, libraryItems, access ->
+        if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
+            contents.copy(
+                items = emptyList(),
+                total = 0,
+                loaded = 0,
+                loading = false,
+                permissionRequired = true,
+            )
+        } else {
+            contents.copy(
+                items = albumMediaProjection(
+                    contents.items,
+                    libraryItems,
+                    access == LocalMediaPermissionMode.Full,
+                ),
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState())
+
+    fun refresh() {
+        refreshes.update { it + 1 }
+    }
+
+    init {
+        viewModelScope.launch {
+            combine(
+                sessionStore.session,
+                permission,
+                refreshes,
+            ) { session, mode, refresh ->
+                LoadRequest(
+                    session,
+                    location,
+                    location is AlbumLocation.Folder && mode != LocalMediaPermissionMode.Full,
+                    refresh,
+                )
+            }.distinctUntilChanged().collectLatest { (session, location, needsPermission) ->
+                mutableState.value = AlbumContentsState()
+                if (session !is SessionUiState.SignedIn) return@collectLatest
+                if (needsPermission) {
+                    mutableState.value = AlbumContentsState(
+                        permissionRequired = true,
+                    )
+                    return@collectLatest
+                }
+                mutableState.update { it.copy(loading = true) }
+                try {
+                    source.load(location, session.credentials).collect { batch ->
+                        mutableState.update {
+                            it.copy(
+                                items = batch.items,
+                                total = batch.total,
+                                loaded = batch.loaded,
+                            )
+                        }
+                    }
+                    mutableState.update { it.copy(loading = false) }
+                } catch (
+                    cancelled: CancellationException,
+                ) {
+                    throw cancelled
+                } catch (
+                    _: Exception,
+                ) {
+                    mutableState.update { it.copy(loading = false, failed = true) }
+                }
+            }
+        }
+    }
+}
+
+private data class LoadRequest(
+    val session: SessionUiState,
+    val location: AlbumLocation,
+    val needsPermission: Boolean,
+    val refresh: Int,
+)

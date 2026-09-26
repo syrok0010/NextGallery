@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.session.*
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow

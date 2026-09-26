@@ -12,6 +12,7 @@ internal data class AlbumSummary(
     val count: Int?,
     val detail: String,
     val cover: AlbumCover? = null,
+    val location: AlbumLocation? = null,
 )
 
 internal sealed interface AlbumCover {
@@ -60,6 +61,7 @@ internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<Album
                 count = 1,
                 detail = "${entry.path} · ${entry.volume}",
                 cover = AlbumCover.Local(entry.uri, entry.modified),
+                location = AlbumLocation.Folder(entry.volume, entry.path),
             )
     }
     return groups.values.toList()

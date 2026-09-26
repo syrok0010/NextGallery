@@ -22,22 +22,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import org.koin.androidx.compose.koinViewModel
 
-private fun routeFromContentKey(contentKey: Any): NextGalleryRoute? =
-    when (contentKey) {
-        NextGalleryRoute.Login.toString() -> NextGalleryRoute.Login
-        NextGalleryRoute.Photos.toString() -> NextGalleryRoute.Photos
-        NextGalleryRoute.Albums.toString() -> NextGalleryRoute.Albums
-        else -> null
-    }
-
-private fun transitionDirection(
+internal fun transitionDirection(
     from: NextGalleryRoute?,
     to: NextGalleryRoute?,
 ): AnimatedContentTransitionScope.SlideDirection? {
@@ -87,33 +81,41 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                 NavDisplay(
                     backStack = routes,
                     onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                    entryDecorators = listOf(
+                        rememberSaveableStateHolderNavEntryDecorator(),
+                        rememberViewModelStoreNavEntryDecorator(),
+                    ),
                     transitionSpec = {
                         horizontalTransition(
                             transitionDirection(
-                                routeFromContentKey(initialState.entries.last().contentKey),
-                                routeFromContentKey(targetState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(targetState.entries.last().contentKey),
                             ),
                         )
                     },
                     popTransitionSpec = {
                         horizontalTransition(
                             transitionDirection(
-                                routeFromContentKey(initialState.entries.last().contentKey),
-                                routeFromContentKey(targetState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(targetState.entries.last().contentKey),
                             ),
                         )
                     },
                     predictivePopTransitionSpec = {
                         horizontalTransition(
                             transitionDirection(
-                                routeFromContentKey(initialState.entries.last().contentKey),
-                                routeFromContentKey(targetState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                                topLevelRouteFromContentKey(targetState.entries.last().contentKey),
                             ),
                         )
                     },
                     entryProvider = entryProvider {
-                        entry<NextGalleryRoute.Login> { LoginScreen() }
-                        entry<NextGalleryRoute.Photos> {
+                        entry<NextGalleryRoute.Login>(
+                            clazzContentKey = { it.navContentKey() },
+                        ) { LoginScreen() }
+                        entry<NextGalleryRoute.Photos>(
+                            clazzContentKey = { it.navContentKey() },
+                        ) {
                             if (signedIn) {
                                 screenStates.SaveableStateProvider("photos") {
                                     PhotosScreen(
@@ -123,18 +125,36 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                 }
                             }
                         }
-                        entry<NextGalleryRoute.Albums> {
+                        entry<NextGalleryRoute.Album>(
+                            clazzContentKey = { it.navContentKey() },
+                            metadata = NavDisplay.transitionSpec {
+                                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) togetherWith
+                                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                            },
+                        ) { album ->
+                            if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout)
+                        }
+                        entry<NextGalleryRoute.Albums>(
+                            clazzContentKey = { it.navContentKey() },
+                        ) {
                             if (signedIn) {
                                 screenStates.SaveableStateProvider("albums") {
                                     AlbumsScreen(
                                         onLogout = sessionViewModel::logout,
+                                        onOpen = { album ->
+                                            album.location?.let { location ->
+                                                if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
+                                                    backStack.add(NextGalleryRoute.Album(location, album.name))
+                                                }
+                                            }
+                                        },
                                     )
                                 }
                             }
                         }
                     },
                 )
-                if (signedIn && !viewerVisible) {
+                if (signedIn && !viewerVisible && page !is NextGalleryRoute.Album) {
                     LibraryIsland(
                         page,
                         { destination ->

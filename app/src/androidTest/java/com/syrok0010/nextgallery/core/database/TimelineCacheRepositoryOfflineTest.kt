@@ -16,10 +16,10 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.images.ThumbnailKey
 import com.syrok0010.nextgallery.feature.images.ThumbnailPreview
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.feature.timeline.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After

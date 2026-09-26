@@ -40,9 +40,10 @@
 Login
 Photos
 Albums
+Album(location, title)
 ```
 
-`SessionUiState` синхронизирует один плоский back stack. `NextGalleryApp` получает только `SessionViewModel`, связывает destinations и плавающий переключатель. `PhotosScreen` и `AlbumsScreen` получают свои ViewModel внутри destination и владеют прокруткой/фильтром. Saveable state вкладок сохраняется при переключении и сбрасывается на границе сессии. Viewer отображается внутри экрана фото поверх его сетки и адресуется по `MediaId`; `ViewerTransitionCoordinator` связывает tile bounds, reveal и закрытие viewer. Корень получает только признак видимости viewer для переключателя.
+`SessionUiState` синхронизирует один плоский back stack. `NextGalleryApp` получает только `SessionViewModel`, связывает destinations и плавающий переключатель. `PhotosScreen`, `AlbumsScreen` и `AlbumScreen` получают свои ViewModel внутри destination и владеют прокруткой/фильтром. Saveable state вкладок сохраняется при переключении и сбрасывается на границе сессии. Viewer отображается внутри экрана фото или конкретного альбома поверх его сетки и адресуется по `MediaId`; `ViewerTransitionCoordinator` связывает tile bounds, reveal и закрытие viewer. Корень получает только признак видимости viewer для переключателя.
 
 Версия Navigation3 определяется version catalog, а не дублируется в ADR.
 

@@ -1,57 +1,48 @@
 package com.syrok0010.nextgallery.app.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import com.syrok0010.nextgallery.feature.timeline.TimelinePanel
-import com.syrok0010.nextgallery.feature.timeline.TimelineViewModel
-import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
-import org.koin.androidx.compose.koinViewModel
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
+import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
+import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
+import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
+import com.syrok0010.nextgallery.feature.timeline.daysForSlots
+import org.koin.compose.koinInject
 
 @Composable
 internal fun PhotosScreen(
     onLogout: () -> Unit,
     onViewerVisibilityChanged: (Boolean) -> Unit,
-    viewModel: TimelineViewModel = koinViewModel(),
+    timeline: TimelineProjectionStore = koinInject(),
+    coordinator: MediaLibraryCoordinator = koinInject(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val transition = rememberViewerTransitionCoordinator()
-    val gridState = rememberLazyGridState()
-    val sequence = rememberViewerSequence(state.timeline.snapshot, transition.viewerMediaId)
-    val index = remember(state.timeline.snapshot) { ViewerTimelineIndex(state.timeline.snapshot) }
-    val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
-    SideEffect { onViewerVisibilityChanged(viewerId != null) }
-    DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }
-    Box(Modifier.fillMaxSize()) {
-        LibraryScreenScaffold(TopLevelDestination.Photos, onLogout, viewerVisible = viewerId != null) {
-            Box(Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }
-            ) {
-                TimelinePanel(
-                    state.timeline,
-                    viewModel::observeTimelineViewport,
-                    transition.revealMediaId,
-                    transition::onTimelineMediaRevealed,
-                    transition::registerTimelineTile,
-                    { transition.open(it.mediaId) },
-                    gridState,
-                )
-            }
+    val state by timeline.state.collectAsStateWithLifecycle()
+    MediaCollectionScreen(
+        slots = state.snapshot?.slots.orEmpty(),
+        emptyContent = { Text(stringResource(R.string.timeline_empty)) },
+        onViewportObservation = {
+            coordinator.requestDays(
+                state.snapshot
+                    ?.daysForSlots(
+                        it.firstVisibleSlotIndex..it.lastVisibleSlotIndex,
+                    ).orEmpty(),
+                it.loadingMode == MediaViewportLoadingMode.Debounced,
+            )
+        },
+        onViewerRange = {
+            coordinator.requestDays(state.snapshot?.daysForSlots(it).orEmpty())
+        },
+        onViewerVisibilityChanged = onViewerVisibilityChanged,
+    ) { viewerVisible, content ->
+        LibraryScreenScaffold(
+            TopLevelDestination.Photos,
+            onLogout,
+            viewerVisible = viewerVisible,
+        ) {
+            content()
         }
-        if (viewerId != null) MediaDetailScreen(
-            initialMediaId = viewerId,
-            sequence = sequence,
-            tileBoundsForMediaId = transition::timelineTileBounds,
-            onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
-            onCurrentItemChange = { item ->
-                index.prefetchRange(item.mediaId)?.let { viewModel.loadVisibleTimelineRange(it.first, it.last) }
-                transition.onCurrentItemChanged(item.mediaId, index.slotIndex(item.mediaId) != null)
-            },
-        )
     }
 }
