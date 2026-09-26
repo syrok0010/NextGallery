@@ -22,7 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
@@ -87,6 +89,10 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                 NavDisplay(
                     backStack = routes,
                     onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                    entryDecorators = listOf(
+                        rememberSaveableStateHolderNavEntryDecorator(),
+                        rememberViewModelStoreNavEntryDecorator(),
+                    ),
                     transitionSpec = {
                         horizontalTransition(
                             transitionDirection(

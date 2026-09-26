@@ -34,10 +34,10 @@ internal class AlbumContentsViewModel(
     source: AlbumContentsSource,
     library: MediaLibraryIndex,
     permission: StateFlow<LocalMediaPermissionMode?>,
+    private val location: AlbumLocation,
 ) : ViewModel() {
-    private val selection = MutableStateFlow<AlbumLocation?>(null)
     private val refreshes = MutableStateFlow(0)
-    private val mutableState = MutableStateFlow(AlbumContentsState())
+    private val mutableState = MutableStateFlow(AlbumContentsState(location = location))
     private val knownItems = library.state
     val state = combine(mutableState, knownItems, permission) { contents, libraryItems, access ->
         if (contents.location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
@@ -57,11 +57,7 @@ internal class AlbumContentsViewModel(
                 ),
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState())
-
-    fun select(location: AlbumLocation?) {
-        selection.value = location
-    }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumContentsState(location = location))
 
     fun refresh() {
         refreshes.update { it + 1 }
@@ -71,10 +67,9 @@ internal class AlbumContentsViewModel(
         viewModelScope.launch {
             combine(
                 sessionStore.session,
-                selection,
                 permission,
                 refreshes,
-            ) { session, location, mode, refresh ->
+            ) { session, mode, refresh ->
                 LoadRequest(
                     session,
                     location,
@@ -83,7 +78,7 @@ internal class AlbumContentsViewModel(
                 )
             }.distinctUntilChanged().collectLatest { (session, location, needsPermission) ->
                 mutableState.value = AlbumContentsState(location = location)
-                if (session !is SessionUiState.SignedIn || location == null) return@collectLatest
+                if (session !is SessionUiState.SignedIn) return@collectLatest
                 if (needsPermission) {
                     mutableState.value = AlbumContentsState(
                         location = location,
@@ -119,7 +114,7 @@ internal class AlbumContentsViewModel(
 
 private data class LoadRequest(
     val session: SessionUiState,
-    val location: AlbumLocation?,
+    val location: AlbumLocation,
     val needsPermission: Boolean,
     val refresh: Int,
 )

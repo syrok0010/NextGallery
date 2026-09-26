@@ -9,22 +9,19 @@ import com.syrok0010.nextgallery.feature.albums.AlbumContentsState
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun AlbumScreen(
     album: NextGalleryRoute.Album,
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    viewModel: AlbumContentsViewModel = koinViewModel(),
+    viewModel: AlbumContentsViewModel = koinViewModel { parametersOf(album.location) },
 ) {
     val loaded by viewModel.state.collectAsState()
     val contents = loaded.takeIf { it.location == album.location }
         ?: AlbumContentsState(location = album.location, loading = true)
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
-    DisposableEffect(album.location, viewModel) {
-        viewModel.select(album.location)
-        onDispose { viewModel.select(null) }
-    }
     MediaCollectionScreen(
         slots = slots,
         accessAllowed = !contents.permissionRequired,

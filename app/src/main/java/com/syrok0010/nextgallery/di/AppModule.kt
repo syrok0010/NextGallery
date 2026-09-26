@@ -94,12 +94,13 @@ val appModule = module {
             }
         }
     }
-    viewModel {
+    viewModel { (location: AlbumLocation) ->
         AlbumContentsViewModel(
             get(),
             get(),
             get<MediaLibraryIndex>(),
             get<LocalMediaPermissionCoordinator>().mode,
+            location,
         )
     }
 

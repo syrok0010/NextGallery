@@ -13,7 +13,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AlbumContentsViewModelTest {
-    @Test fun `changing albums cancels pending load and errors can be retried`() =
+    @Test fun `album scope cancels pending load and errors can be retried`() =
         runTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val store = ViewModelStore()
@@ -23,38 +23,49 @@ class AlbumContentsViewModelTest {
                 var fail = true
                 val first = AlbumLocation.Remote("anna/first")
                 val second = AlbumLocation.Remote("anna/second")
-                val vm = AlbumContentsViewModel(
-                    sessions(),
-                    AlbumContentsSource { location, _ ->
-                        flow {
-                            if (location == first) {
-                                try {
-                                    awaitCancellation()
-                                } finally {
-                                    cancelled = true
-                                }
+                val source = AlbumContentsSource { location, _ ->
+                    flow {
+                        if (location == first) {
+                            try {
+                                awaitCancellation()
+                            } finally {
+                                cancelled = true
                             }
-                            if (fail) error("offline")
-                            emit(AlbumContentsBatch(emptyList(), 0))
                         }
-                    },
+                        if (fail) error("offline")
+                        emit(AlbumContentsBatch(emptyList(), 0))
+                    }
+                }
+                val firstViewModel = AlbumContentsViewModel(
+                    sessions(),
+                    source,
                     MediaLibraryIndex(),
                     permission,
+                    first,
                 )
-                store.put("vm", vm)
-                vm.select(first)
+                store.put("first", firstViewModel)
                 runCurrent()
-                assertTrue(vm.state.value.loading)
-                vm.select(second)
+                assertTrue(firstViewModel.state.value.loading)
+                store.clear()
                 runCurrent()
                 assertTrue(cancelled)
-                assertTrue(vm.state.value.failed)
-                assertEquals(second, vm.state.value.location)
-                fail = false
-                vm.refresh()
+
+                val secondViewModel = AlbumContentsViewModel(
+                    sessions(),
+                    source,
+                    MediaLibraryIndex(),
+                    permission,
+                    second,
+                )
+                store.put("second", secondViewModel)
                 runCurrent()
-                assertFalse(vm.state.value.failed)
-                assertFalse(vm.state.value.loading)
+                assertTrue(secondViewModel.state.value.failed)
+                assertEquals(second, secondViewModel.state.value.location)
+                fail = false
+                secondViewModel.refresh()
+                runCurrent()
+                assertFalse(secondViewModel.state.value.failed)
+                assertFalse(secondViewModel.state.value.loading)
             } finally {
                 store.clear()
                 Dispatchers.resetMain()
@@ -85,9 +96,9 @@ class AlbumContentsViewModelTest {
                     },
                     MediaLibraryIndex(),
                     permission,
+                    AlbumLocation.Folder("external_primary", "Pictures/Trip/"),
                 )
                 store.put("vm", vm)
-                vm.select(AlbumLocation.Folder("external_primary", "Pictures/Trip/"))
                 runCurrent()
                 assertEquals(0, calls)
                 assertTrue(vm.state.value.permissionRequired)
