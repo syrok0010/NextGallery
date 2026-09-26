@@ -74,7 +74,7 @@ val appModule = module {
             index = get(),
             sessions = get(),
             remoteSource = get<MemoriesRepository>(),
-            localUpdates = get<LocalMediaSource>()::updates,
+            localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
         )
     }

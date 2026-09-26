@@ -14,7 +14,11 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -85,64 +89,84 @@ class LocalMediaSource(
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val publicationInterval: Duration = 250.milliseconds,
 ) {
-    fun updates(reconcileRequests: Flow<Unit>): Flow<LocalMediaIndexState> = channelFlow {
-        var publishedItems = projectionStore.loadLocalMediaProjection()
-        send(LocalMediaIndexState(items = publishedItems, progress = null))
-
-        suspend fun reconcile() {
-            val itemsByUri = publishedItems.associateByTo(linkedMapOf()) { it.localContentUri() }
-            val seenUris = mutableSetOf<String>()
-            var dirty = false
-            var lastPublication = TimeSource.Monotonic.markNow()
-            var completed = false
-
-            reader.readBatches(batchSize).collect { batch ->
-                check(!completed) { "MediaStore emitted data after completion" }
-                val mappedItems = mapMetadata(batch.metadata, itemsByUri)
-                val changedItems = mappedItems.filter { itemsByUri[it.localContentUri()] != it }
-                projectionStore.saveLocalMediaBatch(changedItems)
-                mappedItems.forEach { item ->
-                    val uri = item.localContentUri()
-                    seenUris += uri
-                    itemsByUri[uri] = item
-                }
-                dirty = dirty || changedItems.isNotEmpty()
-                completed = batch.progress.indexedCount >= batch.progress.totalCount
-                if (completed) {
-                    seenUris.addAll(batch.unavailableContentUris)
-                    projectionStore.finishLocalMediaReconciliation(seenUris)
-                    dirty = itemsByUri.keys.retainAll(seenUris) || dirty
-                }
-                if (dirty && (completed || lastPublication.elapsedNow() >= publicationInterval)) {
-                    publishedItems = itemsByUri.values.toList().sortedForTimeline()
-                    dirty = false
-                    lastPublication = TimeSource.Monotonic.markNow()
-                }
-                send(LocalMediaIndexState(publishedItems, if (completed) null else batch.progress, processed = batch.progress))
+    /**
+     * Publishes local media while [access] is [LocalMediaPermissionMode.Full].
+     * Any other mode (including null) publishes an empty index and stops MediaStore work.
+     */
+    fun updates(
+        reconcileRequests: Flow<Unit> = emptyFlow(),
+        access: Flow<LocalMediaPermissionMode?> = flowOf(LocalMediaPermissionMode.Full),
+    ): Flow<LocalMediaIndexState> = channelFlow {
+        access.distinctUntilChanged().collectLatest { mode ->
+            if (mode != LocalMediaPermissionMode.Full) {
+                send(LocalMediaIndexState(items = emptyList(), progress = null))
+                return@collectLatest
             }
-            check(completed) { "MediaStore scan ended without a complete result" }
-        }
 
-        val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
-        launch(start = CoroutineStart.UNDISPATCHED) {
-            changeObserver.changes().debounce(changeDebounce).collect {
-                reconcileTriggers.trySend(Unit)
+            var publishedItems = projectionStore.loadLocalMediaProjection()
+            send(LocalMediaIndexState(items = publishedItems, progress = null))
+
+            suspend fun reconcile() {
+                val itemsByUri = publishedItems.associateByTo(linkedMapOf()) { it.localContentUri() }
+                val seenUris = mutableSetOf<String>()
+                var dirty = false
+                var lastPublication = TimeSource.Monotonic.markNow()
+                var completed = false
+
+                reader.readBatches(batchSize).collect { batch ->
+                    check(!completed) { "MediaStore emitted data after completion" }
+                    val mappedItems = mapMetadata(batch.metadata, itemsByUri)
+                    val changedItems = mappedItems.filter { itemsByUri[it.localContentUri()] != it }
+                    projectionStore.saveLocalMediaBatch(changedItems)
+                    mappedItems.forEach { item ->
+                        val uri = item.localContentUri()
+                        seenUris += uri
+                        itemsByUri[uri] = item
+                    }
+                    dirty = dirty || changedItems.isNotEmpty()
+                    completed = batch.progress.indexedCount >= batch.progress.totalCount
+                    if (completed) {
+                        seenUris.addAll(batch.unavailableContentUris)
+                        projectionStore.finishLocalMediaReconciliation(seenUris)
+                        dirty = itemsByUri.keys.retainAll(seenUris) || dirty
+                    }
+                    if (dirty && (completed || lastPublication.elapsedNow() >= publicationInterval)) {
+                        publishedItems = itemsByUri.values.toList().sortedForTimeline()
+                        dirty = false
+                        lastPublication = TimeSource.Monotonic.markNow()
+                    }
+                    send(
+                        LocalMediaIndexState(
+                            publishedItems,
+                            if (completed) null else batch.progress,
+                            processed = batch.progress,
+                        ),
+                    )
+                }
+                check(completed) { "MediaStore scan ended without a complete result" }
             }
-        }
-        launch(start = CoroutineStart.UNDISPATCHED) {
-            reconcileRequests.collect {
-                reconcileTriggers.trySend(Unit)
+
+            val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                changeObserver.changes().debounce(changeDebounce).collect {
+                    reconcileTriggers.trySend(Unit)
+                }
             }
-        }
-        reconcileTriggers.trySend(Unit)
-        for (ignored in reconcileTriggers) {
-            try {
-                reconcile()
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Keep the observer alive; another explicit or MediaStore trigger can recover.
-                send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                reconcileRequests.collect {
+                    reconcileTriggers.trySend(Unit)
+                }
+            }
+            reconcileTriggers.trySend(Unit)
+            for (ignored in reconcileTriggers) {
+                try {
+                    reconcile()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Keep the observer alive; another explicit or MediaStore trigger can recover.
+                    send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+                }
             }
         }
     }.flowOn(computationDispatcher)

@@ -11,8 +11,11 @@ import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRe
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
@@ -22,6 +25,8 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -267,8 +272,8 @@ class LocalMediaSourceTest {
         assertEquals(listOf(cached), store.items)
     }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    @Test fun `failed scan recovers on next observer trigger in the same subscription`() = kotlinx.coroutines.test.runTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `failed scan recovers on next observer trigger in the same subscription`() = runTest {
         val changes = Channel<Unit>(Channel.UNLIMITED)
         var scans = 0
         val source = LocalMediaSource(
@@ -296,6 +301,90 @@ class LocalMediaSourceTest {
         assertEquals(2, scans)
         assertTrue(!states.last().failure)
         assertEquals("recovered", states.last().items.single().displayName)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `access controls publication and regrant starts a new collection`() = runTest {
+        var collections = 0
+        val access = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Denied)
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                collections++
+                flowOf(
+                    LocalMediaBatch(
+                        metadata = listOf(
+                            metadata(
+                                if (collections == 1) "content://images/1" else "content://images/2",
+                                taken = collections * 1_000L,
+                            ),
+                        ),
+                        progress = LocalMediaIndexProgress(1, 1),
+                    ),
+                )
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+        )
+        val states = mutableListOf<LocalMediaIndexState>()
+        backgroundScope.launch {
+            source.updates(access = access).collect { states += it }
+        }
+        runCurrent()
+        assertEquals(emptyList<MediaItem>(), states.last().items)
+
+        access.value = LocalMediaPermissionMode.Full
+        runCurrent()
+        assertEquals(listOf("1"), states.last().items.map { it.displayName })
+
+        access.value = LocalMediaPermissionMode.Denied
+        runCurrent()
+        assertEquals(emptyList<MediaItem>(), states.last().items)
+
+        access.value = LocalMediaPermissionMode.Full
+        runCurrent()
+        assertEquals(listOf("2"), states.last().items.map { it.displayName })
+        assertEquals(2, collections)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `reconcile requests are collected only while full access is active`() = runTest {
+        val requests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        var collections = 0
+        val access = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Denied)
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                collections++
+                flowOf(
+                    LocalMediaBatch(
+                        metadata = emptyList(),
+                        progress = LocalMediaIndexProgress(0, 0),
+                    ),
+                )
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+        )
+        backgroundScope.launch {
+            source.updates(reconcileRequests = requests, access = access).collect { }
+        }
+        runCurrent()
+        requests.tryEmit(Unit)
+        runCurrent()
+        assertEquals(0, collections)
+
+        access.value = LocalMediaPermissionMode.Full
+        runCurrent()
+        assertEquals(1, collections)
+
+        requests.tryEmit(Unit)
+        runCurrent()
+        assertEquals(2, collections)
     }
 
     private class InMemoryLocalMediaProjectionStore(
