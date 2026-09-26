@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.di
 
 import android.provider.MediaStore
+import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
@@ -66,6 +67,7 @@ val appModule = module {
         )
     }
     single { MediaLibraryIndex() }
+    single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }
     single {
         MediaLibraryCoordinator(

@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery
 
 import android.app.Application
 import coil3.SingletonImageLoader
+import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.di.appModule
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
@@ -24,7 +25,8 @@ class NextGalleryApplication : Application() {
 
         val libraryScope = koin.get<CoroutineScope>(named("libraryScope"))
         val coordinator = koin.get<MediaLibraryCoordinator>()
-        libraryScope.launch { coordinator.run() }
+        val publication = koin.get<LibraryPublicationStore>()
+        libraryScope.launch { coordinator.run(publication::publish) }
 
         SingletonImageLoader.setSafe { context ->
             createNextGalleryImageLoader(

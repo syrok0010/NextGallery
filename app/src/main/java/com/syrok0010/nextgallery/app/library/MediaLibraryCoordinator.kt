@@ -10,9 +10,7 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflow
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflowState
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -26,19 +24,18 @@ internal class MediaLibraryCoordinator(
     private val localUpdates: (Flow<Unit>) -> Flow<LocalMediaIndexState>,
     private val permissions: StateFlow<LocalMediaPermissionMode?>,
 ) {
-    private val mutablePublication = MutableStateFlow(LibraryPublication())
-    val publication = mutablePublication.asStateFlow()
     private val running = Mutex()
     private var remoteIndexer: TimelineWorkflow? = null
     private var localIndexer: LocalMediaIndexer? = null
 
-    suspend fun run() {
+    suspend fun run(publish: suspend (LibraryPublication) -> Unit) {
         check(running.tryLock()) { "Library indexing already running" }
         try {
             sessions.session.collectLatest { session ->
                 remoteIndexer = null
                 localIndexer = null
-                clearPublications()
+                clearIndex()
+                publish(LibraryPublication())
                 if (session is SessionUiState.SignedIn) {
                     coroutineScope {
                         val remote = TimelineWorkflow(session.credentials, remoteSource, this)
@@ -55,7 +52,7 @@ internal class MediaLibraryCoordinator(
                                     remoteItems = remoteState.snapshot?.items.orEmpty(),
                                 )
                                 index.publish(library.items)
-                                mutablePublication.value = LibraryPublication(remoteState, library)
+                                publish(LibraryPublication(remoteState, library))
                             }
                         } finally {
                             remoteIndexer = null
@@ -67,7 +64,8 @@ internal class MediaLibraryCoordinator(
         } finally {
             remoteIndexer = null
             localIndexer = null
-            clearPublications()
+            clearIndex()
+            publish(LibraryPublication())
             running.unlock()
         }
     }
@@ -81,9 +79,8 @@ internal class MediaLibraryCoordinator(
         remoteIndexer?.requestDays(dayIds, debounced)
     }
 
-    private fun clearPublications() {
+    private fun clearIndex() {
         index.clear()
-        mutablePublication.value = LibraryPublication()
     }
 }
 

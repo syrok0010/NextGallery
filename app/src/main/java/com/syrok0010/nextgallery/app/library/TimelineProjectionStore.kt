@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.stateIn
 
 /** Adapts execution publications to the photo screen. */
 internal class TimelineProjectionStore(
-    coordinator: MediaLibraryCoordinator,
+    publication: LibraryPublicationStore,
     scope: CoroutineScope,
 ) {
-    val state = coordinator.publication
+    val state = publication.state
         .map { publication ->
             val source = publication.remote
             TimelineUiState(
