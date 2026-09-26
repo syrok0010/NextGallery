@@ -387,6 +387,76 @@ class LocalMediaSourceTest {
         assertEquals(2, collections)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `revoking access cancels observers and refresh subscriptions before regrant`() = runTest {
+        val access = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Full)
+        val requests = MutableSharedFlow<Unit>()
+        var observers = 0
+        var scans = 0
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                scans++
+                flowOf(LocalMediaBatch(emptyList(), LocalMediaIndexProgress(0, 0)))
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver {
+                flow {
+                    observers++
+                    try { kotlinx.coroutines.awaitCancellation() } finally { observers-- }
+                }
+            },
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+        )
+        val job = backgroundScope.launch { source.updates(requests, access).collect {} }
+        runCurrent()
+        repeat(3) {
+            assertEquals(1, observers)
+            assertEquals(1, requests.subscriptionCount.value)
+            access.value = LocalMediaPermissionMode.Denied
+            runCurrent()
+            assertEquals(0, observers)
+            assertEquals(0, requests.subscriptionCount.value)
+            val before = scans
+            requests.emit(Unit)
+            runCurrent()
+            assertEquals(before, scans)
+            access.value = LocalMediaPermissionMode.Full
+            runCurrent()
+        }
+        job.cancelAndJoin()
+        assertEquals(0, observers)
+        assertEquals(0, requests.subscriptionCount.value)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `cache read failure does not terminate local updates and fresh scan recovers`() = runTest {
+        val requests = MutableSharedFlow<Unit>()
+        val store = InMemoryLocalMediaProjectionStore()
+        var scans = 0
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                scans++
+                flowOf(LocalMediaBatch(listOf(metadata("content://images/$scans", taken = 1000)), LocalMediaIndexProgress(1, 1)))
+            },
+            projectionStore = object : LocalMediaProjectionStore by store {
+                override suspend fun loadLocalMediaProjection(): List<MediaItem> = error("cache unavailable")
+            },
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+        )
+        val states = mutableListOf<LocalMediaIndexState>()
+        val job = backgroundScope.launch { source.updates(requests).collect { states += it } }
+        runCurrent()
+        assertTrue(job.isActive)
+        assertEquals(listOf("1"), states.last().items.map { it.displayName })
+        requests.emit(Unit)
+        runCurrent()
+        assertEquals(listOf("2"), states.last().items.map { it.displayName })
+        job.cancelAndJoin()
+    }
+
     private class InMemoryLocalMediaProjectionStore(
         initialItems: List<MediaItem> = emptyList(),
     ) : LocalMediaProjectionStore {

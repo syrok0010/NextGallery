@@ -7,11 +7,13 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -103,7 +105,9 @@ class LocalMediaSource(
                 return@collectLatest
             }
 
-            var publishedItems = projectionStore.loadLocalMediaProjection()
+            var publishedItems = runCatching {
+                projectionStore.loadLocalMediaProjection()
+            }.getOrDefault(emptyList())
             send(LocalMediaIndexState(items = publishedItems, progress = null))
 
             suspend fun reconcile() {
@@ -146,26 +150,27 @@ class LocalMediaSource(
                 check(completed) { "MediaStore scan ended without a complete result" }
             }
 
-            val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
-            launch(start = CoroutineStart.UNDISPATCHED) {
-                changeObserver.changes().debounce(changeDebounce).collect {
-                    reconcileTriggers.trySend(Unit)
+            coroutineScope {
+                val reconcileTriggers = Channel<Unit>(Channel.CONFLATED)
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    changeObserver.changes().debounce(changeDebounce).collect {
+                        reconcileTriggers.trySend(Unit)
+                    }
                 }
-            }
-            launch(start = CoroutineStart.UNDISPATCHED) {
-                reconcileRequests.collect {
-                    reconcileTriggers.trySend(Unit)
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    reconcileRequests.collect {
+                        reconcileTriggers.trySend(Unit)
+                    }
                 }
-            }
-            reconcileTriggers.trySend(Unit)
-            for (ignored in reconcileTriggers) {
-                try {
-                    reconcile()
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    // Keep the observer alive; another explicit or MediaStore trigger can recover.
-                    send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+                reconcileTriggers.trySend(Unit)
+                for (ignored in reconcileTriggers) {
+                    try {
+                        reconcile()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+                    }
                 }
             }
         }
