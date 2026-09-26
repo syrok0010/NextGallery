@@ -21,7 +21,30 @@ internal sealed interface NextGalleryRoute : NavKey {
 
     @Serializable
     data class Album(val location: AlbumLocation, val title: String) : NextGalleryRoute
+
+    fun navContentKey(): String =
+        when (this) {
+            Login -> "login"
+
+            Photos -> "photos"
+
+            Albums -> "albums"
+
+            is Album ->
+                when (val location = location) {
+                    is AlbumLocation.Remote -> "album:remote:${location.clusterId}"
+                    is AlbumLocation.Folder -> "album:folder:${location.volume}:${location.path}"
+                }
+        }
 }
+
+internal fun topLevelRouteFromContentKey(contentKey: Any): NextGalleryRoute? =
+    when (contentKey) {
+        "login" -> NextGalleryRoute.Login
+        "photos" -> NextGalleryRoute.Photos
+        "albums" -> NextGalleryRoute.Albums
+        else -> null
+    }
 
 internal enum class TopLevelDestination(
     val route: NextGalleryRoute,

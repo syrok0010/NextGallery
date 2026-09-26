@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.animation.AnimatedContentTransitionScope
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
@@ -7,6 +8,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NextGalleryAppRouteTest {
@@ -113,6 +115,50 @@ class NextGalleryAppRouteTest {
             destinationBackStack(
                 listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
                 NextGalleryRoute.Photos,
+            ),
+        )
+    }
+
+    @Test
+    fun `photos to albums slides left and albums to photos slides right`() {
+        assertEquals(
+            AnimatedContentTransitionScope.SlideDirection.Left,
+            transitionDirection(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
+        )
+        assertEquals(
+            AnimatedContentTransitionScope.SlideDirection.Right,
+            transitionDirection(NextGalleryRoute.Albums, NextGalleryRoute.Photos),
+        )
+        assertNull(transitionDirection(NextGalleryRoute.Photos, NextGalleryRoute.Photos))
+        assertNull(
+            transitionDirection(
+                NextGalleryRoute.Albums,
+                NextGalleryRoute.Album(AlbumLocation.Folder("v", "Pictures/"), "Pictures"),
+            ),
+        )
+    }
+
+    @Test
+    fun `owned nav content keys drive tab slide direction`() {
+        assertEquals("photos", NextGalleryRoute.Photos.navContentKey())
+        assertEquals("albums", NextGalleryRoute.Albums.navContentKey())
+        assertEquals(
+            NextGalleryRoute.Photos,
+            topLevelRouteFromContentKey(NextGalleryRoute.Photos.navContentKey()),
+        )
+        assertEquals(
+            AnimatedContentTransitionScope.SlideDirection.Left,
+            transitionDirection(
+                topLevelRouteFromContentKey(NextGalleryRoute.Photos.navContentKey()),
+                topLevelRouteFromContentKey(NextGalleryRoute.Albums.navContentKey()),
+            ),
+        )
+        assertNull(topLevelRouteFromContentKey("Photos:class something"))
+        assertNull(
+            topLevelRouteFromContentKey(
+                NextGalleryRoute
+                    .Album(AlbumLocation.Folder("v", "Pictures/"), "Pictures")
+                    .navContentKey(),
             ),
         )
     }
