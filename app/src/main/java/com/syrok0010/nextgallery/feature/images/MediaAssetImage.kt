@@ -194,8 +194,7 @@ private fun localRequest(
             } else {
                 assetRef.contentUri
             },
-        )
-        .memoryCacheKey("$cacheKey:$purpose")
+        ).memoryCacheKey("$cacheKey:$purpose")
         .diskCacheKey("$cacheKey:$purpose")
         .apply {
             if (purpose != MediaImagePurpose.TimelineThumbnail) {

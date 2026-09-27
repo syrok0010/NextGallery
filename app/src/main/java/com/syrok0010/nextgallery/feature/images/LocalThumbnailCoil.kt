@@ -16,10 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 
 /** The local thumbnail path is deliberately separate from the original content URI path. */
-internal data class LocalThumbnailRequest(
-    val contentUri: String,
-    val cacheKey: String,
-)
+internal data class LocalThumbnailRequest(val contentUri: String, val cacheKey: String)
 
 internal class LocalThumbnailFetcher(
     private val data: LocalThumbnailRequest,
@@ -58,12 +55,11 @@ internal class LocalThumbnailFetcher(
     }
 }
 
-internal fun localThumbnailTargetSize(size: CoilSize): Size {
-    return Size(
+internal fun localThumbnailTargetSize(size: CoilSize): Size =
+    Size(
         size.width.pixelsOrDefault(DEFAULT_LOCAL_THUMBNAIL_SIZE),
         size.height.pixelsOrDefault(DEFAULT_LOCAL_THUMBNAIL_SIZE),
     )
-}
 
 private fun Dimension.pixelsOrDefault(default: Int): Int =
     (this as? Dimension.Pixels)?.px?.coerceAtLeast(1) ?: default
