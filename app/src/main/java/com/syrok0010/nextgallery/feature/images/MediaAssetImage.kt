@@ -185,8 +185,16 @@ private fun localRequest(
     val cacheKey = assetRef.coilCacheKey()
     return ImageRequest
         .Builder(context)
-        .data(assetRef.contentUri)
-        .memoryCacheKey("$cacheKey:$purpose")
+        .data(
+            if (purpose == MediaImagePurpose.TimelineThumbnail) {
+                LocalThumbnailRequest(
+                    contentUri = assetRef.contentUri,
+                    cacheKey = cacheKey,
+                )
+            } else {
+                assetRef.contentUri
+            },
+        ).memoryCacheKey("$cacheKey:$purpose")
         .diskCacheKey("$cacheKey:$purpose")
         .apply {
             if (purpose != MediaImagePurpose.TimelineThumbnail) {

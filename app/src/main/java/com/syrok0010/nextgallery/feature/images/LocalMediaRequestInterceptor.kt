@@ -6,9 +6,13 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 internal class LocalMediaRequestInterceptor : Interceptor {
-    private val permits = Semaphore(5)
+    private val permits = Semaphore(8)
 
     override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
+        if (chain.request.data is LocalThumbnailRequest) {
+            return permits.withPermit { chain.proceed() }
+        }
+
         val uri = when (val data = chain.request.data) {
             is String -> data
             is android.net.Uri -> data.toString()

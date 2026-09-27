@@ -190,7 +190,7 @@ internal class ThumbnailBatchLoader(
     private class InFlightRequest(val waiters: MutableList<CompletableDeferred<Boolean>>)
 
     private companion object {
-        const val DEFAULT_BATCH_WINDOW_MILLIS = 20L
+        const val DEFAULT_BATCH_WINDOW_MILLIS = 60L
         const val DEFAULT_BATCH_SIZE = 20
         const val DEFAULT_MAX_CONCURRENT_BATCHES = 4
     }
