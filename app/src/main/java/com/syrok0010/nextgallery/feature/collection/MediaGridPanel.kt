@@ -27,6 +27,11 @@ internal fun MediaGridPanel(
     onMediaRevealed: () -> Unit,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
+    selectionEnabled: Boolean = false,
+    selectionMode: Boolean = false,
+    selectedMediaIds: Set<MediaId> = emptySet(),
+    onSelectionModeChanged: (Boolean) -> Unit = {},
+    onMediaSelectionChanged: (MediaItem, Boolean) -> Unit = { _, _ -> },
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val gridItems = remember(slots) {
@@ -109,6 +114,11 @@ internal fun MediaGridPanel(
                     gridState = gridState,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
+                    selectionEnabled = selectionEnabled,
+                    selectionMode = selectionMode,
+                    selectedMediaIds = selectedMediaIds,
+                    onSelectionModeChanged = onSelectionModeChanged,
+                    onMediaSelectionChanged = onMediaSelectionChanged,
                 )
 
                 MediaScrollIndicatorHost(

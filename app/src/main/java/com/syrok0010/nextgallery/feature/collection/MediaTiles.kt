@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.feature.collection
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,6 +74,11 @@ internal fun MediaSlotTile(
     slot: MediaSlot,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
+    selectionEnabled: Boolean = false,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onSelectionModeChanged: (Boolean) -> Unit = {},
+    onSelectionChanged: (MediaItem, Boolean) -> Unit = { _, _ -> },
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val item = slot.mediaItem
@@ -88,7 +94,20 @@ internal fun MediaSlotTile(
             localCopyDescription = localCopyDescription,
             requestFactory = requestFactory,
             registerTimelineTile = registerTimelineTile,
-            onClick = { onSelect(item) },
+            selectionEnabled = selectionEnabled,
+            selectionMode = selectionMode,
+            selected = selected,
+            onClick = {
+                if (selectionMode) {
+                    onSelectionChanged(item, !selected)
+                } else {
+                    onSelect(item)
+                }
+            },
+            onLongClick = {
+                onSelectionModeChanged(true)
+                onSelectionChanged(item, true)
+            },
         )
     }
 }
@@ -116,7 +135,11 @@ private fun MediaTile(
     localCopyDescription: String,
     requestFactory: MediaImageRequestFactory,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
+    selectionEnabled: Boolean,
+    selectionMode: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    selected: Boolean,
 ) {
     val coordinatesHolder = remember(item.mediaId) {
         TimelineTileCoordinates()
@@ -144,7 +167,10 @@ private fun MediaTile(
                 } else {
                     Modifier
                 },
-            ).clickable(onClick = onClick),
+            ).combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick.takeIf { selectionEnabled },
+            ),
     ) {
         MediaAssetImage(
             item = item,
@@ -168,6 +194,23 @@ private fun MediaTile(
                 if (item.hasRemoteCopy) {
                     RemoteCloudIndicator()
                 }
+            }
+        }
+
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+            ) {
+                Text(
+                    text = "✓",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
         }
 
