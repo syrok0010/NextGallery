@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.collection
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -202,14 +203,15 @@ private fun MediaTile(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(6.dp)
-                    .size(22.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    .size(26.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.onPrimary, CircleShape),
             ) {
-                Text(
-                    text = "✓",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.labelSmall,
+                Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.Center).size(18.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }

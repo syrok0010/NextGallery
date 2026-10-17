@@ -15,17 +15,17 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
-import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody
-import okio.BufferedSink
 import org.koin.android.ext.android.inject
 
 @Serializable
@@ -54,24 +54,42 @@ class UploadForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        startForegroundCompat(notification("Подготовка загрузки", 0, selections.size))
+        startForegroundCompat(notification("Подготовка загрузки", uploading = true))
         serviceScope.launch {
-            val result = runCatching { upload(selections) }
+            // Android drops bursts of notification updates, including the terminal result.
+            // Keep only the latest progress and leave room for foreground/final updates.
+            val updates = Channel<Notification>(Channel.CONFLATED)
+            val manager = getSystemService(NotificationManager::class.java)
+            val publisher = launch {
+                for (update in updates) {
+                    manager.notify(NOTIFICATION_ID, update)
+                    delay(500L)
+                }
+            }
+            val result = runCatching {
+                upload(selections) { message, progress ->
+                    updates.trySend(notification(message, uploading = true, progress = progress))
+                }
+            }
+            publisher.cancelAndJoin()
+            updates.close()
+            delay(500L)
             val message = result.fold(
                 onSuccess = { "Загрузка завершена: ${it.completed} из ${selections.size}" },
                 onFailure = { "Загрузка остановлена: ${it.localizedMessage ?: "ошибка сети"}" },
             )
             // Keep the final result visible after the foreground service stops.
             stopForeground(STOP_FOREGROUND_DETACH)
-            getSystemService(
-                NotificationManager::class.java,
-            ).notify(NOTIFICATION_ID, notification(message))
+            manager.notify(NOTIFICATION_ID, notification(message))
             stopSelfResult(startId)
         }
         return START_NOT_STICKY
     }
 
-    private suspend fun upload(selections: List<UploadSelection>): UploadResult {
+    private suspend fun upload(
+        selections: List<UploadSelection>,
+        onProgress: (String, Int?) -> Unit,
+    ): UploadResult {
         val credentials = credentialsStore.load()
             ?: error("Сессия Nextcloud больше недоступна")
         val config = transport.memoriesApi(credentials).config()
@@ -79,17 +97,14 @@ class UploadForegroundService : Service() {
             ?: error("Memories не сообщил папку таймлайна")
         var completed = 0
         selections.forEachIndexed { index, selection ->
-            notify("Загрузка: ${index + 1} из ${selections.size}", index * 100 / selections.size)
+            val message = "Загрузка: ${index + 1} из ${selections.size}"
             put(
                 credentials = credentials,
                 destination = destination,
                 selection = selection,
+                onProgress = { progress -> onProgress(message, progress) },
             )
             completed++
-            notify(
-                "Загрузка: ${index + 1} из ${selections.size}",
-                (index + 1) * 100 / selections.size,
-            )
         }
         return UploadResult(completed)
     }
@@ -98,6 +113,7 @@ class UploadForegroundService : Service() {
         credentials: com.syrok0010.nextgallery.core.session.AccountCredentials,
         destination: String,
         selection: UploadSelection,
+        onProgress: (Int?) -> Unit,
     ) {
         val uri = Uri.parse(selection.contentUri)
         val url =
@@ -107,10 +123,17 @@ class UploadForegroundService : Service() {
                 destination,
                 selection.displayName,
             )
-        val body = ContentUriRequestBody(
-            resolver = contentResolver,
-            uri = uri,
+        val length = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        onProgress(if (length >= 0L) 0 else null)
+        val body = UploadRequestBody(
+            length = length,
             mediaType = selection.mimeType?.toMediaTypeOrNull(),
+            openStream = {
+                contentResolver.openInputStream(
+                    uri,
+                ) ?: error("Не удалось открыть локальную копию $uri")
+            },
+            onProgress = onProgress,
         )
         val request = transport
             .authenticatedRequestBuilder(credentials, url, accept = "*")
@@ -154,19 +177,18 @@ class UploadForegroundService : Service() {
         }
     }
 
-    private fun notify(message: String, progress: Int) {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification(message, progress, 100))
-    }
-
-    private fun notification(message: String, progress: Int? = null, max: Int = 100): Notification =
+    private fun notification(
+        message: String,
+        uploading: Boolean = false,
+        progress: Int? = null,
+    ): Notification =
         Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
-            .setContentTitle("NextGallery")
-            .setContentText(message)
-            .setOngoing(progress != null && progress < 100)
-            .apply { if (progress != null) setProgress(max, progress, progress == 0) }
+            .setContentTitle(message)
+            .setOngoing(uploading)
+            .setOnlyAlertOnce(true)
+            .apply { if (uploading) setProgress(100, progress ?: 0, progress == null) }
             .build()
 
     private fun createNotificationChannel() {
@@ -187,25 +209,6 @@ class UploadForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private data class UploadResult(val completed: Int)
-
-    private class ContentUriRequestBody(
-        private val resolver: android.content.ContentResolver,
-        private val uri: Uri,
-        private val mediaType: okhttp3.MediaType?,
-    ) : RequestBody() {
-        override fun contentType() = mediaType
-
-        override fun contentLength(): Long =
-            resolver.openAssetFileDescriptor(uri, "r")?.use {
-                it.length
-            } ?: -1L
-
-        override fun writeTo(sink: BufferedSink) {
-            resolver.openInputStream(uri)?.use { input ->
-                input.copyTo(sink.outputStream())
-            } ?: throw IOException("Не удалось открыть локальную копию $uri")
-        }
-    }
 
     companion object {
         private const val CHANNEL_ID = "cloud-upload"
