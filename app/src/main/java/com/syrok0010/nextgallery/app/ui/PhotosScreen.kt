@@ -15,17 +15,20 @@ import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.UploadForegroundService
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import com.syrok0010.nextgallery.feature.upload.rememberUploadAction
 import org.koin.compose.koinInject
 
 @Composable
 internal fun PhotosScreen(
     onLogout: () -> Unit,
     onViewerVisibilityChanged: (Boolean) -> Unit,
+    onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -42,8 +45,9 @@ internal fun PhotosScreen(
             coordinator.requestDays(state.snapshot?.daysForSlots(it).orEmpty())
         },
         onViewerVisibilityChanged = onViewerVisibilityChanged,
+        onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
-        onUpload = { items ->
+        onUpload = { items, onStarted ->
             val selections = items.filterNot { it.hasRemoteCopy }.mapNotNull { item ->
                 item.localCopy?.let { local ->
                     UploadSelection(
@@ -53,7 +57,7 @@ internal fun PhotosScreen(
                     )
                 }
             }
-            if (selections.isNotEmpty()) UploadForegroundService.start(context, selections)
+            upload(selections, onStarted)
         },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(

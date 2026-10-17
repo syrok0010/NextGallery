@@ -61,7 +61,11 @@ class UploadForegroundService : Service() {
                 onSuccess = { "Загрузка завершена: ${it.completed} из ${selections.size}" },
                 onFailure = { "Загрузка остановлена: ${it.localizedMessage ?: "ошибка сети"}" },
             )
-            notify(message, if (result.isSuccess) 100 else 0)
+            // Keep the final result visible after the foreground service stops.
+            stopForeground(STOP_FOREGROUND_DETACH)
+            getSystemService(
+                NotificationManager::class.java,
+            ).notify(NOTIFICATION_ID, notification(message))
             stopSelfResult(startId)
         }
         return START_NOT_STICKY
@@ -75,6 +79,7 @@ class UploadForegroundService : Service() {
             ?: error("Memories не сообщил папку таймлайна")
         var completed = 0
         selections.forEachIndexed { index, selection ->
+            notify("Загрузка: ${index + 1} из ${selections.size}", index * 100 / selections.size)
             put(
                 credentials = credentials,
                 destination = destination,
@@ -154,14 +159,14 @@ class UploadForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification(message, progress, 100))
     }
 
-    private fun notification(message: String, progress: Int, max: Int): Notification =
+    private fun notification(message: String, progress: Int? = null, max: Int = 100): Notification =
         Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
             .setContentTitle("NextGallery")
             .setContentText(message)
-            .setOngoing(progress in 1 until 100)
-            .setProgress(max, progress, progress == 0)
+            .setOngoing(progress != null && progress < 100)
+            .apply { if (progress != null) setProgress(max, progress, progress == 0) }
             .build()
 
     private fun createNotificationChannel() {

@@ -59,6 +59,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
     val page = routes.last()
     val signedIn = session is SessionUiState.SignedIn
     var viewerVisible by remember(session) { mutableStateOf(false) }
+    var selectionMode by remember(session) { mutableStateOf(false) }
     // Tab state survives popping Albums, but never crosses the session boundary.
     val screenStates = key(session) { rememberSaveableStateHolder() }
     LaunchedEffect(session) {
@@ -121,6 +122,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                     PhotosScreen(
                                         onLogout = sessionViewModel::logout,
                                         onViewerVisibilityChanged = { viewerVisible = it },
+                                        onSelectionModeChanged = { selectionMode = it },
                                     )
                                 }
                             }
@@ -154,7 +156,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                         }
                     },
                 )
-                if (signedIn && !viewerVisible && page !is NextGalleryRoute.Album) {
+                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album) {
                     LibraryIsland(
                         page,
                         { destination ->

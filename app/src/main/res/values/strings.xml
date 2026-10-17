@@ -40,6 +40,7 @@
     <string name="status_open_browser_confirm_login">Открой браузер и подтверди вход</string>
     <string name="status_waiting_browser_confirmation">Жду подтверждения входа в браузере</string>
     <string name="timeline_empty">Пока нет загруженных элементов</string>
+    <string name="upload_without_notifications">Уведомления выключены. Загрузка началась.</string>
     <string name="timeline_day_header_pattern">d MMMM</string>
     <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
     <string name="timeline_scroll_date_with_year_pattern">d MMMM yyyy</string>

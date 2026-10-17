@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.collection
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Arrangement
@@ -43,8 +44,9 @@ internal fun MediaCollectionScreen(
     onViewportObservation: (MediaViewportObservation) -> Unit = {},
     onViewerRange: (IntRange) -> Unit = {},
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
+    onSelectionModeChanged: (Boolean) -> Unit = {},
     selectionEnabled: Boolean = false,
-    onUpload: (List<MediaItem>) -> Unit = {},
+    onUpload: (List<MediaItem>, onStarted: () -> Unit) -> Unit = { _, onStarted -> onStarted() },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
@@ -54,11 +56,26 @@ internal fun MediaCollectionScreen(
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedMediaIds by remember { mutableStateOf(emptySet<MediaId>()) }
+    var uploadRequested by remember { mutableStateOf(false) }
+    val cancelSelection = {
+        selectionMode = false
+        selectedMediaIds = emptySet()
+        uploadRequested = false
+    }
     val selectedItems = remember(slots, selectedMediaIds) {
         slots.mapNotNull { it.mediaItem }.filter { it.mediaId in selectedMediaIds }
     }
-    SideEffect { onViewerVisibilityChanged(viewerId != null) }
-    DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }
+    SideEffect {
+        onViewerVisibilityChanged(viewerId != null)
+        onSelectionModeChanged(selectionMode)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onViewerVisibilityChanged(false)
+            onSelectionModeChanged(false)
+        }
+    }
+    BackHandler(enabled = selectionMode && !uploadRequested, onBack = cancelSelection)
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -88,14 +105,11 @@ internal fun MediaCollectionScreen(
         if (viewerId == null && selectionEnabled && selectionMode) {
             SelectionActionBar(
                 selectedCount = selectedItems.size,
-                onCancel = {
-                    selectionMode = false
-                    selectedMediaIds = emptySet()
-                },
+                uploadRequested = uploadRequested,
+                onCancel = cancelSelection,
                 onUpload = {
-                    onUpload(selectedItems)
-                    selectionMode = false
-                    selectedMediaIds = emptySet()
+                    uploadRequested = true
+                    onUpload(selectedItems, cancelSelection)
                 },
             )
         }
@@ -115,6 +129,7 @@ internal fun MediaCollectionScreen(
 @Composable
 private fun BoxScope.SelectionActionBar(
     selectedCount: Int,
+    uploadRequested: Boolean,
     onCancel: () -> Unit,
     onUpload: () -> Unit,
 ) {
@@ -132,12 +147,12 @@ private fun BoxScope.SelectionActionBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconButton(onClick = onCancel) {
+            IconButton(onClick = onCancel, enabled = !uploadRequested) {
                 Icon(Icons.Default.Close, contentDescription = "Отменить выбор")
             }
             Text("Выбрано: $selectedCount", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onUpload, enabled = selectedCount > 0) {
+            Button(onClick = onUpload, enabled = selectedCount > 0 && !uploadRequested) {
                 Icon(
                     painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_cloud),
                     contentDescription = null,
