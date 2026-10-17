@@ -52,27 +52,18 @@ internal fun AddToAlbumSheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(Modifier.height(4.dp))
-            if (request.fileIds.isEmpty()) {
-                Text(
-                    stringResource(R.string.album_add_nothing),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+            if (request.fileIds.isNotEmpty()) {
                 Text(
                     stringResource(R.string.album_add_eligible, request.fileIds.size),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (request.skippedLocal > 0 && request.fileIds.isNotEmpty()) {
+            if (request.localUploads > 0) {
                 Text(
-                    stringResource(R.string.album_add_skipped_local, request.skippedLocal),
+                    stringResource(R.string.album_add_local_uploads, request.localUploads),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-        if (request.fileIds.isEmpty()) {
-            Spacer(Modifier.navigationBarsPadding().height(16.dp))
-            return@ModalBottomSheet
         }
         val loading = (user == null && !choices.failed) || albums.remote.loading
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
