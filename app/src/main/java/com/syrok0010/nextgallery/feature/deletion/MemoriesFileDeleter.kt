@@ -14,7 +14,10 @@ import kotlinx.coroutines.sync.withPermit
 
 internal data class CloudDeleteResult(val deleted: Int, val failed: Int)
 
-/** A file that is already gone (404) is what the user asked for, so it counts as deleted. */
+/**
+ * A file that is already gone (404) is what the user asked for, so it counts as deleted. 412
+ * means another file now sits at the path; it is left alone and counts as a failure.
+ */
 internal fun cloudDeleteSucceeded(code: Int): Boolean = code in 200..299 || code == 404
 
 /**
@@ -38,6 +41,7 @@ internal class MemoriesFileDeleter(
                                 delete(
                                     credentials,
                                     fileUrl(credentials.serverUrl, credentials.userId, file.path),
+                                    file.etag,
                                 )
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
@@ -51,10 +55,19 @@ internal class MemoriesFileDeleter(
         return CloudDeleteResult(deleted = outcomes.count { it }, failed = outcomes.count { !it })
     }
 
-    private suspend fun delete(credentials: AccountCredentials, url: okhttp3.HttpUrl): Boolean {
+    /**
+     * The path comes from a lookup made just before; `If-Match` keeps a file moved or replaced in
+     * between from being deleted in its place. Without an etag the lookup is the only guard.
+     */
+    private suspend fun delete(
+        credentials: AccountCredentials,
+        url: okhttp3.HttpUrl,
+        etag: String?,
+    ): Boolean {
         val request = transport
             .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
             .delete()
+            .apply { if (etag != null) header("If-Match", "\"$etag\"") }
             .build()
         return transport.baseClient.newCall(request).await().use { cloudDeleteSucceeded(it.code) }
     }
