@@ -45,7 +45,10 @@ internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val 
 
 internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
-/** Photos albums deduplicate by file id and answer a repeated COPY with 409 Conflict. */
+/**
+ * Photos albums deduplicate by file id and answer a repeated COPY with 409 Conflict. DAV also
+ * answers 409 when the album itself is missing, so callers confirm the album on conflicts.
+ */
 internal fun albumCopyOutcome(code: Int): AlbumCopyOutcome =
     when (code) {
         in 200..299 -> AlbumCopyOutcome.Added
@@ -117,11 +120,49 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
                     }
                 }.awaitAll()
         }
+        val present = outcomes.count { it == AlbumCopyOutcome.AlreadyPresent }
+        val confirmed = present == 0 || albumExists(credentials, album)
         return AlbumAddResult(
             added = outcomes.count { it == AlbumCopyOutcome.Added },
-            alreadyPresent = outcomes.count { it == AlbumCopyOutcome.AlreadyPresent },
-            failed = outcomes.count { it == AlbumCopyOutcome.Failed },
+            alreadyPresent = if (confirmed) present else 0,
+            failed = outcomes.count {
+                it == AlbumCopyOutcome.Failed
+            } +
+                if (confirmed) 0 else present,
         )
+    }
+
+    /** Adds a file by its DAV URL; works before Memories has indexed a fresh upload. */
+    suspend fun addFile(
+        credentials: AccountCredentials,
+        source: HttpUrl,
+        album: AlbumAddress,
+    ): AlbumCopyOutcome {
+        val outcome = copy(
+            credentials,
+            source,
+            albumUrl(credentials.serverUrl, album)
+                .newBuilder()
+                .addPathSegment(source.pathSegments.last())
+                .build(),
+        )
+        return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(credentials, album)) {
+            AlbumCopyOutcome.Failed
+        } else {
+            outcome
+        }
+    }
+
+    private suspend fun albumExists(credentials: AccountCredentials, album: AlbumAddress): Boolean {
+        val request = transport
+            .authenticatedRequestBuilder(
+                credentials,
+                albumUrl(credentials.serverUrl, album).toString(),
+                accept = "*/*",
+            ).method("PROPFIND", null)
+            .header("Depth", "0")
+            .build()
+        return transport.baseClient.newCall(request).await().use { it.isSuccessful }
     }
 
     private suspend fun copy(

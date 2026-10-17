@@ -32,7 +32,7 @@ class AlbumAdditionTest {
             ),
         )
         assertEquals(listOf(10L, 11L), request.fileIds)
-        assertEquals(1, request.skippedLocal)
+        assertEquals(1, request.localUploads)
     }
 
     @Test fun `only albums owned by current user are writable`() {
@@ -56,10 +56,16 @@ class AlbumAdditionTest {
             listOf(
                 uiText(R.string.album_add_done, "Лето", 3),
                 pluralText(R.plurals.album_add_done_failed, 1, 1),
-                uiText(R.string.album_add_done_skipped, 2),
+                uiText(R.string.album_add_done_uploading, 2),
             ),
             albumAdditionMessage(
-                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 1), skippedLocal = 2),
+                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 1), localUploads = 2),
+            ),
+        )
+        assertEquals(
+            listOf(uiText(R.string.album_add_uploading_only, "Лето", 2)),
+            albumAdditionMessage(
+                AlbumAdditionState.Done("Лето", AlbumAddResult(0, 0, 0), localUploads = 2),
             ),
         )
         assertNull(albumAdditionMessage(AlbumAdditionState.Idle))
@@ -101,12 +107,20 @@ class AlbumAdditionTest {
                     scope,
                 )
                 val before = refreshed
-                assertTrue(additions.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)))
+                var ready: AlbumAddress? = null
+                var mkcolBeforeReady = false
+                val accepted = additions.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)) {
+                    mkcolBeforeReady = fixture.requests.any { it.method == "MKCOL" }
+                    ready = it
+                }
+                assertTrue(accepted)
                 val done = withTimeout(5_000) {
                     additions.state.first { it is AlbumAdditionState.Done }
                 } as AlbumAdditionState.Done
                 assertEquals(AlbumAddResult(1, 0, 0), done.result)
-                assertEquals(1, done.skippedLocal)
+                assertEquals(1, done.localUploads)
+                assertEquals(AlbumAddress("anna", "Поход"), ready)
+                assertTrue("uploads must start after the album exists", mkcolBeforeReady)
                 assertTrue(fixture.requests.any { it.method == "MKCOL" && it.decodedTarget.endsWith("/photos/anna/albums/Поход") })
                 withTimeout(5_000) { while (refreshed == before) kotlinx.coroutines.delay(10) }
                 additions.consume()

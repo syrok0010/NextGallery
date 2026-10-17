@@ -94,8 +94,7 @@
     <string name="album_add_action">В альбом</string>
     <string name="album_add_title">Добавить в альбом</string>
     <string name="album_add_eligible">С облачной копией: %1$d</string>
-    <string name="album_add_skipped_local">Только на телефоне, будут пропущены: %1$d</string>
-    <string name="album_add_nothing">Среди выбранных нет объектов с облачной копией. Сначала загрузите их в облако.</string>
+    <string name="album_add_local_uploads">Только на телефоне, будут загружены в облако и добавлены: %1$d</string>
     <string name="album_add_new">Новый альбом</string>
     <string name="album_add_new_name">Название альбома</string>
     <string name="album_add_create">Создать и добавить</string>
@@ -113,7 +112,8 @@
         <item quantity="many">%1$d ошибок</item>
         <item quantity="other">%1$d ошибок</item>
     </plurals>
-    <string name="album_add_done_skipped">пропущено без облачной копии %1$d</string>
+    <string name="album_add_done_uploading">ещё %1$d загружаются в облако, итог в уведомлении</string>
+    <string name="album_add_uploading_only">«%1$s»: %2$d загружаются в облако и будут добавлены, итог в уведомлении</string>
     <string name="album_add_failed_exists">Альбом «%1$s» уже существует</string>
     <string name="album_add_failed_network">Не удалось добавить в «%1$s». Проверьте подключение.</string>
     <string name="album_add_failed_not_writable">Нет прав на изменение альбома «%1$s»</string>

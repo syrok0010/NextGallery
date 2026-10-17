@@ -57,6 +57,7 @@ class MemoriesAlbumWriterTest {
                 request.method == "COPY" && request.decodedTarget.endsWith("Поход 2.jpg") -> 409 to ""
                 request.method == "COPY" && request.decodedTarget.endsWith("Поход 3.jpg") -> 403 to ""
                 request.method == "COPY" -> 201 to ""
+                request.method == "PROPFIND" -> 207 to ""
                 else -> 404 to ""
             }
         }.use { fixture ->
@@ -91,6 +92,45 @@ class MemoriesAlbumWriterTest {
             } finally {
                 release.countDown()
             }
+        }
+    }
+
+    @Test fun `addFile copies an uploaded DAV path without Memories lookup`() = runBlocking {
+        Fixture { 201 to "" }.use { fixture ->
+            val source = fileUrl(fixture.origin, "anna", "/Photos/Поход 7.jpg")
+            assertEquals(
+                AlbumCopyOutcome.Added,
+                fixture.writer.addFile(fixture.credentials, source, AlbumAddress("anna", "Лето")),
+            )
+            val copy = fixture.requests.single()
+            assertEquals("COPY", copy.method)
+            assertEquals("/remote.php/dav/files/anna/Photos/Поход 7.jpg", copy.decodedTarget)
+            assertEquals(
+                "${fixture.origin}/remote.php/dav/photos/anna/albums/Лето/Поход 7.jpg",
+                URLDecoder.decode(copy.headers.getValue("destination"), "UTF-8"),
+            )
+        }
+    }
+
+    @Test fun `conflict on a missing album is a failure, not already present`() = runBlocking {
+        Fixture { request ->
+            when {
+                request.target.startsWith("/apps/memories/api/image/info/") ->
+                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+                request.method == "COPY" -> 409 to ""
+                else -> 404 to ""
+            }
+        }.use { fixture ->
+            val album = AlbumAddress("anna", "Удалённый")
+            assertEquals(
+                AlbumCopyOutcome.Failed,
+                fixture.writer.addFile(fixture.credentials, fileUrl(fixture.origin, "anna", "/Photos/a.jpg"), album),
+            )
+            assertEquals(
+                AlbumAddResult(added = 0, alreadyPresent = 0, failed = 1),
+                fixture.writer.add(fixture.credentials, album, listOf(1)),
+            )
+            assertTrue(fixture.requests.any { it.method == "PROPFIND" && it.headers["depth"] == "0" })
         }
     }
 
