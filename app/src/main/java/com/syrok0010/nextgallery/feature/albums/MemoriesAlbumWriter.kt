@@ -153,6 +153,10 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
         }
     }
 
+    /**
+     * Confirms a 409 against the album. A failed check must not discard the whole batch, so an
+     * unconfirmed conflict counts as a failure for that file only.
+     */
     private suspend fun albumExists(credentials: AccountCredentials, album: AlbumAddress): Boolean {
         val request = transport
             .authenticatedRequestBuilder(
@@ -162,7 +166,13 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
             ).method("PROPFIND", null)
             .header("Depth", "0")
             .build()
-        return transport.baseClient.newCall(request).await().use { it.isSuccessful }
+        return try {
+            transport.baseClient.newCall(request).await().use { it.isSuccessful }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private suspend fun copy(

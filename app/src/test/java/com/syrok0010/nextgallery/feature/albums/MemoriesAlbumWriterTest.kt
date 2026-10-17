@@ -134,6 +134,25 @@ class MemoriesAlbumWriterTest {
         }
     }
 
+    @Test fun `failed album check keeps added files and fails only unconfirmed conflicts`() = runBlocking {
+        Fixture { request ->
+            when {
+                request.target.startsWith("/apps/memories/api/image/info/") -> {
+                    val id = request.target.substringAfterLast('/')
+                    200 to """{"filename":"/Photos/$id.jpg","basename":"$id.jpg"}"""
+                }
+                request.method == "COPY" && request.decodedTarget.endsWith("/2.jpg") -> 409 to ""
+                request.method == "COPY" -> 201 to ""
+                else -> 500 to ""
+            }
+        }.use { fixture ->
+            assertEquals(
+                AlbumAddResult(added = 1, alreadyPresent = 0, failed = 1),
+                fixture.writer.add(fixture.credentials, AlbumAddress("anna", "Лето"), listOf(1, 2)),
+            )
+        }
+    }
+
     @Test fun `album address splits cluster id into owner and collection`() {
         assertEquals(
             AlbumAddress("anna", "Лето & море"),

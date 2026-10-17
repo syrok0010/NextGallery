@@ -32,6 +32,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadForegroundService
+import com.syrok0010.nextgallery.feature.upload.UploadHandoff
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import com.syrok0010.nextgallery.feature.upload.rememberUploadAction
 import org.koin.compose.koinInject
@@ -44,12 +45,20 @@ internal fun PhotosScreen(
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
     additions: AlbumAdditions = koinInject(),
+    handoff: UploadHandoff = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val addition by additions.state.collectAsStateWithLifecycle()
     var albumRequest by remember { mutableStateOf<AlbumSheetRequest?>(null) }
     val context = LocalContext.current
     val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
+    val pendingUploads by handoff.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingUploads) {
+        if (pendingUploads.isNotEmpty()) {
+            upload(pendingUploads) {}
+            handoff.taken(pendingUploads)
+        }
+    }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -100,8 +109,10 @@ internal fun PhotosScreen(
             onPick = { target ->
                 // A rejected request keeps the sheet and the selection; the sheet explains why.
                 val accepted = additions.add(target, request) { album ->
-                    // The selection is already cleared; the snapshot alone drives the upload.
-                    upload(uploads.map { it.copy(album = UploadAlbum(album.owner, album.name)) }) {}
+                    // May run after this screen is gone: hand off data only, never the screen.
+                    handoff.offer(
+                        uploads.map { it.copy(album = UploadAlbum(album.owner, album.name)) },
+                    )
                 }
                 if (accepted) {
                     albumRequest = null
