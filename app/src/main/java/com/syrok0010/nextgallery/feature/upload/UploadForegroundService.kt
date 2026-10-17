@@ -16,6 +16,7 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAddress
+import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
@@ -50,6 +51,7 @@ class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
     private val transport: NextcloudTransport by inject()
     private val albums: MemoriesAlbumWriter by inject()
+    private val catalog: AlbumCatalogRepository by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val notificationManager: NotificationManager by lazy {
         checkNotNull(
@@ -90,19 +92,23 @@ class UploadForegroundService : Service() {
                     delay(500L)
                 }
             }
+            val progress = UploadProgress()
             val result = runCatching {
-                upload(selections) { message, progress ->
-                    updates.trySend(notification(message, uploading = true, progress = progress))
+                upload(selections, progress) { message, percent ->
+                    updates.trySend(notification(message, uploading = true, progress = percent))
                 }
             }
             publisher.cancelAndJoin()
             updates.close()
             delay(500L)
             val message = result.fold(
-                onSuccess = { "Загрузка завершена: ${it.completed} из ${selections.size}" },
+                onSuccess = { "Загрузка завершена: ${progress.completed} из ${selections.size}" },
                 onFailure = { "Загрузка остановлена: ${it.localizedMessage ?: "ошибка сети"}" },
             )
-            val albumSummary = result.getOrNull()?.albumSummary()
+            if (result.isFailure) progress.notUploaded(selections.drop(progress.completed))
+            val albumSummary = uploadAlbumSummary(progress.albums)
+            // The album sheet refreshed the catalog before these files reached the album.
+            if (progress.albums.isNotEmpty()) catalog.refresh()
             // Keep the final result visible after the foreground service stops.
             stopForeground(STOP_FOREGROUND_DETACH)
             notificationManager.notify(NOTIFICATION_ID, notification(message, text = albumSummary))
@@ -113,15 +119,14 @@ class UploadForegroundService : Service() {
 
     private suspend fun upload(
         selections: List<UploadSelection>,
+        progress: UploadProgress,
         onProgress: (String, Int?) -> Unit,
-    ): UploadResult {
+    ) {
         val credentials = credentialsStore.load()
             ?: error("Сессия Nextcloud больше недоступна")
         val config = transport.memoriesApi(credentials).config()
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
             ?: error("Memories не сообщил папку таймлайна")
-        var completed = 0
-        val albumOutcomes = mutableMapOf<String, MutableList<AlbumCopyOutcome>>()
         selections.forEachIndexed { index, selection ->
             val message = "Загрузка: ${index + 1} из ${selections.size}"
             val uploaded = put(
@@ -130,13 +135,11 @@ class UploadForegroundService : Service() {
                 selection = selection,
                 onProgress = { progress -> onProgress(message, progress) },
             )
-            completed++
+            progress.completed++
             selection.album?.let { album ->
-                albumOutcomes.getOrPut(album.name) { mutableListOf() } +=
-                    addToAlbum(credentials, uploaded, album)
+                progress.record(album, addToAlbum(credentials, uploaded, album))
             }
         }
-        return UploadResult(completed, albumOutcomes)
     }
 
     private suspend fun addToAlbum(
@@ -267,11 +270,21 @@ class UploadForegroundService : Service() {
 
     private class UploadedFile(val url: String, val existed: Boolean, val length: Long)
 
-    private data class UploadResult(
-        val completed: Int,
-        val albums: Map<String, List<AlbumCopyOutcome>> = emptyMap(),
-    ) {
-        fun albumSummary(): String? = uploadAlbumSummary(albums)
+    /** Survives a failed upload so earlier album results still reach the notification. */
+    private class UploadProgress {
+        var completed = 0
+        val albums = linkedMapOf<String, MutableList<AlbumCopyOutcome>>()
+
+        fun record(album: UploadAlbum, outcome: AlbumCopyOutcome) {
+            albums.getOrPut(album.name) { mutableListOf() } += outcome
+        }
+
+        /** Files left after a failed upload did not reach their albums either. */
+        fun notUploaded(selections: List<UploadSelection>) {
+            selections.forEach { selection ->
+                selection.album?.let { record(it, AlbumCopyOutcome.Failed) }
+            }
+        }
     }
 
     companion object {
