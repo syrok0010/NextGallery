@@ -31,6 +31,7 @@ import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
+import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesFileDeleter
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
@@ -47,6 +48,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepos
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
@@ -77,9 +79,15 @@ val appModule = module {
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
     single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
+    single { MemoriesFiles(get()) }
     single { MemoriesFileDeleter(get(), get()) }
     single {
-        MediaDeletionRepository(get(), get(), get(named("libraryScope"))) {
+        MediaDeletionRepository(
+            get(),
+            get(),
+            AndroidPhoneTrash(androidContext().contentResolver),
+            get(named("libraryScope")),
+        ) {
             get<MediaLibraryCoordinator>().refresh()
         }
     }

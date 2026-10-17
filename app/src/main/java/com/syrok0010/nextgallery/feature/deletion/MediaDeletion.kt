@@ -80,7 +80,29 @@ internal sealed interface MediaDeletionState {
 
     data class Running(val count: Int) : MediaDeletionState
 
-    data class Done(val phoneTrashed: Int, val cloud: CloudDeleteResult) : MediaDeletionState
+    data class Done(
+        val phoneTrashed: Int,
+        val cloud: CloudDeleteResult,
+        val phoneFailed: Int = 0,
+    ) : MediaDeletionState {
+        operator fun plus(other: Done) =
+            Done(
+                phoneTrashed = phoneTrashed + other.phoneTrashed,
+                cloud = CloudDeleteResult(
+                    deleted = cloud.deleted + other.cloud.deleted,
+                    failed = cloud.failed + other.cloud.failed,
+                ),
+                phoneFailed = phoneFailed + other.phoneFailed,
+            )
+    }
+}
+
+/**
+ * Counts the URIs that MediaStore really marks as trashed: the system dialog answers RESULT_OK
+ * even when single items fail to move.
+ */
+internal fun interface PhoneTrashCheck {
+    suspend fun trashed(contentUris: List<String>): Int
 }
 
 /**
@@ -90,12 +112,16 @@ internal sealed interface MediaDeletionState {
 internal class MediaDeletionRepository(
     private val sessions: SessionStore,
     private val deleter: MemoriesFileDeleter,
+    private val phoneTrash: PhoneTrashCheck,
     private val scope: CoroutineScope,
     private val onDeleted: () -> Unit,
 ) {
     private val mutableState = MutableStateFlow<MediaDeletionState>(MediaDeletionState.Idle)
     val state = mutableState.asStateFlow()
     private var job: Job? = null
+
+    /** Results not yet shown; a later operation adds to them instead of replacing them. */
+    private var unshown: MediaDeletionState.Done? = null
 
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
     private var operations = SupervisorJob(scope.coroutineContext[Job])
@@ -110,6 +136,7 @@ internal class MediaDeletionRepository(
                     operations.cancel()
                     operations = SupervisorJob(scope.coroutineContext[Job])
                     job = null
+                    unshown = null
                     mutableState.value = MediaDeletionState.Idle
                 }
                 owner = current
@@ -123,7 +150,18 @@ internal class MediaDeletionRepository(
         job = scope.launch(operations) {
             previous?.join()
             val fileIds = targets.fileIds
-            val phoneTrashed = targets.contentUris.size
+            val phoneTrashed = if (targets.contentUris.isEmpty()) {
+                0
+            } else {
+                try {
+                    phoneTrash.trashed(targets.contentUris)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // The dialog was confirmed; an unreadable result is not reported as failure.
+                    targets.contentUris.size
+                }
+            }
             if (fileIds.isNotEmpty()) mutableState.value = MediaDeletionState.Running(fileIds.size)
             val cloud = if (fileIds.isEmpty()) {
                 CloudDeleteResult(deleted = 0, failed = 0)
@@ -137,14 +175,24 @@ internal class MediaDeletionRepository(
                     null
                 } ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
             }
-            mutableState.value = MediaDeletionState.Done(phoneTrashed, cloud)
+            val done = MediaDeletionState.Done(
+                phoneTrashed = phoneTrashed,
+                cloud = cloud,
+                phoneFailed = targets.contentUris.size - phoneTrashed,
+            )
+            val total = unshown?.plus(done) ?: done
+            unshown = total
+            mutableState.value = total
             onDeleted()
         }
     }
 
     /** Called once the UI has shown a terminal result. */
     fun consume() {
-        if (mutableState.value is MediaDeletionState.Done) mutableState.value = MediaDeletionState.Idle
+        if (mutableState.value is MediaDeletionState.Done) {
+            unshown = null
+            mutableState.value = MediaDeletionState.Idle
+        }
     }
 
     private fun credentials(): AccountCredentials? =
@@ -160,7 +208,16 @@ internal fun mediaDeletionMessage(state: MediaDeletionState): List<UiText>? =
 
         is MediaDeletionState.Done -> buildList {
             if (state.phoneTrashed > 0) add(uiText(R.string.delete_done_phone, state.phoneTrashed))
-            if (state.cloud.deleted > 0) add(uiText(R.string.delete_done_cloud, state.cloud.deleted))
+            if (state.phoneFailed > 0) {
+                add(
+                    uiText(R.string.delete_done_phone_failed, state.phoneFailed),
+                )
+            }
+            if (state.cloud.deleted > 0) {
+                add(
+                    uiText(R.string.delete_done_cloud, state.cloud.deleted),
+                )
+            }
             if (state.cloud.failed > 0) add(uiText(R.string.delete_done_failed, state.cloud.failed))
         }.ifEmpty { null }
     }

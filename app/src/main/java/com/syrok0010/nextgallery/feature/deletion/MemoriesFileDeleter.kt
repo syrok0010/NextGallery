@@ -1,8 +1,9 @@
 package com.syrok0010.nextgallery.feature.deletion
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.await
-import com.syrok0010.nextgallery.core.network.fileUrl
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DeleteFileResult
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import kotlinx.coroutines.CancellationException
@@ -14,12 +15,15 @@ import kotlinx.coroutines.sync.withPermit
 
 internal data class CloudDeleteResult(val deleted: Int, val failed: Int)
 
-/** A file that is already gone (404) is what the user asked for, so it counts as deleted. */
+/**
+ * A file that is already gone (404) is what the user asked for, so it counts as deleted. 412
+ * means another file now sits at the path; it is left alone and counts as a failure.
+ */
 internal fun cloudDeleteSucceeded(code: Int): Boolean = code in 200..299 || code == 404
 
 /**
- * Deletes server copies through DAV, as Memories Web does. With the Nextcloud trash bin app
- * enabled, a DAV DELETE moves the file to the user's trash instead of erasing it.
+ * Deletes server copies through the endpoint client used by the rest of the app. With the
+ * Nextcloud trash bin app enabled, a DAV DELETE moves the file to the user's trash.
  */
 internal class MemoriesFileDeleter(
     private val transport: NextcloudTransport,
@@ -37,7 +41,8 @@ internal class MemoriesFileDeleter(
                                 val file = files.file(credentials, fileId)
                                 delete(
                                     credentials,
-                                    fileUrl(credentials.serverUrl, credentials.userId, file.path),
+                                    DavFilePath.of(credentials.userId, file.path),
+                                    file.etag,
                                 )
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
@@ -51,12 +56,19 @@ internal class MemoriesFileDeleter(
         return CloudDeleteResult(deleted = outcomes.count { it }, failed = outcomes.count { !it })
     }
 
-    private suspend fun delete(credentials: AccountCredentials, url: okhttp3.HttpUrl): Boolean {
-        val request = transport
-            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
-            .delete()
-            .build()
-        return transport.baseClient.newCall(request).await().use { cloudDeleteSucceeded(it.code) }
+    /**
+     * The path comes from a lookup made just before; `If-Match` keeps a file moved or replaced in
+     * between from being deleted in its place. Without an etag the lookup is the only guard.
+     */
+    private suspend fun delete(
+        credentials: AccountCredentials,
+        file: DavFilePath,
+        etag: String?,
+    ): Boolean {
+        return when (FilesDavClient(transport) { credentials }.deleteFile(file, etag)) {
+            DeleteFileResult.Deleted, DeleteFileResult.Missing -> true
+            DeleteFileResult.Conflict -> false
+        }
     }
 
     private companion object {
