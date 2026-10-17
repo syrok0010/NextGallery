@@ -1,15 +1,28 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.ui.asString
+import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditionState
+import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
@@ -25,8 +38,11 @@ internal fun PhotosScreen(
     onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
+    additions: AlbumAdditionRepository = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
+    val addition by additions.state.collectAsStateWithLifecycle()
+    var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     val context = LocalContext.current
     val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
     MediaCollectionScreen(
@@ -59,6 +75,7 @@ internal fun PhotosScreen(
             }
             upload(selections, onStarted)
         },
+        onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
@@ -66,6 +83,46 @@ internal fun PhotosScreen(
             viewerVisible = viewerVisible,
         ) {
             content()
+            if (!viewerVisible) {
+                AlbumAdditionSnackbar(
+                    addition,
+                    onShown = additions::consume,
+                    // Keeps the result above the library island once selection mode ends.
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp),
+                )
+            }
         }
     }
+    albumRequest?.let { (request, onDone) ->
+        AddToAlbumSheet(
+            request = request,
+            onDismiss = { albumRequest = null },
+            onPick = { target ->
+                additions.add(target, request)
+                albumRequest = null
+                onDone()
+            },
+        )
+    }
+}
+
+@Composable
+private fun AlbumAdditionSnackbar(
+    state: AlbumAdditionState,
+    onShown: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val host = remember { SnackbarHostState() }
+    val message = albumAdditionMessage(state)?.map { it.asString() }?.joinToString(", ")
+    LaunchedEffect(state, message) {
+        if (message == null) return@LaunchedEffect
+        if (state is AlbumAdditionState.Running) {
+            // Replaced by the result: a new state cancels this effect and dismisses it.
+            host.showSnackbar(message, duration = SnackbarDuration.Indefinite)
+        } else {
+            host.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
+            onShown()
+        }
+    }
+    SnackbarHost(host, modifier)
 }

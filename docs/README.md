@@ -27,3 +27,4 @@
 
 - [ADR 0012: Feature-срезы и чистый media module](adr/0012-feature-slices.md)
 - [ADR 0013: Ручная загрузка из таймлайна](adr/0013-timeline-upload.md)
+- [ADR 0014: Добавление выбранных медиа в альбом](adr/0014-add-to-album.md)
