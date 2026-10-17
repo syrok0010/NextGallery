@@ -16,8 +16,11 @@ internal interface MemoriesFilesApi {
     suspend fun info(@Path("id") fileId: Long): JsonObject
 }
 
-/** Location of a Memories file in the user's DAV files: [path] from the files root, [name]. */
-internal data class RemoteFile(val path: String, val name: String)
+/**
+ * Location of a Memories file in the user's DAV files: [path] from the files root, [name].
+ * [etag] matches DAV `getetag` without quotes and pins writes to this exact file.
+ */
+internal data class RemoteFile(val path: String, val name: String, val etag: String? = null)
 
 /**
  * Bridges Memories file ids to Nextcloud DAV. Memories has no write API, so writes go through
@@ -38,6 +41,7 @@ internal class MemoriesFiles(private val transport: NextcloudTransport) {
         return RemoteFile(
             path = requireNotNull(info.text("filename")) { "Missing path of file $fileId" },
             name = requireNotNull(info.text("basename")) { "Missing name of file $fileId" },
+            etag = info.text("etag")?.takeIf(String::isNotBlank),
         )
     }
 

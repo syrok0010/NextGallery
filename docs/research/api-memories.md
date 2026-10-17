@@ -321,6 +321,7 @@ reconciliation. Переименование или перенос папки м
 Проверено на тестовом стенде (Nextcloud 34.0.5, Memories 10.1.0, октябрь 2026):
 
 - Memories не даёт отдельного endpoint удаления; файл удаляется через DAV `DELETE remote.php/dav/files/{uid}/{path}` (`204`). Путь получается так же, как для альбомов: `image/info/{fileId}` → `filename`.
+- `image/info/{fileId}` возвращает `etag`, равный DAV `getetag` без кавычек. `DELETE` с `If-Match: "<etag>"` удаляет файл (`204`), с чужим ETag — отвечает `412` и файл не трогает.
 - С включённым Deleted files файл попадает в `remote.php/dav/trashbin/{uid}/trash/{basename}.d{timestamp}`; повторный `DELETE` на исходный путь даёт `404`.
 - После удаления `days/{id}` перестаёт возвращать объект без дополнительной индексации.
 

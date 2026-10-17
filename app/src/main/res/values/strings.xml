@@ -166,6 +166,8 @@
     <string name="delete_phone_failed">Не удалось переместить файлы телефона в корзину</string>
     <string name="delete_running">Удаляю из облака: %1$d</string>
     <string name="delete_done_phone">В корзине телефона: %1$d</string>
+    <string name="delete_done_phone_failed">Не удалось переместить в корзину телефона: %1$d</string>
+    <string name="delete_phone_limit">За один раз можно удалить с телефона не больше %1$d объектов</string>
     <string name="delete_done_cloud">В корзине Nextcloud: %1$d</string>
     <string name="delete_done_failed">Не удалось удалить из облака: %1$d</string>
 </resources>

@@ -81,6 +81,7 @@ class MediaDeletionTest {
     @Test fun `cloud delete counts 404 as deleted and isolates per-file failures`() {
         assertEquals(true, cloudDeleteSucceeded(204))
         assertEquals(true, cloudDeleteSucceeded(404))
+        assertEquals(false, cloudDeleteSucceeded(412))
         assertEquals(false, cloudDeleteSucceeded(423))
         assertEquals(false, cloudDeleteSucceeded(500))
     }
@@ -101,6 +102,25 @@ class MediaDeletionTest {
                 ),
                 deletes,
             )
+            val pinned = fixture.requests.single { it.method == "DELETE" && it.decodedTarget.endsWith("Поход 1.jpg") }
+            assertEquals("\"etag-1\"", pinned.headers["if-match"])
+        }
+    }
+
+    @Test fun `a file replaced at the same path is not deleted`() = runBlocking {
+        Fixture { request ->
+            when {
+                request.target.startsWith("/ocs/") -> 200 to """{"ocs":{"data":{"id":"anna"}}}"""
+                request.target.startsWith("/apps/memories/api/image/info/") ->
+                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg","etag":"old"}"""
+                request.method == "DELETE" && request.headers["if-match"] == "\"old\"" -> 412 to ""
+                else -> 204 to ""
+            }
+        }.use { fixture ->
+            assertEquals(
+                CloudDeleteResult(deleted = 0, failed = 1),
+                MemoriesFileDeleter(fixture.writerTransport, fixture.files).delete(fixture.credentials, listOf(1)),
+            )
         }
     }
 
@@ -113,19 +133,29 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     sessions,
                     MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    { it.size - 1 },
                     scope,
                 ) { refreshed.incrementAndGet() }
-                repository.delete(DeletionTargets(listOf("content://media/external/images/media/9"), listOf(1, 3)))
-                val done = withTimeout(5_000) {
-                    repository.state.first { it is MediaDeletionState.Done }
-                }
+                val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
+                repository.delete(DeletionTargets(phone, listOf(1, 3)))
+                // Queued behind the first; its result adds to the one not shown yet.
+                repository.delete(DeletionTargets(emptyList(), listOf(2)))
+                withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
-                    MediaDeletionState.Done(phoneTrashed = 1, cloud = CloudDeleteResult(deleted = 1, failed = 1)),
-                    done,
+                    MediaDeletionState.Done(
+                        phoneTrashed = 1,
+                        cloud = CloudDeleteResult(deleted = 2, failed = 1),
+                        phoneFailed = 1,
+                    ),
+                    repository.state.value,
                 )
-                assertEquals(1, refreshed.get())
                 repository.consume()
                 assertEquals(MediaDeletionState.Idle, repository.state.value)
+                repository.delete(DeletionTargets(emptyList(), listOf(1)))
+                assertEquals(
+                    MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
+                    withTimeout(5_000) { repository.state.first { it is MediaDeletionState.Done } },
+                )
             } finally {
                 scope.cancel()
             }
@@ -139,6 +169,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(null)),
                     MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    { it.size },
                     scope,
                 ) {}
                 repository.delete(DeletionTargets(emptyList(), listOf(1, 2)))
@@ -155,8 +186,8 @@ class MediaDeletionTest {
 
     @Test fun `message stays silent for zero counters`() {
         assertEquals(
-            listOf("delete_done_cloud", "delete_done_failed"),
-            mediaDeletionMessage(MediaDeletionState.Done(0, CloudDeleteResult(deleted = 2, failed = 1)))
+            listOf("delete_done_phone_failed", "delete_done_cloud", "delete_done_failed"),
+            mediaDeletionMessage(MediaDeletionState.Done(0, CloudDeleteResult(deleted = 2, failed = 1), phoneFailed = 1))
                 ?.map { resourceName(it) },
         )
         assertEquals(null, mediaDeletionMessage(MediaDeletionState.Done(0, CloudDeleteResult(0, 0))))
@@ -177,7 +208,7 @@ class MediaDeletionTest {
                 if (id == 4L) {
                     500 to ""
                 } else {
-                    200 to """{"filename":"/Photos/Поход $id.jpg","basename":"Поход $id.jpg"}"""
+                    200 to """{"filename":"/Photos/Поход $id.jpg","basename":"Поход $id.jpg","etag":"etag-$id"}"""
                 }
             }
             request.method == "DELETE" && request.decodedTarget.endsWith("Поход 2.jpg") -> 404 to ""
