@@ -27,6 +27,8 @@ import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
+import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
+import com.syrok0010.nextgallery.feature.deletion.MemoriesFileDeleter
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
@@ -74,6 +76,12 @@ val appModule = module {
     single { MemoriesFiles(get()) }
     single { MemoriesAlbumWriter(get(), get()) }
     single { AlbumAdditionRepository(get(), get(), get(), get(), get(named("libraryScope"))) }
+    single { MemoriesFileDeleter(get(), get()) }
+    single {
+        MediaDeletionRepository(get(), get(), get(named("libraryScope"))) {
+            get<MediaLibraryCoordinator>().refresh()
+        }
+    }
     single { UploadHandoff(get(), get(named("libraryScope"))) }
     single { UploadedCopies(get(), get()) { get<MediaLibraryCoordinator>().refresh() } }
     single { MediaLibraryIndex() }
