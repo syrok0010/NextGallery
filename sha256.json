@@ -1,0 +1,38 @@
+[
+  {
+    "name": "ng91-20261017-фото.png",
+    "bytes": 33702,
+    "sha256": "dfc1d1a36ac251f976dfd6700615f798ec1dd66d2c3d2b9c0b5d158c7521b35e",
+    "matches_source": true
+  },
+  {
+    "name": "ng91-20261017-video.mp4",
+    "bytes": 36017,
+    "sha256": "c56bb9d47f37f5d46b2592b7c1b0354be1812ac7e3a7f3c700d1bc19868f25ff",
+    "matches_source": true
+  },
+  {
+    "name": "ng91-20261017-large-video.mp4",
+    "bytes": 6286822,
+    "sha256": "959a573e29139d95536a94d8613adb10458d6d69869efdea09c333dd28ab91ba",
+    "matches_source": true
+  },
+  {
+    "name": "ng91-20261017-slow-video.mp4",
+    "bytes": 5059007,
+    "sha256": "0e1711dff4d4c8b99a7c72957f88976df65c38eaaaddb5cbd6621272306736fa",
+    "matches_source": true
+  },
+  {
+    "name": "ng91-20261017-background-video.mp4",
+    "bytes": 254406353,
+    "sha256": "90dbfce05204b11e979e6e21cb4dac56dba97cce1491f496e744e61fd55799f3",
+    "matches_source": true
+  },
+  {
+    "name": "ng91-20261017-denied-фото.png",
+    "bytes": 2958,
+    "sha256": "ead60e051b32d5d8dbba87adfa572cd701b512cc6c86687a9721b709b57d196b",
+    "matches_source": true
+  }
+]
