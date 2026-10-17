@@ -3,20 +3,23 @@ package com.syrok0010.nextgallery.feature.albums
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import okhttp3.Response
 import retrofit2.http.GET
 import retrofit2.http.Path
 
@@ -72,26 +75,25 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
         credentials: AccountCredentials,
         user: String,
         name: String,
-    ): AlbumLocation.Remote =
-        withContext(Dispatchers.IO) {
-            val request = transport
-                .authenticatedRequestBuilder(
-                    credentials,
-                    albumUrl(credentials.serverUrl, AlbumAddress(user, name)).toString(),
-                    accept = "*/*",
-                ).method("MKCOL", null)
-                .build()
-            transport.baseClient.newCall(request).execute().use { response ->
-                // DAV answers MKCOL on an existing collection with 405 Method Not Allowed.
-                if (response.code == 405) throw AlbumAlreadyExistsException(name)
-                if (!response.isSuccessful) {
-                    throw IOException(
-                        "HTTP ${response.code} creating album",
-                    )
-                }
+    ): AlbumLocation.Remote {
+        val request = transport
+            .authenticatedRequestBuilder(
+                credentials,
+                albumUrl(credentials.serverUrl, AlbumAddress(user, name)).toString(),
+                accept = "*/*",
+            ).method("MKCOL", null)
+            .build()
+        transport.baseClient.newCall(request).await().use { response ->
+            // DAV answers MKCOL on an existing collection with 405 Method Not Allowed.
+            if (response.code == 405) throw AlbumAlreadyExistsException(name)
+            if (!response.isSuccessful) {
+                throw IOException(
+                    "HTTP ${response.code} creating album",
+                )
             }
-            AlbumLocation.Remote("$user/$name")
         }
+        return AlbumLocation.Remote("$user/$name")
+    }
 
     suspend fun add(
         credentials: AccountCredentials,
@@ -141,15 +143,14 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
         credentials: AccountCredentials,
         source: HttpUrl,
         destination: HttpUrl,
-    ): AlbumCopyOutcome =
-        withContext(Dispatchers.IO) {
-            val request: Request = transport
-                .authenticatedRequestBuilder(credentials, source.toString(), accept = "*/*")
-                .method("COPY", null)
-                .header("Destination", destination.toString())
-                .build()
-            transport.baseClient.newCall(request).execute().use { albumCopyOutcome(it.code) }
-        }
+    ): AlbumCopyOutcome {
+        val request: Request = transport
+            .authenticatedRequestBuilder(credentials, source.toString(), accept = "*/*")
+            .method("COPY", null)
+            .header("Destination", destination.toString())
+            .build()
+        return transport.baseClient.newCall(request).await().use { albumCopyOutcome(it.code) }
+    }
 
     private fun api(credentials: AccountCredentials) =
         transport
@@ -162,6 +163,23 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
         const val PARALLEL_COPIES = 4
     }
 }
+
+/** Unlike `execute()`, cancelling the caller cancels the call, so logout stops pending writes. */
+internal suspend fun Call.await(): Response =
+    suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(
+            object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    continuation.resume(response) { _, value, _ -> value.close() }
+                }
+
+                override fun onFailure(call: Call, e: IOException) {
+                    continuation.resumeWithException(e)
+                }
+            },
+        )
+    }
 
 internal fun albumUrl(serverUrl: String, album: AlbumAddress): HttpUrl =
     davRoot(serverUrl)

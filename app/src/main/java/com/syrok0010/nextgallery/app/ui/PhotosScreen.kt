@@ -11,7 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
@@ -98,9 +101,11 @@ internal fun PhotosScreen(
             request = request,
             onDismiss = { albumRequest = null },
             onPick = { target ->
-                additions.add(target, request)
-                albumRequest = null
-                onDone()
+                // A rejected request keeps the sheet and the selection; the sheet explains why.
+                if (additions.add(target, request)) {
+                    albumRequest = null
+                    onDone()
+                }
             },
         )
     }
@@ -114,14 +119,23 @@ private fun AlbumAdditionSnackbar(
 ) {
     val host = remember { SnackbarHostState() }
     val message = albumAdditionMessage(state)?.map { it.asString() }?.joinToString(", ")
-    LaunchedEffect(state, message) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(state, message, lifecycle) {
         if (message == null) return@LaunchedEffect
-        if (state is AlbumAdditionState.Running) {
-            // Replaced by the result: a new state cancels this effect and dismisses it.
-            host.showSnackbar(message, duration = SnackbarDuration.Indefinite)
-        } else {
-            host.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
-            onShown()
+        // A result timing out while the app is stopped would be consumed unseen; show it again
+        // once the screen is visible.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (state is AlbumAdditionState.Running) {
+                // Replaced by the result: a new state cancels this effect and dismisses it.
+                host.showSnackbar(message, duration = SnackbarDuration.Indefinite)
+            } else {
+                host.showSnackbar(
+                    message,
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
+                onShown()
+            }
         }
     }
     SnackbarHost(host, modifier)

@@ -7,8 +7,15 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URLDecoder
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import org.junit.Assert.*
@@ -79,6 +86,24 @@ class MemoriesAlbumWriterTest {
                 URLDecoder.decode(copy.headers.getValue("destination").replace("+", "%2B"), "UTF-8"),
             )
             assertFalse(copy.headers.getValue("destination").contains(' '))
+        }
+    }
+
+    @Test fun `cancelling a write cancels the HTTP call instead of waiting for the server`() = runBlocking {
+        val release = CountDownLatch(1)
+        Fixture {
+            release.await(5, TimeUnit.SECONDS)
+            201 to ""
+        }.use { fixture ->
+            try {
+                val write = launch(Dispatchers.IO) {
+                    fixture.writer.create(fixture.credentials, "anna", "Медленный")
+                }
+                withTimeout(5_000) { while (fixture.requests.isEmpty()) delay(10) }
+                withTimeout(1_000) { write.cancelAndJoin() }
+            } finally {
+                release.countDown()
+            }
         }
     }
 

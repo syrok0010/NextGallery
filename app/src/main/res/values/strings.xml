@@ -102,6 +102,7 @@
     <string name="album_add_name_invalid">Название не может содержать «/»</string>
     <string name="album_add_name_exists">Такой альбом уже есть</string>
     <string name="album_add_user_error">Не удалось получить данные аккаунта Nextcloud</string>
+    <string name="album_add_busy">Дождитесь окончания предыдущего добавления в альбом</string>
     <string name="album_add_list_empty">У вас пока нет своих альбомов Nextcloud</string>
     <string name="album_add_running">Добавляю в «%1$s»…</string>
     <string name="album_add_done">«%1$s»: добавлено %2$d</string>

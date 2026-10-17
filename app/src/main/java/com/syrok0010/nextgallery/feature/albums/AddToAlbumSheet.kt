@@ -33,6 +33,7 @@ internal fun AddToAlbumSheet(
     catalog: AlbumCatalogRepository = koinInject(),
 ) {
     val choices by additions.choices.collectAsStateWithLifecycle()
+    val busy = additions.state.collectAsStateWithLifecycle().value is AlbumAdditionState.Running
     val albums by catalog.state.collectAsStateWithLifecycle()
     val user = choices.user
     val writable = remember(albums.remote.items, user) {
@@ -90,6 +91,13 @@ internal fun AddToAlbumSheet(
                 ) { Text(stringResource(R.string.action_refresh)) }
             }
         }
+        if (busy) {
+            Text(
+                stringResource(R.string.album_add_busy),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
         if (albums.remote.failed) {
             Text(
                 stringResource(R.string.albums_remote_error),
@@ -104,7 +112,7 @@ internal fun AddToAlbumSheet(
             item {
                 AlbumChoiceRow(
                     title = stringResource(R.string.album_add_new),
-                    enabled = user != null,
+                    enabled = user != null && !busy,
                     onClick = { creating = true },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -124,6 +132,7 @@ internal fun AddToAlbumSheet(
                 AlbumChoiceRow(
                     title = album.name,
                     subtitle = album.count?.let { stringResource(R.string.albums_count, it) },
+                    enabled = !busy,
                     onClick = { onPick(AlbumTarget.Existing(location, album.name)) },
                 ) {
                     AlbumCoverImage(album)

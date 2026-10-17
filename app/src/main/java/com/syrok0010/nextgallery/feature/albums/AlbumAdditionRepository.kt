@@ -101,10 +101,14 @@ internal class AlbumAdditionRepository(
         }
     }
 
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest) {
-        if (job?.isActive == true) return
-        val credentials = credentials() ?: return
-        val user = mutableChoices.value.user ?: return
+    /**
+     * Returns false when the request is not accepted: another addition is running or the account
+     * is not ready. The caller keeps the selection in that case.
+     */
+    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
+        if (job?.isActive == true) return false
+        val credentials = credentials() ?: return false
+        val user = mutableChoices.value.user ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.size)
         job = scope.launch {
             mutableState.value = try {
@@ -131,6 +135,7 @@ internal class AlbumAdditionRepository(
             }
             catalog.refresh()
         }
+        return true
     }
 
     /** Called once the UI has shown a terminal result. */

@@ -102,7 +102,7 @@ class AlbumAdditionTest {
                 repository.prepare()
                 withTimeout(5_000) { repository.choices.first { it.user == "anna" } }
                 val before = refreshed
-                repository.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1))
+                assertTrue(repository.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)))
                 val done = withTimeout(5_000) {
                     repository.state.first { it is AlbumAdditionState.Done }
                 } as AlbumAdditionState.Done
@@ -117,6 +117,62 @@ class AlbumAdditionTest {
             }
         }
     }
+
+    @Test fun `second addition is rejected while the first is running`() = runBlocking {
+        val release = java.util.concurrent.CountDownLatch(1)
+        MemoriesAlbumWriterTest.Fixture { request ->
+            when {
+                request.target.startsWith("/ocs/") -> 200 to """{"ocs":{"data":{"id":"anna"}}}"""
+                request.target.startsWith("/apps/memories/api/image/info/") ->
+                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+                request.method == "COPY" -> {
+                    release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                    201 to ""
+                }
+                else -> 404 to ""
+            }
+        }.use { fixture ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val sessions = SessionStore(FixedCredentials(fixture.credentials))
+                val repository = AlbumAdditionRepository(
+                    sessions,
+                    MemoriesAlbumWriter(fixture.writerTransport),
+                    emptyCatalog(sessions, scope),
+                    scope,
+                )
+                repository.prepare()
+                withTimeout(5_000) { repository.choices.first { it.user == "anna" } }
+                val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
+                val request = AlbumAdditionRequest(listOf(1L), 0)
+                assertTrue(repository.add(album, request))
+                assertFalse(repository.add(album, request))
+                release.countDown()
+                withTimeout(5_000) { repository.state.first { it is AlbumAdditionState.Done } }
+                repository.consume()
+                withTimeout(5_000) {
+                    while (!repository.add(album, request)) kotlinx.coroutines.delay(10)
+                }
+            } finally {
+                release.countDown()
+                scope.cancel()
+            }
+        }
+    }
+
+    private fun emptyCatalog(sessions: SessionStore, scope: CoroutineScope) =
+        AlbumCatalogRepository(
+            sessions,
+            object : RemoteAlbumSource {
+                override suspend fun load(credentials: AccountCredentials) = RemoteAlbums(emptyList())
+            },
+            object : LocalAlbumSource {
+                override suspend fun load() = emptyList<AlbumSummary>()
+                override fun changes() = emptyFlow<Unit>()
+            },
+            MutableStateFlow<LocalMediaPermissionMode?>(null),
+            scope,
+        )
 
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials
