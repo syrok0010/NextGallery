@@ -17,6 +17,8 @@
 
 ## Записи
 
+Анимированные превью: [фон](background-upload.gif), [отказ](permission-denied.gif).
+
 - [Выбор, запрос уведомлений и результат](selection-and-permission.mp4)
 - [Загрузка 243 МиБ в фоне](background-upload.mp4)
 - [Отказ и повтор без нового запроса](permission-denied.mp4)
