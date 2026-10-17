@@ -145,6 +145,7 @@
     <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>
     <string name="upload_error_open">не удалось открыть %1$s</string>
     <string name="upload_error_http">HTTP %1$d при загрузке %2$s</string>
+    <string name="upload_batches_done">Завершено загрузок: %1$d</string>
     <string name="upload_album_summary">В «%1$s»: %2$d</string>
     <string name="upload_album_summary_failed">В «%1$s»: %2$d, не добавлено: %3$d</string>
 </resources>

@@ -83,7 +83,16 @@ class UploadForegroundService : Service() {
             }.orEmpty()
         if (selections.isEmpty()) {
             // A running worker stops the service with the latest start id itself.
-            if (worker == null) stopSelfResult(startId)
+            if (worker == null) {
+                // startForegroundService still requires startForeground, even right before stop.
+                startForeground(
+                    FOREGROUND_NOTIFICATION_ID,
+                    notification(getString(R.string.upload_preparing), uploading = true),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+            }
             return START_NOT_STICKY
         }
         queue += selections
@@ -99,14 +108,16 @@ class UploadForegroundService : Service() {
     }
 
     /**
-     * Batches run one after another under one foreground notification; each gets its own result
-     * notification. The service leaves the foreground only when no batch is waiting.
+     * Batches run one after another under one foreground notification. One result notification
+     * collects every batch of this run, so results neither pile up nor replace a queued batch's.
+     * The service leaves the foreground only when no batch is waiting.
      */
     private suspend fun drainQueue() {
+        val results = mutableListOf<BatchResult>()
         while (true) {
             val batch = queue.removeFirstOrNull() ?: break
-            val result = runBatch(batch)
-            notificationManager.notify(RESULT_NOTIFICATION_ID + resultCount++, result)
+            results += runBatch(batch)
+            notificationManager.notify(RESULT_NOTIFICATION_ID, resultNotification(results))
         }
         // No suspension from the empty check to here, so no start can slip in between.
         worker = null
@@ -114,7 +125,7 @@ class UploadForegroundService : Service() {
         stopSelfResult(lastStartId)
     }
 
-    private suspend fun runBatch(selections: List<UploadSelection>): Notification {
+    private suspend fun runBatch(selections: List<UploadSelection>): BatchResult {
         // Android drops bursts of notification updates, including the terminal result.
         // Keep only the latest progress and leave room for foreground/final updates.
         val updates = Channel<Notification>(Channel.CONFLATED)
@@ -149,7 +160,21 @@ class UploadForegroundService : Service() {
             .ifEmpty { null }
         // The album sheet refreshed the catalog before these files reached the album.
         if (progress.albums.isNotEmpty()) catalog.refresh()
-        return notification(message, text = albumSummary)
+        return BatchResult(message, albumSummary)
+    }
+
+    private fun resultNotification(results: List<BatchResult>): Notification {
+        val single = results.singleOrNull()
+        if (single != null) return notification(single.title, text = single.details)
+        val lines = results.map { listOfNotNull(it.title, it.details).joinToString(" · ") }
+        return Notification
+            .Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_cloud)
+            .setContentTitle(getString(R.string.upload_batches_done, results.size))
+            .setContentText(lines.last())
+            .setStyle(Notification.InboxStyle().also { style -> lines.forEach(style::addLine) })
+            .setOnlyAlertOnce(true)
+            .build()
     }
 
     private fun failureReason(error: Throwable): String =
@@ -295,6 +320,8 @@ class UploadForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private class BatchResult(val title: String, val details: String?)
+
     private class UploadedFile(val url: HttpUrl, val existed: Boolean, val length: Long)
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
@@ -320,14 +347,11 @@ class UploadForegroundService : Service() {
         private const val CHANNEL_ID = "cloud-upload"
         private const val FOREGROUND_NOTIFICATION_ID = 42
 
-        /** Results live next to the progress, one per batch, so a queued batch keeps its own. */
-        private const val RESULT_NOTIFICATION_ID = 1000
-
-        // Start ids restart with every service instance, so results count per process instead.
-        private var resultCount = 0
+        private const val RESULT_NOTIFICATION_ID = 43
         private const val EXTRA_SELECTIONS = "selections"
 
         fun start(context: Context, selections: List<UploadSelection>) {
+            if (selections.isEmpty()) return
             val payload = Json.encodeToString(selections)
             val intent = Intent(context, UploadForegroundService::class.java)
                 .putExtra(EXTRA_SELECTIONS, payload)
