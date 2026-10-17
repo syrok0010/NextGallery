@@ -14,13 +14,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
-import com.syrok0010.nextgallery.feature.albums.fileUrl
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,7 @@ class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
     private val transport: NextcloudTransport by inject()
     private val albums: MemoriesAlbumWriter by inject()
+    private val files: MemoriesFiles by inject()
     private val catalog: AlbumCatalogRepository by inject()
     private val copies: UploadedCopies by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -198,8 +200,7 @@ class UploadForegroundService : Service() {
     ) {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
-        // Login Flow may hand out an e-mail as login name; DAV paths use the uid.
-        val user = albums.currentUser(credentials)
+        val user = files.currentUser(credentials)
         val config = transport.memoriesApi(credentials).config()
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
             ?: throw UploadException(R.string.upload_error_timeline)

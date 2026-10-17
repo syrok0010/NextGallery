@@ -102,7 +102,8 @@ class AlbumAdditionTest {
                 )
                 val repository = AlbumAdditionRepository(
                     sessions,
-                    MemoriesAlbumWriter(fixture.writerTransport),
+                    fixture.files,
+                    fixture.writer,
                     catalog,
                     scope,
                 )
@@ -152,7 +153,8 @@ class AlbumAdditionTest {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val repository = AlbumAdditionRepository(
                     sessions,
-                    MemoriesAlbumWriter(fixture.writerTransport),
+                    fixture.files,
+                    fixture.writer,
                     emptyCatalog(sessions, scope),
                     scope,
                 )

@@ -8,6 +8,7 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -61,6 +62,7 @@ internal fun writableAlbums(albums: List<AlbumSummary>, user: String): List<Albu
 
 internal class AlbumAdditionRepository(
     private val sessions: SessionStore,
+    private val files: MemoriesFiles,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
     private val scope: CoroutineScope,
@@ -96,7 +98,7 @@ internal class AlbumAdditionRepository(
         mutableChoices.value = AlbumChoices(user = null)
         userJob = scope.launch {
             mutableChoices.value = try {
-                AlbumChoices(writer.currentUser(credentials))
+                AlbumChoices(files.currentUser(credentials))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
