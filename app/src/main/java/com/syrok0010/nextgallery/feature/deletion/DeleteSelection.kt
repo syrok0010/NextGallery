@@ -66,6 +66,14 @@ internal fun rememberDeleteAction(
         when {
             pendingPayload != null -> Unit
 
+            targets.contentUris.size > MAX_TRASH_REQUEST ->
+                Toast
+                    .makeText(
+                        context,
+                        context.getString(R.string.delete_phone_limit, MAX_TRASH_REQUEST),
+                        Toast.LENGTH_LONG,
+                    ).show()
+
             targets.contentUris.isEmpty() -> {
                 confirm(targets)
                 started()
