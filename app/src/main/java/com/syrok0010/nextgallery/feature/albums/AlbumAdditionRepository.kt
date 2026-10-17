@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -178,16 +179,25 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
             }
             if (state.result.failed > 0) {
                 add(
-                    uiText(R.string.album_add_done_failed, state.result.failed),
+                    pluralText(
+                        R.plurals.album_add_done_failed,
+                        state.result.failed,
+                        state.result.failed,
+                    ),
                 )
             }
             if (state.localUploads > 0) {
                 add(
                     if (total > 0) {
-                        uiText(R.string.album_add_done_uploading, state.localUploads)
+                        pluralText(
+                            R.plurals.album_add_done_uploading,
+                            state.localUploads,
+                            state.localUploads,
+                        )
                     } else {
-                        uiText(
-                            R.string.album_add_uploading_only,
+                        pluralText(
+                            R.plurals.album_add_uploading_only,
+                            state.localUploads,
                             state.albumName,
                             state.localUploads,
                         )

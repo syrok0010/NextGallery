@@ -145,15 +145,17 @@ private fun BoxScope.SelectionActionBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             IconButton(onClick = onCancel, enabled = !uploadRequested) {
-                Icon(Icons.Default.Close, contentDescription = "Отменить выбор")
+                Icon(Icons.Default.Close, contentDescription = stringResource(com.syrok0010.nextgallery.R.string.selection_cancel))
             }
+            val selectedLabel =
+                stringResource(com.syrok0010.nextgallery.R.string.selection_count, selectedCount)
             Text(
                 "$selectedCount",
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
-                    .semantics { contentDescription = "Выбрано: $selectedCount" },
+                    .semantics { contentDescription = selectedLabel },
             )
             Spacer(Modifier.width(4.dp))
             if (onAddToAlbum != null) {
@@ -176,7 +178,7 @@ private fun BoxScope.SelectionActionBar(
                     contentDescription = null,
                 )
                 Spacer(Modifier.width(6.dp))
-                Text("Загрузить")
+                Text(stringResource(com.syrok0010.nextgallery.R.string.upload_action))
             }
         }
     }

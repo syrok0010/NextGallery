@@ -39,7 +39,8 @@ internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : 
     }
 }
 
-private fun JsonObject.text(key: String): String? =
+/** Memories and OCS send JSON null and missing fields alike; both read as null. */
+internal fun JsonObject.text(key: String): String? =
     (get(key) as? JsonPrimitive)?.takeUnless { it.content == "null" }?.content
 
 private fun JsonObject.number(key: String): Long? = text(key)?.toLongOrNull()

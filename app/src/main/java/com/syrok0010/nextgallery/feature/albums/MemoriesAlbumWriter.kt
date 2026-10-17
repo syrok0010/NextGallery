@@ -12,7 +12,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import okhttp3.Call
 import okhttp3.Callback
@@ -67,9 +66,7 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
     suspend fun currentUser(credentials: AccountCredentials): String {
         val response = api(credentials).currentUser()
         val data = response["ocs"]?.jsonObject?.get("data")?.jsonObject
-        return requireNotNull(
-            (data?.get("id") as? JsonPrimitive)?.content?.takeIf(String::isNotBlank),
-        ) {
+        return requireNotNull(data?.text("id")?.takeIf(String::isNotBlank)) {
             "Missing Nextcloud user id"
         }
     }
@@ -255,6 +252,3 @@ private fun davRoot(serverUrl: String): HttpUrl.Builder =
         .newBuilder()
         .addPathSegment("remote.php")
         .addPathSegment("dav")
-
-private fun JsonObject.text(key: String): String? =
-    (get(key) as? JsonPrimitive)?.takeUnless { it.content == "null" }?.content

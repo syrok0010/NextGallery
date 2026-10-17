@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
@@ -19,19 +20,23 @@ import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
+import com.syrok0010.nextgallery.feature.albums.fileUrl
 import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
@@ -52,12 +57,17 @@ class UploadForegroundService : Service() {
     private val transport: NextcloudTransport by inject()
     private val albums: MemoriesAlbumWriter by inject()
     private val catalog: AlbumCatalogRepository by inject()
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val notificationManager: NotificationManager by lazy {
         checkNotNull(
             getSystemService(),
         )
     }
+
+    // Main thread only: starts arrive there, and the worker reads the queue there too.
+    private val queue = ArrayDeque<List<UploadSelection>>()
+    private var worker: Job? = null
+    private var lastStartId = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -65,57 +75,94 @@ class UploadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val payload = intent?.getStringExtra(EXTRA_SELECTIONS) ?: return START_NOT_STICKY
-        val selections = runCatching {
-            Json.decodeFromString<List<UploadSelection>>(payload)
-        }.getOrElse {
-            stopSelfResult(startId)
-            return START_NOT_STICKY
-        }
+        lastStartId = startId
+        val selections = intent
+            ?.getStringExtra(EXTRA_SELECTIONS)
+            ?.let { payload ->
+                runCatching { Json.decodeFromString<List<UploadSelection>>(payload) }.getOrNull()
+            }.orEmpty()
         if (selections.isEmpty()) {
-            stopSelfResult(startId)
+            // A running worker stops the service with the latest start id itself.
+            if (worker == null) stopSelfResult(startId)
             return START_NOT_STICKY
         }
+        queue += selections
+        if (worker == null) {
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                notification(getString(R.string.upload_preparing), uploading = true),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+            worker = serviceScope.launch { drainQueue() }
+        }
+        return START_NOT_STICKY
+    }
 
-        startForeground(
-            NOTIFICATION_ID,
-            notification("Подготовка загрузки", uploading = true),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-        )
-        serviceScope.launch {
-            // Android drops bursts of notification updates, including the terminal result.
-            // Keep only the latest progress and leave room for foreground/final updates.
-            val updates = Channel<Notification>(Channel.CONFLATED)
+    /**
+     * Batches run one after another under one foreground notification; each gets its own result
+     * notification. The service leaves the foreground only when no batch is waiting.
+     */
+    private suspend fun drainQueue() {
+        while (true) {
+            val batch = queue.removeFirstOrNull() ?: break
+            val result = runBatch(batch)
+            notificationManager.notify(RESULT_NOTIFICATION_ID + resultCount++, result)
+        }
+        // No suspension from the empty check to here, so no start can slip in between.
+        worker = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelfResult(lastStartId)
+    }
+
+    private suspend fun runBatch(selections: List<UploadSelection>): Notification {
+        // Android drops bursts of notification updates, including the terminal result.
+        // Keep only the latest progress and leave room for foreground/final updates.
+        val updates = Channel<Notification>(Channel.CONFLATED)
+        val progress = UploadProgress()
+        val result = coroutineScope {
             val publisher = launch {
                 for (update in updates) {
-                    notificationManager.notify(NOTIFICATION_ID, update)
+                    notificationManager.notify(FOREGROUND_NOTIFICATION_ID, update)
                     delay(500L)
                 }
             }
-            val progress = UploadProgress()
             val result = runCatching {
-                upload(selections, progress) { message, percent ->
-                    updates.trySend(notification(message, uploading = true, progress = percent))
+                withContext(Dispatchers.IO) {
+                    upload(selections, progress) { message, percent ->
+                        updates.trySend(notification(message, uploading = true, progress = percent))
+                    }
                 }
             }
             publisher.cancelAndJoin()
             updates.close()
-            delay(500L)
-            val message = result.fold(
-                onSuccess = { "Загрузка завершена: ${progress.completed} из ${selections.size}" },
-                onFailure = { "Загрузка остановлена: ${it.localizedMessage ?: "ошибка сети"}" },
-            )
-            if (result.isFailure) progress.notUploaded(selections.drop(progress.completed))
-            val albumSummary = uploadAlbumSummary(progress.albums)
-            // The album sheet refreshed the catalog before these files reached the album.
-            if (progress.albums.isNotEmpty()) catalog.refresh()
-            // Keep the final result visible after the foreground service stops.
-            stopForeground(STOP_FOREGROUND_DETACH)
-            notificationManager.notify(NOTIFICATION_ID, notification(message, text = albumSummary))
-            stopSelfResult(startId)
+            result
         }
-        return START_NOT_STICKY
+        (result.exceptionOrNull() as? CancellationException)?.let { throw it }
+        delay(500L)
+        val message = result.fold(
+            onSuccess = { getString(R.string.upload_done, progress.completed, selections.size) },
+            onFailure = { getString(R.string.upload_stopped, failureReason(it)) },
+        )
+        if (result.isFailure) progress.notUploaded(selections.drop(progress.completed))
+        val albumSummary = uploadAlbumSummaries(progress.albums)
+            .joinToString(" · ") { it.text() }
+            .ifEmpty { null }
+        // The album sheet refreshed the catalog before these files reached the album.
+        if (progress.albums.isNotEmpty()) catalog.refresh()
+        return notification(message, text = albumSummary)
     }
+
+    private fun failureReason(error: Throwable): String =
+        (error as? UploadException)?.let { getString(it.reason, *it.args) }
+            ?: error.localizedMessage
+            ?: getString(R.string.upload_error_network)
+
+    private fun AlbumUploadSummary.text(): String =
+        if (failed > 0) {
+            getString(R.string.upload_album_summary_failed, album, added, failed)
+        } else {
+            getString(R.string.upload_album_summary, album, added)
+        }
 
     private suspend fun upload(
         selections: List<UploadSelection>,
@@ -123,15 +170,17 @@ class UploadForegroundService : Service() {
         onProgress: (String, Int?) -> Unit,
     ) {
         val credentials = credentialsStore.load()
-            ?: error("Сессия Nextcloud больше недоступна")
+            ?: throw UploadException(R.string.upload_error_session)
+        // Login Flow may hand out an e-mail as login name; DAV paths use the uid.
+        val user = albums.currentUser(credentials)
         val config = transport.memoriesApi(credentials).config()
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
-            ?: error("Memories не сообщил папку таймлайна")
+            ?: throw UploadException(R.string.upload_error_timeline)
         selections.forEachIndexed { index, selection ->
-            val message = "Загрузка: ${index + 1} из ${selections.size}"
+            val message = getString(R.string.upload_progress, index + 1, selections.size)
             val uploaded = put(
                 credentials = credentials,
-                destination = destination,
+                url = uploadUrl(credentials.serverUrl, user, destination, selection.displayName),
                 selection = selection,
                 onProgress = { progress -> onProgress(message, progress) },
             )
@@ -154,7 +203,7 @@ class UploadForegroundService : Service() {
         return try {
             albums.addFile(
                 credentials,
-                uploaded.url.toHttpUrl(),
+                uploaded.url,
                 AlbumAddress(album.owner, album.name),
             )
         } catch (cancelled: CancellationException) {
@@ -167,7 +216,7 @@ class UploadForegroundService : Service() {
     private fun sameRemoteSize(credentials: AccountCredentials, uploaded: UploadedFile): Boolean {
         if (uploaded.length < 0L) return false
         val request = transport
-            .authenticatedRequestBuilder(credentials, uploaded.url, accept = "*/*")
+            .authenticatedRequestBuilder(credentials, uploaded.url.toString(), accept = "*/*")
             .head()
             .build()
         return runCatching {
@@ -180,59 +229,37 @@ class UploadForegroundService : Service() {
 
     private fun put(
         credentials: AccountCredentials,
-        destination: String,
+        url: HttpUrl,
         selection: UploadSelection,
         onProgress: (Int?) -> Unit,
     ): UploadedFile {
         val uri = Uri.parse(selection.contentUri)
-        val url =
-            webDavUrl(
-                credentials.serverUrl,
-                credentials.loginName,
-                destination,
-                selection.displayName,
-            )
         val length = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
         val body = UploadRequestBody(
             length = length,
             mediaType = selection.mimeType?.toMediaTypeOrNull(),
             openStream = {
-                contentResolver.openInputStream(
-                    uri,
-                ) ?: error("Не удалось открыть локальную копию $uri")
+                contentResolver.openInputStream(uri)
+                    ?: throw UploadException(R.string.upload_error_open, selection.displayName)
             },
             onProgress = onProgress,
         )
         val request = transport
-            .authenticatedRequestBuilder(credentials, url, accept = "*")
+            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*")
             .method("PUT", body)
             .header("If-None-Match", "*")
             .build()
         return transport.baseClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful && response.code != 412) {
-                error("HTTP ${response.code} при загрузке ${selection.displayName}")
+                throw UploadException(
+                    R.string.upload_error_http,
+                    response.code,
+                    selection.displayName,
+                )
             }
             UploadedFile(url, existed = response.code == 412, length = length)
         }
-    }
-
-    private fun webDavUrl(
-        serverUrl: String,
-        login: String,
-        directory: String,
-        name: String,
-    ): String {
-        val base = NextcloudTransport.normalizeServerOrigin(serverUrl).trimEnd('/')
-        val encodedLogin = Uri.encode(login)
-        val segments = (
-            listOf("remote.php", "dav", "files", encodedLogin) +
-                directory.trim('/').split('/').filter(String::isNotBlank) +
-                name
-            ).joinToString("/") { segment ->
-            if (segment == encodedLogin) segment else Uri.encode(segment)
-        }
-        return "$base/$segments"
     }
 
     private fun notification(
@@ -255,7 +282,7 @@ class UploadForegroundService : Service() {
         notificationManager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "Загрузка в облако",
+                getString(R.string.upload_channel),
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
@@ -268,7 +295,9 @@ class UploadForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private class UploadedFile(val url: String, val existed: Boolean, val length: Long)
+    private class UploadedFile(val url: HttpUrl, val existed: Boolean, val length: Long)
+
+    private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 
     /** Survives a failed upload so earlier album results still reach the notification. */
     private class UploadProgress {
@@ -289,7 +318,13 @@ class UploadForegroundService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "cloud-upload"
-        private const val NOTIFICATION_ID = 42
+        private const val FOREGROUND_NOTIFICATION_ID = 42
+
+        /** Results live next to the progress, one per batch, so a queued batch keeps its own. */
+        private const val RESULT_NOTIFICATION_ID = 1000
+
+        // Start ids restart with every service instance, so results count per process instead.
+        private var resultCount = 0
         private const val EXTRA_SELECTIONS = "selections"
 
         fun start(context: Context, selections: List<UploadSelection>) {
@@ -301,14 +336,17 @@ class UploadForegroundService : Service() {
     }
 }
 
-/** Notification text for album additions after upload; files already in the album count as added. */
-internal fun uploadAlbumSummary(albums: Map<String, List<AlbumCopyOutcome>>): String? =
-    albums.entries
-        .joinToString(" · ") { (name, outcomes) ->
-            val failed = outcomes.count { it == AlbumCopyOutcome.Failed }
-            val added = outcomes.size - failed
-            buildString {
-                append("В «$name»: $added")
-                if (failed > 0) append(", не добавлено: $failed")
-            }
-        }.ifEmpty { null }
+internal data class AlbumUploadSummary(val album: String, val added: Int, val failed: Int)
+
+/** Album additions after upload, per album; files already in the album count as added. */
+internal fun uploadAlbumSummaries(
+    albums: Map<String, List<AlbumCopyOutcome>>,
+): List<AlbumUploadSummary> =
+    albums.map { (name, outcomes) ->
+        val failed = outcomes.count { it == AlbumCopyOutcome.Failed }
+        AlbumUploadSummary(name, added = outcomes.size - failed, failed = failed)
+    }
+
+/** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
+internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =
+    fileUrl(serverUrl, user, directory).newBuilder().addPathSegment(name).build()

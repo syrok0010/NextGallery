@@ -8,8 +8,8 @@ import org.junit.Test
 class UploadAlbumSummaryTest {
     @Test fun `summary counts files already in album as added and reports failures`() {
         assertEquals(
-            "В «Лето»: 2, не добавлено: 1",
-            uploadAlbumSummary(
+            listOf(AlbumUploadSummary("Лето", added = 2, failed = 1)),
+            uploadAlbumSummaries(
                 mapOf(
                     "Лето" to listOf(
                         AlbumCopyOutcome.Added,
@@ -19,7 +19,17 @@ class UploadAlbumSummaryTest {
                 ),
             ),
         )
-        assertNull(uploadAlbumSummary(emptyMap()))
+        assertTrue(uploadAlbumSummaries(emptyMap()).isEmpty())
+    }
+
+    @Test fun `upload URL uses the uid and encodes the file name as one segment`() {
+        val url = uploadUrl("https://cloud.example/", "anna", "/Photos/Camera/", "Лето #1?.jpg")
+        assertEquals(
+            "/remote.php/dav/files/anna/Photos/Camera/%D0%9B%D0%B5%D1%82%D0%BE%20%231%3F.jpg",
+            url.encodedPath,
+        )
+        assertEquals("Лето #1?.jpg", url.pathSegments.last())
+        assertNull(url.query)
     }
 
     @Test fun `selection without album keeps the PR 91 payload format`() {

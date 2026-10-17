@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CoroutineScope
@@ -54,14 +55,14 @@ class AlbumAdditionTest {
         assertEquals(
             listOf(
                 uiText(R.string.album_add_done, "Лето", 3),
-                uiText(R.string.album_add_done_uploading, 2),
+                pluralText(R.plurals.album_add_done_uploading, 2, 2),
             ),
             albumAdditionMessage(
                 AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 0), localUploads = 2),
             ),
         )
         assertEquals(
-            listOf(uiText(R.string.album_add_uploading_only, "Лето", 2)),
+            listOf(pluralText(R.plurals.album_add_uploading_only, 2, "Лето", 2)),
             albumAdditionMessage(
                 AlbumAdditionState.Done("Лето", AlbumAddResult(0, 0, 0), localUploads = 2),
             ),
