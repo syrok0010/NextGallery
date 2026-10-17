@@ -1,0 +1,166 @@
+package com.syrok0010.nextgallery.feature.deletion
+
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.core.ui.uiText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+
+/** Which copies of objects that exist both on the phone and in the cloud go to the trash. */
+internal enum class DeletionScope { Everywhere, PhoneOnly, CloudOnly }
+
+/** Copies to delete: local content URIs for the system trash, cloud file ids for Nextcloud. */
+@Serializable
+internal data class DeletionTargets(val contentUris: List<String>, val fileIds: List<Long>)
+
+/** Selection snapshot split by where the copies live; the scope only applies to [merged]. */
+internal data class DeletionPlan(
+    val phoneOnly: List<String>,
+    val cloudOnly: List<Long>,
+    val merged: List<MergedCopies>,
+) {
+    data class MergedCopies(val contentUri: String, val fileId: Long)
+
+    val total: Int get() = phoneOnly.size + cloudOnly.size + merged.size
+
+    fun targets(scope: DeletionScope) =
+        DeletionTargets(
+            contentUris = phoneOnly +
+                if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.contentUri },
+            fileIds = (
+                cloudOnly +
+                    if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
+                ).distinct(),
+        )
+
+    companion object {
+        fun of(items: List<MediaItem>): DeletionPlan {
+            val phoneOnly = mutableListOf<String>()
+            val cloudOnly = mutableListOf<Long>()
+            val merged = mutableListOf<MergedCopies>()
+            items.forEach { item ->
+                val local = item.localCopy?.contentUri?.let { mediaStoreItemUri(it, item.isVideo) }
+                val remote = item.remoteFileId
+                when {
+                    local != null && remote != null -> merged += MergedCopies(local, remote)
+                    local != null -> phoneOnly += local
+                    remote != null -> cloudOnly += remote
+                }
+            }
+            return DeletionPlan(phoneOnly, cloudOnly, merged)
+        }
+    }
+}
+
+/**
+ * The local index reads `MediaStore.Files`, but trash requests only accept image, video and audio
+ * item URIs, so `content://media/<volume>/file/<id>` is rewritten to the typed collection.
+ */
+internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
+    val prefix = "content://media/"
+    val parts = contentUri.removePrefix(prefix).split('/')
+    if (!contentUri.startsWith(prefix) || parts.size != 3 || parts[1] != "file") return contentUri
+    val collection = if (isVideo) "video" else "images"
+    return "$prefix${parts[0]}/$collection/media/${parts[2]}"
+}
+
+internal sealed interface MediaDeletionState {
+    data object Idle : MediaDeletionState
+
+    data class Running(val count: Int) : MediaDeletionState
+
+    data class Done(val phoneTrashed: Int, val cloud: CloudDeleteResult) : MediaDeletionState
+}
+
+/**
+ * Runs the cloud half of a deletion in a process-scoped coroutine: the phone half has already
+ * been confirmed in the system trash dialog, so the result must survive the screen.
+ */
+internal class MediaDeletionRepository(
+    private val sessions: SessionStore,
+    private val deleter: MemoriesFileDeleter,
+    private val scope: CoroutineScope,
+    private val onDeleted: () -> Unit,
+) {
+    private val mutableState = MutableStateFlow<MediaDeletionState>(MediaDeletionState.Idle)
+    val state = mutableState.asStateFlow()
+    private var job: Job? = null
+
+    /** Parent of every queued deletion, so a session change cancels the whole queue. */
+    private var operations = SupervisorJob(scope.coroutineContext[Job])
+
+    init {
+        scope.launch {
+            var owner: AccountCredentials? = null
+            sessions.session.collect { session ->
+                val current = (session as? SessionUiState.SignedIn)?.credentials
+                // The first emission only records the owner; results never cross accounts.
+                if (current == null || (owner != null && current != owner)) {
+                    operations.cancel()
+                    operations = SupervisorJob(scope.coroutineContext[Job])
+                    job = null
+                    mutableState.value = MediaDeletionState.Idle
+                }
+                owner = current
+            }
+        }
+    }
+
+    /** Requests run one after another; a new one never cancels a deletion already started. */
+    fun delete(targets: DeletionTargets) {
+        val previous = job
+        job = scope.launch(operations) {
+            previous?.join()
+            val fileIds = targets.fileIds
+            val phoneTrashed = targets.contentUris.size
+            if (fileIds.isNotEmpty()) mutableState.value = MediaDeletionState.Running(fileIds.size)
+            val cloud = if (fileIds.isEmpty()) {
+                CloudDeleteResult(deleted = 0, failed = 0)
+            } else {
+                val credentials = credentials()
+                try {
+                    credentials?.let { deleter.delete(it, fileIds) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                } ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
+            }
+            mutableState.value = MediaDeletionState.Done(phoneTrashed, cloud)
+            onDeleted()
+        }
+    }
+
+    /** Called once the UI has shown a terminal result. */
+    fun consume() {
+        if (mutableState.value is MediaDeletionState.Done) mutableState.value = MediaDeletionState.Idle
+    }
+
+    private fun credentials(): AccountCredentials? =
+        (sessions.session.value as? SessionUiState.SignedIn)?.credentials
+}
+
+/** Message parts joined by the snackbar; zero counters stay silent. */
+internal fun mediaDeletionMessage(state: MediaDeletionState): List<UiText>? =
+    when (state) {
+        MediaDeletionState.Idle -> null
+
+        is MediaDeletionState.Running -> listOf(uiText(R.string.delete_running, state.count))
+
+        is MediaDeletionState.Done -> buildList {
+            if (state.phoneTrashed > 0) add(uiText(R.string.delete_done_phone, state.phoneTrashed))
+            if (state.cloud.deleted > 0) add(uiText(R.string.delete_done_cloud, state.cloud.deleted))
+            if (state.cloud.failed > 0) add(uiText(R.string.delete_done_failed, state.cloud.failed))
+        }.ifEmpty { null }
+    }
