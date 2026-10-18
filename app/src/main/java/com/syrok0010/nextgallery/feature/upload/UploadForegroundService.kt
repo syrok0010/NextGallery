@@ -8,9 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
-import android.os.Build
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
@@ -35,6 +35,11 @@ class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
     private val transport: NextcloudTransport by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val notificationManager: NotificationManager by lazy {
+        checkNotNull(
+            getSystemService(),
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -54,15 +59,18 @@ class UploadForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        startForegroundCompat(notification("Подготовка загрузки", uploading = true))
+        startForeground(
+            NOTIFICATION_ID,
+            notification("Подготовка загрузки", uploading = true),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
         serviceScope.launch {
             // Android drops bursts of notification updates, including the terminal result.
             // Keep only the latest progress and leave room for foreground/final updates.
             val updates = Channel<Notification>(Channel.CONFLATED)
-            val manager = getSystemService(NotificationManager::class.java)
             val publisher = launch {
                 for (update in updates) {
-                    manager.notify(NOTIFICATION_ID, update)
+                    notificationManager.notify(NOTIFICATION_ID, update)
                     delay(500L)
                 }
             }
@@ -80,7 +88,7 @@ class UploadForegroundService : Service() {
             )
             // Keep the final result visible after the foreground service stops.
             stopForeground(STOP_FOREGROUND_DETACH)
-            manager.notify(NOTIFICATION_ID, notification(message))
+            notificationManager.notify(NOTIFICATION_ID, notification(message))
             stopSelfResult(startId)
         }
         return START_NOT_STICKY
@@ -165,18 +173,6 @@ class UploadForegroundService : Service() {
         return "$base/$segments"
     }
 
-    private fun startForegroundCompat(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-    }
-
     private fun notification(
         message: String,
         uploading: Boolean = false,
@@ -192,7 +188,7 @@ class UploadForegroundService : Service() {
             .build()
 
     private fun createNotificationChannel() {
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
+        notificationManager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
                 "Загрузка в облако",
