@@ -123,16 +123,44 @@ class RoomMediaIdentityRegistry(
         }
     }
 
-    override suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity): Boolean =
+    override suspend fun link(
+        existing: MediaSourceIdentity,
+        linked: MediaSourceIdentity,
+        isCurrent: () -> Boolean,
+    ): Boolean =
         database.withTransaction {
+            if (!isCurrent()) return@withTransaction false
             val mediaId = dao
                 .identifiers(existing.identifierKind(), listOf(existing.sourceKey))
                 .singleOrNull()
                 ?.mediaId
                 ?: return@withTransaction false
+            val linkedKind = linked.identifierKind()
+            val previous = dao
+                .identifiers(
+                    linkedKind,
+                    listOf(linked.sourceKey),
+                ).singleOrNull()
+                ?.mediaId
+            // One copy per source: two server files of one object would share one timeline slot.
+            val earlierCopies = dao
+                .identifiersForMediaIds(listOf(mediaId))
+                .filter { it.kind == linkedKind && it.value != linked.sourceKey }
+            if (earlierCopies.isNotEmpty()) {
+                dao.deleteIdentifierValues(linkedKind, earlierCopies.map { it.value })
+            }
+            if (previous != null && previous != mediaId) {
+                val previousSources = dao
+                    .identifiersForMediaIds(listOf(previous))
+                    .filter { it.kind in SOURCE_IDENTIFIER_KINDS }
+                // Aliases of an object only [linked] had would pull it back on the next resolve.
+                if (previousSources.all { it.kind == linkedKind && it.value == linked.sourceKey }) {
+                    dao.reassignMediaId(previous, mediaId)
+                }
+            }
             dao.deleteConflict(linked.source, linked.sourceKey)
             dao.upsertIdentifiers(
-                listOf(MediaIdentifierEntity(linked.identifierKind(), linked.sourceKey, mediaId)),
+                listOf(MediaIdentifierEntity(linkedKind, linked.sourceKey, mediaId)),
             )
             true
         }

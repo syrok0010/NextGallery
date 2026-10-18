@@ -4,6 +4,8 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
@@ -13,12 +15,20 @@ import com.syrok0010.nextgallery.core.ui.UiText
  */
 class UploadedCopies(
     private val identities: MediaIdentityRegistry,
+    private val sessions: SessionStore,
     private val refreshLibrary: () -> Unit,
 ) {
-    suspend fun link(contentUri: String, fileId: Long): Boolean =
+    /**
+     * Links only while [credentials] are still signed in: logout clears Memories identities, and
+     * the same numeric file id on another server is a different file.
+     */
+    suspend fun link(credentials: AccountCredentials, contentUri: String, fileId: Long): Boolean =
         identities.link(
             existing = MediaSourceIdentity(MediaSourceKind.Local, contentUri),
             linked = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString()),
+            isCurrent = {
+                (sessions.session.value as? SessionUiState.SignedIn)?.credentials == credentials
+            },
         )
 
     /** Follow-up for one batch; [UploadQueue] adds it to every batch. */
@@ -30,7 +40,7 @@ class UploadedCopies(
         override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) {
             uploaded = true
             // Without the link the timeline shows the phone file and its server copy separately.
-            file.fileId?.let { fileId -> link(file.selection.contentUri, fileId) }
+            file.fileId?.let { fileId -> link(credentials, file.selection.contentUri, fileId) }
         }
 
         /** Shows the server copies without waiting for a manual refresh. */

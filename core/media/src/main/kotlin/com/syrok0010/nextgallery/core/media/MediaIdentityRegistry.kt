@@ -46,11 +46,17 @@ interface MediaIdentityRegistry {
     suspend fun removeSource(source: MediaSourceKind)
 
     /**
-     * Records [linked] as another copy of the media already known as [existing], for example the
-     * server file just uploaded from a phone file. A previous media id of [linked] is replaced.
-     * Returns false when [existing] is unknown.
+     * Records [linked] as the copy of the media already known as [existing] in [linked]'s source,
+     * for example the server file just uploaded from a phone file. This exact link outranks
+     * aliases: an object [linked] had alone is merged, and an earlier copy from the same source
+     * becomes a separate object again. [isCurrent] is checked in the same transaction, so a link
+     * cannot outlive a concurrent [removeSource]. Returns false when nothing was linked.
      */
-    suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity): Boolean
+    suspend fun link(
+        existing: MediaSourceIdentity,
+        linked: MediaSourceIdentity,
+        isCurrent: () -> Boolean = { true },
+    ): Boolean
 }
 
 data class MediaIdentityReconciliation(
