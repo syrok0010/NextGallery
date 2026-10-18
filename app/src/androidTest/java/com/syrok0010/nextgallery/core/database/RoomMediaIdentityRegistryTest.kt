@@ -182,6 +182,28 @@ class RoomMediaIdentityRegistryTest {
     }
 
     @Test
+    fun serverDuplicatesWithOneAliasJoinPhoneFileOnlyOnce() = runBlocking {
+        database.close()
+        val generatedIds = listOf("local-id", "first-id", "second-id").map(::MediaId).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val alias = MediaAlias(MediaAliasKind.Auid, "shared-auid")
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val first = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val second = MediaSourceIdentity(MediaSourceKind.Memories, (FILE_ID + 1).toString())
+        fun candidate(source: MediaSourceIdentity) = MediaIdentityCandidate(source = source, aliases = setOf(alias))
+        val localId = registry.resolve(listOf(candidate(local))).mediaIds.getValue(local)
+        assertEquals(localId, registry.resolve(listOf(candidate(first))).mediaIds.getValue(first))
+
+        database.close()
+        openDatabase(mediaIdFactory = listOf(MediaId("second-id")).iterator()::next)
+        val secondId = registry.resolve(listOf(candidate(second))).mediaIds.getValue(second)
+
+        assertEquals(MediaId("second-id"), secondId)
+        val resolved = registry.resolve(listOf(candidate(second), candidate(first), candidate(local))).mediaIds
+        assertEquals(mapOf(local to localId, first to localId, second to secondId), resolved)
+    }
+
+    @Test
     fun staleLinkIsNotWritten() = runBlocking {
         val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
         val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())

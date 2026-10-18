@@ -101,9 +101,9 @@ data class MemoriesPhotoDto(
     @SerialName("ishidden")
     val isHidden: JsonElement? = null,
 ) {
-    /** Computed as Memories 8 did on the server; zero values are unknown there too. */
+    /** Computed as Memories 8 did on the server: a zero epoch or size is unknown, dates before 1970 are not. */
     val auid: String?
-        get() = if (epoch != null && epoch > 0 && size != null && size > 0) {
+        get() = if (epoch != null && epoch != 0L && size != null && size > 0) {
             MemoriesMediaIdentity.auid(epoch, size)
         } else {
             null
