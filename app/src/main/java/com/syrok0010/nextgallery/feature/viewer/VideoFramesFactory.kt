@@ -4,6 +4,7 @@ import android.content.Context
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
+import com.syrok0010.nextgallery.feature.viewer.playback.newVodClientId
 
 /** Shared dependencies; each expanded card gets its own extraction request identity. */
 internal class VideoFramesFactory(
@@ -13,7 +14,7 @@ internal class VideoFramesFactory(
     fun sources(asset: MediaAssetRef): VideoSources = playerFactory.sources(asset)
 
     fun create(sources: VideoSources): VideoFrameProvider {
-        val clientId = java.util.UUID.randomUUID().toString()
+        val clientId = newVodClientId()
         return FallbackVideoFrames(
             local = LocalVideoFrames(context),
             remote = RemoteVideoFrames(context) { playerFactory.mediaSourceFactory(context) },
