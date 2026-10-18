@@ -157,6 +157,44 @@ class RoomMediaIdentityRegistryTest {
     }
 
     @Test
+    fun linkOutranksAliasesAndKeepsOneServerCopy() = runBlocking {
+        database.close()
+        val generatedIds = listOf("local-id", "early-remote-id", "first-copy-id").map(::MediaId).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val first = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val second = MediaSourceIdentity(MediaSourceKind.Memories, (FILE_ID + 1).toString())
+        val serverAlias = MediaAlias(MediaAliasKind.Auid, "server-auid")
+        val localId = registry.resolveId(local)
+        registry.resolve(listOf(MediaIdentityCandidate(source = second, aliases = setOf(serverAlias))))
+
+        assertEquals(true, registry.link(existing = local, linked = first))
+        assertEquals(true, registry.link(existing = local, linked = second))
+
+        val resolved = registry.resolve(
+            listOf(
+                MediaIdentityCandidate(source = second, aliases = setOf(serverAlias)),
+                MediaIdentityCandidate(source = first, aliases = emptySet()),
+            ),
+        ).mediaIds
+        assertEquals(localId, resolved.getValue(second))
+        assertEquals(MediaId("first-copy-id"), resolved.getValue(first))
+    }
+
+    @Test
+    fun staleLinkIsNotWritten() = runBlocking {
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        registry.resolveId(local)
+
+        assertEquals(false, registry.link(existing = local, linked = remote, isCurrent = { false }))
+        assertEquals(
+            emptyList<MediaIdentifierEntity>(),
+            database.mediaIdentityDao().identifiers(MediaIdentifierKind.MemoriesFile, listOf(FILE_ID.toString())),
+        )
+    }
+
+    @Test
     fun unknownExistingSourceIsNotLinked() = runBlocking {
         val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
         val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())

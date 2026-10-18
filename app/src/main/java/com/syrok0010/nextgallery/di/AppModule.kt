@@ -73,7 +73,7 @@ val appModule = module {
     single { MemoriesAlbumWriter(get()) }
     single { AlbumAdditionRepository(get(), get(), get(), get(named("libraryScope"))) }
     single { UploadHandoff(get(), get(named("libraryScope"))) }
-    single { UploadedCopies(get()) { get<MediaLibraryCoordinator>().refresh() } }
+    single { UploadedCopies(get(), get()) { get<MediaLibraryCoordinator>().refresh() } }
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }

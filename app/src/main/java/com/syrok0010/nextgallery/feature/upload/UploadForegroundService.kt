@@ -212,7 +212,7 @@ class UploadForegroundService : Service() {
                 onProgress = { progress -> onProgress(message, progress) },
             )
             progress.completed++
-            uploaded.fileId?.let { fileId -> link(selection, fileId) }
+            uploaded.fileId?.let { fileId -> link(credentials, selection, fileId) }
             selection.album?.let { album ->
                 progress.record(album, addToAlbum(credentials, uploaded, album))
             }
@@ -220,9 +220,13 @@ class UploadForegroundService : Service() {
     }
 
     /** Without the link the timeline shows the phone file and its server copy separately. */
-    private suspend fun link(selection: UploadSelection, fileId: Long) {
+    private suspend fun link(
+        credentials: AccountCredentials,
+        selection: UploadSelection,
+        fileId: Long,
+    ) {
         try {
-            copies.link(selection.contentUri, fileId)
+            copies.link(credentials, selection.contentUri, fileId)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
