@@ -123,6 +123,20 @@ class RoomMediaIdentityRegistry(
         }
     }
 
+    override suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity): Boolean =
+        database.withTransaction {
+            val mediaId = dao
+                .identifiers(existing.identifierKind(), listOf(existing.sourceKey))
+                .singleOrNull()
+                ?.mediaId
+                ?: return@withTransaction false
+            dao.deleteConflict(linked.source, linked.sourceKey)
+            dao.upsertIdentifiers(
+                listOf(MediaIdentifierEntity(linked.identifierKind(), linked.sourceKey, mediaId)),
+            )
+            true
+        }
+
     suspend fun conflicts(): List<MediaIdentityConflict> =
         dao.conflicts().map { entity ->
             MediaIdentityConflict(
