@@ -28,7 +28,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
-import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,20 +53,18 @@ internal fun MediaCollectionScreen(
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedMediaIds by remember { mutableStateOf(emptySet<MediaId>()) }
+    val selection = rememberMediaSelection()
     var uploadRequested by remember { mutableStateOf(false) }
     val cancelSelection = {
-        selectionMode = false
-        selectedMediaIds = emptySet()
+        selection.clear()
         uploadRequested = false
     }
-    val selectedItems = remember(slots, selectedMediaIds) {
-        slots.mapNotNull { it.mediaItem }.filter { it.mediaId in selectedMediaIds }
+    val selectedItems = remember(slots, selection.selectedIds) {
+        slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
     }
     SideEffect {
         onViewerVisibilityChanged(viewerId != null)
-        onSelectionModeChanged(selectionMode)
+        onSelectionModeChanged(selection.active)
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -75,7 +72,7 @@ internal fun MediaCollectionScreen(
             onSelectionModeChanged(false)
         }
     }
-    BackHandler(enabled = selectionMode && !uploadRequested, onBack = cancelSelection)
+    BackHandler(enabled = selection.active && !uploadRequested, onBack = cancelSelection)
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -87,22 +84,12 @@ internal fun MediaCollectionScreen(
                     onMediaRevealed = transition::onTimelineMediaRevealed,
                     registerTimelineTile = transition::registerTimelineTile,
                     onSelect = { transition.open(it.mediaId) },
-                    selectionMode = selectionMode,
-                    selectionEnabled = selectionEnabled,
-                    selectedMediaIds = selectedMediaIds,
-                    onSelectionModeChanged = { selectionMode = it },
-                    onMediaSelectionChanged = { item, selected ->
-                        selectedMediaIds = if (selected) {
-                            selectedMediaIds + item.mediaId
-                        } else {
-                            selectedMediaIds - item.mediaId
-                        }
-                    },
+                    selection = selection.takeIf { selectionEnabled },
                     gridState = gridState,
                 )
             }
         }
-        if (viewerId == null && selectionEnabled && selectionMode) {
+        if (viewerId == null && selectionEnabled && selection.active) {
             SelectionActionBar(
                 selectedCount = selectedItems.size,
                 uploadRequested = uploadRequested,

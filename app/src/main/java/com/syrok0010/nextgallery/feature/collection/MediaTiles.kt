@@ -19,6 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,11 +77,8 @@ internal fun MediaSlotTile(
     slot: MediaSlot,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
-    selectionEnabled: Boolean = false,
-    selectionMode: Boolean = false,
-    selected: Boolean = false,
-    onSelectionModeChanged: (Boolean) -> Unit = {},
-    onSelectionChanged: (MediaItem, Boolean) -> Unit = { _, _ -> },
+    /** Null where the screen has no selection mode. */
+    selection: MediaSelection? = null,
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val item = slot.mediaItem
@@ -89,26 +88,25 @@ internal fun MediaSlotTile(
     if (item == null) {
         PlaceholderMediaTile(cloudCopyDescription = cloudCopyDescription)
     } else {
+        // Only the tile whose own state changed recomposes when the selection changes.
+        val selected by remember(selection, item.mediaId) {
+            derivedStateOf { selection?.isSelected(item.mediaId) == true }
+        }
         MediaTile(
             item = item,
             cloudCopyDescription = cloudCopyDescription,
             localCopyDescription = localCopyDescription,
             requestFactory = requestFactory,
             registerTimelineTile = registerTimelineTile,
-            selectionEnabled = selectionEnabled,
-            selectionMode = selectionMode,
             selected = selected,
             onClick = {
-                if (selectionMode) {
-                    onSelectionChanged(item, !selected)
+                if (selection?.active == true) {
+                    selection.toggle(item.mediaId)
                 } else {
                     onSelect(item)
                 }
             },
-            onLongClick = {
-                onSelectionModeChanged(true)
-                onSelectionChanged(item, true)
-            },
+            onLongClick = selection?.let { { it.select(item.mediaId) } },
         )
     }
 }
@@ -136,11 +134,9 @@ private fun MediaTile(
     localCopyDescription: String,
     requestFactory: MediaImageRequestFactory,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
-    selectionEnabled: Boolean,
-    selectionMode: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
     selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     val coordinatesHolder = remember(item.mediaId) {
         TimelineTileCoordinates()
@@ -170,7 +166,7 @@ private fun MediaTile(
                 },
             ).combinedClickable(
                 onClick = onClick,
-                onLongClick = onLongClick.takeIf { selectionEnabled },
+                onLongClick = onLongClick,
             ),
     ) {
         MediaAssetImage(
