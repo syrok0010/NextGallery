@@ -53,9 +53,7 @@ object TimelineSnapshotAssembler {
     }
 
     private fun MediaItem.hasMaterializedRemoteMetadata(): Boolean =
-        remoteFileId != null &&
-            takenAtEpochSeconds != null &&
-            (!auid.isNullOrBlank() || !buid.isNullOrBlank())
+        remoteFileId != null && takenAtEpochSeconds != null
 
     fun mergeLoadedItems(
         snapshot: TimelineSnapshot,

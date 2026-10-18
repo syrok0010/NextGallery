@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.timeline.remote
 
+import com.syrok0010.nextgallery.feature.library.local.MemoriesMediaIdentity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -87,7 +88,7 @@ data class MemoriesPhotoDto(
     val epoch: Long? = null,
     val mimetype: String? = null,
     val liveid: String? = null,
-    val auid: String? = null,
+    val size: Long? = null,
     val buid: String? = null,
     @SerialName("shared_by")
     val sharedBy: String? = null,
@@ -99,4 +100,12 @@ data class MemoriesPhotoDto(
     val isFavorite: JsonElement? = null,
     @SerialName("ishidden")
     val isHidden: JsonElement? = null,
-)
+) {
+    /** Computed as Memories 8 did on the server; zero values are unknown there too. */
+    val auid: String?
+        get() = if (epoch != null && epoch > 0 && size != null && size > 0) {
+            MemoriesMediaIdentity.auid(epoch, size)
+        } else {
+            null
+        }
+}

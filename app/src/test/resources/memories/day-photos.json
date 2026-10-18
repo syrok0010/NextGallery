@@ -9,7 +9,7 @@
     "epoch": 1716768000,
     "mimetype": "image/jpeg",
     "liveid": "live-42",
-    "auid": "auid-42",
+    "size": 2048000,
     "buid": "buid-42",
     "shared_by": "Alice",
     "isfavorite": 0,
@@ -28,7 +28,7 @@
     "video_duration": 12,
     "isfavorite": "1",
     "ishidden": true,
-    "auid": "auid-43",
+    "size": 15728640,
     "buid": "buid-43"
   }
 ]

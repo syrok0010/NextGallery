@@ -34,7 +34,7 @@ class TimelineSnapshotAssemblerTest {
     }
 
     @Test
-    fun `materialized snapshot excludes cloud objects without deduplication or position metadata`() {
+    fun `materialized snapshot keeps cloud objects without aliases and drops those without position`() {
         val complete = mediaItem(fileId = 42, dayId = 19870).copy(
             auid = "auid-42",
             takenAtEpochSeconds = 1_717_100_000L,
@@ -52,8 +52,8 @@ class TimelineSnapshotAssemblerTest {
             loadedDayIds = setOf(19870),
         )
 
-        assertEquals(listOf(complete), snapshot.items)
-        assertEquals(listOf(TimelineDay(dayId = 19870, count = 1)), snapshot.days)
+        assertEquals(listOf(complete, withoutAlias), snapshot.items)
+        assertEquals(listOf(TimelineDay(dayId = 19870, count = 2)), snapshot.days)
     }
 
     @Test
