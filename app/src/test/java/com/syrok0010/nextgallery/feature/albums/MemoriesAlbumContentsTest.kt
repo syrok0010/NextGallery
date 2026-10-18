@@ -52,8 +52,8 @@ class MemoriesAlbumContentsTest {
                     val lines = generateSequence { reader.readLine()?.takeIf(String::isNotEmpty) }.toList()
                     requests += lines
                     val index = lines.first().contains("/days?")
-                    val body = if (index) """[{"dayid":20,"count":3,"detail":[{"fileid":1,"dayid":20,"auid":"same"}]}]"""
-                        else """[{"fileid":1,"dayid":20,"auid":"same"},{"fileid":2,"dayid":20,"auid":"same"},{"fileid":3,"dayid":20,"isvideo":1}]"""
+                    val body = if (index) """[{"dayid":20,"count":3,"detail":[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048}]}]"""
+                        else """[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":2,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":3,"dayid":20,"epoch":1716768000,"isvideo":1}]"""
                     val bytes = body.toByteArray()
                     it.getOutputStream().apply {
                         write("HTTP/1.1 ${if (fail && !index) 503 else 200} Fixture\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray())

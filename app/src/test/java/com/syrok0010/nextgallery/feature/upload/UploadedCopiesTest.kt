@@ -55,7 +55,7 @@ class UploadedCopiesTest {
         }
 
     @Test
-    fun `without the link Memories 10_1 copies stay separate`() =
+    fun `without the link copies with different aliases stay separate`() =
         runBlocking {
             val localId = resolveLocal()
             val remoteId = resolveRemote()
@@ -181,7 +181,7 @@ class UploadedCopiesTest {
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
-    /** Memories 10.1 returns neither AUID nor BUID. */
+    /** Without explicit aliases the server copy matches nothing. */
     private suspend fun resolveRemote(
         fileId: Long = FILE_ID,
         auid: String? = null,
