@@ -314,6 +314,14 @@ reconciliation. Переименование или перенос папки м
 - `GET /apps/memories/api/image/info/{fileId}` возвращает `filename` относительно корня файлов пользователя, `basename`, `size`, `owneruid`. Этого достаточно, чтобы построить источник `COPY` по `fileId` из таймлайна.
 - DAV uid нужно брать из OCS `cloud/user`, а не из login name.
 
+### Загрузка файлов
+
+Проверено на тестовом стенде (Nextcloud + Memories 10.1.0, октябрь 2026):
+
+- Успешный `PUT` с `If-None-Match: *` возвращает `201` и заголовки `ETag`, `OC-ETag` и `OC-FileId`. `OC-FileId` имеет вид `00000183ocmsigiy9k16`: `fileId`, дополненный нулями до восьми цифр, и instance id, начинающийся с `oc`. Этот `fileId` совпадает с `fileid` в Memories.
+- Повторный `PUT` того же имени возвращает `412` без `OC-FileId`.
+- `days/{id}` в Memories 10.1.0 не содержит `auid`/`buid`, поэтому облачная копия загруженного файла не объединяется с локальной эвристикой (#100). Связь по `OC-FileId` описана в ADR 0017.
+
 ### Содержимое альбомов
 
 Проверено по тому же checkout Memories (`abea4165`):

@@ -44,6 +44,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadedCopies
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +72,10 @@ val appModule = module {
     }
     single { MemoriesAlbumWriter(get()) }
     single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
-    single { UploadQueue(get(), get(named("libraryScope"))) }
+    single { UploadedCopies(get()) { get<MediaLibraryCoordinator>().refresh() } }
+    single {
+        UploadQueue(get(), get(named("libraryScope"))) { listOf(get<UploadedCopies>().followUp()) }
+    }
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }

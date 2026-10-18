@@ -44,6 +44,13 @@ data class MediaIdentityResolution(
 interface MediaIdentityRegistry {
     suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution
     suspend fun removeSource(source: MediaSourceKind)
+
+    /**
+     * Records [linked] as another copy of the media already known as [existing], for example the
+     * server file just uploaded from a phone file. A previous media id of [linked] is replaced.
+     * Returns false when [existing] is unknown.
+     */
+    suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity): Boolean
 }
 
 data class MediaIdentityReconciliation(
