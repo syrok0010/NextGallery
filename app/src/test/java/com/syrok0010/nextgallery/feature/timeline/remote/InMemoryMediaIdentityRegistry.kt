@@ -35,8 +35,23 @@ class InMemoryMediaIdentityRegistry(
         return reconciliation.resolution
     }
 
-    override suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity): Boolean {
+    override suspend fun link(
+        existing: MediaSourceIdentity,
+        linked: MediaSourceIdentity,
+        isCurrent: () -> Boolean,
+    ): Boolean {
+        if (!isCurrent()) return false
         val mediaId = sourceMediaIds[existing] ?: return false
+        val previous = sourceMediaIds[linked]
+        sourceMediaIds.keys.removeAll { source ->
+            source != linked && source.source == linked.source && sourceMediaIds[source] == mediaId
+        }
+        if (previous != null && previous != mediaId) {
+            val previousSources = sourceMediaIds.filterValues { it == previous }.keys
+            if (previousSources == setOf(linked)) {
+                aliasMediaIds.replaceAll { _, value -> if (value == previous) mediaId else value }
+            }
+        }
         sourceMediaIds[linked] = mediaId
         return true
     }
