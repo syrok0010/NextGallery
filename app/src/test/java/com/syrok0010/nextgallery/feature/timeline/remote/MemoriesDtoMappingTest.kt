@@ -118,6 +118,15 @@ class MemoriesDtoMappingTest {
         assertNull(photo.copy(size = null).auid)
         assertNull(photo.copy(epoch = null).auid)
         assertNull(photo.copy(size = 0).auid)
+        assertNull(photo.copy(epoch = 0).auid)
+    }
+
+    @Test
+    fun `AUID covers dates before 1970`() {
+        val photo =
+            MemoriesPhotoDto(fileid = 42, dayid = -3653, epoch = -315_619_200L, size = 2_048L)
+
+        assertEquals(MemoriesMediaIdentity.auid(-315_619_200L, 2_048L), photo.auid)
     }
 
     private fun fixture(name: String): String =

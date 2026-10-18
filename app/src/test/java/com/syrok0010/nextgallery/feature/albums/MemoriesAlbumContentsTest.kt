@@ -21,10 +21,11 @@ class MemoriesAlbumContentsTest {
     @Test fun `all batches carry encoded cluster filter and use media identity`() = runBlocking {
         Fixture().use { fixture ->
             val batches = fixture.load()
-            assertEquals(2, batches.last().items.size)
+            // Two server files with one AUID stay two objects.
+            assertEquals(3, batches.last().items.size)
             assertEquals(3, batches.last().loaded)
-            assertEquals(listOf(3L, 2L), batches.last().items.map { it.remoteFileId })
-            assertEquals(2, batches.last().items.map { it.mediaId }.toSet().size)
+            assertEquals(listOf(3L, 2L, 1L), batches.last().items.map { it.remoteFileId })
+            assertEquals(3, batches.last().items.map { it.mediaId }.toSet().size)
             assertEquals(3, batches.last().total)
             assertEquals(2, fixture.requests.size)
             fixture.requests.forEach { request ->
