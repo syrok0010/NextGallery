@@ -98,7 +98,7 @@ Redirects для видео отключены: клиент обращаетс�
 
 После явного Play discovery читает config и master playlist параллельно обычному
 playback. При `vod_disable` или ошибке discovery menu скрыто. `Direct` адресует
-remote original, `Original` существует только при `max.m3u8`, `Auto` выбирает
+remote original, `Original` существует только при `direct.m3u8` (до Memories 10 — `max.m3u8`), `Auto` выбирает
 master, остальные варианты берутся из manifest. Явный quality override у
 local+cloud объекта переключает на remote; локальное перекодирование отсутствует.
 
