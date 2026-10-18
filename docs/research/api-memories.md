@@ -55,7 +55,7 @@ POST /apps/memories/api/image/multipreview
 - `GET /days` возвращает список дней с `dayid` и `count`; для первых дней ответ может сразу содержать `detail` с медиаэлементами.
 - `GET /days/{id1,id2}` поддерживает загрузку нескольких дней одним запросом через comma-separated id в path.
 - `POST /days` используется браузерным клиентом для bulk-загрузки списка day ids через JSON body.
-- Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `auid`, а для видео также `isvideo` и `video_duration`.
+- Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `size`, а для видео также `isvideo` и `video_duration`. До Memories 9 сервер добавлял `auid`; теперь клиент вычисляет его из `epoch` и `size` (ADR 0018).
 - Boolean-like поля могут приходить не как JSON boolean, а как `0/1`; например, `isfavorite: 1`. DTO/mapping слой должен быть tolerant к таким значениям.
 - `POST /image/multipreview` принимает список `{ fileid, x, y, a, reqid }` и подходит для батчевой загрузки thumbnails.
 
@@ -240,13 +240,16 @@ UnifiedTimelineProjection -> published timeline
 - `/config.vod_disable` запрещает VOD. При выключенном VOD native-клиент не
   запрашивает manifest и скрывает quality menu.
 - `GET /apps/memories/api/video/transcode/{client}/{fileid}/index.m3u8` возвращает
-  master playlist. `client` имеет минимум 8 символов и остаётся одним для текущей
-  playback session; native-клиент использует случайный UUID.
+  master playlist. С Memories 10 `client` — 8–128 hex-символов, иначе `400`
+  (`client (invalid)`); он остаётся одним для текущей playback session, native-клиент
+  использует UUID без дефисов. Если go-vod решает, что оригинал не нужно
+  перекодировать, ответ — `303` на скачивание оригинала; клиент считает это
+  отсутствием вариантов качества.
 - Master содержит `EXT-X-STREAM-INF` с `BANDWIDTH`, `RESOLUTION`, `FRAME-RATE`
   и относительные `{quality}.m3u8`, включая query string. Playlist и сегменты
   проходят через тот же authenticated transport; query сохраняется.
 - `Direct` означает исходный `/stream`, `Original` — только обнаруженный
-  `max.m3u8`, `Auto` — master playlist. Resolution label равен меньшей стороне
+  `direct.m3u8` (до Memories 10 — `max.m3u8`), `Auto` — master playlist. Resolution label равен меньшей стороне
   `RESOLUTION`, в том числе для portrait. Фиксированные профили клиент не создаёт.
 - Сервер отклоняет external storage и временные файлы; `vod_disable=false` ещё
   не гарантирует доступность transcode для конкретного файла. Ошибка discovery
@@ -314,7 +317,22 @@ reconciliation. Переименование или перенос папки м
 
 - Успешный `PUT` с `If-None-Match: *` возвращает `201` и заголовки `ETag`, `OC-ETag` и `OC-FileId`. `OC-FileId` имеет вид `00000183ocmsigiy9k16`: `fileId`, дополненный нулями до восьми цифр, и instance id, начинающийся с `oc`. Этот `fileId` совпадает с `fileid` в Memories.
 - Повторный `PUT` того же имени возвращает `412` без `OC-FileId`.
-- Ответ `days/{id}` в Memories 10.1.0 не содержит `auid` и `buid`. В таблице `oc_memories` есть колонка `buid`, колонки `auid` нет. Значит, объединение local/remote по этим полям здесь не срабатывает (issue #100), хотя раздел «Live-проверка MVP-1 baseline» упоминает `auid` в элементе timeline. Загруженный из приложения файл связывается с локальным по `OC-FileId` (ADR 0017).
+- Ответ `days/{id}` в Memories 10.1.0 не содержит `auid` и `buid`. В таблице `oc_memories` есть колонка `buid`, колонки `auid` нет. Загруженный из приложения файл связывается с локальным по `OC-FileId` (ADR 0017), остальные — по AUID, вычисленному на клиенте (ADR 0018).
+
+### Memories 10 по сравнению с 8
+
+Сравнение исходников v8.1.0 и v10.1.0 и проверка на стенде (октябрь 2026). Решение о поддерживаемой версии — ADR 0018.
+
+- Memories 9+ требует Nextcloud 34. Маршруты API не удалены и не переименованы; новые: `POST image/reindex/{id}`, `GET video/storyboard/{client}/{fileid}/{profile}`, `lens/*` (семантический поиск через внешний сервис), `recognize/api-key`.
+- `days/{id}` с 9.0.1 не содержит `auid`, но всегда содержит `size` (int) и `epoch`. `epoch` — реальный timestamp съёмки (`DateTime::getTimestamp()` с учётом смещения). На стенде он совпал с `DATE_TAKEN / 1000` из MediaStore для JPEG с `OffsetTimeOriginal`, а `md5("$epoch$size")` дал тот же AUID, что у телефонной копии.
+- `buid` отдаётся только при `Util::callerIsNative()`: `X-Requested-With: gallery.memories` или `MemoriesNative` в User-Agent. Так же было в v8. Этот флаг также отключает preload `detail` в `days` и меняет обработку auth-заголовков.
+- `video/transcode` проверяет `client` регулярным выражением `^[0-9a-fA-F]{8,128}$`; v8 проверял только длину. Проверено: UUID с дефисами — `400`, без дефисов — `200` и master playlist.
+- Master playlist v10 содержит `480p.m3u8`, `720p.m3u8`, … и `direct.m3u8` (исходное качество, последний уровень).
+- «Холодный» запрос сегмента, который начинается не с ключевого кадра, go-vod отдаёт без SPS/PPS. ExoPlayer не может стартовать с такого сегмента; hls.js в вебе настроен терпеть это (`maxBufferHole`).
+- `image/info/{id}` отвечает `404` для файлов, которые ещё не проиндексированы Memories.
+- В ответах появились новые необязательные поля: `pano`, `dayid_real` (элементы дня), `intimeline`, `address_short` (`image/info`), новые ключи `/config`.
+- `stream` поддерживает Range (`206`/`416`) и ETag.
+- На стенде VOD выключен по умолчанию (`memories.vod.disable` не задан, `/config.vod_disable = true`). Для проверки HLS нужно задать `memories.vod.disable=false`, `memories.vod.ffmpeg` и `memories.vod.ffprobe`, а затем удалить эти ключи.
 
 ### Удаление файлов
 
