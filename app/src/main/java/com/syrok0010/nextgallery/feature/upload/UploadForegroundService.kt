@@ -241,7 +241,7 @@ class UploadForegroundService : Service() {
             .method("PUT", body)
             .header("If-None-Match", "*")
             .build()
-        val existed = transport.baseClient.newCall(request).execute().use { response ->
+        val (existed, fileId) = transport.baseClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful && response.code != 412) {
                 throw UploadException(
                     R.string.upload_error_http,
@@ -249,10 +249,10 @@ class UploadForegroundService : Service() {
                     selection.displayName,
                 )
             }
-            response.code == 412
+            (response.code == 412) to uploadedFileId(response.header("OC-FileId"))
         }
         if (existed && !sameRemoteSize(credentials, url, length)) return null
-        return UploadedFile(selection, url, created = !existed)
+        return UploadedFile(selection, url, created = !existed, fileId.takeUnless { existed })
     }
 
     private fun sameRemoteSize(

@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.upload
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.ui.UiText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -26,20 +27,40 @@ class UploadQueueTest {
                 queue.submit(first)
                 queue.submit(UploadBatch(emptyList()))
                 queue.submit(second)
-                assertEquals(listOf(first, second), queue.release())
+                assertEquals(listOf(first.files, second.files), queue.release().map { it.files })
                 val third = batch("c")
                 queue.submit(third)
 
                 assertEquals(2, queue.releasedFiles())
-                assertSame(first, queue.next())
+                assertEquals(first.files, queue.next()?.files)
                 assertEquals(
                     "waiting batches join the total only once released",
                     1,
                     queue.releasedFiles(),
                 )
-                assertSame(second, queue.next())
+                assertEquals(second.files, queue.next()?.files)
                 assertNull(queue.next())
-                assertEquals(listOf(third), queue.waiting.value)
+                assertEquals(listOf(third.files), queue.waiting.value.map { it.files })
+            } finally {
+                scope.cancel()
+            }
+        }
+
+    @Test fun `every batch gets the common follow-ups before its own`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val common = mutableListOf<UploadFollowUp>()
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope) {
+                    listOf(Recording()).also(common::addAll)
+                }
+                val own = Recording()
+                queue.submit(UploadBatch(batch("a").files, listOf(own)))
+                queue.submit(batch("b"))
+                queue.release()
+
+                assertEquals(listOf(common[0], own), queue.next()?.followUps)
+                assertEquals("one instance per batch", listOf(common[1]), queue.next()?.followUps)
             } finally {
                 scope.cancel()
             }
@@ -56,13 +77,16 @@ class UploadQueueTest {
                 queue.submit(refused)
                 val released = queue.release()
                 // A service that was already running took one batch before the new start was refused.
-                assertSame(running, queue.next())
+                assertEquals(running.files, queue.next()?.files)
                 val newer = batch("c")
                 queue.submit(newer)
 
                 queue.restore(released)
 
-                assertEquals(listOf(refused, newer), queue.waiting.value)
+                assertEquals(
+                    listOf(refused.files, newer.files),
+                    queue.waiting.value.map { it.files },
+                )
                 assertNull(queue.next())
                 assertEquals(0, queue.releasedFiles())
             } finally {
@@ -90,6 +114,12 @@ class UploadQueueTest {
 
     private fun batch(name: String) =
         UploadBatch(listOf(UploadSelection("content://media/$name", "$name.jpg", "image/jpeg")))
+
+    private class Recording : UploadFollowUp {
+        override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = Unit
+
+        override suspend fun finished(missed: List<UploadSelection>) = emptyList<UiText>()
+    }
 
     private class Fixed(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials

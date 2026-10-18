@@ -132,6 +132,39 @@ class RoomMediaIdentityRegistryTest {
         assertEquals(MediaId("local-id"), localRepository.loadLocalMediaProjection().single().mediaId)
     }
 
+    @Test
+    fun linkedServerFileKeepsLocalMediaIdAcrossReopenAndCache() = runBlocking {
+        database.close()
+        val generatedIds = listOf(MediaId("local-id"), MediaId("remote-id")).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val localId = registry.resolveId(local)
+        val earlyRemoteId = registry.resolveId(remote)
+        cacheRepository.saveTimelineSnapshot(credentials, snapshot(mediaItem(earlyRemoteId)))
+
+        assertEquals(true, registry.link(existing = local, linked = remote))
+
+        assertEquals(MediaId("remote-id"), earlyRemoteId)
+        assertEquals(
+            localId,
+            cacheRepository.loadTimelineSnapshot(credentials)?.items?.single()?.mediaId,
+        )
+        database.close()
+        openDatabase(mediaIdFactory = { error("Linked identities must not generate new MediaIds") })
+        assertEquals(localId, registry.resolveId(remote))
+        assertEquals(localId, registry.resolveId(local))
+    }
+
+    @Test
+    fun unknownExistingSourceIsNotLinked() = runBlocking {
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+
+        assertEquals(false, registry.link(existing = local, linked = remote))
+        assertEquals(MediaId("first-persistent-id"), registry.resolveId(remote))
+    }
+
     private fun openDatabase(
         mediaIdFactory: () -> MediaId = { MediaId("first-persistent-id") },
     ) {

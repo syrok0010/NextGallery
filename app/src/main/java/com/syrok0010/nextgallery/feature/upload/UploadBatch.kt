@@ -32,12 +32,14 @@ internal class UploadBatch(
 
 /**
  * [selection] is on the server at [url]: uploaded now ([created]) or already there with the same
- * size. A different file under the same name never reaches follow-ups.
+ * size. A different file under the same name never reaches follow-ups. [fileId] is the server file
+ * id, known only for a created file: an existing one may be another photo of the same size.
  */
 internal data class UploadedFile(
     val selection: UploadSelection,
     val url: HttpUrl,
     val created: Boolean,
+    val fileId: Long? = null,
 )
 
 /**
