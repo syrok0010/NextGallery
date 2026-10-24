@@ -13,47 +13,52 @@ import kotlinx.coroutines.yield
 import org.junit.Assert.*
 import org.junit.Test
 
-class UploadHandoffTest {
+class UploadQueueTest {
     private val credentials = AccountCredentials("http://cloud", "anna", "secret", "anna")
 
-    @Test fun `screen takes the snapshot it started while newer offers stay pending`() =
+    @Test fun `released batches go to the service in order while newer ones keep waiting`() =
         runBlocking {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
-                val handoff = UploadHandoff(SessionStore(Fixed(credentials)), scope)
-                handoff.offer(listOf(selection("a")))
-                val started = handoff.pending.value
-                handoff.offer(listOf(selection("b")))
-                handoff.taken(started)
-                assertEquals(listOf(selection("b")), handoff.pending.value)
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope)
+                val first = batch("a")
+                val second = batch("b")
+                queue.submit(first)
+                queue.submit(UploadBatch(emptyList()))
+                queue.submit(second)
+                assertEquals(2, queue.release())
+                val third = batch("c")
+                queue.submit(third)
+
+                assertSame(first, queue.next())
+                assertSame(second, queue.next())
+                assertNull(queue.next())
+                assertEquals(listOf(third), queue.waiting.value)
             } finally {
                 scope.cancel()
             }
         }
 
-    @Test fun `logout drops pending uploads`() =
+    @Test fun `logout drops waiting and released batches`() =
         runBlocking {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
                 val sessions = SessionStore(Fixed(credentials))
-                val handoff = UploadHandoff(sessions, scope)
-                handoff.offer(listOf(selection("a")))
+                val queue = UploadQueue(sessions, scope)
+                queue.submit(batch("a"))
+                queue.release()
+                queue.submit(batch("b"))
                 yield()
                 sessions.signOut()
-                withTimeout(5_000) { handoff.pending.first { it.isEmpty() } }
-                Unit
+                withTimeout(5_000) { queue.waiting.first { it.isEmpty() } }
+                assertNull(queue.next())
             } finally {
                 scope.cancel()
             }
         }
 
-    private fun selection(name: String) =
-        UploadSelection(
-            "content://media/$name",
-            "$name.jpg",
-            "image/jpeg",
-            UploadAlbum("anna", "Лето"),
-        )
+    private fun batch(name: String) =
+        UploadBatch(listOf(UploadSelection("content://media/$name", "$name.jpg", "image/jpeg")))
 
     private class Fixed(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials

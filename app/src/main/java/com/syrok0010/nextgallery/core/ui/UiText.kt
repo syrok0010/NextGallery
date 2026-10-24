@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.core.ui
 
+import android.content.Context
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
@@ -28,4 +29,11 @@ fun UiText.asString(): String =
     when (this) {
         is UiText.Resource -> stringResource(id, *args.toTypedArray())
         is UiText.Plural -> pluralStringResource(id, quantity, *args.toTypedArray())
+    }
+
+/** For text shown outside composition, for example in a notification. */
+fun UiText.asString(context: Context): String =
+    when (this) {
+        is UiText.Resource -> context.getString(id, *args.toTypedArray())
+        is UiText.Plural -> context.resources.getQuantityString(id, quantity, *args.toTypedArray())
     }

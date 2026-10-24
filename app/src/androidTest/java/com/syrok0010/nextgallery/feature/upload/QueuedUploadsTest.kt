@@ -9,19 +9,22 @@ import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,11 +32,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class UploadPermissionFlowTest {
+class QueuedUploadsTest {
     @get:Rule val rule = createComposeRule()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
-    private val uploads = mutableListOf<List<UploadSelection>>()
+    private val scope = CoroutineScope(Dispatchers.Unconfined)
+    private val queue = UploadQueue(SessionStore(SignedIn), scope)
+    private var starts = 0
     private val registry = PermissionRegistry()
     private var notificationsGranted = false
     private val permissionContext by lazy {
@@ -53,81 +58,81 @@ class UploadPermissionFlowTest {
     @Before
     fun resetPermission() {
         assumeTrue(Build.VERSION.SDK_INT >= 33)
-        context
-            .getSharedPreferences(
-                "upload_permissions",
-                Context.MODE_PRIVATE,
-            ).edit()
-            .clear()
-            .commit()
+        clearPreferences()
     }
 
     @After
     fun cleanup() {
-        context
-            .getSharedPreferences(
-                "upload_permissions",
-                Context.MODE_PRIVATE,
-            ).edit()
-            .clear()
-            .commit()
+        clearPreferences()
+        scope.cancel()
     }
 
     @Test
-    fun denialStartsOriginalSelectionOnceAndDoesNotAskAgain() {
-        showUpload()
-        rule.onNodeWithText("Upload").performClick()
-        rule.onNodeWithText("Upload").performClick()
+    fun denialStartsWaitingBatchOnceAndDoesNotAskAgain() {
+        showQueuedUploads()
+        queue.submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, registry.requests.size)
-            assertEquals(emptyList<List<UploadSelection>>(), uploads)
+            assertEquals(0, starts)
             registry.dispatchResult(registry.requests.single(), false)
         }
-        rule.runOnIdle { assertEquals(listOf(SELECTION), uploads) }
-        rule.onNodeWithText("Upload").performClick()
+        rule.runOnIdle {
+            assertEquals(1, starts)
+            assertSame(BATCH, queue.next())
+        }
+        queue.submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, registry.requests.size)
-            assertEquals(listOf(SELECTION, SELECTION), uploads)
+            assertEquals(2, starts)
         }
     }
 
     @Test
-    fun pendingSelectionSurvivesRecreationAndDuplicatePermissionResult() {
+    fun waitingBatchSurvivesRecreationAndDuplicatePermissionResult() {
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner, LocalContext provides permissionContext) {
-                val upload = rememberUploadAction { uploads += it }
-                Button(onClick = { upload(SELECTION) {} }) { Text("Upload") }
+                QueuedUploads(queue) { starts++ }
             }
         }
-        rule.onNodeWithText("Upload").performClick()
+        queue.submit(BATCH)
+        rule.waitForIdle()
         restoration.emulateSavedInstanceStateRestore()
         rule.runOnIdle { registry.dispatchResult(registry.requests.single(), true) }
         rule.runOnIdle { registry.dispatchResult(registry.requests.single(), true) }
         rule.runOnIdle {
             assertEquals(1, registry.requests.size)
-            assertEquals(listOf(SELECTION), uploads)
+            assertEquals(1, starts)
         }
     }
 
     @Test
     fun grantedPermissionStartsImmediatelyWithoutDialog() {
         notificationsGranted = true
-        showUpload()
-        rule.onNodeWithText("Upload").performClick()
+        showQueuedUploads()
+        queue.submit(BATCH)
         rule.runOnIdle {
             assertEquals(emptyList<Int>(), registry.requests)
-            assertEquals(listOf(SELECTION), uploads)
+            assertEquals(1, starts)
         }
     }
 
-    private fun showUpload() {
+    private fun showQueuedUploads() {
         rule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner, LocalContext provides permissionContext) {
-                val upload = rememberUploadAction { uploads += it }
-                Button(onClick = { upload(SELECTION) {} }) { Text("Upload") }
+                QueuedUploads(queue) { starts++ }
             }
         }
+    }
+
+    private fun clearPreferences() {
+        context
+            .getSharedPreferences(
+                "upload_permissions",
+                Context.MODE_PRIVATE,
+            ).edit()
+            .clear()
+            .commit()
     }
 
     private class PermissionRegistry : ActivityResultRegistry() {
@@ -142,10 +147,18 @@ class UploadPermissionFlowTest {
         }
     }
 
+    private object SignedIn : CredentialsStore {
+        override fun load() = AccountCredentials("http://cloud", "anna", "secret", "anna")
+        override fun save(credentials: AccountCredentials) = Unit
+        override fun clear() = Unit
+    }
+
     private companion object {
-        val SELECTION = listOf(
-            UploadSelection("content://media/external/images/media/42", "фото.png", "image/png"),
-            UploadSelection("content://media/external/video/media/43", "video.mp4", "video/mp4"),
+        val BATCH = UploadBatch(
+            listOf(
+                UploadSelection("content://media/external/images/media/42", "фото.png", "image/png"),
+                UploadSelection("content://media/external/video/media/43", "video.mp4", "video/mp4"),
+            ),
         )
     }
 }

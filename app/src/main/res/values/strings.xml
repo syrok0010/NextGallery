@@ -112,9 +112,38 @@
         <item quantity="many">%1$d ошибок</item>
         <item quantity="other">%1$d ошибок</item>
     </plurals>
-    <string name="album_add_done_uploading">ещё %1$d загружаются в облако, итог в уведомлении</string>
-    <string name="album_add_uploading_only">«%1$s»: %2$d загружаются в облако и будут добавлены, итог в уведомлении</string>
+    <plurals name="album_add_done_uploading">
+        <item quantity="one">ещё %1$d загружается в облако, итог в уведомлении</item>
+        <item quantity="few">ещё %1$d загружаются в облако, итог в уведомлении</item>
+        <item quantity="many">ещё %1$d загружаются в облако, итог в уведомлении</item>
+        <item quantity="other">ещё %1$d загружаются в облако, итог в уведомлении</item>
+    </plurals>
+    <plurals name="album_add_uploading_only">
+        <item quantity="one">«%1$s»: %2$d объект загружается в облако и будет добавлен, итог в уведомлении</item>
+        <item quantity="few">«%1$s»: %2$d объекта загружаются в облако и будут добавлены, итог в уведомлении</item>
+        <item quantity="many">«%1$s»: %2$d объектов загружаются в облако и будут добавлены, итог в уведомлении</item>
+        <item quantity="other">«%1$s»: %2$d объектов загружаются в облако и будут добавлены, итог в уведомлении</item>
+    </plurals>
     <string name="album_add_failed_exists">Альбом «%1$s» уже существует</string>
     <string name="album_add_failed_network">Не удалось добавить в «%1$s». Проверьте подключение.</string>
     <string name="album_add_failed_not_writable">Нет прав на изменение альбома «%1$s»</string>
+    <string name="album_upload_summary">В «%1$s»: %2$d</string>
+    <string name="album_upload_summary_failed">В «%1$s»: %2$d, не добавлено: %3$d</string>
+    <string name="upload_channel">Загрузка в облако</string>
+    <string name="upload_preparing">Подготовка загрузки</string>
+    <string name="upload_progress">Загрузка: %1$d из %2$d</string>
+    <string name="upload_done">Загрузка завершена: %1$d из %2$d</string>
+    <string name="upload_stopped">Загрузка остановлена: %1$s</string>
+    <string name="upload_error_network">ошибка сети</string>
+    <string name="upload_error_session">сессия Nextcloud больше недоступна</string>
+    <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>
+    <string name="upload_error_open">не удалось открыть %1$s</string>
+    <string name="upload_error_http">HTTP %1$d при загрузке %2$s</string>
+    <string name="upload_batches_done">Завершено загрузок: %1$d</string>
+    <plurals name="upload_name_taken">
+        <item quantity="one">%1$d не загружен: имя занято другим файлом</item>
+        <item quantity="few">%1$d не загружены: имя занято другим файлом</item>
+        <item quantity="many">%1$d не загружены: имя занято другим файлом</item>
+        <item quantity="other">%1$d не загружены: имя занято другим файлом</item>
+    </plurals>
 </resources>

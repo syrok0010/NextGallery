@@ -8,6 +8,10 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.feature.upload.UploadBatch
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import com.syrok0010.nextgallery.feature.upload.uploadSelections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -24,15 +28,18 @@ internal sealed interface AlbumTarget {
 }
 
 /**
- * Server copies join the album directly; local-only objects are uploaded by the caller once the
- * album address is known and join the album after the upload.
+ * Server copies join the album directly; local-only [uploads] are uploaded once the album exists
+ * and join it after the upload.
  */
-internal data class AlbumAdditionRequest(val fileIds: List<Long>, val localUploads: Int) {
+internal data class AlbumAdditionRequest(
+    val fileIds: List<Long>,
+    val uploads: List<UploadSelection> = emptyList(),
+) {
     companion object {
         fun of(items: List<MediaItem>) =
             AlbumAdditionRequest(
                 fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
-                localUploads = items.count { it.remoteFileId == null },
+                uploads = uploadSelections(items),
             )
     }
 }
@@ -65,6 +72,7 @@ internal class AlbumAdditions(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
+    private val uploads: UploadQueue,
     private val scope: CoroutineScope,
 ) {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
@@ -90,14 +98,10 @@ internal class AlbumAdditions(
      * Returns false when the request is not accepted: another addition is running or nobody is
      * signed in. The caller keeps the selection in that case.
      *
-     * [onAlbumReady] runs on [scope] once the album exists, before server copies are added, so
-     * uploads never race album creation. It is not called when the album cannot be written.
+     * Local-only objects are queued for upload once the album exists, so they never race album
+     * creation; they are not uploaded when the album cannot be written.
      */
-    fun add(
-        target: AlbumTarget,
-        request: AlbumAdditionRequest,
-        onAlbumReady: (AlbumAddress) -> Unit = {},
-    ): Boolean {
+    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.size)
@@ -111,11 +115,16 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
-                    onAlbumReady(address)
+                    uploads.submit(
+                        UploadBatch(
+                            request.uploads,
+                            listOf(AlbumUploadFollowUp(writer, catalog, address)),
+                        ),
+                    )
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(credentials, address, request.fileIds),
-                        request.localUploads,
+                        request.uploads.size,
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -169,10 +178,15 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
             if (state.localUploads > 0) {
                 add(
                     if (total > 0) {
-                        uiText(R.string.album_add_done_uploading, state.localUploads)
+                        pluralText(
+                            R.plurals.album_add_done_uploading,
+                            state.localUploads,
+                            state.localUploads,
+                        )
                     } else {
-                        uiText(
-                            R.string.album_add_uploading_only,
+                        pluralText(
+                            R.plurals.album_add_uploading_only,
+                            state.localUploads,
                             state.albumName,
                             state.localUploads,
                         )

@@ -29,6 +29,7 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
+import com.syrok0010.nextgallery.feature.upload.QueuedUploads
 import org.koin.androidx.compose.koinViewModel
 
 internal fun transitionDirection(
@@ -69,6 +70,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
         }
     }
     LocalMediaPermissionFlow(isSignedIn = signedIn)
+    if (signedIn) QueuedUploads()
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
         CompositionLocalProvider(

@@ -60,9 +60,9 @@ internal fun AddToAlbumSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (request.localUploads > 0) {
+            if (request.uploads.isNotEmpty()) {
                 Text(
-                    stringResource(R.string.album_add_local_uploads, request.localUploads),
+                    stringResource(R.string.album_add_local_uploads, request.uploads.size),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
