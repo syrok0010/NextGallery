@@ -49,4 +49,7 @@ internal class UploadQueue(sessions: SessionStore, scope: CoroutineScope) {
 
     /** Called by the service once per start. */
     fun next(): UploadBatch? = started.poll()
+
+    /** Files in batches released to the service but not taken yet, for the overall progress. */
+    fun releasedFiles(): Int = started.sumOf { it.files.size }
 }

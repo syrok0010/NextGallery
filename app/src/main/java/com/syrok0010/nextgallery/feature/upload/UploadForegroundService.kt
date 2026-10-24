@@ -78,23 +78,31 @@ class UploadForegroundService : Service() {
     }
 
     /**
-     * Batches run one after another under one foreground notification. One result notification
-     * collects every batch of this run, so results neither pile up nor replace a queued batch's.
-     * The service leaves the foreground only when no batch is waiting.
+     * Batches run one after another as one pass under one foreground notification. Progress and
+     * the result count files of the whole pass, so a batch released while another is running
+     * extends the same counter instead of starting a new one. The service leaves the foreground
+     * only when no batch is waiting.
      */
     private suspend fun drainQueue() {
-        val results = mutableListOf<BatchResult>()
+        val pass = UploadPass()
         while (true) {
             val batch = queue.next() ?: break
-            results += runBatch(batch)
-            notificationManager.notify(RESULT_NOTIFICATION_ID, resultNotification(results))
+            runBatch(batch, pass)
         }
         // No suspension from the empty check to here, so no start can slip in between.
+        if (pass.files > 0) {
+            notificationManager.notify(
+                RESULT_NOTIFICATION_ID,
+                resultNotification(pass),
+            )
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelfResult(lastStartId)
     }
 
-    private suspend fun runBatch(batch: UploadBatch): BatchResult {
+    private suspend fun runBatch(batch: UploadBatch, pass: UploadPass) {
+        pass.files += batch.files.size
+        val before = pass.processed
         // Android drops bursts of notification updates, including the terminal result.
         // Keep only the latest progress and leave room for foreground/final updates.
         val updates = Channel<Notification>(Channel.CONFLATED)
@@ -108,7 +116,10 @@ class UploadForegroundService : Service() {
             }
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    upload(batch, progress) { message, percent ->
+                    upload(batch, progress) { index, percent ->
+                        // Read per update: batches released meanwhile join the total at once.
+                        val total = pass.files + queue.releasedFiles()
+                        val message = getString(R.string.upload_progress, before + index + 1, total)
                         updates.trySend(notification(message, uploading = true, progress = percent))
                     }
                 }
@@ -118,43 +129,49 @@ class UploadForegroundService : Service() {
             result
         }
         (result.exceptionOrNull() as? CancellationException)?.let { throw it }
+        result.exceptionOrNull()?.let { pass.failures += failureReason(it) }
+        pass.processed += batch.files.size
+        pass.uploaded += progress.completed
+        pass.nameTaken += progress.nameTaken.size
         val missed = progress.nameTaken + batch.files.drop(progress.processed)
+        batch.followUps.forEach { followUp ->
+            pass.details += guarded(emptyList()) { followUp.finished(missed) }
+        }
+        // Leaves room for the result after the last progress update.
+        delay(500L)
+    }
+
+    private fun resultNotification(pass: UploadPass): Notification {
         val lines = buildList {
-            if (progress.nameTaken.isNotEmpty()) {
+            if (pass.failures.isNotEmpty()) {
+                add(getString(R.string.upload_count, pass.uploaded, pass.files))
+            }
+            if (pass.nameTaken > 0) {
                 add(
                     pluralText(
                         R.plurals.upload_name_taken,
-                        progress.nameTaken.size,
-                        progress.nameTaken.size,
-                    ),
+                        pass.nameTaken,
+                        pass.nameTaken,
+                    ).asString(this@UploadForegroundService),
                 )
             }
-            batch.followUps.forEach { followUp ->
-                addAll(guarded(emptyList()) { followUp.finished(missed) })
-            }
+            pass.details.mapTo(this) { it.asString(this@UploadForegroundService) }
         }
-        delay(500L)
-        val message = result.fold(
-            onSuccess = { getString(R.string.upload_done, progress.completed, batch.files.size) },
-            onFailure = { getString(R.string.upload_stopped, failureReason(it)) },
-        )
-        return BatchResult(
-            message,
-            lines.joinToString(" · ") { it.asString(this) }.ifEmpty { null },
-        )
-    }
-
-    private fun resultNotification(results: List<BatchResult>): Notification {
-        val single = results.singleOrNull()
-        if (single != null) return notification(single.title, text = single.details)
-        val lines = results.map { listOfNotNull(it.title, it.details).joinToString(" · ") }
+        val title = if (pass.failures.isEmpty()) {
+            getString(R.string.upload_done, pass.uploaded, pass.files)
+        } else {
+            getString(R.string.upload_stopped, pass.failures.distinct().joinToString(", "))
+        }
         return Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
-            .setContentTitle(getString(R.string.upload_batches_done, results.size))
-            .setContentText(lines.last())
-            .setStyle(Notification.InboxStyle().also { style -> lines.forEach(style::addLine) })
-            .setOnlyAlertOnce(true)
+            .setContentTitle(title)
+            .apply {
+                if (lines.isNotEmpty()) {
+                    setContentText(lines.joinToString(" · "))
+                    setStyle(Notification.BigTextStyle().bigText(lines.joinToString("\n")))
+                }
+            }.setOnlyAlertOnce(true)
             .build()
     }
 
@@ -166,7 +183,7 @@ class UploadForegroundService : Service() {
     private suspend fun upload(
         batch: UploadBatch,
         progress: UploadProgress,
-        onProgress: (String, Int?) -> Unit,
+        onProgress: (index: Int, percent: Int?) -> Unit,
     ) {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
@@ -174,7 +191,6 @@ class UploadForegroundService : Service() {
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
-            val message = getString(R.string.upload_progress, index + 1, batch.files.size)
             val uploaded = put(
                 credentials = credentials,
                 url = uploadUrl(
@@ -184,7 +200,7 @@ class UploadForegroundService : Service() {
                     selection.displayName,
                 ),
                 selection = selection,
-                onProgress = { progress -> onProgress(message, progress) },
+                onProgress = { percent -> onProgress(index, percent) },
             )
             progress.processed++
             if (uploaded == null) {
@@ -261,13 +277,11 @@ class UploadForegroundService : Service() {
         message: String,
         uploading: Boolean = false,
         progress: Int? = null,
-        text: String? = null,
     ): Notification =
         Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
             .setContentTitle(message)
-            .apply { if (text != null) setContentText(text) }
             .setOngoing(uploading)
             .setOnlyAlertOnce(true)
             .apply { if (uploading) setProgress(100, progress ?: 0, progress == null) }
@@ -290,7 +304,15 @@ class UploadForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private class BatchResult(val title: String, val details: String?)
+    /** Results of all batches in one pass of the queue; changed on the main thread only. */
+    private class UploadPass {
+        var files = 0
+        var processed = 0
+        var uploaded = 0
+        var nameTaken = 0
+        val failures = mutableListOf<String>()
+        val details = mutableListOf<UiText>()
+    }
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 

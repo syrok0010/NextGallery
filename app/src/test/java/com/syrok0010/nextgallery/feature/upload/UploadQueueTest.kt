@@ -30,7 +30,13 @@ class UploadQueueTest {
                 val third = batch("c")
                 queue.submit(third)
 
+                assertEquals(2, queue.releasedFiles())
                 assertSame(first, queue.next())
+                assertEquals(
+                    "waiting batches join the total only once released",
+                    1,
+                    queue.releasedFiles(),
+                )
                 assertSame(second, queue.next())
                 assertNull(queue.next())
                 assertEquals(listOf(third), queue.waiting.value)
