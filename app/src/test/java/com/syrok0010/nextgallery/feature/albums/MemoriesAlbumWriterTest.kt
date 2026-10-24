@@ -1,7 +1,9 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -30,7 +32,7 @@ class MemoriesAlbumWriterTest {
                 404 to ""
             }
         }.use { fixture ->
-            assertEquals("anna-uid", fixture.writer.currentUser(fixture.credentials))
+            assertEquals("anna-uid", fixture.files.currentUser(fixture.credentials))
         }
     }
 
@@ -200,7 +202,8 @@ class MemoriesAlbumWriterTest {
         val origin = "http://127.0.0.1:${server.localPort}"
         val credentials = AccountCredentials(origin, "fixture", "password")
         val writerTransport = NextcloudTransport(Json { ignoreUnknownKeys = true })
-        val writer = MemoriesAlbumWriter(writerTransport)
+        val files = MemoriesFiles(writerTransport)
+        val writer = MemoriesAlbumWriter(writerTransport, files)
 
         init {
             executor.execute {

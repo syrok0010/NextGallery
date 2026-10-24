@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -29,6 +30,12 @@ import com.syrok0010.nextgallery.feature.albums.AlbumAdditionState
 import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
+import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
+import com.syrok0010.nextgallery.feature.deletion.DeletionPlan
+import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
+import com.syrok0010.nextgallery.feature.deletion.MediaDeletionState
+import com.syrok0010.nextgallery.feature.deletion.mediaDeletionMessage
+import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadForegroundService
@@ -46,10 +53,14 @@ internal fun PhotosScreen(
     coordinator: MediaLibraryCoordinator = koinInject(),
     additions: AlbumAdditionRepository = koinInject(),
     handoff: UploadHandoff = koinInject(),
+    deletions: MediaDeletionRepository = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val addition by additions.state.collectAsStateWithLifecycle()
+    val deletion by deletions.state.collectAsStateWithLifecycle()
     var albumRequest by remember { mutableStateOf<AlbumSheetRequest?>(null) }
+    var deleteRequest by remember { mutableStateOf<DeleteRequest?>(null) }
+    val delete = rememberDeleteAction(deletions::delete)
     val context = LocalContext.current
     val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
     val pendingUploads by handoff.pending.collectAsStateWithLifecycle()
@@ -85,6 +96,12 @@ internal fun PhotosScreen(
                 onDone,
             )
         },
+        onDelete = { items, onDone ->
+            deleteRequest = DeleteRequest(
+                DeletionPlan.of(items),
+                onDone,
+            )
+        },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
@@ -93,14 +110,37 @@ internal fun PhotosScreen(
         ) {
             content()
             if (!viewerVisible) {
-                AlbumAdditionSnackbar(
-                    addition,
-                    onShown = additions::consume,
-                    // Keeps the result above the library island once selection mode ends.
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp),
-                )
+                // Keeps results above the library island once selection mode ends.
+                Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp)) {
+                    OperationSnackbar(
+                        state = addition,
+                        message = albumAdditionMessage(
+                            addition,
+                        )?.map { it.asString() }?.joinToString(", "),
+                        running = addition is AlbumAdditionState.Running,
+                        onShown = additions::consume,
+                    )
+                    OperationSnackbar(
+                        state = deletion,
+                        message = mediaDeletionMessage(
+                            deletion,
+                        )?.map { it.asString() }?.joinToString(". "),
+                        running = deletion is MediaDeletionState.Running,
+                        onShown = deletions::consume,
+                    )
+                }
             }
         }
+    }
+    deleteRequest?.let { (plan, onDone) ->
+        DeleteSelectionDialog(
+            plan = plan,
+            onDismiss = { deleteRequest = null },
+            onConfirm = { scope ->
+                deleteRequest = null
+                delete(plan.targets(scope), onDone)
+            },
+        )
     }
     albumRequest?.let { (request, uploads, onDone) ->
         AddToAlbumSheet(
@@ -123,6 +163,9 @@ internal fun PhotosScreen(
     }
 }
 
+/** [onDone] ends selection mode; it runs only once the deletion is confirmed. */
+private data class DeleteRequest(val plan: DeletionPlan, val onDone: () -> Unit)
+
 /** Selection snapshot for the album sheet; [uploads] are local-only objects without server copy. */
 private data class AlbumSheetRequest(
     val request: AlbumAdditionRequest,
@@ -141,21 +184,23 @@ private fun uploadSelections(items: List<MediaItem>): List<UploadSelection> =
         }
     }
 
+/** Shows a running message until replaced, then the result once; [state] keys the effect. */
 @Composable
-private fun AlbumAdditionSnackbar(
-    state: AlbumAdditionState,
+private fun OperationSnackbar(
+    state: Any,
+    message: String?,
+    running: Boolean,
     onShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val host = remember { SnackbarHostState() }
-    val message = albumAdditionMessage(state)?.map { it.asString() }?.joinToString(", ")
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state, message, lifecycle) {
         if (message == null) return@LaunchedEffect
         // A result timing out while the app is stopped would be consumed unseen; show it again
         // once the screen is visible.
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            if (state is AlbumAdditionState.Running) {
+            if (running) {
                 // Replaced by the result: a new state cancels this effect and dismisses it.
                 host.showSnackbar(message, duration = SnackbarDuration.Indefinite)
             } else {

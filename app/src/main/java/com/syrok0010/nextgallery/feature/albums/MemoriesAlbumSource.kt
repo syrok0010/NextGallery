@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.timeline.remote.text
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import retrofit2.http.GET
 
 internal interface AlbumApi {
@@ -38,10 +38,6 @@ internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : 
         )
     }
 }
-
-/** Memories and OCS send JSON null and missing fields alike; both read as null. */
-internal fun JsonObject.text(key: String): String? =
-    (get(key) as? JsonPrimitive)?.takeUnless { it.content == "null" }?.content
 
 private fun JsonObject.number(key: String): Long? = text(key)?.toLongOrNull()
 
