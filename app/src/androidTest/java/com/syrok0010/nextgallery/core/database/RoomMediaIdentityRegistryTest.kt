@@ -211,6 +211,7 @@ class RoomMediaIdentityRegistryTest {
             serverUrl = "https://cloud.example.test",
             loginName = "test-user",
             appPassword = "test-password",
+            userId = "test-user",
         )
     }
 }

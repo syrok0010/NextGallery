@@ -29,7 +29,7 @@ internal class JsonCredentialsStore(
 
     override fun save(credentials: AccountCredentials) {
         require(credentials.isComplete()) {
-            "Credentials must contain serverUrl, loginName and appPassword."
+            "Credentials must contain serverUrl, loginName, appPassword and userId."
         }
         textStore.saveText(json.encodeToString(credentials))
     }
@@ -39,5 +39,8 @@ internal class JsonCredentialsStore(
     }
 
     private fun AccountCredentials.isComplete(): Boolean =
-        serverUrl.isNotBlank() && loginName.isNotBlank() && appPassword.isNotBlank()
+        serverUrl.isNotBlank() &&
+            loginName.isNotBlank() &&
+            appPassword.isNotBlank() &&
+            userId.isNotBlank()
 }

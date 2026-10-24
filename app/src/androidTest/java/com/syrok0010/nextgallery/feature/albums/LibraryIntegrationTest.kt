@@ -45,7 +45,7 @@ class LibraryIntegrationTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         LibraryFixture().use { fixture ->
             rule.runOnUiThread {
-                sessions.signIn(AccountCredentials(fixture.url, "fixture", "password"))
+                sessions.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture"))
             }
             try {
                 val restoration = StateRestorationTester(rule)
@@ -60,7 +60,7 @@ class LibraryIntegrationTest {
                 rule.waitUntil(15_000) { rule.onAllNodesWithContentDescription("fixture-1.jpg").fetchSemanticsNodes().isNotEmpty() }
                 val imageResult = runBlocking(Dispatchers.IO) {
                     SingletonImageLoader.get(context).execute(ImageRequest.Builder(context)
-                        .data(thumbnailRequest(AccountCredentials(fixture.url, "fixture", "password"), 1, "v1"))
+                        .data(thumbnailRequest(AccountCredentials(fixture.url, "fixture", "password", "fixture"), 1, "v1"))
                         .size(300, 300).build())
                 }
                 assertTrue((imageResult as? ErrorResult)?.throwable?.stackTraceToString().orEmpty(), imageResult is SuccessResult)
@@ -110,7 +110,7 @@ class LibraryIntegrationTest {
                 rule.onNodeWithText("Подключение к Nextcloud").assertIsDisplayed()
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
                 rule.onNodeWithTag("album_catalog").assertDoesNotExist()
-                rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password")) }
+                rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture")) }
                 rule.onNodeWithTag("library_page:Photos").assertIsSelected()
             } finally {
                 rule.runOnUiThread {

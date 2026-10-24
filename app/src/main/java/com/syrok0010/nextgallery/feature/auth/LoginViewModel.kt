@@ -152,5 +152,6 @@ class LoginViewModel(
 private fun LoginPollFailure.toUiText() = when (this) {
     is LoginPollFailure.Http -> uiText(R.string.error_login_poll_http, code)
     LoginPollFailure.Network -> uiText(R.string.error_login_poll_network)
+    LoginPollFailure.Account -> uiText(R.string.error_login_account)
     LoginPollFailure.Unknown -> uiText(R.string.error_login_poll_unknown)
 }

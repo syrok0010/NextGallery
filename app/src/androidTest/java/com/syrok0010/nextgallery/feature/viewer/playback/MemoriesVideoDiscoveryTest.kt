@@ -70,7 +70,12 @@ class MemoriesVideoDiscoveryTest {
             .newBuilder()
             .addInterceptor(
                 AuthenticatedVideoSource(transport) {
-                    AccountCredentials("https://cloud.example/nextcloud", "alice", "secret")
+                    AccountCredentials(
+                        "https://cloud.example/nextcloud",
+                        "alice",
+                        "secret",
+                        "alice",
+                    )
                 },
             ).addInterceptor { chain ->
                 val request = chain.request()

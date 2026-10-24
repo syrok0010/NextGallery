@@ -186,5 +186,6 @@ class NextGalleryAppRouteTest {
             serverUrl = "https://cloud.example.com",
             loginName = "user",
             appPassword = "secret",
+            userId = "user",
         )
 }

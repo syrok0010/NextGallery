@@ -295,6 +295,17 @@ reconciliation. Переименование или перенос папки м
 При partial/denied access локальный каталог скрыт до полной поддержки #19.
 
 
+### Запись в альбомы
+
+Проверено на тестовом стенде (Nextcloud + Memories, октябрь 2026) тем же способом, которым пишет Memories Web:
+
+- Write-endpoint для альбомов у Memories нет; альбомы Photos изменяются через DAV `remote.php/dav/photos/{uid}/albums/{name}`.
+- `MKCOL` на этот путь создаёт альбом (`201`); повторный `MKCOL` возвращает `405`.
+- `COPY remote.php/dav/files/{uid}/{path}` с `Destination` на `.../albums/{name}/{basename}` добавляет файл (`201`). Повтор того же файла — `409 Conflict` («File N is already in the folder»).
+- Внутри альбома DAV показывает элементы как `{fileid}-{basename}`; альбом хранит ссылку на файл, а не копию содержимого.
+- `GET /apps/memories/api/image/info/{fileId}` возвращает `filename` относительно корня файлов пользователя, `basename`, `size`, `owneruid`. Этого достаточно, чтобы построить источник `COPY` по `fileId` из таймлайна.
+- DAV uid нужно брать из OCS `cloud/user`, а не из login name.
+
 ### Содержимое альбомов
 
 Проверено по тому же checkout Memories (`abea4165`):
