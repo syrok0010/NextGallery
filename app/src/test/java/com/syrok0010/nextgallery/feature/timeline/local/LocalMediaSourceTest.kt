@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlin.time.Duration
@@ -487,6 +488,12 @@ class LocalMediaSourceTest {
         override suspend fun removeSource(source: MediaSourceKind) {
             delegate.removeSource(source)
         }
+
+        override suspend fun link(
+            existing: MediaSourceIdentity,
+            linked: MediaSourceIdentity,
+            isCurrent: () -> Boolean,
+        ) = delegate.link(existing, linked, isCurrent)
     }
 
     private fun metadata(

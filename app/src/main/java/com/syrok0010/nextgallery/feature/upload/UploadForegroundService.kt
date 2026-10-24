@@ -57,6 +57,7 @@ class UploadForegroundService : Service() {
     private val transport: NextcloudTransport by inject()
     private val albums: MemoriesAlbumWriter by inject()
     private val catalog: AlbumCatalogRepository by inject()
+    private val copies: UploadedCopies by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val notificationManager: NotificationManager by lazy {
         checkNotNull(
@@ -149,6 +150,7 @@ class UploadForegroundService : Service() {
             result
         }
         (result.exceptionOrNull() as? CancellationException)?.let { throw it }
+        if (progress.completed > 0) copies.uploaded()
         delay(500L)
         val message = result.fold(
             onSuccess = { getString(R.string.upload_done, progress.completed, selections.size) },
@@ -210,9 +212,25 @@ class UploadForegroundService : Service() {
                 onProgress = { progress -> onProgress(message, progress) },
             )
             progress.completed++
+            uploaded.fileId?.let { fileId -> link(credentials, selection, fileId) }
             selection.album?.let { album ->
                 progress.record(album, addToAlbum(credentials, uploaded, album))
             }
+        }
+    }
+
+    /** Without the link the timeline shows the phone file and its server copy separately. */
+    private suspend fun link(
+        credentials: AccountCredentials,
+        selection: UploadSelection,
+        fileId: Long,
+    ) {
+        try {
+            copies.link(credentials, selection.contentUri, fileId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // The file is uploaded; a missing link leaves a duplicate, not a failed upload.
         }
     }
 
@@ -283,7 +301,14 @@ class UploadForegroundService : Service() {
                     selection.displayName,
                 )
             }
-            UploadedFile(url, existed = response.code == 412, length = length)
+            val existed = response.code == 412
+            UploadedFile(
+                url = url,
+                existed = existed,
+                length = length,
+                // A file that already existed may be another photo with the same name.
+                fileId = if (existed) null else uploadedFileId(response.header("OC-FileId")),
+            )
         }
     }
 
@@ -322,7 +347,12 @@ class UploadForegroundService : Service() {
 
     private class BatchResult(val title: String, val details: String?)
 
-    private class UploadedFile(val url: HttpUrl, val existed: Boolean, val length: Long)
+    private class UploadedFile(
+        val url: HttpUrl,
+        val existed: Boolean,
+        val length: Long,
+        val fileId: Long?,
+    )
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 
