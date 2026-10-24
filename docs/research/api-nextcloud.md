@@ -20,6 +20,8 @@ Nextcloud Login Flow v2 должен быть стартовым способо�
 - login name;
 - app password.
 
+Login name годится только для Basic Auth: это может быть e-mail или другой alias, отличный от uid. DAV-пути (`remote.php/dav/files/{uid}`, `remote.php/dav/photos/{uid}`) требуют uid; его отдаёт `GET /ocs/v2.php/cloud/user?format=json` в `ocs.data.id`. Успешный poll Login Flow расходует token, повторный poll отвечает `404`.
+
 Документация:
 
 - https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html

@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 import com.syrok0010.nextgallery.core.media.MediaItem
 import androidx.compose.foundation.layout.Row
@@ -46,6 +50,8 @@ internal fun MediaCollectionScreen(
     onSelectionModeChanged: (Boolean) -> Unit = {},
     selectionEnabled: Boolean = false,
     onUpload: (List<MediaItem>, onStarted: () -> Unit) -> Unit = { _, onStarted -> onStarted() },
+    /** Hands over the selection snapshot; [onDone] ends selection mode once the action starts. */
+    onAddToAlbum: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
@@ -94,6 +100,9 @@ internal fun MediaCollectionScreen(
                 selectedCount = selectedItems.size,
                 uploadRequested = uploadRequested,
                 onCancel = cancelSelection,
+                onAddToAlbum = onAddToAlbum?.let { action ->
+                    { action(selectedItems, cancelSelection) }
+                },
                 onUpload = {
                     uploadRequested = true
                     onUpload(selectedItems, cancelSelection)
@@ -118,6 +127,7 @@ private fun BoxScope.SelectionActionBar(
     selectedCount: Int,
     uploadRequested: Boolean,
     onCancel: () -> Unit,
+    onAddToAlbum: (() -> Unit)?,
     onUpload: () -> Unit,
 ) {
     Surface(
@@ -137,8 +147,29 @@ private fun BoxScope.SelectionActionBar(
             IconButton(onClick = onCancel, enabled = !uploadRequested) {
                 Icon(Icons.Default.Close, contentDescription = "Отменить выбор")
             }
-            Text("Выбрано: $selectedCount", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.width(8.dp))
+            Text(
+                "$selectedCount",
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .semantics { contentDescription = "Выбрано: $selectedCount" },
+            )
+            Spacer(Modifier.width(4.dp))
+            if (onAddToAlbum != null) {
+                // Icon-only keeps the bar on one line next to the primary upload action.
+                FilledTonalIconButton(
+                    onClick = onAddToAlbum,
+                    enabled = selectedCount > 0 && !uploadRequested,
+                ) {
+                    Icon(
+                        painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_albums),
+                        contentDescription = stringResource(
+                            com.syrok0010.nextgallery.R.string.album_add_action,
+                        ),
+                    )
+                }
+            }
             Button(onClick = onUpload, enabled = selectedCount > 0 && !uploadRequested) {
                 Icon(
                     painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_cloud),

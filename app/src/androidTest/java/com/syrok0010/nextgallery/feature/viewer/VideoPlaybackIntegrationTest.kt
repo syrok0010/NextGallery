@@ -291,7 +291,7 @@ class VideoPlaybackIntegrationTest {
         }
         screenshot("remote-auth-error")
         koin.get<SessionStore>().signIn(
-            AccountCredentials(fixture.url, "fixture", "renewed"),
+            AccountCredentials(fixture.url, "fixture", "renewed", "fixture"),
         )
         fixture.status = 404
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
@@ -567,7 +567,7 @@ class VideoPlaybackIntegrationTest {
         val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("local-video.mp4").use { it.readBytes() }
         RemoteVideoFixture(bytes).use { fixture ->
             try {
-                session.signIn(AccountCredentials(fixture.url, "fixture", "password"))
+                session.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture"))
                 val remote = sample().copy(assetRef = MediaAssetRef.MemoriesFile(42))
                 block(fixture, remote)
             } finally {

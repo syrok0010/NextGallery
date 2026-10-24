@@ -16,7 +16,7 @@ import org.junit.Test
 
 class AuthenticatedVideoSourceTest {
     @Test fun `every request resolves current credentials and retains ranges without URL secrets`() {
-        var account = AccountCredentials("https://cloud.example/nextcloud/", "alice", "first")
+        var account = AccountCredentials("https://cloud.example/nextcloud/", "alice", "first", "alice")
         val requests = mutableListOf<Request>()
         val transport = NextcloudTransport(Json, OkHttpClient())
         val client = transport.baseClient.newBuilder()
@@ -47,7 +47,7 @@ class AuthenticatedVideoSourceTest {
     }
 
     @Test fun `HLS playlists and segments retain real URLs and authenticate each request`() {
-        var account = AccountCredentials("https://cloud.example/nextcloud", "alice", "first")
+        var account = AccountCredentials("https://cloud.example/nextcloud", "alice", "first", "alice")
         val requests = mutableListOf<Request>()
         val transport = NextcloudTransport(Json, OkHttpClient())
         val client = transport.baseClient.newBuilder()
@@ -71,7 +71,7 @@ class AuthenticatedVideoSourceTest {
     }
 
     @Test fun `foreign origins subpaths and old account URLs never receive credentials`() {
-        var account = AccountCredentials("https://cloud.example/nextcloud", "alice", "secret")
+        var account = AccountCredentials("https://cloud.example/nextcloud", "alice", "secret", "alice")
         var requests = 0
         val transport = NextcloudTransport(Json, OkHttpClient())
         val client = transport.baseClient.newBuilder()

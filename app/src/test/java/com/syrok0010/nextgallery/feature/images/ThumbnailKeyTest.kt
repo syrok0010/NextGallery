@@ -42,6 +42,7 @@ class ThumbnailKeyTest {
                 serverUrl = "https://cloud.example.com/",
                 loginName = "user",
                 appPassword = "secret",
+                userId = "user",
             ),
             fileId = 42,
             etag = "etag",

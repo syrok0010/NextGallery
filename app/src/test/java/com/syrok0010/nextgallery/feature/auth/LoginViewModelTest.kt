@@ -13,7 +13,7 @@ class LoginViewModelTest {
         Dispatchers.setMain(dispatcher)
         try {
             var fail = true
-            val credentials = AccountCredentials("https://cloud.example", "user", "password")
+            val credentials = AccountCredentials("https://cloud.example", "user", "password", "user")
             val store = object : CredentialsStore {
                 override fun load(): AccountCredentials? = null
                 override fun save(credentials: AccountCredentials) { if (fail) error("keystore unavailable") }

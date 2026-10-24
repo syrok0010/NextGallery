@@ -4,6 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
+import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Url
 
@@ -17,6 +20,14 @@ interface NextcloudAuthApi {
         @Url endpoint: String,
         @Field("token") token: String,
     ): LoginFlowCredentialsDto
+}
+
+interface NextcloudUserApi {
+    @Headers("OCS-APIRequest: true")
+    @GET("ocs/v2.php/cloud/user?format=json")
+    suspend fun currentUser(
+        @Header("Authorization") authorization: String,
+    ): OcsResponseDto<NextcloudUserDto>
 }
 
 @Serializable
@@ -33,3 +44,12 @@ data class LoginFlowCredentialsDto(
     @SerialName("appPassword")
     val appPassword: String,
 )
+
+@Serializable
+data class OcsResponseDto<T>(val ocs: OcsBodyDto<T>)
+
+@Serializable
+data class OcsBodyDto<T>(val data: T)
+
+@Serializable
+data class NextcloudUserDto(val id: String)

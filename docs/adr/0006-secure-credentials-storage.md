@@ -34,7 +34,9 @@ Nextcloud Login Flow v2 возвращает долгоживущий app passwo
 
 `KeystoreCredentialsStore` сериализует `AccountCredentials` в JSON и шифрует AES/GCM ключом `nextgallery.credentials.v1` из Android Keystore. В SharedPreferences сохраняются ciphertext и IV.
 
-Формат plaintext-прототипа не мигрируется. Пока действует dev-допущение без compatibility guarantees, несовместимое локальное состояние сбрасывается переустановкой приложения.
+Кроме server URL, login name и app password `AccountCredentials` хранит `userId` — uid Nextcloud для DAV-путей. Login name может быть e-mail и не совпадать с uid, а uid аккаунта не меняется, поэтому он запрашивается один раз сразу после Login Flow (`GET /ocs/v2.php/cloud/user`), а не перед каждой DAV-операцией. Если uid прочитать не удалось, вход завершается ошибкой и начинается заново: poll token уже израсходован.
+
+Формат plaintext-прототипа не мигрируется. Сессия, сохранённая до появления `userId`, считается неполной и сбрасывается: нужен повторный вход. Пока действует dev-допущение без compatibility guarantees, несовместимое локальное состояние сбрасывается переустановкой приложения.
 
 ## Последствия
 

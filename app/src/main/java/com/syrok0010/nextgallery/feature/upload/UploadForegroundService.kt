@@ -127,7 +127,7 @@ class UploadForegroundService : Service() {
         val url =
             webDavUrl(
                 credentials.serverUrl,
-                credentials.loginName,
+                credentials.userId,
                 destination,
                 selection.displayName,
             )
@@ -157,18 +157,18 @@ class UploadForegroundService : Service() {
 
     private fun webDavUrl(
         serverUrl: String,
-        login: String,
+        user: String,
         directory: String,
         name: String,
     ): String {
         val base = NextcloudTransport.normalizeServerOrigin(serverUrl).trimEnd('/')
-        val encodedLogin = Uri.encode(login)
+        val encodedUser = Uri.encode(user)
         val segments = (
-            listOf("remote.php", "dav", "files", encodedLogin) +
+            listOf("remote.php", "dav", "files", encodedUser) +
                 directory.trim('/').split('/').filter(String::isNotBlank) +
                 name
             ).joinToString("/") { segment ->
-            if (segment == encodedLogin) segment else Uri.encode(segment)
+            if (segment == encodedUser) segment else Uri.encode(segment)
         }
         return "$base/$segments"
     }

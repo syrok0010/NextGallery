@@ -218,6 +218,7 @@ class TimelineSlotTileTest {
             serverUrl = "https://cloud.example.com",
             loginName = "test",
             appPassword = "secret",
+            userId = "test",
         )
         val noOpUnregister: () -> Unit = {}
     }

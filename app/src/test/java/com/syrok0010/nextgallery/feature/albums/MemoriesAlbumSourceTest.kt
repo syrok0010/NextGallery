@@ -108,6 +108,7 @@ class MemoriesAlbumSourceTest {
                     "http://127.0.0.1:${server.localPort}/nextcloud",
                     "fixture",
                     "password",
+                    "fixture",
                 ),
             )
         override fun close() {

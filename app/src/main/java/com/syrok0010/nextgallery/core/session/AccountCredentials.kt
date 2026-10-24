@@ -7,4 +7,6 @@ data class AccountCredentials(
     val serverUrl: String,
     val loginName: String,
     val appPassword: String,
+    /** Nextcloud uid for DAV paths; Login Flow may hand out an e-mail as [loginName]. */
+    val userId: String,
 )
