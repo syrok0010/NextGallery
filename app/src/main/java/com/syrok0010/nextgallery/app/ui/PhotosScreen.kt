@@ -18,6 +18,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.ui.asString
@@ -29,7 +30,9 @@ import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
+import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadForegroundService
+import com.syrok0010.nextgallery.feature.upload.UploadHandoff
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import com.syrok0010.nextgallery.feature.upload.rememberUploadAction
 import org.koin.compose.koinInject
@@ -42,12 +45,20 @@ internal fun PhotosScreen(
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
     additions: AlbumAdditionRepository = koinInject(),
+    handoff: UploadHandoff = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val addition by additions.state.collectAsStateWithLifecycle()
-    var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
+    var albumRequest by remember { mutableStateOf<AlbumSheetRequest?>(null) }
     val context = LocalContext.current
     val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
+    val pendingUploads by handoff.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingUploads) {
+        if (pendingUploads.isNotEmpty()) {
+            upload(pendingUploads) {}
+            handoff.taken(pendingUploads)
+        }
+    }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -66,19 +77,14 @@ internal fun PhotosScreen(
         onViewerVisibilityChanged = onViewerVisibilityChanged,
         onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
-        onUpload = { items, onStarted ->
-            val selections = items.filterNot { it.hasRemoteCopy }.mapNotNull { item ->
-                item.localCopy?.let { local ->
-                    UploadSelection(
-                        contentUri = local.contentUri,
-                        displayName = item.displayName,
-                        mimeType = item.mimeType,
-                    )
-                }
-            }
-            upload(selections, onStarted)
+        onUpload = { items, onStarted -> upload(uploadSelections(items), onStarted) },
+        onAddToAlbum = { items, onDone ->
+            albumRequest = AlbumSheetRequest(
+                AlbumAdditionRequest.of(items),
+                uploadSelections(items),
+                onDone,
+            )
         },
-        onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
@@ -96,13 +102,19 @@ internal fun PhotosScreen(
             }
         }
     }
-    albumRequest?.let { (request, onDone) ->
+    albumRequest?.let { (request, uploads, onDone) ->
         AddToAlbumSheet(
             request = request,
             onDismiss = { albumRequest = null },
             onPick = { target ->
                 // A rejected request keeps the sheet and the selection; the sheet explains why.
-                if (additions.add(target, request)) {
+                val accepted = additions.add(target, request) { album ->
+                    // May run after this screen is gone: hand off data only, never the screen.
+                    handoff.offer(
+                        uploads.map { it.copy(album = UploadAlbum(album.owner, album.name)) },
+                    )
+                }
+                if (accepted) {
                     albumRequest = null
                     onDone()
                 }
@@ -110,6 +122,24 @@ internal fun PhotosScreen(
         )
     }
 }
+
+/** Selection snapshot for the album sheet; [uploads] are local-only objects without server copy. */
+private data class AlbumSheetRequest(
+    val request: AlbumAdditionRequest,
+    val uploads: List<UploadSelection>,
+    val onDone: () -> Unit,
+)
+
+private fun uploadSelections(items: List<MediaItem>): List<UploadSelection> =
+    items.filterNot { it.hasRemoteCopy }.mapNotNull { item ->
+        item.localCopy?.let { local ->
+            UploadSelection(
+                contentUri = local.contentUri,
+                displayName = item.displayName,
+                mimeType = item.mimeType,
+            )
+        }
+    }
 
 @Composable
 private fun AlbumAdditionSnackbar(

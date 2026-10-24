@@ -22,13 +22,16 @@ internal sealed interface AlbumTarget {
     data class New(override val name: String) : AlbumTarget
 }
 
-/** Only server copies can join a Photos album; local-only objects are reported, not uploaded. */
-internal data class AlbumAdditionRequest(val fileIds: List<Long>, val skippedLocal: Int) {
+/**
+ * Server copies join the album directly; local-only objects are uploaded by the caller once the
+ * album address is known and join the album after the upload.
+ */
+internal data class AlbumAdditionRequest(val fileIds: List<Long>, val localUploads: Int) {
     companion object {
         fun of(items: List<MediaItem>) =
             AlbumAdditionRequest(
                 fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
-                skippedLocal = items.count { it.remoteFileId == null },
+                localUploads = items.count { it.remoteFileId == null },
             )
     }
 }
@@ -40,7 +43,7 @@ internal sealed interface AlbumAdditionState {
 
     data class Running(val albumName: String, val count: Int) : AlbumAdditionState
 
-    data class Done(val albumName: String, val result: AlbumAddResult, val skippedLocal: Int) :
+    data class Done(val albumName: String, val result: AlbumAddResult, val localUploads: Int) :
         AlbumAdditionState
 
     data class Failed(val albumName: String, val reason: AlbumAdditionFailure) : AlbumAdditionState
@@ -104,8 +107,15 @@ internal class AlbumAdditionRepository(
     /**
      * Returns false when the request is not accepted: another addition is running or the account
      * is not ready. The caller keeps the selection in that case.
+     *
+     * [onAlbumReady] runs on [scope] once the album exists, before server copies are added, so
+     * uploads never race album creation. It is not called when the album cannot be written.
      */
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
+    fun add(
+        target: AlbumTarget,
+        request: AlbumAdditionRequest,
+        onAlbumReady: (AlbumAddress) -> Unit = {},
+    ): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
         val user = mutableChoices.value.user ?: return false
@@ -120,10 +130,11 @@ internal class AlbumAdditionRepository(
                 if (address == null || address.owner != user) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
+                    onAlbumReady(address)
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(credentials, user, address, request.fileIds),
-                        request.skippedLocal,
+                        request.localUploads,
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -158,7 +169,10 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
         is AlbumAdditionState.Running -> listOf(uiText(R.string.album_add_running, state.albumName))
 
         is AlbumAdditionState.Done -> buildList {
-            add(uiText(R.string.album_add_done, state.albumName, state.result.added))
+            val total = state.result.added + state.result.alreadyPresent + state.result.failed
+            if (total > 0 || state.localUploads == 0) {
+                add(uiText(R.string.album_add_done, state.albumName, state.result.added))
+            }
             if (state.result.alreadyPresent > 0) {
                 add(uiText(R.string.album_add_done_present, state.result.alreadyPresent))
             }
@@ -167,9 +181,17 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
                     uiText(R.string.album_add_done_failed, state.result.failed),
                 )
             }
-            if (state.skippedLocal > 0) {
+            if (state.localUploads > 0) {
                 add(
-                    uiText(R.string.album_add_done_skipped, state.skippedLocal),
+                    if (total > 0) {
+                        uiText(R.string.album_add_done_uploading, state.localUploads)
+                    } else {
+                        uiText(
+                            R.string.album_add_uploading_only,
+                            state.albumName,
+                            state.localUploads,
+                        )
+                    },
                 )
             }
         }
