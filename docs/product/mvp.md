@@ -14,6 +14,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - загружает Memories timeline и remote thumbnails;
 - индексирует доступные локальные фото и видео из MediaStore;
 - показывает каталог серверных альбомов и локальных папок, открывает их содержимое и листает медиа внутри выбранного альбома;
+- добавляет выбранные в таймлайне медиа с облачной копией в свой альбом Nextcloud или в новый альбом;
 - объединяет локальные и облачные копии по устойчивому `MediaId` и приблизительным `AUID`/`BUID`;
 - показывает cached local projection и материализованную cloud metadata до завершения refresh;
 - воспроизводит локальные и облачные video originals в detail view после явного запуска; при ошибке локальной копии переключается на Memories original в той же playback session;
@@ -42,7 +43,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 
 ### Альбомы и sharing
 
-- добавление фото в альбомы;
+- добавление в альбомы локальных фото без облачной копии и в shared-альбомы;
 - удобный UI для sharing альбомов и фото.
 
 ### Автосинхронизация

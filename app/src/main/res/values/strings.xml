@@ -90,4 +90,26 @@
     <string name="album_video">Видео</string>
     <string name="album_contents">Содержимое альбома</string>
     <string name="album_contents_unique">Медиаобъектов в сетке: %1$d</string>
+    <string name="album_add_action">В альбом</string>
+    <string name="album_add_title">Добавить в альбом</string>
+    <string name="album_add_eligible">С облачной копией: %1$d</string>
+    <string name="album_add_skipped_local">Только на телефоне, будут пропущены: %1$d</string>
+    <string name="album_add_nothing">Среди выбранных нет объектов с облачной копией. Сначала загрузите их в облако.</string>
+    <string name="album_add_new">Новый альбом</string>
+    <string name="album_add_new_name">Название альбома</string>
+    <string name="album_add_create">Создать и добавить</string>
+    <string name="album_add_cancel">Отмена</string>
+    <string name="album_add_name_invalid">Название не может содержать «/»</string>
+    <string name="album_add_name_exists">Такой альбом уже есть</string>
+    <string name="album_add_user_error">Не удалось получить данные аккаунта Nextcloud</string>
+    <string name="album_add_busy">Дождитесь окончания предыдущего добавления в альбом</string>
+    <string name="album_add_list_empty">У вас пока нет своих альбомов Nextcloud</string>
+    <string name="album_add_running">Добавляю в «%1$s»…</string>
+    <string name="album_add_done">«%1$s»: добавлено %2$d</string>
+    <string name="album_add_done_present">уже были в альбоме %1$d</string>
+    <string name="album_add_done_failed">ошибок %1$d</string>
+    <string name="album_add_done_skipped">пропущено без облачной копии %1$d</string>
+    <string name="album_add_failed_exists">Альбом «%1$s» уже существует</string>
+    <string name="album_add_failed_network">Не удалось добавить в «%1$s». Проверьте подключение.</string>
+    <string name="album_add_failed_not_writable">Нет прав на изменение альбома «%1$s»</string>
 </resources>

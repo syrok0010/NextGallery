@@ -167,7 +167,7 @@ internal fun AlbumCardRow(
 }
 
 @Composable
-private fun AlbumCoverImage(album: AlbumSummary, sessions: SessionStore = koinInject()) {
+internal fun AlbumCoverImage(album: AlbumSummary, sessions: SessionStore = koinInject()) {
     val session by sessions.session.collectAsState()
     val context = LocalContext.current
     val request = remember(album.cover, session, context) {
