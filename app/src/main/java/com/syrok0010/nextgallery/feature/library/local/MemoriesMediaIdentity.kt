@@ -17,10 +17,13 @@ object MemoriesMediaIdentity {
             ?.let { "iuid=$it" }
             ?: "size=$sizeBytes"
         return MediaAliases(
-            auid = md5("$identityEpochSeconds$sizeBytes"),
+            auid = auid(identityEpochSeconds, sizeBytes),
             buid = md5("$baseName$buidSuffix"),
         )
     }
+
+    /** Memories 9+ no longer returns AUID, so server files get it from `epoch` and `size` too. */
+    fun auid(epochSeconds: Long, sizeBytes: Long): String = md5("$epochSeconds$sizeBytes")
 
     private fun md5(value: String): String {
         val digest = MessageDigest.getInstance("MD5").digest(value.toByteArray())

@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.viewer.playback
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.feature.images.MemoriesAssetUrlFactory
+import java.util.UUID
 
 /** Resolved for a playback session; the media catalogue retains only asset identifiers. */
 internal data class VideoSources(
@@ -40,7 +41,13 @@ internal data class RemoteVideoOriginal(val fileId: Long, private val serverUrl:
     val configurationUri: String get() = "$api/config"
 
     fun masterPlaylist(clientId: String): String {
-        require(clientId.matches(Regex("[a-zA-Z0-9-]{8,}"))) { "Invalid video client" }
+        require(clientId.matches(VOD_CLIENT_ID)) { "Invalid video client" }
         return "$api/video/transcode/$clientId/$fileId/index.m3u8"
     }
 }
+
+/** Memories 10 rejects VOD clients other than 8-128 hex characters with HTTP 400. */
+private val VOD_CLIENT_ID = Regex("[0-9a-fA-F]{8,128}")
+
+/** One per playback session, like the Memories web client. */
+internal fun newVodClientId(): String = UUID.randomUUID().toString().replace("-", "")

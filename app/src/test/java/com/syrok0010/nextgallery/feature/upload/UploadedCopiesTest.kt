@@ -53,7 +53,7 @@ class UploadedCopiesTest {
         }
 
     @Test
-    fun `without the link Memories 10_1 copies stay separate`() =
+    fun `without the link copies with different aliases stay separate`() =
         runBlocking {
             val localId = resolveLocal()
             val remoteId = resolveRemote()
@@ -98,15 +98,39 @@ class UploadedCopiesTest {
 
             assertTrue(copies.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
 
-            val secondId = resolveRemote(SECOND_FILE_ID)
-            val firstId = resolveRemote()
+            // Both server files have the phone file's AUID.
+            val secondId = resolveRemote(SECOND_FILE_ID, auid = LOCAL_AUID)
+            val firstId = resolveRemote(auid = LOCAL_AUID)
             assertEquals(localId, secondId)
             assertNotEquals(localId, firstId)
             val library = projectMediaLibrary(
                 localItems = listOf(localItem(localId)),
-                remoteItems = listOf(remoteItem(firstId), remoteItem(secondId, SECOND_FILE_ID)),
+                remoteItems = listOf(
+                    remoteItem(firstId, auid = LOCAL_AUID),
+                    remoteItem(secondId, SECOND_FILE_ID, LOCAL_AUID),
+                ),
             )
             assertEquals(2, library.items.size)
+            assertEquals(2, library.items.map { it.mediaId }.toSet().size)
+            assertEquals(1, library.items.count { it.assetRef is MediaAssetRef.LocalFirst })
+        }
+
+    @Test
+    fun `server duplicates with one AUID stay separate tiles next to the phone file`() =
+        runBlocking {
+            val firstId = resolveRemote(auid = LOCAL_AUID)
+            val secondId = resolveRemote(SECOND_FILE_ID, auid = LOCAL_AUID)
+            val localId = resolveLocal()
+
+            val library = projectMediaLibrary(
+                localItems = listOf(localItem(localId)),
+                remoteItems = listOf(
+                    remoteItem(firstId, auid = LOCAL_AUID),
+                    remoteItem(secondId, SECOND_FILE_ID, LOCAL_AUID),
+                ),
+            )
+            assertEquals(2, library.items.size)
+            assertEquals(2, library.items.map { it.mediaId }.toSet().size)
             assertEquals(1, library.items.count { it.assetRef is MediaAssetRef.LocalFirst })
         }
 
@@ -143,7 +167,7 @@ class UploadedCopiesTest {
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
-    /** Memories 10.1 returns neither AUID nor BUID. */
+    /** Without explicit aliases the server copy matches nothing. */
     private suspend fun resolveRemote(
         fileId: Long = FILE_ID,
         auid: String? = null,
@@ -157,8 +181,8 @@ class UploadedCopiesTest {
     private fun localItem(mediaId: MediaId) =
         item(mediaId, LOCAL_AUID, LOCAL_BUID, MediaAssetRef.LocalContent(CONTENT_URI, TAKEN_AT))
 
-    private fun remoteItem(mediaId: MediaId, fileId: Long = FILE_ID) =
-        item(mediaId, auid = null, buid = null, MediaAssetRef.MemoriesFile(fileId))
+    private fun remoteItem(mediaId: MediaId, fileId: Long = FILE_ID, auid: String? = null) =
+        item(mediaId, auid, buid = null, MediaAssetRef.MemoriesFile(fileId))
 
     private fun item(mediaId: MediaId, auid: String?, buid: String?, assetRef: MediaAssetRef) =
         MediaItem(
