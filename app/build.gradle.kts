@@ -146,6 +146,16 @@ val verifyFeatureBoundaries by tasks.registering {
                 ) {
                     "${source.name}: viewer accepts media sequence, not timeline internals"
                 }
+                check(
+                    !(
+                        owner.startsWith(
+                            prefix + "feature.upload",
+                        ) &&
+                            dependency.startsWith(prefix + "feature.albums")
+                        ),
+                ) {
+                    "${source.name}: upload runs follow-ups and shows their lines, not album results"
+                }
             }
         }
     }
