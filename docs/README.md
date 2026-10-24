@@ -26,5 +26,6 @@
 - [ADR 0011: Стек просмотра фото](adr/0011-photo-viewer-stack.md)
 
 - [ADR 0012: Feature-срезы и чистый media module](adr/0012-feature-slices.md)
-- [ADR 0013: Ручная загрузка из таймлайна](adr/0013-timeline-upload.md)
-- [ADR 0014: Добавление выбранных медиа в альбом](adr/0014-add-to-album.md)
+- [ADR 0013: Общий индекс медиатеки и проекции коллекций](adr/0013-media-library-index.md)
+- [ADR 0014: Ручная загрузка из таймлайна](adr/0014-timeline-upload.md)
+- [ADR 0015: Добавление выбранных медиа в альбом](adr/0015-add-to-album.md)
