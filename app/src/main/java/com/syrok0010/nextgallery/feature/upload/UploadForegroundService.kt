@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
@@ -33,7 +34,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
@@ -353,14 +353,4 @@ private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
 
 /** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
 internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =
-    NextcloudTransport
-        .normalizeServerOrigin(serverUrl)
-        .toHttpUrl()
-        .newBuilder()
-        .addPathSegment("remote.php")
-        .addPathSegment("dav")
-        .addPathSegment("files")
-        .addPathSegment(user)
-        .apply { directory.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }
-        .addPathSegment(name)
-        .build()
+    fileUrl(serverUrl, user, directory).newBuilder().addPathSegment(name).build()
