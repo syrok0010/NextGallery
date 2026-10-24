@@ -22,22 +22,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MemoriesAlbumWriterTest {
-    @Test fun `current user comes from OCS user id, not login name`() = runBlocking {
-        Fixture { request ->
-            if (request.target.startsWith("/ocs/v2.php/cloud/user")) {
-                200 to """{"ocs":{"meta":{"status":"ok"},"data":{"id":"anna-uid","display-name":"Anna"}}}"""
-            } else {
-                404 to ""
-            }
-        }.use { fixture ->
-            assertEquals("anna-uid", fixture.writer.currentUser(fixture.credentials))
-        }
-    }
-
     @Test fun `create sends MKCOL to encoded own album and maps 405 to existing album`() = runBlocking {
         var exists = false
         Fixture { if (exists) 405 to "" else 201 to "" }.use { fixture ->
-            val location = fixture.writer.create(fixture.credentials, "anna", "Лето & море")
+            val location = fixture.writer.create(fixture.credentials, "Лето & море")
             assertEquals(AlbumLocation.Remote("anna/Лето & море"), location)
             val request = fixture.requests.single()
             assertEquals("MKCOL", request.method)
@@ -48,7 +36,7 @@ class MemoriesAlbumWriterTest {
             )
             exists = true
             try {
-                fixture.writer.create(fixture.credentials, "anna", "Лето & море")
+                fixture.writer.create(fixture.credentials, "Лето & море")
                 fail("Expected existing album")
             } catch (_: AlbumAlreadyExistsException) {
             }
@@ -74,7 +62,6 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             val result = fixture.writer.add(
                 fixture.credentials,
-                user = "anna",
                 album = AlbumAddress("anna", "Лето & море"),
                 fileIds = listOf(1, 2, 3, 4, 1),
             )
@@ -97,7 +84,7 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             try {
                 val write = launch(Dispatchers.IO) {
-                    fixture.writer.create(fixture.credentials, "anna", "Медленный")
+                    fixture.writer.create(fixture.credentials, "Медленный")
                 }
                 withTimeout(5_000) { while (fixture.requests.isEmpty()) delay(10) }
                 withTimeout(1_000) { write.cancelAndJoin() }
@@ -139,7 +126,8 @@ class MemoriesAlbumWriterTest {
         private val executor = Executors.newSingleThreadExecutor()
         val requests = CopyOnWriteArrayList<Recorded>()
         val origin = "http://127.0.0.1:${server.localPort}"
-        val credentials = AccountCredentials(origin, "fixture", "password")
+        /** The login name differs from the uid, as with an e-mail login; DAV paths use the uid. */
+        val credentials = AccountCredentials(origin, "fixture", "password", userId = "anna")
         val writerTransport = NextcloudTransport(Json { ignoreUnknownKeys = true })
         val writer = MemoriesAlbumWriter(writerTransport)
 
@@ -164,6 +152,10 @@ class MemoriesAlbumWriterTest {
                                 line.substringBefore(':').lowercase() to line.substringAfter(':').trim()
                             },
                         )
+                        // Unread body bytes would reset the connection before the client reads.
+                        request.headers["content-length"]?.toInt()?.let { length ->
+                            reader.read(CharArray(length))
+                        }
                         requests += request
                         val (code, body) = respond(request)
                         val bytes = body.toByteArray()

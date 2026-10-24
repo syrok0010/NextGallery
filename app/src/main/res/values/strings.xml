@@ -21,6 +21,7 @@
     <string name="error_login_poll_http">Проверка входа завершилась ошибкой HTTP %1$d</string>
     <string name="error_login_poll_network">Не удалось проверить вход из-за сетевой ошибки</string>
     <string name="error_login_poll_unknown">Не удалось проверить вход</string>
+    <string name="error_login_account">Не удалось получить данные аккаунта Nextcloud</string>
     <string name="error_open_browser_failed">Не удалось открыть браузер. Попробуй открыть вход вручную.</string>
     <string name="error_start_login_flow_failed">Не удалось начать вход</string>
     <string name="login_server_url_label">Адрес сервера</string>
@@ -101,13 +102,17 @@
     <string name="album_add_cancel">Отмена</string>
     <string name="album_add_name_invalid">Название не может содержать «/»</string>
     <string name="album_add_name_exists">Такой альбом уже есть</string>
-    <string name="album_add_user_error">Не удалось получить данные аккаунта Nextcloud</string>
     <string name="album_add_busy">Дождитесь окончания предыдущего добавления в альбом</string>
     <string name="album_add_list_empty">У вас пока нет своих альбомов Nextcloud</string>
     <string name="album_add_running">Добавляю в «%1$s»…</string>
     <string name="album_add_done">«%1$s»: добавлено %2$d</string>
     <string name="album_add_done_present">уже были в альбоме %1$d</string>
-    <string name="album_add_done_failed">ошибок %1$d</string>
+    <plurals name="album_add_done_failed">
+        <item quantity="one">%1$d ошибка</item>
+        <item quantity="few">%1$d ошибки</item>
+        <item quantity="many">%1$d ошибок</item>
+        <item quantity="other">%1$d ошибок</item>
+    </plurals>
     <string name="album_add_done_skipped">пропущено без облачной копии %1$d</string>
     <string name="album_add_failed_exists">Альбом «%1$s» уже существует</string>
     <string name="album_add_failed_network">Не удалось добавить в «%1$s». Проверьте подключение.</string>

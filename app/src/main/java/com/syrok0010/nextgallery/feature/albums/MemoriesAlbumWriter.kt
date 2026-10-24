@@ -11,9 +11,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.Serializable
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl
@@ -24,12 +22,13 @@ import retrofit2.http.GET
 import retrofit2.http.Path
 
 internal interface AlbumWriteApi {
-    @GET("ocs/v2.php/cloud/user?format=json")
-    suspend fun currentUser(): JsonObject
-
     @GET("apps/memories/api/image/info/{id}")
-    suspend fun info(@Path("id") fileId: Long): JsonObject
+    suspend fun info(@Path("id") fileId: Long): ImageInfoDto
 }
+
+/** [filename] is the path from the user's files root, [basename] the file name. */
+@Serializable
+internal data class ImageInfoDto(val filename: String, val basename: String)
 
 /** Owner and collection name of a Photos album addressed by Memories `cluster_id`. */
 internal data class AlbumAddress(val owner: String, val name: String) {
@@ -61,21 +60,8 @@ internal class AlbumAlreadyExistsException(name: String) : IOException("Album $n
  * itself has no album write endpoint.
  */
 internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
-    suspend fun currentUser(credentials: AccountCredentials): String {
-        val response = api(credentials).currentUser()
-        val data = response["ocs"]?.jsonObject?.get("data")?.jsonObject
-        return requireNotNull(
-            (data?.get("id") as? JsonPrimitive)?.content?.takeIf(String::isNotBlank),
-        ) {
-            "Missing Nextcloud user id"
-        }
-    }
-
-    suspend fun create(
-        credentials: AccountCredentials,
-        user: String,
-        name: String,
-    ): AlbumLocation.Remote {
+    suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
+        val user = credentials.userId
         val request = transport
             .authenticatedRequestBuilder(
                 credentials,
@@ -97,7 +83,6 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
 
     suspend fun add(
         credentials: AccountCredentials,
-        user: String,
         album: AlbumAddress,
         fileIds: List<Long>,
     ): AlbumAddResult {
@@ -115,12 +100,12 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
                                     credentials,
                                     source = fileUrl(
                                         credentials.serverUrl,
-                                        user,
-                                        requireNotNull(info.text("filename")),
+                                        credentials.userId,
+                                        info.filename,
                                     ),
                                     destination = albumUrl(credentials.serverUrl, album)
                                         .newBuilder()
-                                        .addPathSegment(requireNotNull(info.text("basename")))
+                                        .addPathSegment(info.basename)
                                         .build(),
                                 )
                             } catch (cancelled: CancellationException) {
@@ -204,6 +189,3 @@ private fun davRoot(serverUrl: String): HttpUrl.Builder =
         .newBuilder()
         .addPathSegment("remote.php")
         .addPathSegment("dav")
-
-private fun JsonObject.text(key: String): String? =
-    (get(key) as? JsonPrimitive)?.takeUnless { it.content == "null" }?.content

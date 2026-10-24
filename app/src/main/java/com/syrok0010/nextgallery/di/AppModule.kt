@@ -12,7 +12,7 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRepository
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
@@ -69,7 +69,7 @@ val appModule = module {
         )
     }
     single { MemoriesAlbumWriter(get()) }
-    single { AlbumAdditionRepository(get(), get(), get(), get(named("libraryScope"))) }
+    single { AlbumAdditions(get(), get(), get(), get(named("libraryScope"))) }
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }

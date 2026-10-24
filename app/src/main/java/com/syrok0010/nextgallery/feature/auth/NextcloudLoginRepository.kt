@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import okhttp3.Credentials
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(private val transport: NextcloudTransport) : LoginGateway {
@@ -20,30 +21,45 @@ class NextcloudLoginRepository(private val transport: NextcloudTransport) : Logi
         )
     }
 
-    override suspend fun pollLogin(session: LoginSession): LoginPollResult =
-        try {
+    override suspend fun pollLogin(session: LoginSession): LoginPollResult {
+        val response = try {
             val api = transport.nextcloudAuthApi(session.serverUrl)
-            val response = api.pollLogin(session.pollEndpoint, session.pollToken)
-            LoginPollResult.Ready(
-                AccountCredentials(
-                    serverUrl = transport.normalizeBaseUrl(response.server),
-                    loginName = response.loginName,
-                    appPassword = response.appPassword,
-                ),
-            )
+            api.pollLogin(session.pollEndpoint, session.pollToken)
         } catch (error: HttpException) {
-            if (error.code() == 404) {
+            return if (error.code() == 404) {
                 LoginPollResult.Pending
             } else {
                 LoginPollResult.Failed(LoginPollFailure.Http(error.code()))
             }
         } catch (_: IOException) {
-            LoginPollResult.Failed(LoginPollFailure.Network, isRecoverable = true)
+            return LoginPollResult.Failed(LoginPollFailure.Network, isRecoverable = true)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            LoginPollResult.Failed(LoginPollFailure.Unknown)
+            return LoginPollResult.Failed(LoginPollFailure.Unknown)
         }
+        val serverUrl = transport.normalizeBaseUrl(response.server)
+        val userId = try {
+            transport
+                .nextcloudUserApi(serverUrl)
+                .currentUser(Credentials.basic(response.loginName, response.appPassword))
+                .ocs.data.id
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+        // A successful poll spends the token: polling again would only wait for the timeout.
+        if (userId.isNullOrBlank()) return LoginPollResult.Failed(LoginPollFailure.Account)
+        return LoginPollResult.Ready(
+            AccountCredentials(
+                serverUrl = serverUrl,
+                loginName = response.loginName,
+                appPassword = response.appPassword,
+                userId = userId,
+            ),
+        )
+    }
 }
 
 data class LoginSession(
@@ -63,5 +79,8 @@ sealed interface LoginPollResult {
 sealed interface LoginPollFailure {
     data class Http(val code: Int) : LoginPollFailure
     data object Network : LoginPollFailure
+
+    /** Login succeeded, but the account uid could not be read. */
+    data object Account : LoginPollFailure
     data object Unknown : LoginPollFailure
 }

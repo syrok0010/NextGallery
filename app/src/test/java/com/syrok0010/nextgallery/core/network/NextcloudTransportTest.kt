@@ -14,6 +14,7 @@ class NextcloudTransportTest {
         serverUrl = "cloud.example.com",
         loginName = "user",
         appPassword = "secret",
+        userId = "user",
     )
 
     @Test

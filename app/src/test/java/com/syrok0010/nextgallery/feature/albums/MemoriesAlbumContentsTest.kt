@@ -64,7 +64,7 @@ class MemoriesAlbumContentsTest {
         } }
         suspend fun load() = MemoriesAlbumContents(NextcloudTransport(Json { ignoreUnknownKeys = true }), InMemoryMediaIdentityRegistry()).load(
             AlbumLocation.Remote("anna/Лето & море"),
-            AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password"),
+            AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture"),
         ).toList()
         override fun close() { server.close(); executor.shutdownNow() }
     }

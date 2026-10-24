@@ -20,6 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.koin.compose.koinInject
 
 /** Album picker for a selection snapshot; the caller owns the selection and its lifetime. */
@@ -29,18 +31,18 @@ internal fun AddToAlbumSheet(
     request: AlbumAdditionRequest,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
-    additions: AlbumAdditionRepository = koinInject(),
+    additions: AlbumAdditions = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
+    sessions: SessionStore = koinInject(),
 ) {
-    val choices by additions.choices.collectAsStateWithLifecycle()
     val busy = additions.state.collectAsStateWithLifecycle().value is AlbumAdditionState.Running
     val albums by catalog.state.collectAsStateWithLifecycle()
-    val user = choices.user
+    val session by sessions.session.collectAsStateWithLifecycle()
+    val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
     val writable = remember(albums.remote.items, user) {
         user?.let { writableAlbums(albums.remote.items, it) }.orEmpty()
     }
     var creating by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { additions.prepare() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -74,22 +76,8 @@ internal fun AddToAlbumSheet(
             Spacer(Modifier.navigationBarsPadding().height(16.dp))
             return@ModalBottomSheet
         }
-        val loading = (user == null && !choices.failed) || albums.remote.loading
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-        if (choices.failed) {
-            Row(
-                Modifier.padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.album_add_user_error),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = additions::prepare,
-                ) { Text(stringResource(R.string.action_refresh)) }
-            }
+        if (albums.remote.loading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
         }
         if (busy) {
             Text(

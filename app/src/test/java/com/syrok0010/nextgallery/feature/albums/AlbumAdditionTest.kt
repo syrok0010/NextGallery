@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CoroutineScope
@@ -54,19 +55,19 @@ class AlbumAdditionTest {
         assertEquals(
             listOf(
                 uiText(R.string.album_add_done, "Лето", 3),
+                pluralText(R.plurals.album_add_done_failed, 1, 1),
                 uiText(R.string.album_add_done_skipped, 2),
             ),
             albumAdditionMessage(
-                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 0), skippedLocal = 2),
+                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 1), skippedLocal = 2),
             ),
         )
         assertNull(albumAdditionMessage(AlbumAdditionState.Idle))
     }
 
-    @Test fun `repository creates album, adds files and refreshes catalog`() = runBlocking {
+    @Test fun `additions create album, add files and refresh catalog`() = runBlocking {
         MemoriesAlbumWriterTest.Fixture { request ->
             when {
-                request.target.startsWith("/ocs/") -> 200 to """{"ocs":{"data":{"id":"anna"}}}"""
                 request.method == "MKCOL" -> 201 to ""
                 request.target.startsWith("/apps/memories/api/image/info/") ->
                     200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
@@ -93,25 +94,23 @@ class AlbumAdditionTest {
                     MutableStateFlow<LocalMediaPermissionMode?>(null),
                     scope,
                 )
-                val repository = AlbumAdditionRepository(
+                val additions = AlbumAdditions(
                     sessions,
                     MemoriesAlbumWriter(fixture.writerTransport),
                     catalog,
                     scope,
                 )
-                repository.prepare()
-                withTimeout(5_000) { repository.choices.first { it.user == "anna" } }
                 val before = refreshed
-                assertTrue(repository.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)))
+                assertTrue(additions.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)))
                 val done = withTimeout(5_000) {
-                    repository.state.first { it is AlbumAdditionState.Done }
+                    additions.state.first { it is AlbumAdditionState.Done }
                 } as AlbumAdditionState.Done
                 assertEquals(AlbumAddResult(1, 0, 0), done.result)
                 assertEquals(1, done.skippedLocal)
                 assertTrue(fixture.requests.any { it.method == "MKCOL" && it.decodedTarget.endsWith("/photos/anna/albums/Поход") })
                 withTimeout(5_000) { while (refreshed == before) kotlinx.coroutines.delay(10) }
-                repository.consume()
-                assertEquals(AlbumAdditionState.Idle, repository.state.value)
+                additions.consume()
+                assertEquals(AlbumAdditionState.Idle, additions.state.value)
             } finally {
                 scope.cancel()
             }
@@ -122,7 +121,6 @@ class AlbumAdditionTest {
         val release = java.util.concurrent.CountDownLatch(1)
         MemoriesAlbumWriterTest.Fixture { request ->
             when {
-                request.target.startsWith("/ocs/") -> 200 to """{"ocs":{"data":{"id":"anna"}}}"""
                 request.target.startsWith("/apps/memories/api/image/info/") ->
                     200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
                 request.method == "COPY" -> {
@@ -135,23 +133,21 @@ class AlbumAdditionTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
-                val repository = AlbumAdditionRepository(
+                val additions = AlbumAdditions(
                     sessions,
                     MemoriesAlbumWriter(fixture.writerTransport),
                     emptyCatalog(sessions, scope),
                     scope,
                 )
-                repository.prepare()
-                withTimeout(5_000) { repository.choices.first { it.user == "anna" } }
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
                 val request = AlbumAdditionRequest(listOf(1L), 0)
-                assertTrue(repository.add(album, request))
-                assertFalse(repository.add(album, request))
+                assertTrue(additions.add(album, request))
+                assertFalse(additions.add(album, request))
                 release.countDown()
-                withTimeout(5_000) { repository.state.first { it is AlbumAdditionState.Done } }
-                repository.consume()
+                withTimeout(5_000) { additions.state.first { it is AlbumAdditionState.Done } }
+                additions.consume()
                 withTimeout(5_000) {
-                    while (!repository.add(album, request)) kotlinx.coroutines.delay(10)
+                    while (!additions.add(album, request)) kotlinx.coroutines.delay(10)
                 }
             } finally {
                 release.countDown()

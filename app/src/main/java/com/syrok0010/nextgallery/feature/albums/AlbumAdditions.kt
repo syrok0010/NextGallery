@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -47,15 +48,17 @@ internal sealed interface AlbumAdditionState {
 }
 
 /** Albums the current user may write without collaborator rules: their own Photos albums. */
-internal data class AlbumChoices(val user: String?, val failed: Boolean = false)
-
 internal fun writableAlbums(albums: List<AlbumSummary>, user: String): List<AlbumSummary> =
     albums.filter {
         val location = it.location as? AlbumLocation.Remote
         location != null && AlbumAddress.of(location)?.owner == user
     }
 
-internal class AlbumAdditionRepository(
+/**
+ * Runs album additions in the app scope, so one outlives the sheet and the screen that started it,
+ * and keeps its state for the result message.
+ */
+internal class AlbumAdditions(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
@@ -63,9 +66,6 @@ internal class AlbumAdditionRepository(
 ) {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     val state = mutableState.asStateFlow()
-    private val mutableChoices = MutableStateFlow(AlbumChoices(user = null))
-    val choices = mutableChoices.asStateFlow()
-    private var userJob: Job? = null
     private var job: Job? = null
 
     init {
@@ -75,9 +75,7 @@ internal class AlbumAdditionRepository(
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 // The first emission only records the owner; results never cross accounts.
                 if (current == null || (owner != null && current != owner)) {
-                    userJob?.cancel()
                     job?.cancel()
-                    mutableChoices.value = AlbumChoices(user = null)
                     mutableState.value = AlbumAdditionState.Idle
                 }
                 owner = current
@@ -85,44 +83,27 @@ internal class AlbumAdditionRepository(
         }
     }
 
-    /** Resolves the DAV user id once per session; login names may differ from it. */
-    fun prepare() {
-        if (mutableChoices.value.user != null || userJob?.isActive == true) return
-        val credentials = credentials() ?: return
-        mutableChoices.value = AlbumChoices(user = null)
-        userJob = scope.launch {
-            mutableChoices.value = try {
-                AlbumChoices(writer.currentUser(credentials))
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                AlbumChoices(user = null, failed = true)
-            }
-        }
-    }
-
     /**
-     * Returns false when the request is not accepted: another addition is running or the account
-     * is not ready. The caller keeps the selection in that case.
+     * Returns false when the request is not accepted: another addition is running or nobody is
+     * signed in. The caller keeps the selection in that case.
      */
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
-        val user = mutableChoices.value.user ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.size)
         job = scope.launch {
             mutableState.value = try {
                 val location = when (target) {
                     is AlbumTarget.Existing -> target.location
-                    is AlbumTarget.New -> writer.create(credentials, user, target.name.trim())
+                    is AlbumTarget.New -> writer.create(credentials, target.name.trim())
                 }
                 val address = AlbumAddress.of(location)
-                if (address == null || address.owner != user) {
+                if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
                     AlbumAdditionState.Done(
                         target.name,
-                        writer.add(credentials, user, address, request.fileIds),
+                        writer.add(credentials, address, request.fileIds),
                         request.skippedLocal,
                     )
                 }
@@ -164,7 +145,11 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
             }
             if (state.result.failed > 0) {
                 add(
-                    uiText(R.string.album_add_done_failed, state.result.failed),
+                    pluralText(
+                        R.plurals.album_add_done_failed,
+                        state.result.failed,
+                        state.result.failed,
+                    ),
                 )
             }
             if (state.skippedLocal > 0) {

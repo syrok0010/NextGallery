@@ -291,6 +291,7 @@ class TimelineCacheRepositoryOfflineTest {
             serverUrl = "https://cloud.example.test",
             loginName = "test-user",
             appPassword = "test-password",
+            userId = "test-user",
         )
     }
 }

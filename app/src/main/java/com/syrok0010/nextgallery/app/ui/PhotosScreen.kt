@@ -22,9 +22,9 @@ import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionState
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
@@ -41,7 +41,7 @@ internal fun PhotosScreen(
     onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
-    additions: AlbumAdditionRepository = koinInject(),
+    additions: AlbumAdditions = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val addition by additions.state.collectAsStateWithLifecycle()

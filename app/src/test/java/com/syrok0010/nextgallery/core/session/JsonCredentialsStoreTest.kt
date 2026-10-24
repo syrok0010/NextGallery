@@ -20,6 +20,7 @@ class JsonCredentialsStoreTest {
             serverUrl = "https://cloud.example.com",
             loginName = "alice",
             appPassword = "app-password",
+            userId = "alice",
         )
 
         store.save(credentials)
@@ -34,6 +35,17 @@ class JsonCredentialsStoreTest {
     @Test
     fun `load clears malformed payload`() {
         val textStore = FakeCredentialsTextStore(initialValue = "not-json")
+        val store = JsonCredentialsStore(textStore, json)
+
+        assertNull(store.load())
+        assertNull(textStore.loadText())
+    }
+
+    @Test
+    fun `session saved without uid requires a new login`() {
+        val textStore = FakeCredentialsTextStore(
+            initialValue = """{"serverUrl":"https://cloud.example.com","loginName":"alice","appPassword":"secret"}""",
+        )
         val store = JsonCredentialsStore(textStore, json)
 
         assertNull(store.load())
