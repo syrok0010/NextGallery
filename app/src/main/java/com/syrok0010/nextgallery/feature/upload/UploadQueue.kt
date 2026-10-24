@@ -40,14 +40,23 @@ internal class UploadQueue(sessions: SessionStore, scope: CoroutineScope) {
         if (batch.files.isNotEmpty()) mutableWaiting.update { it + batch }
     }
 
-    /** Hands all waiting batches to the service; returns how many service starts they need. */
-    fun release(): Int {
+    /** Hands all waiting batches to the service and returns them; one service start takes them all. */
+    fun release(): List<UploadBatch> {
         val batches = mutableWaiting.getAndUpdate { emptyList() }
         started.addAll(batches)
-        return batches.size
+        return batches
     }
 
-    /** Called by the service once per start. */
+    /**
+     * Takes back [batches] the service has not taken, after the system refused to start it. They
+     * wait again ahead of batches submitted since.
+     */
+    fun restore(batches: List<UploadBatch>) {
+        val back = batches.filter(started::remove)
+        if (back.isNotEmpty()) mutableWaiting.update { back + it }
+    }
+
+    /** Called by the service until it returns null. */
     fun next(): UploadBatch? = started.poll()
 
     /** Files in batches released to the service but not taken yet, for the overall progress. */

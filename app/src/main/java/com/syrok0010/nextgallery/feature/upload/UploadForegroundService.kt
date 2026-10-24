@@ -328,7 +328,10 @@ class UploadForegroundService : Service() {
         private const val FOREGROUND_NOTIFICATION_ID = 42
         private const val RESULT_NOTIFICATION_ID = 43
 
-        /** Takes the next batch released by [UploadQueue]; call once per released batch. */
+        /**
+         * Takes all batches released by [UploadQueue], including ones released while it runs. Throws
+         * if the system does not let the app start a foreground service right now.
+         */
         fun start(context: Context) {
             ContextCompat.startForegroundService(
                 context,

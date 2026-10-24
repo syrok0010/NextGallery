@@ -14,6 +14,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.core.app.ActivityOptionsCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -24,7 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -78,7 +82,7 @@ class QueuedUploadsTest {
         }
         rule.runOnIdle {
             assertEquals(1, starts)
-            assertSame(BATCH, queue.next())
+            assertEquals(BATCH.files, queue.next()?.files)
         }
         queue.submit(BATCH)
         rule.runOnIdle {
@@ -117,6 +121,46 @@ class QueuedUploadsTest {
         }
     }
 
+    @Test
+    fun refusedStartKeepsBatchUntilAppIsVisibleAgain() {
+        notificationsGranted = true
+        var refuse = true
+        val screen = Screen()
+        rule.runOnUiThread { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalActivityResultRegistryOwner provides owner,
+                LocalContext provides permissionContext,
+                LocalLifecycleOwner provides screen,
+            ) {
+                QueuedUploads(queue) {
+                    starts++
+                    if (refuse) throw IllegalStateException("not allowed to start service")
+                }
+            }
+        }
+        queue.submit(BATCH)
+        rule.runOnIdle {
+            assertEquals(1, starts)
+            assertEquals(listOf(BATCH.files), queue.waiting.value.map { it.files })
+            assertNull(queue.next())
+        }
+        queue.submit(OTHER)
+        rule.runOnIdle { assertEquals("no retries while the screen stays visible", 1, starts) }
+
+        refuse = false
+        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.CREATED }
+        rule.runOnIdle { assertEquals(1, starts) }
+        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
+        rule.runOnIdle {
+            assertEquals("one start for all waiting batches", 2, starts)
+            assertEquals(emptyList<UploadBatch>(), queue.waiting.value)
+            assertEquals(BATCH.files, queue.next()?.files)
+            assertEquals(OTHER.files, queue.next()?.files)
+            assertNull(queue.next())
+        }
+    }
+
     private fun showQueuedUploads() {
         rule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner, LocalContext provides permissionContext) {
@@ -147,6 +191,10 @@ class QueuedUploadsTest {
         }
     }
 
+    private class Screen : LifecycleOwner {
+        override val lifecycle = LifecycleRegistry(this)
+    }
+
     private object SignedIn : CredentialsStore {
         override fun load() = AccountCredentials("http://cloud", "anna", "secret", "anna")
         override fun save(credentials: AccountCredentials) = Unit
@@ -159,6 +207,9 @@ class QueuedUploadsTest {
                 UploadSelection("content://media/external/images/media/42", "фото.png", "image/png"),
                 UploadSelection("content://media/external/video/media/43", "video.mp4", "video/mp4"),
             ),
+        )
+        val OTHER = UploadBatch(
+            listOf(UploadSelection("content://media/external/images/media/44", "другое.jpg", "image/jpeg")),
         )
     }
 }

@@ -26,7 +26,7 @@ class UploadQueueTest {
                 queue.submit(first)
                 queue.submit(UploadBatch(emptyList()))
                 queue.submit(second)
-                assertEquals(2, queue.release())
+                assertEquals(listOf(first, second), queue.release())
                 val third = batch("c")
                 queue.submit(third)
 
@@ -40,6 +40,31 @@ class UploadQueueTest {
                 assertSame(second, queue.next())
                 assertNull(queue.next())
                 assertEquals(listOf(third), queue.waiting.value)
+            } finally {
+                scope.cancel()
+            }
+        }
+
+    @Test fun `refused start returns untaken batches ahead of newer ones`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope)
+                val running = batch("a")
+                val refused = batch("b")
+                queue.submit(running)
+                queue.submit(refused)
+                val released = queue.release()
+                // A service that was already running took one batch before the new start was refused.
+                assertSame(running, queue.next())
+                val newer = batch("c")
+                queue.submit(newer)
+
+                queue.restore(released)
+
+                assertEquals(listOf(refused, newer), queue.waiting.value)
+                assertNull(queue.next())
+                assertEquals(0, queue.releasedFiles())
             } finally {
                 scope.cancel()
             }

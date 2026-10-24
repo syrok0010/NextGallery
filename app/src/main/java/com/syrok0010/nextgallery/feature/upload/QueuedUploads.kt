@@ -15,11 +15,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.combine
 import org.koin.compose.koinInject
 
 /**
@@ -36,33 +41,53 @@ internal fun QueuedUploads(
         context.getSharedPreferences("upload_permissions", Context.MODE_PRIVATE)
     }
     val start by rememberUpdatedState(startService)
-    val waiting by queue.waiting.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     // Survives recreation while the dialog is shown, so the restored screen does not ask again.
     var asking by rememberSaveable { mutableStateOf(false) }
-    val release = {
-        asking = false
-        val starts = queue.release()
-        if (starts > 0 && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            Toast.makeText(context, R.string.upload_without_notifications, Toast.LENGTH_LONG).show()
-        }
-        repeat(starts) { start(context) }
-    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { release() }
+    ) { asking = false }
 
-    LaunchedEffect(waiting, asking) {
-        if (waiting.isEmpty() || asking) return@LaunchedEffect
-        val shouldRequest = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED &&
-            !preferences.getBoolean("notifications_requested", false)
-        if (shouldRequest) {
-            preferences.edit().putBoolean("notifications_requested", true).apply()
-            asking = true
-            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            release()
+    LaunchedEffect(queue, lifecycle, context) {
+        // A foreground service may only start from a visible app.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            combine(queue.waiting, snapshotFlow { asking }, ::Pair).collect { (waiting, isAsking) ->
+                if (waiting.isEmpty() || isAsking) return@collect
+                val shouldRequest = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) !=
+                    PackageManager.PERMISSION_GRANTED &&
+                    !preferences.getBoolean("notifications_requested", false)
+                if (shouldRequest) {
+                    preferences.edit().putBoolean("notifications_requested", true).apply()
+                    asking = true
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else if (!handOff(context, queue, start)) {
+                    // Retrying while still visible would most likely be refused again; the
+                    // batches wait for the next time the app comes to the foreground.
+                    awaitCancellation()
+                }
+            }
         }
     }
+}
+
+/** Starts the service once for all waiting batches; false if the system refused to start it. */
+private fun handOff(context: Context, queue: UploadQueue, start: (Context) -> Unit): Boolean {
+    val released = queue.release()
+    if (released.isEmpty()) return true
+    try {
+        start(context)
+    } catch (_: IllegalStateException) {
+        // ForegroundServiceStartNotAllowedException and the background start limit before Android 12.
+        queue.restore(released)
+        Toast.makeText(context, R.string.upload_start_refused, Toast.LENGTH_LONG).show()
+        return false
+    }
+    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+        Toast.makeText(context, R.string.upload_without_notifications, Toast.LENGTH_LONG).show()
+    }
+    return true
 }
