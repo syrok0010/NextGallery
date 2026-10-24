@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.timeline
 
+import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.LocalMediaProjection
 import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaItem

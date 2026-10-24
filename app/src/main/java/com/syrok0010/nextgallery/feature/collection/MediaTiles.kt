@@ -2,7 +2,8 @@ package com.syrok0010.nextgallery.feature.collection
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,11 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +77,8 @@ internal fun MediaSlotTile(
     slot: MediaSlot,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
+    /** Null where the screen has no selection mode. */
+    selection: MediaSelection? = null,
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val item = slot.mediaItem
@@ -82,13 +88,25 @@ internal fun MediaSlotTile(
     if (item == null) {
         PlaceholderMediaTile(cloudCopyDescription = cloudCopyDescription)
     } else {
+        // Only the tile whose own state changed recomposes when the selection changes.
+        val selected by remember(selection, item.mediaId) {
+            derivedStateOf { selection?.isSelected(item.mediaId) == true }
+        }
         MediaTile(
             item = item,
             cloudCopyDescription = cloudCopyDescription,
             localCopyDescription = localCopyDescription,
             requestFactory = requestFactory,
             registerTimelineTile = registerTimelineTile,
-            onClick = { onSelect(item) },
+            selected = selected,
+            onClick = {
+                if (selection?.active == true) {
+                    selection.toggle(item.mediaId)
+                } else {
+                    onSelect(item)
+                }
+            },
+            onLongClick = selection?.let { { it.select(item.mediaId) } },
         )
     }
 }
@@ -116,7 +134,9 @@ private fun MediaTile(
     localCopyDescription: String,
     requestFactory: MediaImageRequestFactory,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
+    selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     val coordinatesHolder = remember(item.mediaId) {
         TimelineTileCoordinates()
@@ -144,7 +164,10 @@ private fun MediaTile(
                 } else {
                     Modifier
                 },
-            ).clickable(onClick = onClick),
+            ).combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         MediaAssetImage(
             item = item,
@@ -168,6 +191,24 @@ private fun MediaTile(
                 if (item.hasRemoteCopy) {
                     RemoteCloudIndicator()
                 }
+            }
+        }
+
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(26.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.onPrimary, CircleShape),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.Center).size(18.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
             }
         }
 

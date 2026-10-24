@@ -1,16 +1,39 @@
 package com.syrok0010.nextgallery.feature.collection
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
+import com.syrok0010.nextgallery.core.media.MediaItem
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 
 /** Shared grid, scroll restoration and viewer transitions; callers own loading and chrome. */
 @Composable
@@ -20,6 +43,9 @@ internal fun MediaCollectionScreen(
     onViewportObservation: (MediaViewportObservation) -> Unit = {},
     onViewerRange: (IntRange) -> Unit = {},
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
+    onSelectionModeChanged: (Boolean) -> Unit = {},
+    selectionEnabled: Boolean = false,
+    onUpload: (List<MediaItem>, onStarted: () -> Unit) -> Unit = { _, onStarted -> onStarted() },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
@@ -27,8 +53,26 @@ internal fun MediaCollectionScreen(
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
-    SideEffect { onViewerVisibilityChanged(viewerId != null) }
-    DisposableEffect(Unit) { onDispose { onViewerVisibilityChanged(false) } }
+    val selection = rememberMediaSelection()
+    var uploadRequested by remember { mutableStateOf(false) }
+    val cancelSelection = {
+        selection.clear()
+        uploadRequested = false
+    }
+    val selectedItems = remember(slots, selection.selectedIds) {
+        slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
+    }
+    SideEffect {
+        onViewerVisibilityChanged(viewerId != null)
+        onSelectionModeChanged(selection.active)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onViewerVisibilityChanged(false)
+            onSelectionModeChanged(false)
+        }
+    }
+    BackHandler(enabled = selection.active && !uploadRequested, onBack = cancelSelection)
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -40,9 +84,21 @@ internal fun MediaCollectionScreen(
                     onMediaRevealed = transition::onTimelineMediaRevealed,
                     registerTimelineTile = transition::registerTimelineTile,
                     onSelect = { transition.open(it.mediaId) },
+                    selection = selection.takeIf { selectionEnabled },
                     gridState = gridState,
                 )
             }
+        }
+        if (viewerId == null && selectionEnabled && selection.active) {
+            SelectionActionBar(
+                selectedCount = selectedItems.size,
+                uploadRequested = uploadRequested,
+                onCancel = cancelSelection,
+                onUpload = {
+                    uploadRequested = true
+                    onUpload(selectedItems, cancelSelection)
+                },
+            )
         }
         if (viewerId != null) MediaDetailScreen(
             initialMediaId = viewerId,
@@ -54,5 +110,43 @@ internal fun MediaCollectionScreen(
                 transition.onCurrentItemChanged(item.mediaId, index.slotIndex(item.mediaId) != null)
             },
         )
+    }
+}
+
+@Composable
+private fun BoxScope.SelectionActionBar(
+    selectedCount: Int,
+    uploadRequested: Boolean,
+    onCancel: () -> Unit,
+    onUpload: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onCancel, enabled = !uploadRequested) {
+                Icon(Icons.Default.Close, contentDescription = "Отменить выбор")
+            }
+            Text("Выбрано: $selectedCount", style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onUpload, enabled = selectedCount > 0 && !uploadRequested) {
+                Icon(
+                    painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_cloud),
+                    contentDescription = null,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Загрузить")
+            }
+        }
     }
 }
