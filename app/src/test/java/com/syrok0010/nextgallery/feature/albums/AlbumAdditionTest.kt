@@ -10,6 +10,8 @@ import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,13 +19,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 
 class AlbumAdditionTest {
-    @Test fun `request keeps server copies and counts local-only objects`() {
+    @Test fun `request keeps server copies and uploads local-only objects`() {
         val request = AlbumAdditionRequest.of(
             listOf(
                 item("remote", MediaAssetRef.MemoriesFile(10)),
@@ -32,7 +35,10 @@ class AlbumAdditionTest {
             ),
         )
         assertEquals(listOf(10L, 11L), request.fileIds)
-        assertEquals(1, request.skippedLocal)
+        assertEquals(
+            listOf(UploadSelection("content://media/local", "local.jpg", "image/jpeg")),
+            request.uploads,
+        )
     }
 
     @Test fun `only albums owned by current user are writable`() {
@@ -56,10 +62,16 @@ class AlbumAdditionTest {
             listOf(
                 uiText(R.string.album_add_done, "Лето", 3),
                 pluralText(R.plurals.album_add_done_failed, 1, 1),
-                uiText(R.string.album_add_done_skipped, 2),
+                pluralText(R.plurals.album_add_done_uploading, 2, 2),
             ),
             albumAdditionMessage(
-                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 1), skippedLocal = 2),
+                AlbumAdditionState.Done("Лето", AlbumAddResult(3, 0, 1), localUploads = 2),
+            ),
+        )
+        assertEquals(
+            listOf(pluralText(R.plurals.album_add_uploading_only, 2, "Лето", 2)),
+            albumAdditionMessage(
+                AlbumAdditionState.Done("Лето", AlbumAddResult(0, 0, 0), localUploads = 2),
             ),
         )
         assertNull(albumAdditionMessage(AlbumAdditionState.Idle))
@@ -94,19 +106,37 @@ class AlbumAdditionTest {
                     MutableStateFlow<LocalMediaPermissionMode?>(null),
                     scope,
                 )
+                val uploads = UploadQueue(sessions, scope)
                 val additions = AlbumAdditions(
                     sessions,
                     MemoriesAlbumWriter(fixture.writerTransport),
                     catalog,
+                    uploads,
                     scope,
                 )
                 val before = refreshed
-                assertTrue(additions.add(AlbumTarget.New("Поход"), AlbumAdditionRequest(listOf(1L), 1)))
+                var mkcolBeforeSubmit = false
+                // Unconfined: runs inside submit, before the addition goes on.
+                val submitted = scope.launch(Dispatchers.Unconfined) {
+                    uploads.waiting.first { it.isNotEmpty() }
+                    mkcolBeforeSubmit = fixture.requests.any { it.method == "MKCOL" }
+                }
+                val local = UploadSelection("content://media/local", "local.jpg", "image/jpeg")
+                val accepted = additions.add(
+                    AlbumTarget.New("Поход"),
+                    AlbumAdditionRequest(listOf(1L), listOf(local)),
+                )
+                assertTrue(accepted)
                 val done = withTimeout(5_000) {
                     additions.state.first { it is AlbumAdditionState.Done }
                 } as AlbumAdditionState.Done
                 assertEquals(AlbumAddResult(1, 0, 0), done.result)
-                assertEquals(1, done.skippedLocal)
+                assertEquals(1, done.localUploads)
+                submitted.join()
+                assertTrue("uploads must start after the album exists", mkcolBeforeSubmit)
+                val batch = uploads.waiting.value.single()
+                assertEquals(listOf(local), batch.files)
+                assertTrue(batch.followUps.single() is AlbumUploadFollowUp)
                 assertTrue(fixture.requests.any { it.method == "MKCOL" && it.decodedTarget.endsWith("/photos/anna/albums/Поход") })
                 withTimeout(5_000) { while (refreshed == before) kotlinx.coroutines.delay(10) }
                 additions.consume()
@@ -137,10 +167,11 @@ class AlbumAdditionTest {
                     sessions,
                     MemoriesAlbumWriter(fixture.writerTransport),
                     emptyCatalog(sessions, scope),
+                    UploadQueue(sessions, scope),
                     scope,
                 )
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
-                val request = AlbumAdditionRequest(listOf(1L), 0)
+                val request = AlbumAdditionRequest(listOf(1L))
                 assertTrue(additions.add(album, request))
                 assertFalse(additions.add(album, request))
                 release.countDown()

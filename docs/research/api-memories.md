@@ -302,6 +302,8 @@ reconciliation. Переименование или перенос папки м
 - Write-endpoint для альбомов у Memories нет; альбомы Photos изменяются через DAV `remote.php/dav/photos/{uid}/albums/{name}`.
 - `MKCOL` на этот путь создаёт альбом (`201`); повторный `MKCOL` возвращает `405`.
 - `COPY remote.php/dav/files/{uid}/{path}` с `Destination` на `.../albums/{name}/{basename}` добавляет файл (`201`). Повтор того же файла — `409 Conflict` («File N is already in the folder»).
+- `COPY` в несуществующий альбом тоже возвращает `409` (DAV: нет родительской коллекции). Отличить его от «уже в альбоме» можно только отдельной проверкой альбома: `PROPFIND` с `Depth: 0` даёт `207`, если альбом есть, и `404`, если нет.
+- `COPY` работает по DAV-пути и не требует индексации Memories: только что загруженный `PUT` файл можно сразу добавить в альбом. `HEAD` на файл возвращает `Content-Length`.
 - Внутри альбома DAV показывает элементы как `{fileid}-{basename}`; альбом хранит ссылку на файл, а не копию содержимого.
 - `GET /apps/memories/api/image/info/{fileId}` возвращает `filename` относительно корня файлов пользователя, `basename`, `size`, `owneruid`. Этого достаточно, чтобы построить источник `COPY` по `fileId` из таймлайна.
 - DAV uid нужно брать из OCS `cloud/user`, а не из login name.

@@ -8,6 +8,10 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.feature.upload.UploadBatch
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import com.syrok0010.nextgallery.feature.upload.uploadSelections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -23,13 +27,19 @@ internal sealed interface AlbumTarget {
     data class New(override val name: String) : AlbumTarget
 }
 
-/** Only server copies can join a Photos album; local-only objects are reported, not uploaded. */
-internal data class AlbumAdditionRequest(val fileIds: List<Long>, val skippedLocal: Int) {
+/**
+ * Server copies join the album directly; local-only [uploads] are uploaded once the album exists
+ * and join it after the upload.
+ */
+internal data class AlbumAdditionRequest(
+    val fileIds: List<Long>,
+    val uploads: List<UploadSelection> = emptyList(),
+) {
     companion object {
         fun of(items: List<MediaItem>) =
             AlbumAdditionRequest(
                 fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
-                skippedLocal = items.count { it.remoteFileId == null },
+                uploads = uploadSelections(items),
             )
     }
 }
@@ -41,7 +51,7 @@ internal sealed interface AlbumAdditionState {
 
     data class Running(val albumName: String, val count: Int) : AlbumAdditionState
 
-    data class Done(val albumName: String, val result: AlbumAddResult, val skippedLocal: Int) :
+    data class Done(val albumName: String, val result: AlbumAddResult, val localUploads: Int) :
         AlbumAdditionState
 
     data class Failed(val albumName: String, val reason: AlbumAdditionFailure) : AlbumAdditionState
@@ -62,6 +72,7 @@ internal class AlbumAdditions(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
+    private val uploads: UploadQueue,
     private val scope: CoroutineScope,
 ) {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
@@ -86,6 +97,9 @@ internal class AlbumAdditions(
     /**
      * Returns false when the request is not accepted: another addition is running or nobody is
      * signed in. The caller keeps the selection in that case.
+     *
+     * Local-only objects are queued for upload once the album exists, so they never race album
+     * creation; they are not uploaded when the album cannot be written.
      */
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
@@ -101,10 +115,16 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
+                    uploads.submit(
+                        UploadBatch(
+                            request.uploads,
+                            listOf(AlbumUploadFollowUp(writer, catalog, address)),
+                        ),
+                    )
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(credentials, address, request.fileIds),
-                        request.skippedLocal,
+                        request.uploads.size,
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -139,7 +159,10 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
         is AlbumAdditionState.Running -> listOf(uiText(R.string.album_add_running, state.albumName))
 
         is AlbumAdditionState.Done -> buildList {
-            add(uiText(R.string.album_add_done, state.albumName, state.result.added))
+            val total = state.result.added + state.result.alreadyPresent + state.result.failed
+            if (total > 0 || state.localUploads == 0) {
+                add(uiText(R.string.album_add_done, state.albumName, state.result.added))
+            }
             if (state.result.alreadyPresent > 0) {
                 add(uiText(R.string.album_add_done_present, state.result.alreadyPresent))
             }
@@ -152,9 +175,22 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
                     ),
                 )
             }
-            if (state.skippedLocal > 0) {
+            if (state.localUploads > 0) {
                 add(
-                    uiText(R.string.album_add_done_skipped, state.skippedLocal),
+                    if (total > 0) {
+                        pluralText(
+                            R.plurals.album_add_done_uploading,
+                            state.localUploads,
+                            state.localUploads,
+                        )
+                    } else {
+                        pluralText(
+                            R.plurals.album_add_uploading_only,
+                            state.localUploads,
+                            state.albumName,
+                            state.localUploads,
+                        )
+                    },
                 )
             }
         }

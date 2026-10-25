@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -18,8 +17,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
-import com.syrok0010.nextgallery.core.media.hasRemoteCopy
-import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
@@ -29,9 +26,9 @@ import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
-import com.syrok0010.nextgallery.feature.upload.UploadForegroundService
-import com.syrok0010.nextgallery.feature.upload.UploadSelection
-import com.syrok0010.nextgallery.feature.upload.rememberUploadAction
+import com.syrok0010.nextgallery.feature.upload.UploadBatch
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.uploadSelections
 import org.koin.compose.koinInject
 
 @Composable
@@ -42,12 +39,11 @@ internal fun PhotosScreen(
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
     additions: AlbumAdditions = koinInject(),
+    uploads: UploadQueue = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val addition by additions.state.collectAsStateWithLifecycle()
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
-    val context = LocalContext.current
-    val upload = rememberUploadAction { UploadForegroundService.start(context, it) }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -67,16 +63,9 @@ internal fun PhotosScreen(
         onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
         onUpload = { items, onStarted ->
-            val selections = items.filterNot { it.hasRemoteCopy }.mapNotNull { item ->
-                item.localCopy?.let { local ->
-                    UploadSelection(
-                        contentUri = local.contentUri,
-                        displayName = item.displayName,
-                        mimeType = item.mimeType,
-                    )
-                }
-            }
-            upload(selections, onStarted)
+            // The batch starts from the app root, which also asks for the notification permission.
+            uploads.submit(UploadBatch(uploadSelections(items)))
+            onStarted()
         },
         onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
     ) { viewerVisible, content ->
