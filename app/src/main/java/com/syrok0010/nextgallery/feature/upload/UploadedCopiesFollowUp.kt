@@ -9,16 +9,15 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
- * Creates the identity-linking follow-up that is attached to every upload batch. It keeps an
- * uploaded phone file and its new server file one media object. Memories 10.1 does not return
- * AUID/BUID, so the server copy cannot be matched later; the upload is the only moment both
- * identities are known together.
+ * Links an uploaded phone file and its new server file as one media object. Memories 10.1 does not
+ * return AUID/BUID, so the server copy cannot be matched later; the upload is the only moment both
+ * identities are known together. One instance serves one upload batch.
  */
-internal class UploadedCopiesFollowUpFactory(
+internal class UploadedCopiesFollowUp(
     private val identities: MediaIdentityRegistry,
     private val sessions: SessionStore,
     private val refreshLibrary: () -> Unit,
-) {
+) : UploadFollowUp {
     /**
      * Links only while [credentials] are still signed in: logout clears Memories identities, and
      * the same numeric file id on another server is a different file.
@@ -36,23 +35,18 @@ internal class UploadedCopiesFollowUpFactory(
             },
         )
 
-    /** Creates one stateful follow-up for one batch. */
-    fun create(): UploadFollowUp = LinkFollowUp()
+    private var uploaded = false
 
-    private inner class LinkFollowUp : UploadFollowUp {
-        private var uploaded = false
+    override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) {
+        uploaded = true
+        // Without the link the timeline shows the phone file and its server copy separately.
+        file.fileId?.let { fileId -> link(credentials, file.selection.contentUri, fileId) }
+    }
 
-        override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) {
-            uploaded = true
-            // Without the link the timeline shows the phone file and its server copy separately.
-            file.fileId?.let { fileId -> link(credentials, file.selection.contentUri, fileId) }
-        }
-
-        /** Shows the server copies without waiting for a manual refresh. */
-        override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
-            if (uploaded) refreshLibrary()
-            return emptyList()
-        }
+    /** Shows the server copies without waiting for a manual refresh. */
+    override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+        if (uploaded) refreshLibrary()
+        return emptyList()
     }
 }
 

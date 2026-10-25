@@ -21,11 +21,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class UploadedCopiesFollowUpFactoryTest {
+class UploadedCopiesFollowUpTest {
     private val registry = InMemoryMediaIdentityRegistry()
     private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
-    private val factory = UploadedCopiesFollowUpFactory(registry, sessions) { refreshes++ }
+    private val followUp = UploadedCopiesFollowUp(registry, sessions) { refreshes++ }
 
     @Test
     fun `file id is read from the OC-FileId header`() {
@@ -42,8 +42,8 @@ class UploadedCopiesFollowUpFactoryTest {
         runBlocking {
             val localId = resolveLocal()
 
-            assertTrue(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-            assertTrue(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
             val remoteId = resolveRemote()
 
             assertEquals(localId, remoteId)
@@ -75,7 +75,7 @@ class UploadedCopiesFollowUpFactoryTest {
             val localId = resolveLocal()
             val earlyRemoteId = resolveRemote()
 
-            assertTrue(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
             assertNotEquals(localId, earlyRemoteId)
             assertEquals(localId, resolveRemote())
@@ -87,7 +87,7 @@ class UploadedCopiesFollowUpFactoryTest {
             val localId = resolveLocal()
             val earlyRemoteId = resolveRemote(auid = "server-auid", buid = "server-buid")
 
-            assertTrue(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
             assertNotEquals(localId, earlyRemoteId)
             assertEquals(localId, resolveRemote(auid = "server-auid", buid = "server-buid"))
@@ -97,9 +97,9 @@ class UploadedCopiesFollowUpFactoryTest {
     fun `link does not replace an existing server copy`() =
         runBlocking {
             val localId = resolveLocal()
-            assertTrue(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
-            assertFalse(factory.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
+            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
 
             val secondId = resolveRemote(SECOND_FILE_ID)
             val firstId = resolveRemote()
@@ -118,10 +118,10 @@ class UploadedCopiesFollowUpFactoryTest {
         runBlocking {
             val otherLocalId =
                 resolveLocal(OTHER_CONTENT_URI, "other-local-auid", "other-local-buid")
-            assertTrue(factory.link(CREDENTIALS, OTHER_CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(CREDENTIALS, OTHER_CONTENT_URI, FILE_ID))
 
             val localId = resolveLocal()
-            assertFalse(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
             assertEquals(otherLocalId, resolveRemote())
             assertNotEquals(localId, otherLocalId)
@@ -133,9 +133,9 @@ class UploadedCopiesFollowUpFactoryTest {
             val localId = resolveLocal()
 
             sessions.signOut()
-            assertFalse(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
             sessions.signIn(CREDENTIALS.copy(serverUrl = "https://other.example"))
-            assertFalse(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
             assertNotEquals(localId, resolveRemote())
         }
@@ -143,7 +143,7 @@ class UploadedCopiesFollowUpFactoryTest {
     @Test
     fun `unknown phone file is not linked`() =
         runBlocking {
-            assertFalse(factory.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
             assertEquals(0, refreshes)
         }
 
@@ -151,8 +151,6 @@ class UploadedCopiesFollowUpFactoryTest {
     fun `follow-up links a created file and refreshes the library after the batch`() =
         runBlocking {
             val localId = resolveLocal()
-            val followUp = factory.create()
-
             followUp.uploaded(CREDENTIALS, uploadedFile(fileId = FILE_ID))
             assertEquals(0, refreshes)
             assertEquals(emptyList<UiText>(), followUp.finished(emptyList()))
@@ -165,8 +163,6 @@ class UploadedCopiesFollowUpFactoryTest {
     fun `follow-up leaves a file that already existed unlinked`() =
         runBlocking {
             val localId = resolveLocal()
-            val followUp = factory.create()
-
             followUp.uploaded(CREDENTIALS, uploadedFile(fileId = null))
             followUp.finished(emptyList())
 
@@ -177,7 +173,7 @@ class UploadedCopiesFollowUpFactoryTest {
     @Test
     fun `follow-up without files on the server leaves the library alone`() =
         runBlocking {
-            factory.create().finished(listOf(SELECTION))
+            followUp.finished(listOf(SELECTION))
 
             assertEquals(0, refreshes)
         }
