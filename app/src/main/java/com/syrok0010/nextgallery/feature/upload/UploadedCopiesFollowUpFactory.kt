@@ -9,11 +9,12 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
- * Keeps an uploaded phone file and its new server file one media object. Memories 10.1 does not
- * return AUID/BUID, so the server copy cannot be matched later; the upload is the only moment
- * both identities are known together.
+ * Creates the identity-linking follow-up that is attached to every upload batch. It keeps an
+ * uploaded phone file and its new server file one media object. Memories 10.1 does not return
+ * AUID/BUID, so the server copy cannot be matched later; the upload is the only moment both
+ * identities are known together.
  */
-class UploadedCopies(
+internal class UploadedCopiesFollowUpFactory(
     private val identities: MediaIdentityRegistry,
     private val sessions: SessionStore,
     private val refreshLibrary: () -> Unit,
@@ -22,7 +23,11 @@ class UploadedCopies(
      * Links only while [credentials] are still signed in: logout clears Memories identities, and
      * the same numeric file id on another server is a different file.
      */
-    suspend fun link(credentials: AccountCredentials, contentUri: String, fileId: Long): Boolean =
+    internal suspend fun link(
+        credentials: AccountCredentials,
+        contentUri: String,
+        fileId: Long,
+    ): Boolean =
         identities.link(
             existing = MediaSourceIdentity(MediaSourceKind.Local, contentUri),
             linked = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString()),
@@ -31,8 +36,8 @@ class UploadedCopies(
             },
         )
 
-    /** Follow-up for one batch; [UploadQueue] adds it to every batch. */
-    internal fun followUp(): UploadFollowUp = LinkFollowUp()
+    /** Creates one stateful follow-up for one batch. */
+    fun create(): UploadFollowUp = LinkFollowUp()
 
     private inner class LinkFollowUp : UploadFollowUp {
         private var uploaded = false
