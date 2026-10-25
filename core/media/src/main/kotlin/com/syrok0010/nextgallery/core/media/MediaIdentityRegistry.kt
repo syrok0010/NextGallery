@@ -82,10 +82,33 @@ fun reconcileMediaIdentities(
     val reassignments = mutableListOf<Pair<MediaId, MediaId>>()
 
     fun reconcile(candidate: MediaIdentityCandidate) {
-        val publishedMediaId = sourceMediaIds[candidate.source]
+        val knownSourceMediaId = sourceMediaIds[candidate.source]
+        val publishedMediaId = knownSourceMediaId
             ?: candidate.publishedMediaId
             ?: mediaIdFactory()
         val matchedMediaIds = candidate.aliases.mapNotNull(aliasMediaIds::get).toSet()
+
+        // A persisted source identity is an exact link. A stale or colliding alias
+        // must never move that source to another MediaId.
+        if (knownSourceMediaId != null) {
+            val conflictingMediaIds = matchedMediaIds - knownSourceMediaId
+            if (conflictingMediaIds.isNotEmpty()) {
+                conflicts += MediaIdentityConflict(
+                    source = candidate.source,
+                    aliases = candidate.aliases,
+                    conflictingMediaIds = conflictingMediaIds + knownSourceMediaId,
+                )
+                assign(candidate.source, knownSourceMediaId)
+                resolved[candidate.source] = knownSourceMediaId
+                return
+            }
+            assign(candidate.source, knownSourceMediaId)
+            candidate.aliases.forEach { alias -> aliasMediaIds[alias] = knownSourceMediaId }
+            if (candidate.source.source == MediaSourceKind.Local) localMediaIds += knownSourceMediaId
+            resolved[candidate.source] = knownSourceMediaId
+            return
+        }
+
         val occupied = candidate.source.source != MediaSourceKind.Local &&
             matchedMediaIds.any { mediaId ->
                 mediaId != publishedMediaId &&

@@ -59,6 +59,32 @@ class MediaContractTest {
         assertEquals(shared, result.aliasMediaIds[alias])
     }
 
+    @Test fun `persisted source identity outranks a stale alias`() {
+        val source = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val exact = MediaId("exact")
+        val stale = MediaId("stale")
+
+        val result = reconcileMediaIdentities(
+            candidates = listOf(
+                MediaIdentityCandidate(
+                    source = source,
+                    publishedMediaId = MediaId("new-published-id"),
+                    aliases = setOf(alias),
+                ),
+            ),
+            initialSourceMediaIds = mapOf(source to exact),
+            initialAliasMediaIds = mapOf(alias to stale),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = { error("Persisted source identity must not generate an ID") },
+        )
+
+        assertEquals(exact, result.resolution.mediaIds[source])
+        assertEquals(exact, result.sourceMediaIds[source])
+        assertEquals(stale, result.aliasMediaIds[alias])
+        assertEquals(setOf(exact, stale), result.resolution.conflicts.single().conflictingMediaIds)
+    }
+
     @Test fun `derived identity and day stay consistent through copy`() {
         val item = item(MediaAssetRef.MemoriesFile(42))
         val updated = item.copy(dayId = 20_001, assetRef = MediaAssetRef.MemoriesFile(43))
