@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.feature.timeline.remote
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
-import com.syrok0010.nextgallery.feature.images.MemoriesAssetUrlFactory
 import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
+import com.syrok0010.nextgallery.feature.images.MemoriesAssetUrlFactory
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
