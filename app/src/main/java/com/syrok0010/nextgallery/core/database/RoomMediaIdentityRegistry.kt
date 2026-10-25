@@ -130,6 +130,57 @@ class RoomMediaIdentityRegistry(
         }
     }
 
+    override suspend fun link(
+        existing: MediaSourceIdentity,
+        linked: MediaSourceIdentity,
+        isCurrent: () -> Boolean,
+    ): Boolean =
+        database.withTransaction {
+            if (!isCurrent()) return@withTransaction false
+            val mediaId = dao
+                .identifiers(existing.identifierKind(), listOf(existing.sourceKey))
+                .singleOrNull()
+                ?.mediaId
+                ?: return@withTransaction false
+            val linkedKind = linked.identifierKind()
+            val previous = dao
+                .identifiers(
+                    linkedKind,
+                    listOf(linked.sourceKey),
+                ).singleOrNull()
+                ?.mediaId
+            if (previous == mediaId) {
+                dao.deleteConflict(linked.source, linked.sourceKey)
+                return@withTransaction true
+            }
+
+            // A link is permanent for the lifetime of these source identities. Do not replace a
+            // server copy that is already attached to the local object.
+            val existingLinkedCopies = dao
+                .identifiersForMediaIds(listOf(mediaId))
+                .filter { it.kind == linkedKind }
+            if (existingLinkedCopies.isNotEmpty()) {
+                return@withTransaction false
+            }
+
+            if (previous != null && previous != mediaId) {
+                val previousSources = dao
+                    .identifiersForMediaIds(listOf(previous))
+                    .filter { it.kind in SOURCE_IDENTIFIER_KINDS }
+                // An unlinked server object may have been indexed between PUT and this follow-up.
+                // Merge that object, but never take a link away from another local object.
+                if (previousSources.any { it.kind != linkedKind || it.value != linked.sourceKey }) {
+                    return@withTransaction false
+                }
+                dao.reassignMediaId(previous, mediaId)
+            }
+            dao.deleteConflict(linked.source, linked.sourceKey)
+            dao.upsertIdentifiers(
+                listOf(MediaIdentifierEntity(linkedKind, linked.sourceKey, mediaId)),
+            )
+            true
+        }
+
     suspend fun conflicts(): List<MediaIdentityConflict> =
         dao.conflicts().map { entity ->
             MediaIdentityConflict(

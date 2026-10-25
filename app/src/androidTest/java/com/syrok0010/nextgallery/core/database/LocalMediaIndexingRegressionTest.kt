@@ -10,6 +10,7 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaBatch
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaChangeObserver
@@ -140,6 +141,12 @@ class LocalMediaIndexingRegressionTest {
         override suspend fun removeSource(source: MediaSourceKind) {
             delegate.removeSource(source)
         }
+
+        override suspend fun link(
+            existing: MediaSourceIdentity,
+            linked: MediaSourceIdentity,
+            isCurrent: () -> Boolean,
+        ) = delegate.link(existing, linked, isCurrent)
     }
 
     private companion object {

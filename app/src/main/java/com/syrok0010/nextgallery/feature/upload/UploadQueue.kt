@@ -15,9 +15,14 @@ import kotlinx.coroutines.launch
  * Upload batches between the caller and the upload service. A batch [waiting] here is started by
  * [QueuedUploads] once a screen is visible: a foreground service may only start from a visible app,
  * and the notification permission dialog needs one too. Batches live in memory only, like the
- * upload itself, and never cross accounts.
+ * upload itself, and never cross accounts. Every batch also gets the follow-ups from
+ * [commonFollowUps]: work any upload needs, whoever asked for it.
  */
-internal class UploadQueue(sessions: SessionStore, scope: CoroutineScope) {
+internal class UploadQueue(
+    sessions: SessionStore,
+    scope: CoroutineScope,
+    private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
+) {
     private val mutableWaiting = MutableStateFlow<List<UploadBatch>>(emptyList())
     val waiting = mutableWaiting.asStateFlow()
     private val started = ConcurrentLinkedQueue<UploadBatch>()
@@ -37,7 +42,9 @@ internal class UploadQueue(sessions: SessionStore, scope: CoroutineScope) {
     }
 
     fun submit(batch: UploadBatch) {
-        if (batch.files.isNotEmpty()) mutableWaiting.update { it + batch }
+        if (batch.files.isEmpty()) return
+        val complete = UploadBatch(batch.files, commonFollowUps() + batch.followUps)
+        mutableWaiting.update { it + complete }
     }
 
     /** Hands all waiting batches to the service and returns them; one service start takes them all. */
