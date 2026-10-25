@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,7 +111,13 @@ internal fun AddToAlbumSheet(
                 val location = album.location as AlbumLocation.Remote
                 AlbumChoiceRow(
                     title = album.name,
-                    subtitle = album.count?.let { stringResource(R.string.albums_count, it) },
+                    subtitle = album.count?.let {
+                        pluralStringResource(
+                            R.plurals.albums_count,
+                            it,
+                            it,
+                        )
+                    },
                     enabled = !busy,
                     onClick = { onPick(AlbumTarget.Existing(location, album.name)) },
                 ) {

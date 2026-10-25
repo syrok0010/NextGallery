@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -150,7 +151,7 @@ internal fun AlbumCardRow(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    album.count?.let { stringResource(R.string.albums_count, it) }
+                    album.count?.let { pluralStringResource(R.plurals.albums_count, it, it) }
                         ?: stringResource(R.string.albums_count_unknown),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

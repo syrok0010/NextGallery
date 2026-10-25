@@ -76,7 +76,12 @@
     <string name="albums_all">Все</string>
     <string name="albums_cloud">Nextcloud</string>
     <string name="albums_phone">Телефон</string>
-    <string name="albums_count">%1$d элементов</string>
+    <plurals name="albums_count">
+        <item quantity="one">%1$d элемент</item>
+        <item quantity="few">%1$d элемента</item>
+        <item quantity="many">%1$d элементов</item>
+        <item quantity="other">%1$d элементов</item>
+    </plurals>
     <string name="albums_count_unknown">Количество неизвестно</string>
     <string name="albums_cover_placeholder">Нет обложки</string>
     <string name="albums_unsupported">Альбомы недоступны в конфигурации Memories</string>
@@ -130,6 +135,9 @@
     <string name="album_add_failed_not_writable">Нет прав на изменение альбома «%1$s»</string>
     <string name="album_upload_summary">В «%1$s»: %2$d</string>
     <string name="album_upload_summary_failed">В «%1$s»: %2$d, не добавлено: %3$d</string>
+    <string name="selection_cancel">Отменить выбор</string>
+    <string name="selection_count">Выбрано: %1$d</string>
+    <string name="upload_action">Загрузить</string>
     <string name="upload_channel">Загрузка в облако</string>
     <string name="upload_preparing">Подготовка загрузки</string>
     <string name="upload_progress">Загрузка: %1$d из %2$d</string>
