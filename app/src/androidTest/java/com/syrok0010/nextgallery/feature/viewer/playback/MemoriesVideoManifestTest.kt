@@ -11,12 +11,12 @@ class MemoriesVideoManifestTest {
         val result = MemoriesVideoManifest.qualities(master, """
             #EXTM3U
             #EXT-X-STREAM-INF:BANDWIDTH=9000000,RESOLUTION=1920x1080
-            max.m3u8?session=123
+            direct.m3u8?session=123
             #EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=360x640
             360p.m3u8
         """.trimIndent())
         assertEquals(listOf("Auto", "Original", "360p"), result.map { it.label })
-        assertTrue(result[1].uri.endsWith("max.m3u8?session=123"))
+        assertTrue(result[1].uri.endsWith("direct.m3u8?session=123"))
     }
 
     @Test fun `HLS attributes resolve variable references and quoted codec lists`() {
