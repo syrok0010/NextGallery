@@ -132,6 +132,29 @@ class RoomMediaIdentityRegistryTest {
         assertEquals(MediaId("local-id"), localRepository.loadLocalMediaProjection().single().mediaId)
     }
 
+    @Test
+    fun serverDuplicatesWithOneAliasJoinPhoneFileOnlyOnce() = runBlocking {
+        val generatedIds = listOf("local-id", "first-id", "second-id").map(::MediaId).iterator()
+        val alias = MediaAlias(MediaAliasKind.Auid, "shared-auid")
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val first = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val second = MediaSourceIdentity(MediaSourceKind.Memories, (FILE_ID + 1).toString())
+
+        database.close()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val resolved = registry.resolve(
+            listOf(
+                MediaIdentityCandidate(local, aliases = setOf(alias)),
+                MediaIdentityCandidate(first, aliases = setOf(alias)),
+                MediaIdentityCandidate(second, aliases = setOf(alias)),
+            ),
+        ).mediaIds
+
+        assertEquals(MediaId("local-id"), resolved.getValue(local))
+        assertEquals(MediaId("local-id"), resolved.getValue(first))
+        assertEquals(MediaId("second-id"), resolved.getValue(second))
+    }
+
     private fun openDatabase(
         mediaIdFactory: () -> MediaId = { MediaId("first-persistent-id") },
     ) {
@@ -159,7 +182,7 @@ class RoomMediaIdentityRegistryTest {
 
     private fun snapshot(item: MediaItem) = TimelineSnapshotAssembler.assemble(
         config = MemoriesConfig(
-            version = "8.0.1",
+            version = "10.1.0",
             timelinePath = "/Photos",
             albumsEnabled = false,
             recognizeEnabled = false,

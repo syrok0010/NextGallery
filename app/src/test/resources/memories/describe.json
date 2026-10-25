@@ -1,5 +1,5 @@
 {
-  "version": "7.5.2",
+  "version": "10.1.0",
   "baseUrl": "https://cloud.example.com/apps/memories/",
   "loginFlowUrl": "https://cloud.example.com/index.php/login/v2",
   "uid": "alice"

@@ -116,7 +116,7 @@ class UnifiedTimelineProjectionPersistenceTest {
 
     private fun remoteSnapshot(item: MediaItem) =
         TimelineSnapshotAssembler.assemble(
-            config = MemoriesConfig("8.0.1", "/Photos", false, false, false, false, false, false),
+            config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false),
             days = listOf(TimelineDay(item.dayId, 1)),
             mediaItems = listOf(item),
             loadedDayIds = setOf(item.dayId),

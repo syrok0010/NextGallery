@@ -2,11 +2,13 @@ package com.syrok0010.nextgallery.feature.timeline.remote
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import com.syrok0010.nextgallery.feature.images.MemoriesAssetUrlFactory
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,7 +23,7 @@ class MemoriesDtoMappingTest {
     fun `decode describe response`() {
         val dto = json.decodeFromString<MemoriesDescribeDto>(fixture("describe.json"))
 
-        assertEquals("7.5.2", dto.version)
+        assertEquals("10.1.0", dto.version)
         assertEquals("https://cloud.example.com/apps/memories/", dto.baseUrl)
         assertEquals("https://cloud.example.com/index.php/login/v2", dto.loginFlowUrl)
         assertEquals("alice", dto.uid)
@@ -33,7 +35,7 @@ class MemoriesDtoMappingTest {
 
         val config = dto.toMemoriesConfig()
 
-        assertEquals("7.5.2", config.version)
+        assertEquals("10.1.0", config.version)
         assertEquals("/Photos", config.timelinePath)
         assertTrue(config.albumsEnabled)
         assertFalse(config.recognizeEnabled)
@@ -90,6 +92,32 @@ class MemoriesDtoMappingTest {
             imageUrls.detailPreviewUrl,
         )
         assertEquals("https://cloud.example.com/apps/memories/api/stream/43", imageUrls.originalUrl)
+    }
+
+    @Test
+    fun `server AUID is computed like the phone one`() {
+        val photo = json.decodeFromString<List<MemoriesPhotoDto>>(fixture("day-photos.json"))[0]
+
+        val phone = MemoriesMediaIdentity.calculate(
+            baseName = "IMG_0042.jpg",
+            sizeBytes = 2_048_000L,
+            dateTakenMillis = 1_716_768_000_123L,
+            imageUniqueId = null,
+        )
+
+        assertEquals(phone.auid, photo.toMediaItem(MediaId("resolved")).auid)
+        // md5("$epoch$size"), the server-side formula used before Memories 10.
+        assertEquals("1e4216a83a596e9943f541ff23a398c8", phone.auid)
+    }
+
+    @Test
+    fun `AUID is unknown without epoch or size`() {
+        val photo =
+            MemoriesPhotoDto(fileid = 42, dayid = 19870, epoch = 1_716_768_000L, size = 2_048L)
+
+        assertNull(photo.copy(size = null).auid)
+        assertNull(photo.copy(epoch = null).auid)
+        assertNull(photo.copy(size = 0).auid)
     }
 
     private fun fixture(name: String): String =

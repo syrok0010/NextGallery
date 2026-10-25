@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.library.local
 
+import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

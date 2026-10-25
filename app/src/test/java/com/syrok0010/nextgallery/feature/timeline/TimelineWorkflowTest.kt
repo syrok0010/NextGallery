@@ -125,7 +125,7 @@ class TimelineWorkflowTest {
         val mediaItems = itemsByDay.values.flatten()
         return TimelineSnapshotAssembler.assemble(
             config = MemoriesConfig(
-                version = "7.5.2",
+                version = "10.1.0",
                 timelinePath = "/Photos",
                 albumsEnabled = false,
                 recognizeEnabled = false,

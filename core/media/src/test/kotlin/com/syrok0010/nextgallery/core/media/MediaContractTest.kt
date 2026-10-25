@@ -21,6 +21,70 @@ class MediaContractTest {
         assertEquals(listOf(old to MediaId("local")), result.reassignments)
     }
 
+    @Test fun `two server files with one alias stay separate objects`() {
+        val first = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val second = MediaSourceIdentity(MediaSourceKind.Memories, "43")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val result = reconcileMediaIdentities(
+            candidates = listOf(
+                MediaIdentityCandidate(first, MediaId("first"), setOf(alias)),
+                MediaIdentityCandidate(second, MediaId("second"), setOf(alias)),
+            ),
+            initialSourceMediaIds = emptyMap(),
+            initialAliasMediaIds = emptyMap(),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = { error("published ID is present") },
+        )
+        assertEquals(MediaId("first"), result.resolution.mediaIds[first])
+        assertEquals(MediaId("second"), result.resolution.mediaIds[second])
+        assertEquals(listOf(second), result.resolution.conflicts.map { it.source })
+        assertEquals(MediaId("first"), result.aliasMediaIds[alias])
+    }
+
+    @Test fun `alias does not join an object whose server copy is known only by id`() {
+        val local = MediaSourceIdentity(MediaSourceKind.Local, "content://media/1")
+        val linked = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val other = MediaSourceIdentity(MediaSourceKind.Memories, "43")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val shared = MediaId("shared")
+        val result = reconcileMediaIdentities(
+            candidates = listOf(MediaIdentityCandidate(other, MediaId("other"), setOf(alias))),
+            initialSourceMediaIds = emptyMap(),
+            initialAliasMediaIds = mapOf(alias to shared),
+            initialLocalMediaIds = setOf(shared),
+            mediaIdFactory = { error("published ID is present") },
+            initialMediaSources = mapOf(shared to setOf(local, linked)),
+        )
+        assertEquals(MediaId("other"), result.resolution.mediaIds[other])
+        assertEquals(shared, result.aliasMediaIds[alias])
+    }
+
+    @Test fun `persisted source identity outranks a stale alias`() {
+        val source = MediaSourceIdentity(MediaSourceKind.Memories, "42")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val exact = MediaId("exact")
+        val stale = MediaId("stale")
+
+        val result = reconcileMediaIdentities(
+            candidates = listOf(
+                MediaIdentityCandidate(
+                    source = source,
+                    publishedMediaId = MediaId("new-published-id"),
+                    aliases = setOf(alias),
+                ),
+            ),
+            initialSourceMediaIds = mapOf(source to exact),
+            initialAliasMediaIds = mapOf(alias to stale),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = { error("Persisted source identity must not generate an ID") },
+        )
+
+        assertEquals(exact, result.resolution.mediaIds[source])
+        assertEquals(exact, result.sourceMediaIds[source])
+        assertEquals(stale, result.aliasMediaIds[alias])
+        assertEquals(setOf(exact, stale), result.resolution.conflicts.single().conflictingMediaIds)
+    }
+
     @Test fun `derived identity and day stay consistent through copy`() {
         val item = item(MediaAssetRef.MemoriesFile(42))
         val updated = item.copy(dayId = 20_001, assetRef = MediaAssetRef.MemoriesFile(43))

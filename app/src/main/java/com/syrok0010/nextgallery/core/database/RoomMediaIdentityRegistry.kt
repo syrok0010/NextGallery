@@ -31,6 +31,7 @@ class RoomMediaIdentityRegistry(
                 initialAliasMediaIds = known.aliases,
                 initialLocalMediaIds = known.localIds,
                 mediaIdFactory = mediaIdFactory,
+                initialMediaSources = known.mediaSources,
             )
 
             persistReconciliation(candidates, reconciliation)
@@ -61,14 +62,19 @@ class RoomMediaIdentityRegistry(
                     dao.identifiers(kind, values)
                 }
             }.associate { entity -> entity.toAlias() to MediaId(entity.mediaId) }
-        val localMediaIds = aliasMediaIds.values
+        val aliasedCopies = aliasMediaIds.values
             .map { it.value }
             .distinct()
             .chunked(QUERY_CHUNK_SIZE)
             .flatMap { mediaIds -> dao.identifiersForMediaIds(mediaIds) }
+            .filter { it.kind in SOURCE_IDENTIFIER_KINDS }
+        val localMediaIds = aliasedCopies
             .filter { it.kind == MediaIdentifierKind.LocalContent }
             .mapTo(mutableSetOf()) { MediaId(it.mediaId) }
-        return KnownIdentities(sourceMediaIds, aliasMediaIds, localMediaIds)
+        val mediaSources = aliasedCopies
+            .groupBy({ MediaId(it.mediaId) }, { it.toSourceIdentity() })
+            .mapValues { (_, sources) -> sources.toSet() }
+        return KnownIdentities(sourceMediaIds, aliasMediaIds, localMediaIds, mediaSources)
     }
 
     private suspend fun persistReconciliation(
@@ -110,6 +116,7 @@ class RoomMediaIdentityRegistry(
         val sources: Map<MediaSourceIdentity, MediaId>,
         val aliases: Map<MediaAlias, MediaId>,
         val localIds: Set<MediaId>,
+        val mediaSources: Map<MediaId, Set<MediaSourceIdentity>>,
     )
 
     override suspend fun removeSource(source: MediaSourceKind) {
