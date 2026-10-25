@@ -245,9 +245,11 @@ UnifiedTimelineProjection -> published timeline
 - Master содержит `EXT-X-STREAM-INF` с `BANDWIDTH`, `RESOLUTION`, `FRAME-RATE`
   и относительные `{quality}.m3u8`, включая query string. Playlist и сегменты
   проходят через тот же authenticated transport; query сохраняется.
-- `Direct` означает исходный `/stream`, `Original` — только обнаруженный
-  `max.m3u8`, `Auto` — master playlist. Resolution label равен меньшей стороне
-  `RESOLUTION`, в том числе для portrait. Фиксированные профили клиент не создаёт.
+- `Direct` означает исходный `/stream`, `Original` — обнаруженный
+  `direct.m3u8`, `Auto` — master playlist. Если transcode отвечает `303`, это
+  означает отсутствие вариантов качества, и клиент оставляет только исходный
+  `/stream`. Resolution label равен меньшей стороне `RESOLUTION`, в том числе
+  для portrait. Фиксированные профили клиент не создаёт.
 - Сервер отклоняет external storage и временные файлы; `vod_disable=false` ещё
   не гарантирует доступность transcode для конкретного файла. Ошибка discovery
   оставляет original без quality menu, ошибка выбранного HLS даёт явный retry.
