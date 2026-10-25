@@ -55,7 +55,7 @@ POST /apps/memories/api/image/multipreview
 - `GET /days` возвращает список дней с `dayid` и `count`; для первых дней ответ может сразу содержать `detail` с медиаэлементами.
 - `GET /days/{id1,id2}` поддерживает загрузку нескольких дней одним запросом через comma-separated id в path.
 - `POST /days` используется браузерным клиентом для bulk-загрузки списка day ids через JSON body.
-- Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `auid`, а для видео также `isvideo` и `video_duration`.
+- Элемент timeline содержит достаточный минимум для grid без отдельного WebDAV-запроса: `fileid`, `dayid`, `w`, `h`, `etag`, `basename`, `epoch`, `mimetype`, `size`, а для видео также `isvideo` и `video_duration`. В Memories 10 `auid` из ответа исчез, поэтому связь по AUID требует отдельной проверки формулы.
 - Boolean-like поля могут приходить не как JSON boolean, а как `0/1`; например, `isfavorite: 1`. DTO/mapping слой должен быть tolerant к таким значениям.
 - `POST /image/multipreview` принимает список `{ fileid, x, y, a, reqid }` и подходит для батчевой загрузки thumbnails.
 
@@ -230,6 +230,10 @@ UnifiedTimelineProjection -> published timeline
 - Native playback использует существующие app-password headers NextcloudTransport,
   не браузерный request token в URL. Instrumentation fixture проверяет этот
   HTTP-контракт отдельно от доступности личного сервера.
+
+## Identity timeline в Memories 10
+
+В Memories 10 ответы `days/{id}` не содержат `auid`, но содержат `epoch` и `size`. Текущая реализация проверяет гипотезу, что клиент может повторить формулу Memories 8 `md5("$epoch$size")` для облачной копии. Это приблизительное сопоставление: одинаковые timestamp и размер могут принадлежать разным файлам, поэтому несколько серверных копий с одним alias должны оставаться разными объектами и фиксироваться как конфликт. Точная связь файла, загруженного из NextGallery, должна использовать `OC-FileId` и не зависеть от этой эвристики.
 
 ## Video HLS: контракт Memories VOD
 
