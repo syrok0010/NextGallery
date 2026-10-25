@@ -13,8 +13,8 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoSources
+import com.syrok0010.nextgallery.feature.viewer.playback.newVodClientId
 import java.io.IOException
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +43,7 @@ internal class VideoPlaybackController(
     var state by mutableStateOf(session.state)
         private set
     private var sourceUri by mutableStateOf(session.sourceUri)
-    private val vodClientId = UUID.randomUUID().toString()
+    private val vodClientId = newVodClientId()
     private var started = false
     private var closed by mutableStateOf(false)
     private var discovery: Job? = null
