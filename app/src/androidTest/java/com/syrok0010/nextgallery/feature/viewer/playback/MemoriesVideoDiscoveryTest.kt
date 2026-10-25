@@ -60,6 +60,18 @@ class MemoriesVideoDiscoveryTest {
         }
     }
 
+    @Test fun `redirect to the original means no qualities`() =
+        runBlocking {
+            val requests = mutableListOf<Request>()
+            val result = discovery(
+                requests,
+                false,
+                303,
+            ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123")
+            assertTrue(result.isEmpty())
+            assertEquals(2, requests.size)
+        }
+
     private fun discovery(
         requests: MutableList<Request>,
         disabled: Boolean,
