@@ -1,4 +1,4 @@
-package com.syrok0010.nextgallery.feature.library.local
+package com.syrok0010.nextgallery.core.media
 
 import java.math.BigInteger
 import java.security.MessageDigest
@@ -22,7 +22,7 @@ object MemoriesMediaIdentity {
         )
     }
 
-    /** Memories 9+ no longer returns AUID, so server files get it from `epoch` and `size` too. */
+    /** Memories 10 no longer returns AUID, so server files get it from `epoch` and `size` too. */
     fun auid(epochSeconds: Long, sizeBytes: Long): String = md5("$epochSeconds$sizeBytes")
 
     private fun md5(value: String): String {

@@ -3,7 +3,7 @@ package com.syrok0010.nextgallery.feature.timeline.remote
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.feature.images.MemoriesAssetUrlFactory
-import com.syrok0010.nextgallery.feature.library.local.MemoriesMediaIdentity
+import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -23,7 +23,7 @@ class MemoriesDtoMappingTest {
     fun `decode describe response`() {
         val dto = json.decodeFromString<MemoriesDescribeDto>(fixture("describe.json"))
 
-        assertEquals("7.5.2", dto.version)
+        assertEquals("10.1.0", dto.version)
         assertEquals("https://cloud.example.com/apps/memories/", dto.baseUrl)
         assertEquals("https://cloud.example.com/index.php/login/v2", dto.loginFlowUrl)
         assertEquals("alice", dto.uid)
@@ -35,7 +35,7 @@ class MemoriesDtoMappingTest {
 
         val config = dto.toMemoriesConfig()
 
-        assertEquals("7.5.2", config.version)
+        assertEquals("10.1.0", config.version)
         assertEquals("/Photos", config.timelinePath)
         assertTrue(config.albumsEnabled)
         assertFalse(config.recognizeEnabled)
@@ -106,7 +106,7 @@ class MemoriesDtoMappingTest {
         )
 
         assertEquals(phone.auid, photo.toMediaItem(MediaId("resolved")).auid)
-        // md5("$epoch$size"), Exif::getAUID in Memories 8.
+        // md5("$epoch$size"), the server-side formula used before Memories 10.
         assertEquals("1e4216a83a596e9943f541ff23a398c8", phone.auid)
     }
 

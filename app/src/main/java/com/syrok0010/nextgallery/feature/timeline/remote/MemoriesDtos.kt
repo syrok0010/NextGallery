@@ -1,6 +1,6 @@
 package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.feature.library.local.MemoriesMediaIdentity
+import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -101,7 +101,7 @@ data class MemoriesPhotoDto(
     @SerialName("ishidden")
     val isHidden: JsonElement? = null,
 ) {
-    /** Computed as Memories 8 did on the server: a zero epoch or size is unknown, dates before 1970 are not. */
+    /** Computed from the fields returned by Memories 10; a zero epoch or size is unknown, dates before 1970 are valid. */
     val auid: String?
         get() = if (epoch != null && epoch != 0L && size != null && size > 0) {
             MemoriesMediaIdentity.auid(epoch, size)
