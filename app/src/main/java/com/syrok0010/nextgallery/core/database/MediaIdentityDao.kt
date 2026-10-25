@@ -38,9 +38,6 @@ interface MediaIdentityDao {
     @Query("DELETE FROM media_identifiers WHERE kind = :kind")
     suspend fun deleteIdentifiers(kind: MediaIdentifierKind)
 
-    @Query("DELETE FROM media_identifiers WHERE kind = :kind AND value IN (:values)")
-    suspend fun deleteIdentifierValues(kind: MediaIdentifierKind, values: Collection<String>)
-
     @Query(
         """
         DELETE FROM media_identifiers

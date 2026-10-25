@@ -167,6 +167,7 @@ class RoomMediaIdentityRegistryTest {
         cacheRepository.saveTimelineSnapshot(credentials, snapshot(mediaItem(earlyRemoteId)))
 
         assertEquals(true, registry.link(existing = local, linked = remote))
+        assertEquals(true, registry.link(existing = local, linked = remote))
 
         assertEquals(MediaId("remote-id"), earlyRemoteId)
         assertEquals(
@@ -180,7 +181,7 @@ class RoomMediaIdentityRegistryTest {
     }
 
     @Test
-    fun linkOutranksAliasesAndKeepsOneServerCopy() = runBlocking {
+    fun linkDoesNotReplaceExistingServerCopy() = runBlocking {
         database.close()
         val generatedIds = listOf("local-id", "early-remote-id", "first-copy-id").map(::MediaId).iterator()
         openDatabase(mediaIdFactory = generatedIds::next)
@@ -192,7 +193,7 @@ class RoomMediaIdentityRegistryTest {
         registry.resolve(listOf(MediaIdentityCandidate(source = second, aliases = setOf(serverAlias))))
 
         assertEquals(true, registry.link(existing = local, linked = first))
-        assertEquals(true, registry.link(existing = local, linked = second))
+        assertEquals(false, registry.link(existing = local, linked = second))
 
         val resolved = registry.resolve(
             listOf(
@@ -200,8 +201,8 @@ class RoomMediaIdentityRegistryTest {
                 MediaIdentityCandidate(source = first, aliases = emptySet()),
             ),
         ).mediaIds
-        assertEquals(localId, resolved.getValue(second))
-        assertEquals(MediaId("first-copy-id"), resolved.getValue(first))
+        assertEquals(MediaId("early-remote-id"), resolved.getValue(second))
+        assertEquals(localId, resolved.getValue(first))
     }
 
     @Test

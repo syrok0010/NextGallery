@@ -43,6 +43,7 @@ class UploadedCopiesTest {
             val localId = resolveLocal()
 
             assertTrue(copies.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            assertTrue(copies.link(CREDENTIALS, CONTENT_URI, FILE_ID))
             val remoteId = resolveRemote()
 
             assertEquals(localId, remoteId)
@@ -69,7 +70,7 @@ class UploadedCopiesTest {
         }
 
     @Test
-    fun `link replaces a media id the server file already received`() =
+    fun `link merges an already indexed remote-only object`() =
         runBlocking {
             val localId = resolveLocal()
             val earlyRemoteId = resolveRemote()
@@ -93,23 +94,37 @@ class UploadedCopiesTest {
         }
 
     @Test
-    fun `a new upload of the same phone file keeps one server copy per object`() =
+    fun `link does not replace an existing server copy`() =
         runBlocking {
             val localId = resolveLocal()
             assertTrue(copies.link(CREDENTIALS, CONTENT_URI, FILE_ID))
 
-            assertTrue(copies.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
+            assertFalse(copies.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
 
             val secondId = resolveRemote(SECOND_FILE_ID)
             val firstId = resolveRemote()
-            assertEquals(localId, secondId)
-            assertNotEquals(localId, firstId)
+            assertNotEquals(localId, secondId)
+            assertEquals(localId, firstId)
             val library = projectMediaLibrary(
                 localItems = listOf(localItem(localId)),
                 remoteItems = listOf(remoteItem(firstId), remoteItem(secondId, SECOND_FILE_ID)),
             )
             assertEquals(2, library.items.size)
             assertEquals(1, library.items.count { it.assetRef is MediaAssetRef.LocalFirst })
+        }
+
+    @Test
+    fun `link does not steal a server copy from another local object`() =
+        runBlocking {
+            val otherLocalId =
+                resolveLocal(OTHER_CONTENT_URI, "other-local-auid", "other-local-buid")
+            assertTrue(copies.link(CREDENTIALS, OTHER_CONTENT_URI, FILE_ID))
+
+            val localId = resolveLocal()
+            assertFalse(copies.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+
+            assertEquals(otherLocalId, resolveRemote())
+            assertNotEquals(localId, otherLocalId)
         }
 
     @Test
@@ -175,9 +190,13 @@ class UploadedCopiesTest {
             fileId = fileId,
         )
 
-    private suspend fun resolveLocal(): MediaId {
-        val source = MediaSourceIdentity(MediaSourceKind.Local, CONTENT_URI)
-        val candidate = mediaIdentityCandidate(source, auid = LOCAL_AUID, buid = LOCAL_BUID)
+    private suspend fun resolveLocal(
+        contentUri: String = CONTENT_URI,
+        auid: String = LOCAL_AUID,
+        buid: String = LOCAL_BUID,
+    ): MediaId {
+        val source = MediaSourceIdentity(MediaSourceKind.Local, contentUri)
+        val candidate = mediaIdentityCandidate(source, auid = auid, buid = buid)
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
@@ -221,6 +240,7 @@ class UploadedCopiesTest {
 
     private companion object {
         const val CONTENT_URI = "content://media/external/images/media/42"
+        const val OTHER_CONTENT_URI = "content://media/external/images/media/43"
         val SELECTION = UploadSelection(CONTENT_URI, "a.jpg", "image/jpeg")
         const val FILE_ID = 183L
         const val SECOND_FILE_ID = 190L
