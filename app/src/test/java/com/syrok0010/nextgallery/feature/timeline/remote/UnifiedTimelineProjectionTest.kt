@@ -339,7 +339,7 @@ class UnifiedTimelineProjectionTest {
     )
 
     private fun memoriesConfig() = MemoriesConfig(
-        version = "8.0.1",
+        version = "10.1.0",
         timelinePath = "/Photos",
         albumsEnabled = false,
         recognizeEnabled = false,

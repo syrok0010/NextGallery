@@ -203,7 +203,7 @@ class TimelineSnapshotAssemblerTest {
 
     private fun memoriesConfig(): MemoriesConfig {
         return MemoriesConfig(
-            version = "7.5.2",
+            version = "10.1.0",
             timelinePath = "/Photos",
             albumsEnabled = false,
             recognizeEnabled = false,
