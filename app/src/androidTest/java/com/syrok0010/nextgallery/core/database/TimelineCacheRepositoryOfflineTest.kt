@@ -106,6 +106,35 @@ class TimelineCacheRepositoryOfflineTest {
         }
 
     @Test
+    fun cloudObjectWithoutAliasesSurvivesOfflineRestore() =
+        runBlocking {
+            val withoutAliases = remoteItem().copy(auid = null, buid = null)
+            identityRegistry.resolve(
+                listOf(
+                    MediaIdentityCandidate(
+                        source = withoutAliases.sourceIdentity(),
+                        publishedMediaId = withoutAliases.mediaId,
+                        aliases = emptySet(),
+                    ),
+                ),
+            )
+            repository.saveTimelineSnapshot(
+                credentials = credentials,
+                snapshot = TimelineSnapshotAssembler.assemble(
+                    config = memoriesConfig(),
+                    days = listOf(TimelineDay(dayId = MATERIALIZED_DAY_ID, count = 1)),
+                    mediaItems = listOf(withoutAliases),
+                    loadedDayIds = setOf(MATERIALIZED_DAY_ID),
+                ),
+            )
+
+            assertEquals(
+                listOf(withoutAliases),
+                repository.loadTimelineSnapshot(credentials)?.items,
+            )
+        }
+
+    @Test
     fun clearingCloudCachePreservesDeviceProjectionAndReusableIdentity() =
         runBlocking {
             val sharedAlias = MediaAlias(MediaAliasKind.Auid, "shared-auid")
