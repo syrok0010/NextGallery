@@ -19,7 +19,7 @@ class MemoriesVideoDiscoveryTest {
                 discovery
                     .qualities(
                         RemoteVideoOriginal(42, "https://cloud.example/nextcloud"),
-                        "client123",
+                        "c0ffee123",
                     ).isEmpty(),
             )
             assertEquals(
@@ -34,10 +34,10 @@ class MemoriesVideoDiscoveryTest {
             val result = discovery(
                 requests,
                 false,
-            ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123")
+            ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "c0ffee123")
             assertEquals(listOf("Auto", "360p"), result.map { it.label })
             assertEquals(
-                "/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8",
+                "/nextcloud/apps/memories/api/video/transcode/c0ffee123/42/index.m3u8",
                 requests.last().url.encodedPath,
             )
             requests.forEach {
@@ -55,7 +55,7 @@ class MemoriesVideoDiscoveryTest {
                     mutableListOf(),
                     false,
                     403,
-                ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123")
+                ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "c0ffee123")
             }
         }
     }

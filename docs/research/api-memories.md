@@ -240,8 +240,8 @@ UnifiedTimelineProjection -> published timeline
 - `/config.vod_disable` запрещает VOD. При выключенном VOD native-клиент не
   запрашивает manifest и скрывает quality menu.
 - `GET /apps/memories/api/video/transcode/{client}/{fileid}/index.m3u8` возвращает
-  master playlist. `client` имеет минимум 8 символов и остаётся одним для текущей
-  playback session; native-клиент использует случайный UUID.
+  master playlist. В Memories 10 `client` должен содержать 8–128 hex-символов;
+  клиент использует один случайный UUID без дефисов на текущую playback session.
 - Master содержит `EXT-X-STREAM-INF` с `BANDWIDTH`, `RESOLUTION`, `FRAME-RATE`
   и относительные `{quality}.m3u8`, включая query string. Playlist и сегменты
   проходят через тот же authenticated transport; query сохраняется.
