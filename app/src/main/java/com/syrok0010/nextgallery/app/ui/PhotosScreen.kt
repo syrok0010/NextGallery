@@ -27,7 +27,7 @@ import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
-import com.syrok0010.nextgallery.feature.deletion.DeletionPlan
+import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionState
 import com.syrok0010.nextgallery.feature.deletion.mediaDeletionMessage
@@ -80,10 +80,9 @@ internal fun PhotosScreen(
         },
         onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
         onDelete = { items, onDone ->
-            deleteRequest = DeleteRequest(
-                DeletionPlan.of(items),
-                onDone,
-            )
+            deletions.prepare(items.map { it.mediaId })?.let { preparation ->
+                deleteRequest = DeleteRequest(preparation, onDone)
+            }
         },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
@@ -115,13 +114,13 @@ internal fun PhotosScreen(
             }
         }
     }
-    deleteRequest?.let { (plan, onDone) ->
+    deleteRequest?.let { (preparation, onDone) ->
         DeleteSelectionDialog(
-            plan = plan,
+            plan = preparation.plan,
             onDismiss = { deleteRequest = null },
             onConfirm = { scope ->
                 deleteRequest = null
-                delete(plan.targets(scope), onDone)
+                delete(preparation.confirm(scope), onDone)
             },
         )
     }
@@ -141,7 +140,7 @@ internal fun PhotosScreen(
 }
 
 /** [onDone] ends selection mode; it runs only once the deletion is confirmed. */
-private data class DeleteRequest(val plan: DeletionPlan, val onDone: () -> Unit)
+private data class DeleteRequest(val preparation: DeletionPreparation, val onDone: () -> Unit)
 
 /** Shows a running message until replaced, then the result once; [state] keys the effect. */
 @Composable

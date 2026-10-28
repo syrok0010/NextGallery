@@ -43,8 +43,8 @@ import kotlinx.serialization.json.Json
  */
 @Composable
 internal fun rememberDeleteAction(
-    onConfirmed: (DeletionTargets) -> Unit,
-): (DeletionTargets, onStarted: () -> Unit) -> Unit {
+    onConfirmed: (DeletionConfirmation) -> Unit,
+): (DeletionConfirmation, onStarted: () -> Unit) -> Unit {
     val context = LocalContext.current
     val confirm by rememberUpdatedState(onConfirmed)
     // Survives activity recreation while the system dialog is open.
@@ -58,7 +58,11 @@ internal fun rememberDeleteAction(
         val started = onStarted
         onStarted = null
         if (payload != null && result.resultCode == Activity.RESULT_OK) {
-            confirm(Json.decodeFromString<DeletionTargets>(payload))
+            confirm(
+                DeletionConfirmation.fromTargets(
+                    Json.decodeFromString<DeletionTargets>(payload),
+                ),
+            )
             started?.invoke()
         }
     }
@@ -66,7 +70,7 @@ internal fun rememberDeleteAction(
         when {
             pendingPayload != null -> Unit
 
-            targets.contentUris.size > MAX_TRASH_REQUEST ->
+            targets.targets.contentUris.size > MAX_TRASH_REQUEST ->
                 Toast
                     .makeText(
                         context,
@@ -74,7 +78,7 @@ internal fun rememberDeleteAction(
                         Toast.LENGTH_LONG,
                     ).show()
 
-            targets.contentUris.isEmpty() -> {
+            targets.targets.contentUris.isEmpty() -> {
                 confirm(targets)
                 started()
             }
@@ -82,10 +86,10 @@ internal fun rememberDeleteAction(
             else -> try {
                 val request = MediaStore.createTrashRequest(
                     context.contentResolver,
-                    targets.contentUris.map(Uri::parse),
+                    targets.targets.contentUris.map(Uri::parse),
                     true,
                 )
-                pendingPayload = Json.encodeToString(targets)
+                pendingPayload = Json.encodeToString(targets.targets)
                 onStarted = started
                 launcher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (_: IllegalArgumentException) {

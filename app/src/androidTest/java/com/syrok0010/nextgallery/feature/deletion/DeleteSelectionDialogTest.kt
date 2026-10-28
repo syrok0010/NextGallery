@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -18,11 +19,9 @@ class DeleteSelectionDialogTest {
     @Test fun mergedObjectsAskWhereToDeleteAndDefaultToEverywhere() {
         var confirmed: DeletionScope? = null
         val plan = DeletionPlan(
-            phoneOnly = listOf("content://media/external/images/media/1"),
-            cloudOnly = listOf(10),
-            merged = listOf(
-                DeletionPlan.MergedCopies("content://media/external/images/media/2", 20),
-            ),
+            phoneOnly = listOf(MediaId("phone")),
+            cloudOnly = listOf(MediaId("cloud")),
+            merged = listOf(MediaId("both")),
         )
         rule.setContent {
             NextGalleryTheme {
@@ -46,7 +45,7 @@ class DeleteSelectionDialogTest {
                 DeleteSelectionDialog(
                     DeletionPlan(
                         phoneOnly = emptyList(),
-                        cloudOnly = listOf(10, 11),
+                        cloudOnly = listOf(MediaId("cloud-1"), MediaId("cloud-2")),
                         merged = emptyList(),
                     ),
                     onDismiss = {},
