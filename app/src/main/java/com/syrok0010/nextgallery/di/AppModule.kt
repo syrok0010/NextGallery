@@ -82,6 +82,7 @@ val appModule = module {
         MediaDeletionRepository(
             get(),
             get(),
+            get(),
             AndroidPhoneTrash(androidContext().contentResolver),
             get(named("libraryScope")),
         ) {

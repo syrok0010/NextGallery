@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +21,7 @@ import org.junit.Test
 
 class MediaDeletionTest {
     @Test fun `plan splits copies and scope only narrows objects with both copies`() {
-        val plan = DeletionPlan.of(
+        val preparation = DeletionPreparation.of(
             listOf(
                 item("phone", local(1)),
                 item("cloud", MediaAssetRef.MemoriesFile(10)),
@@ -28,7 +29,7 @@ class MediaDeletionTest {
                 item("video", local(3), isVideo = true),
             ),
         )
-        assertEquals(4, plan.total)
+        assertEquals(4, preparation.plan.total)
         assertEquals(
             DeletionTargets(
                 contentUris = listOf(
@@ -38,7 +39,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            plan.targets(DeletionScope.Everywhere),
+            preparation.confirm(DeletionScope.Everywhere).targets,
         )
         assertEquals(
             DeletionTargets(
@@ -49,7 +50,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10),
             ),
-            plan.targets(DeletionScope.PhoneOnly),
+            preparation.confirm(DeletionScope.PhoneOnly).targets,
         )
         assertEquals(
             DeletionTargets(
@@ -59,7 +60,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            plan.targets(DeletionScope.CloudOnly),
+            preparation.confirm(DeletionScope.CloudOnly).targets,
         )
     }
 
@@ -76,6 +77,38 @@ class MediaDeletionTest {
             "content://other/file/7",
             mediaStoreItemUri("content://other/file/7", isVideo = false),
         )
+    }
+
+    @Test fun `repository resolves media ids and keeps the prepared copies stable`() {
+        Fixture(::server).use { fixture ->
+            val index = MediaLibraryIndex()
+            index.publish(listOf(item("both", MediaAssetRef.LocalFirst(local(2), MediaAssetRef.MemoriesFile(20)))))
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val repository = MediaDeletionRepository(
+                    SessionStore(FixedCredentials(fixture.credentials)),
+                    index,
+                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    { it.size },
+                    scope,
+                ) {}
+                val preparation = repository.prepare(listOf(MediaId("both")))
+                assertEquals(listOf(MediaId("both")), preparation?.plan?.merged)
+
+                index.clear()
+
+                assertEquals(
+                    DeletionTargets(
+                        contentUris = listOf("content://media/external/images/media/2"),
+                        fileIds = listOf(20),
+                    ),
+                    preparation?.confirm(DeletionScope.Everywhere)?.targets,
+                )
+                assertEquals(null, repository.prepare(listOf(MediaId("missing"))))
+            } finally {
+                scope.cancel()
+            }
+        }
     }
 
     @Test fun `cloud delete counts 404 as deleted and isolates per-file failures`() {
@@ -131,14 +164,19 @@ class MediaDeletionTest {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val repository = MediaDeletionRepository(
                     sessions,
+                    MediaLibraryIndex(),
                     MemoriesFileDeleter(fixture.writerTransport, fixture.files),
                     { it.size - 1 },
                     scope,
                 ) { refreshed.incrementAndGet() }
                 val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
-                repository.delete(DeletionTargets(phone, listOf(1, 3)))
+                repository.delete(
+                    DeletionConfirmation.fromTargets(DeletionTargets(phone, listOf(1, 3))),
+                )
                 // Queued behind the first; its result adds to the one not shown yet.
-                repository.delete(DeletionTargets(emptyList(), listOf(2)))
+                repository.delete(
+                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(2))),
+                )
                 withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
                     MediaDeletionState.Done(
@@ -150,7 +188,9 @@ class MediaDeletionTest {
                 )
                 repository.consume()
                 assertEquals(MediaDeletionState.Idle, repository.state.value)
-                repository.delete(DeletionTargets(emptyList(), listOf(1)))
+                repository.delete(
+                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(1))),
+                )
                 assertEquals(
                     MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
                     withTimeout(5_000) { repository.state.first { it is MediaDeletionState.Done } },
@@ -167,11 +207,14 @@ class MediaDeletionTest {
             try {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(null)),
+                    MediaLibraryIndex(),
                     MemoriesFileDeleter(fixture.writerTransport, fixture.files),
                     { it.size },
                     scope,
                 ) {}
-                repository.delete(DeletionTargets(emptyList(), listOf(1, 2)))
+                repository.delete(
+                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(1, 2))),
+                )
                 assertEquals(
                     MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),
                     withTimeout(5_000) { repository.state.first { it is MediaDeletionState.Done } },
