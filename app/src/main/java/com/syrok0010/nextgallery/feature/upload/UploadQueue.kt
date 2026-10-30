@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
@@ -10,6 +11,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -66,6 +68,7 @@ internal data class UploadQueueState(
  */
 internal class UploadQueue(
     sessions: SessionStore,
+    private val library: MediaLibraryIndex,
     private val scope: CoroutineScope,
     private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
 ) : OperationStatusSource {
@@ -91,16 +94,18 @@ internal class UploadQueue(
         }
     }
 
-    fun submit(batch: UploadBatch) {
-        if (batch.files.isEmpty()) return
-        val complete = UploadBatch(batch.files, commonFollowUps() + batch.followUps)
+    /** Queues current phone copies for [mediaIds], returning the number actually queued. */
+    fun submit(mediaIds: Collection<MediaId>, followUps: List<UploadFollowUp> = emptyList()): Int {
+        val files = mediaIds.distinct().mapNotNull { id -> library.state.value[id]?.let(::uploadSelection) }
+        if (files.isEmpty()) return 0
+        val complete = UploadBatch(files, commonFollowUps() + followUps)
         mutableState.update { state ->
             state.copy(
                 waiting = state.waiting + complete,
                 activity = state.activity.let { current ->
                     UploadActivity(
-                        pending = current?.pending.orEmpty() + batch.files.map { it.contentUri },
-                        total = (current?.total ?: 0) + batch.files.size,
+                        pending = current?.pending.orEmpty() + files.map { it.contentUri },
+                        total = (current?.total ?: 0) + files.size,
                         processed = current?.processed ?: 0,
                         current = current?.current,
                         percent = current?.percent,
@@ -108,6 +113,7 @@ internal class UploadQueue(
                 },
             )
         }
+        return files.size
     }
 
     /** Hands all waiting batches to the service and returns them; one service start takes them all. */
