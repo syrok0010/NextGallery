@@ -145,11 +145,16 @@ class UploadQueueTest {
                     queue.activity.value,
                 )
                 queue.processed("content://media/c")
-                assertNull(queue.activity.value)
+                assertEquals(
+                    "follow-ups of the last batch still run",
+                    UploadActivity(pending = emptySet(), total = 3, processed = 3),
+                    queue.activity.value,
+                )
 
                 queue.passFinished(
                     UploadResult(uploaded = 1, files = 2, failures = listOf("HTTP 500")),
                 )
+                assertNull(queue.activity.value)
                 queue.passFinished(UploadResult(uploaded = 1, files = 1))
                 assertEquals(
                     "results add up until shown",
