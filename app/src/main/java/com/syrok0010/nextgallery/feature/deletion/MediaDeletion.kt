@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -86,26 +87,29 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
     return "$prefix${parts[0]}/$collection/media/${parts[2]}"
 }
 
-internal sealed interface MediaDeletionState {
-    data object Idle : MediaDeletionState
+/**
+ * Cloud copies queued or being deleted. [total] and [processed] count files of all deletions
+ * started since the queue was last empty, so a queued deletion extends the same progress.
+ */
+internal data class DeletionProgress(val fileIds: Set<Long>, val total: Int, val processed: Int)
 
-    data class Running(val count: Int) : MediaDeletionState
+/** Results of deletions not shown yet; a later deletion adds to them. */
+internal data class DeletionResult(
+    val phoneTrashed: Int,
+    val cloud: CloudDeleteResult,
+    val phoneFailed: Int = 0,
+) {
+    val failed: Boolean get() = phoneFailed > 0 || cloud.failed > 0
 
-    data class Done(
-        val phoneTrashed: Int,
-        val cloud: CloudDeleteResult,
-        val phoneFailed: Int = 0,
-    ) : MediaDeletionState {
-        operator fun plus(other: Done) =
-            Done(
-                phoneTrashed = phoneTrashed + other.phoneTrashed,
-                cloud = CloudDeleteResult(
-                    deleted = cloud.deleted + other.cloud.deleted,
-                    failed = cloud.failed + other.cloud.failed,
-                ),
-                phoneFailed = phoneFailed + other.phoneFailed,
-            )
-    }
+    operator fun plus(other: DeletionResult) =
+        DeletionResult(
+            phoneTrashed = phoneTrashed + other.phoneTrashed,
+            cloud = CloudDeleteResult(
+                deleted = cloud.deleted + other.cloud.deleted,
+                failed = cloud.failed + other.cloud.failed,
+            ),
+            phoneFailed = phoneFailed + other.phoneFailed,
+        )
 }
 
 /**
@@ -128,12 +132,11 @@ internal class MediaDeletionRepository(
     private val scope: CoroutineScope,
     private val onDeleted: () -> Unit,
 ) {
-    private val mutableState = MutableStateFlow<MediaDeletionState>(MediaDeletionState.Idle)
-    val state = mutableState.asStateFlow()
+    private val mutableProgress = MutableStateFlow<DeletionProgress?>(null)
+    val progress = mutableProgress.asStateFlow()
+    private val mutableResult = MutableStateFlow<DeletionResult?>(null)
+    val result = mutableResult.asStateFlow()
     private var job: Job? = null
-
-    /** Results not yet shown; a later operation adds to them instead of replacing them. */
-    private var unshown: MediaDeletionState.Done? = null
 
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
     private var operations = SupervisorJob(scope.coroutineContext[Job])
@@ -148,8 +151,8 @@ internal class MediaDeletionRepository(
                     operations.cancel()
                     operations = SupervisorJob(scope.coroutineContext[Job])
                     job = null
-                    unshown = null
-                    mutableState.value = MediaDeletionState.Idle
+                    mutableProgress.value = null
+                    mutableResult.value = null
                 }
                 owner = current
             }
@@ -168,9 +171,18 @@ internal class MediaDeletionRepository(
     /** Requests run one after another; a new one never cancels a deletion already started. */
     fun delete(targets: DeletionTargets) {
         val previous = job
+        val fileIds = targets.fileIds
+        if (fileIds.isNotEmpty()) {
+            mutableProgress.update { current ->
+                DeletionProgress(
+                    fileIds = current?.fileIds.orEmpty() + fileIds,
+                    total = (current?.total ?: 0) + fileIds.size,
+                    processed = current?.processed ?: 0,
+                )
+            }
+        }
         job = scope.launch(operations) {
             previous?.join()
-            val fileIds = targets.fileIds
             val phoneTrashed = if (targets.contentUris.isEmpty()) {
                 0
             } else {
@@ -183,62 +195,57 @@ internal class MediaDeletionRepository(
                     targets.contentUris.size
                 }
             }
-            if (fileIds.isNotEmpty()) mutableState.value = MediaDeletionState.Running(fileIds.size)
             val cloud = if (fileIds.isEmpty()) {
                 CloudDeleteResult(deleted = 0, failed = 0)
             } else {
                 val credentials = credentials()
                 try {
-                    credentials?.let { deleter.delete(it, fileIds) }
+                    credentials?.let {
+                        deleter.delete(it, fileIds) {
+                            mutableProgress.update { current ->
+                                current?.copy(processed = current.processed + 1)
+                            }
+                        }
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
                     null
                 } ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
             }
-            val done = MediaDeletionState.Done(
+            val done = DeletionResult(
                 phoneTrashed = phoneTrashed,
                 cloud = cloud,
                 phoneFailed = targets.contentUris.size - phoneTrashed,
             )
-            val total = unshown?.plus(done) ?: done
-            unshown = total
-            mutableState.value = total
+            mutableResult.update { it?.plus(done) ?: done }
+            mutableProgress.update { current ->
+                // The ids leave only now: the tiles stay marked until the result is in.
+                current
+                    ?.copy(
+                        fileIds = current.fileIds - fileIds.toSet(),
+                    )?.takeIf { it.fileIds.isNotEmpty() }
+            }
             onDeleted()
         }
     }
 
-    /** Called once the UI has shown a terminal result. */
+    /** Called once the UI has shown the result. */
     fun consume() {
-        if (mutableState.value is MediaDeletionState.Done) {
-            unshown = null
-            mutableState.value = MediaDeletionState.Idle
-        }
+        mutableResult.value = null
     }
 
     private fun credentials(): AccountCredentials? =
         (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
-/** Message parts joined by the snackbar; zero counters stay silent. */
-internal fun mediaDeletionMessage(state: MediaDeletionState): List<UiText>? =
-    when (state) {
-        MediaDeletionState.Idle -> null
-
-        is MediaDeletionState.Running -> listOf(uiText(R.string.delete_running, state.count))
-
-        is MediaDeletionState.Done -> buildList {
-            if (state.phoneTrashed > 0) add(uiText(R.string.delete_done_phone, state.phoneTrashed))
-            if (state.phoneFailed > 0) {
-                add(
-                    uiText(R.string.delete_done_phone_failed, state.phoneFailed),
-                )
-            }
-            if (state.cloud.deleted > 0) {
-                add(
-                    uiText(R.string.delete_done_cloud, state.cloud.deleted),
-                )
-            }
-            if (state.cloud.failed > 0) add(uiText(R.string.delete_done_failed, state.cloud.failed))
-        }.ifEmpty { null }
+/** Lines of a result; zero counters stay silent. */
+internal fun mediaDeletionMessage(result: DeletionResult): List<UiText> =
+    buildList {
+        if (result.phoneTrashed > 0) add(uiText(R.string.delete_done_phone, result.phoneTrashed))
+        if (result.phoneFailed > 0) {
+            add(uiText(R.string.delete_done_phone_failed, result.phoneFailed))
+        }
+        if (result.cloud.deleted > 0) add(uiText(R.string.delete_done_cloud, result.cloud.deleted))
+        if (result.cloud.failed > 0) add(uiText(R.string.delete_done_failed, result.cloud.failed))
     }

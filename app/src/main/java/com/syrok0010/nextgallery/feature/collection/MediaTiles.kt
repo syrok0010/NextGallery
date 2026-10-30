@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -79,6 +80,8 @@ internal fun MediaSlotTile(
     onSelect: (MediaItem) -> Unit,
     /** Null where the screen has no selection mode. */
     selection: MediaSelection? = null,
+    /** Reads snapshot state, so only tiles whose activity changed recompose. */
+    tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val item = slot.mediaItem
@@ -92,6 +95,7 @@ internal fun MediaSlotTile(
         val selected by remember(selection, item.mediaId) {
             derivedStateOf { selection?.isSelected(item.mediaId) == true }
         }
+        val activity by remember(tileActivity, item) { derivedStateOf { tileActivity(item) } }
         MediaTile(
             item = item,
             cloudCopyDescription = cloudCopyDescription,
@@ -99,6 +103,7 @@ internal fun MediaSlotTile(
             requestFactory = requestFactory,
             registerTimelineTile = registerTimelineTile,
             selected = selected,
+            activity = activity,
             onClick = {
                 if (selection?.active == true) {
                     selection.toggle(item.mediaId)
@@ -135,6 +140,7 @@ private fun MediaTile(
     requestFactory: MediaImageRequestFactory,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     selected: Boolean,
+    activity: MediaTileActivity?,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
 ) {
@@ -145,7 +151,8 @@ private fun MediaTile(
         val unregister = registerTimelineTile(item.mediaId, coordinatesHolder::boundsInRoot)
         onDispose(unregister)
     }
-    val copyDescription = buildList {
+    val activityDescription = activity?.let { activityDescription(it) }
+    val copyDescription = activityDescription ?: buildList {
         if (item.hasLocalCopy) add(localCopyDescription)
         if (item.hasRemoteCopy) add(cloudCopyDescription)
     }.joinToString()
@@ -173,12 +180,21 @@ private fun MediaTile(
             item = item,
             purpose = MediaImagePurpose.TimelineThumbnail,
             contentDescription = item.displayName,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (activity?.operation == MediaTileOperation.Delete) 0.55f else 1f),
             contentScale = ContentScale.Crop,
             requestFactory = requestFactory,
         )
 
-        if (item.hasLocalCopy || item.hasRemoteCopy) {
+        if (activity != null) {
+            MediaTileActivityIndicator(
+                activity,
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp),
+            )
+        } else if (item.hasLocalCopy || item.hasRemoteCopy) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -226,6 +242,20 @@ private fun MediaTile(
             )
         }
     }
+}
+
+@Composable
+private fun activityDescription(activity: MediaTileActivity): String {
+    val operation = stringResource(
+        when (activity.operation) {
+            MediaTileOperation.Upload -> R.string.media_activity_upload
+            MediaTileOperation.AddToAlbum -> R.string.media_activity_album
+            MediaTileOperation.Delete -> R.string.media_activity_delete
+        },
+    )
+    return activity.progress?.let {
+        stringResource(R.string.media_activity_progress, operation, (it * 100).toInt())
+    } ?: operation
 }
 
 @Composable

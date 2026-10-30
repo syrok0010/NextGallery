@@ -55,6 +55,8 @@ internal fun MediaCollectionScreen(
     onAddToAlbum: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
     /** Same contract as [onAddToAlbum]; [onDone] runs only once the deletion is confirmed. */
     onDelete: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
+    /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
+    tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
@@ -94,6 +96,7 @@ internal fun MediaCollectionScreen(
                     registerTimelineTile = transition::registerTimelineTile,
                     onSelect = { transition.open(it.mediaId) },
                     selection = selection.takeIf { selectionEnabled },
+                    tileActivity = tileActivity,
                     gridState = gridState,
                 )
             }
