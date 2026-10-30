@@ -7,18 +7,21 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
 import okhttp3.HttpUrl
 
-data class UploadSelection(val contentUri: String, val displayName: String, val mimeType: String?)
+/** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
+internal data class UploadSelection(
+    val contentUri: String,
+    val displayName: String,
+    val mimeType: String?,
+)
 
-/** Objects that exist only on the phone; others already have a server copy or no local bytes. */
-internal fun uploadSelections(items: List<MediaItem>): List<UploadSelection> =
-    items.filterNot { it.hasRemoteCopy }.mapNotNull { item ->
-        item.localCopy?.let { local ->
-            UploadSelection(
-                contentUri = local.contentUri,
-                displayName = item.displayName,
-                mimeType = item.mimeType,
-            )
-        }
+/** Only objects that exist just on the phone are uploaded; others already have a server copy. */
+internal fun uploadSelection(item: MediaItem): UploadSelection? =
+    item.localCopy?.takeUnless { item.hasRemoteCopy }?.let { local ->
+        UploadSelection(
+            contentUri = local.contentUri,
+            displayName = item.displayName,
+            mimeType = item.mimeType,
+        )
     }
 
 /**
