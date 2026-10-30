@@ -43,8 +43,8 @@ import kotlinx.serialization.json.Json
  */
 @Composable
 internal fun rememberDeleteAction(
-    onConfirmed: (DeletionConfirmation) -> Unit,
-): (DeletionConfirmation, onStarted: () -> Unit) -> Unit {
+    onConfirmed: (DeletionTargets) -> Unit,
+): (DeletionTargets, onStarted: () -> Unit) -> Unit {
     val context = LocalContext.current
     val confirm by rememberUpdatedState(onConfirmed)
     // Survives activity recreation while the system dialog is open.
@@ -58,11 +58,7 @@ internal fun rememberDeleteAction(
         val started = onStarted
         onStarted = null
         if (payload != null && result.resultCode == Activity.RESULT_OK) {
-            confirm(
-                DeletionConfirmation.fromTargets(
-                    Json.decodeFromString<DeletionTargets>(payload),
-                ),
-            )
+            confirm(Json.decodeFromString<DeletionTargets>(payload))
             started?.invoke()
         }
     }
@@ -70,7 +66,7 @@ internal fun rememberDeleteAction(
         when {
             pendingPayload != null -> Unit
 
-            targets.targets.contentUris.size > MAX_TRASH_REQUEST ->
+            targets.contentUris.size > MAX_TRASH_REQUEST ->
                 Toast
                     .makeText(
                         context,
@@ -78,7 +74,7 @@ internal fun rememberDeleteAction(
                         Toast.LENGTH_LONG,
                     ).show()
 
-            targets.targets.contentUris.isEmpty() -> {
+            targets.contentUris.isEmpty() -> {
                 confirm(targets)
                 started()
             }
@@ -86,10 +82,10 @@ internal fun rememberDeleteAction(
             else -> try {
                 val request = MediaStore.createTrashRequest(
                     context.contentResolver,
-                    targets.targets.contentUris.map(Uri::parse),
+                    targets.contentUris.map(Uri::parse),
                     true,
                 )
-                pendingPayload = Json.encodeToString(targets.targets)
+                pendingPayload = Json.encodeToString(targets)
                 onStarted = started
                 launcher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (_: IllegalArgumentException) {
@@ -115,14 +111,14 @@ internal fun DeleteSelectionDialog(
         title = { Text(pluralStringResource(R.plurals.delete_title, plan.total, plan.total)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (plan.phoneOnly.isNotEmpty()) {
-                    Text(stringResource(R.string.delete_phone_only, plan.phoneOnly.size))
+                if (plan.phoneOnly > 0) {
+                    Text(stringResource(R.string.delete_phone_only, plan.phoneOnly))
                 }
-                if (plan.cloudOnly.isNotEmpty()) {
-                    Text(stringResource(R.string.delete_cloud_only, plan.cloudOnly.size))
+                if (plan.cloudOnly > 0) {
+                    Text(stringResource(R.string.delete_cloud_only, plan.cloudOnly))
                 }
-                if (plan.merged.isNotEmpty()) {
-                    Text(stringResource(R.string.delete_merged, plan.merged.size))
+                if (plan.merged > 0) {
+                    Text(stringResource(R.string.delete_merged, plan.merged))
                     Column(Modifier.selectableGroup()) {
                         DeletionScope.entries.forEach { option ->
                             ScopeOption(
