@@ -17,9 +17,7 @@ import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
-import com.syrok0010.nextgallery.feature.upload.UploadBatch
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import com.syrok0010.nextgallery.feature.upload.uploadSelections
 import org.koin.compose.koinInject
 
 @Composable
@@ -59,7 +57,7 @@ internal fun PhotosScreen(
         selectionEnabled = true,
         onUpload = { items, onStarted ->
             // The batch starts from the app root, which also asks for the notification permission.
-            uploads.submit(UploadBatch(uploadSelections(items)))
+            uploads.submit(items.map { it.mediaId })
             onStarted()
         },
         onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
