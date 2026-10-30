@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,9 @@ internal fun LibraryHeader(
     onLogout: () -> Unit,
     onBack: (() -> Unit)? = null,
     title: String? = null,
+    /** While [statusActive], takes the place of the app name, up to the menu. */
+    statusActive: Boolean = false,
+    status: @Composable () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp)) {
@@ -44,10 +48,22 @@ internal fun LibraryHeader(
                         stringResource(R.string.action_back),
                     )
                 }
-            } else Text(
-                stringResource(R.string.app_name),
-                style = MaterialTheme.typography.labelLarge,
-            )
+            }
+            Crossfade(
+                targetState = statusActive,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = if (onBack != null) 4.dp else 0.dp, end = 4.dp),
+                label = "header_status",
+            ) { active ->
+                when {
+                    active -> status()
+                    onBack == null -> Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
             Box {
                 IconButton(onClick = { menu = true }) {
                     Icon(Icons.Default.MoreVert, stringResource(R.string.library_menu))

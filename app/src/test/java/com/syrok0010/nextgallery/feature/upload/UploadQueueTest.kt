@@ -112,6 +112,63 @@ class UploadQueueTest {
             }
         }
 
+    @Test fun `activity follows files until the queue is empty and keeps the result`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val sessions = SessionStore(Fixed(credentials))
+                val queue = UploadQueue(sessions, scope)
+                val first = UploadBatch(batch("a").files + batch("b").files)
+                queue.submit(first)
+                queue.uploading("content://media/a", 40)
+                queue.submit(batch("c"))
+                assertEquals(
+                    UploadActivity(
+                        pending = setOf(
+                            "content://media/a",
+                            "content://media/b",
+                            "content://media/c",
+                        ),
+                        total = 3,
+                        processed = 0,
+                        current = "content://media/a",
+                        percent = 40,
+                    ),
+                    queue.activity.value,
+                )
+
+                queue.processed("content://media/a")
+                // Stopped on an error: the rest of the batch is done too.
+                queue.batchFinished(first)
+                assertEquals(
+                    UploadActivity(pending = setOf("content://media/c"), total = 3, processed = 2),
+                    queue.activity.value,
+                )
+                queue.processed("content://media/c")
+                assertNull(queue.activity.value)
+
+                queue.passFinished(
+                    UploadResult(uploaded = 1, files = 2, failures = listOf("HTTP 500")),
+                )
+                queue.passFinished(UploadResult(uploaded = 1, files = 1))
+                assertEquals(
+                    "results add up until shown",
+                    UploadResult(uploaded = 2, files = 3, failures = listOf("HTTP 500")),
+                    queue.result.value,
+                )
+                queue.consumeResult()
+                assertNull(queue.result.value)
+
+                queue.submit(batch("d"))
+                queue.passFinished(UploadResult(uploaded = 0, files = 1))
+                sessions.signOut()
+                withTimeout(5_000) { queue.activity.first { it == null } }
+                assertNull(queue.result.value)
+            } finally {
+                scope.cancel()
+            }
+        }
+
     private fun batch(name: String) =
         UploadBatch(listOf(UploadSelection("content://media/$name", "$name.jpg", "image/jpeg")))
 

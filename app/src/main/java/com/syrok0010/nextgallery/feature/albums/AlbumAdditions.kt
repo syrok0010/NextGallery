@@ -49,7 +49,8 @@ internal enum class AlbumAdditionFailure { AlbumExists, Network, NotWritable }
 internal sealed interface AlbumAdditionState {
     data object Idle : AlbumAdditionState
 
-    data class Running(val albumName: String, val count: Int) : AlbumAdditionState
+    /** [fileIds] are the server copies being copied into the album. */
+    data class Running(val albumName: String, val fileIds: Set<Long>) : AlbumAdditionState
 
     data class Done(val albumName: String, val result: AlbumAddResult, val localUploads: Int) :
         AlbumAdditionState
@@ -104,7 +105,7 @@ internal class AlbumAdditions(
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
-        mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.size)
+        mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
         job = scope.launch {
             mutableState.value = try {
                 val location = when (target) {
@@ -151,7 +152,7 @@ internal class AlbumAdditions(
         (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
-/** Message parts joined by the snackbar; zero counters stay silent. */
+/** Message parts of the status line; zero counters stay silent. */
 internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
     when (state) {
         AlbumAdditionState.Idle -> null

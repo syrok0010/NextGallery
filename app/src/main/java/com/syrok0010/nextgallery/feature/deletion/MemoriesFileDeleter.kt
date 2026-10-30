@@ -28,7 +28,12 @@ internal class MemoriesFileDeleter(
     private val transport: NextcloudTransport,
     private val files: MemoriesFiles,
 ) {
-    suspend fun delete(credentials: AccountCredentials, fileIds: List<Long>): CloudDeleteResult {
+    /** [onProcessed] runs once per file, whatever its outcome, for the progress shown in the app. */
+    suspend fun delete(
+        credentials: AccountCredentials,
+        fileIds: List<Long>,
+        onProcessed: () -> Unit = {},
+    ): CloudDeleteResult {
         val permits = Semaphore(PARALLEL_DELETES)
         val outcomes = coroutineScope {
             fileIds
@@ -36,7 +41,7 @@ internal class MemoriesFileDeleter(
                 .map { fileId ->
                     async {
                         permits.withPermit {
-                            try {
+                            val deleted = try {
                                 val file = files.file(credentials, fileId)
                                 delete(
                                     credentials,
@@ -48,6 +53,8 @@ internal class MemoriesFileDeleter(
                             } catch (_: Exception) {
                                 false
                             }
+                            onProcessed()
+                            deleted
                         }
                     }
                 }.awaitAll()

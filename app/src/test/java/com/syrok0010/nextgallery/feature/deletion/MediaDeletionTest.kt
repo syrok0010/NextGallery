@@ -8,11 +8,13 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -181,21 +183,55 @@ class MediaDeletionTest {
                 )
                 withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
-                    MediaDeletionState.Done(
+                    DeletionResult(
                         phoneTrashed = 1,
                         cloud = CloudDeleteResult(deleted = 2, failed = 1),
                         phoneFailed = 1,
                     ),
-                    repository.state.value,
+                    repository.result.value,
                 )
+                assertEquals("progress ends with the queue", null, repository.progress.value)
                 repository.consume()
-                assertEquals(MediaDeletionState.Idle, repository.state.value)
+                assertEquals(null, repository.result.value)
                 repository.delete(
                     DeletionTargets(emptyList(), listOf(1)),
                 )
                 assertEquals(
-                    MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
-                    withTimeout(5_000) { repository.state.first { it is MediaDeletionState.Done } },
+                    DeletionResult(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
+                    withTimeout(5_000) { repository.result.filterNotNull().first() },
+                )
+            } finally {
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test fun `progress marks queued cloud copies until the queue is done`() = runBlocking {
+        val release = CountDownLatch(1)
+        Fixture { request ->
+            release.await()
+            server(request)
+        }.use { fixture ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val repository = MediaDeletionRepository(
+                    SessionStore(FixedCredentials(fixture.credentials)),
+                    MediaLibraryIndex(),
+                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    { it.size },
+                    scope,
+                ) {}
+                repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
+                repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
+                assertEquals(
+                    DeletionProgress(fileIds = setOf(1, 2, 3), total = 3, processed = 0),
+                    repository.progress.value,
+                )
+                release.countDown()
+                withTimeout(5_000) { repository.progress.first { it == null } }
+                assertEquals(
+                    DeletionResult(phoneTrashed = 1, cloud = CloudDeleteResult(deleted = 2, failed = 1)),
+                    repository.result.value,
                 )
             } finally {
                 scope.cancel()
@@ -205,7 +241,8 @@ class MediaDeletionTest {
 
     @Test fun `without a session every cloud copy counts as failed`() = runBlocking {
         Fixture(::server).use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            // The session reset runs inside the constructor, not after the deletion.
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
             try {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(null)),
@@ -218,8 +255,8 @@ class MediaDeletionTest {
                     DeletionTargets(emptyList(), listOf(1, 2)),
                 )
                 assertEquals(
-                    MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),
-                    withTimeout(5_000) { repository.state.first { it is MediaDeletionState.Done } },
+                    DeletionResult(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),
+                    withTimeout(5_000) { repository.result.filterNotNull().first() },
                 )
                 assertEquals(emptyList<String>(), fixture.requests.map { it.method })
             } finally {
@@ -231,10 +268,10 @@ class MediaDeletionTest {
     @Test fun `message stays silent for zero counters`() {
         assertEquals(
             listOf("delete_done_phone_failed", "delete_done_cloud", "delete_done_failed"),
-            mediaDeletionMessage(MediaDeletionState.Done(0, CloudDeleteResult(deleted = 2, failed = 1), phoneFailed = 1))
-                ?.map { resourceName(it) },
+            mediaDeletionMessage(DeletionResult(0, CloudDeleteResult(deleted = 2, failed = 1), phoneFailed = 1))
+                .map { resourceName(it) },
         )
-        assertEquals(null, mediaDeletionMessage(MediaDeletionState.Done(0, CloudDeleteResult(0, 0))))
+        assertEquals(emptyList<Any>(), mediaDeletionMessage(DeletionResult(0, CloudDeleteResult(0, 0))))
     }
 
     private fun resourceName(text: com.syrok0010.nextgallery.core.ui.UiText): String {

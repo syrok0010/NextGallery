@@ -95,6 +95,14 @@ class UploadForegroundService : Service() {
                 RESULT_NOTIFICATION_ID,
                 resultNotification(pass),
             )
+            queue.passFinished(
+                UploadResult(
+                    uploaded = pass.uploaded,
+                    files = pass.files,
+                    failures = pass.failures.distinct(),
+                    details = pass.detailLines(),
+                ),
+            )
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelfResult(lastStartId)
@@ -134,6 +142,7 @@ class UploadForegroundService : Service() {
         pass.uploaded += progress.completed
         pass.nameTaken += progress.nameTaken.size
         val missed = progress.nameTaken + batch.files.drop(progress.processed)
+        queue.batchFinished(batch)
         batch.followUps.forEach { followUp ->
             pass.details += guarded(emptyList()) { followUp.finished(missed) }
         }
@@ -146,16 +155,7 @@ class UploadForegroundService : Service() {
             if (pass.failures.isNotEmpty()) {
                 add(getString(R.string.upload_count, pass.uploaded, pass.files))
             }
-            if (pass.nameTaken > 0) {
-                add(
-                    pluralText(
-                        R.plurals.upload_name_taken,
-                        pass.nameTaken,
-                        pass.nameTaken,
-                    ).asString(this@UploadForegroundService),
-                )
-            }
-            pass.details.mapTo(this) { it.asString(this@UploadForegroundService) }
+            pass.detailLines().mapTo(this) { it.asString(this@UploadForegroundService) }
         }
         val title = if (pass.failures.isEmpty()) {
             getString(R.string.upload_done, pass.uploaded, pass.files)
@@ -200,8 +200,12 @@ class UploadForegroundService : Service() {
                     selection.displayName,
                 ),
                 selection = selection,
-                onProgress = { percent -> onProgress(index, percent) },
+                onProgress = { percent ->
+                    queue.uploading(selection.contentUri, percent)
+                    onProgress(index, percent)
+                },
             )
+            queue.processed(selection.contentUri)
             progress.processed++
             if (uploaded == null) {
                 progress.nameTaken += selection
@@ -312,6 +316,16 @@ class UploadForegroundService : Service() {
         var nameTaken = 0
         val failures = mutableListOf<String>()
         val details = mutableListOf<UiText>()
+
+        fun detailLines(): List<UiText> =
+            buildList {
+                if (nameTaken > 0) {
+                    add(
+                        pluralText(R.plurals.upload_name_taken, nameTaken, nameTaken),
+                    )
+                }
+                addAll(details)
+            }
     }
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
