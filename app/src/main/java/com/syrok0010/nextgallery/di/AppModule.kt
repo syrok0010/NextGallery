@@ -98,7 +98,7 @@ val appModule = module {
         }
     } bind OperationStatusSource::class
     single {
-        UploadQueue(get(), get(named("libraryScope"))) {
+        UploadQueue(get(), get(), get(named("libraryScope"))) {
             listOf(
                 UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
             )

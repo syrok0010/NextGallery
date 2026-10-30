@@ -12,6 +12,7 @@ import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,10 +36,7 @@ class AlbumAdditionTest {
             ),
         )
         assertEquals(listOf(10L, 11L), request.fileIds)
-        assertEquals(
-            listOf(UploadSelection("content://media/local", "local.jpg", "image/jpeg")),
-            request.uploads,
-        )
+        assertEquals(listOf(MediaId("local")), request.uploads)
     }
 
     @Test fun `only albums owned by current user are writable`() {
@@ -106,7 +104,8 @@ class AlbumAdditionTest {
                     MutableStateFlow<LocalMediaPermissionMode?>(null),
                     scope,
                 )
-                val uploads = UploadQueue(sessions, scope)
+                val library = MediaLibraryIndex().apply { publish(listOf(item("local", local("local")))) }
+                val uploads = UploadQueue(sessions, library, scope)
                 val additions = AlbumAdditions(
                     sessions,
                     fixture.writer,
@@ -124,7 +123,7 @@ class AlbumAdditionTest {
                 val local = UploadSelection("content://media/local", "local.jpg", "image/jpeg")
                 val accepted = additions.add(
                     AlbumTarget.New("Поход"),
-                    AlbumAdditionRequest(listOf(1L), listOf(local)),
+                    AlbumAdditionRequest(listOf(1L), listOf(MediaId("local"))),
                 )
                 assertTrue(accepted)
                 val done = withTimeout(5_000) {
@@ -167,7 +166,7 @@ class AlbumAdditionTest {
                     sessions,
                     fixture.writer,
                     emptyCatalog(sessions, scope),
-                    UploadQueue(sessions, scope),
+                    UploadQueue(sessions, MediaLibraryIndex(), scope),
                     scope,
                 )
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")

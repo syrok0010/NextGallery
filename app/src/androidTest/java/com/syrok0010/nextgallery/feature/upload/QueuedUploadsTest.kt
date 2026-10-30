@@ -20,9 +20,13 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -41,7 +45,8 @@ class QueuedUploadsTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private val scope = CoroutineScope(Dispatchers.Unconfined)
-    private val queue = UploadQueue(SessionStore(SignedIn), scope)
+    private val library = MediaLibraryIndex().apply { publish(BATCH + OTHER) }
+    private val queue = UploadQueue(SessionStore(SignedIn), library, scope)
     private var starts = 0
     private val registry = PermissionRegistry()
     private var notificationsGranted = false
@@ -74,7 +79,7 @@ class QueuedUploadsTest {
     @Test
     fun denialStartsWaitingBatchOnceAndDoesNotAskAgain() {
         showQueuedUploads()
-        queue.submit(BATCH)
+        submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, registry.requests.size)
             assertEquals(0, starts)
@@ -84,7 +89,7 @@ class QueuedUploadsTest {
             assertEquals(1, starts)
             assertEquals(BATCH.files, queue.next()?.files)
         }
-        queue.submit(BATCH)
+        submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, registry.requests.size)
             assertEquals(2, starts)
@@ -99,7 +104,7 @@ class QueuedUploadsTest {
                 QueuedUploads(queue) { starts++ }
             }
         }
-        queue.submit(BATCH)
+        submit(BATCH)
         rule.waitForIdle()
         restoration.emulateSavedInstanceStateRestore()
         rule.runOnIdle { registry.dispatchResult(registry.requests.single(), true) }
@@ -114,7 +119,7 @@ class QueuedUploadsTest {
     fun grantedPermissionStartsImmediatelyWithoutDialog() {
         notificationsGranted = true
         showQueuedUploads()
-        queue.submit(BATCH)
+        submit(BATCH)
         rule.runOnIdle {
             assertEquals(emptyList<Int>(), registry.requests)
             assertEquals(1, starts)
@@ -139,13 +144,13 @@ class QueuedUploadsTest {
                 }
             }
         }
-        queue.submit(BATCH)
+        submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, starts)
             assertEquals(listOf(BATCH.files), queue.waiting.value.map { it.files })
             assertNull(queue.next())
         }
-        queue.submit(OTHER)
+        submit(OTHER)
         rule.runOnIdle { assertEquals("no retries while the screen stays visible", 1, starts) }
 
         refuse = false
@@ -195,6 +200,10 @@ class QueuedUploadsTest {
         override val lifecycle = LifecycleRegistry(this)
     }
 
+    private fun submit(items: List<MediaItem>) = queue.submit(items.map { it.mediaId })
+
+    private val List<MediaItem>.files get() = mapNotNull(::uploadSelection)
+
     private object SignedIn : CredentialsStore {
         override fun load() = AccountCredentials("http://cloud", "anna", "secret", "anna")
         override fun save(credentials: AccountCredentials) = Unit
@@ -202,14 +211,31 @@ class QueuedUploadsTest {
     }
 
     private companion object {
-        val BATCH = UploadBatch(
-            listOf(
-                UploadSelection("content://media/external/images/media/42", "фото.png", "image/png"),
-                UploadSelection("content://media/external/video/media/43", "video.mp4", "video/mp4"),
-            ),
+        val BATCH = listOf(
+            phoneItem("content://media/external/images/media/42", "фото.png", "image/png"),
+            phoneItem("content://media/external/video/media/43", "video.mp4", "video/mp4"),
         )
-        val OTHER = UploadBatch(
-            listOf(UploadSelection("content://media/external/images/media/44", "другое.jpg", "image/jpeg")),
-        )
+        val OTHER = listOf(phoneItem("content://media/external/images/media/44", "другое.jpg", "image/jpeg"))
+
+        fun phoneItem(contentUri: String, name: String, mimeType: String) =
+            MediaItem(
+                mediaId = MediaId(contentUri),
+                dayId = 1,
+                displayName = name,
+                mimeType = mimeType,
+                width = null,
+                height = null,
+                etag = null,
+                livePhotoId = null,
+                auid = null,
+                buid = null,
+                sharedBy = null,
+                takenAtEpochSeconds = 1,
+                isVideo = mimeType.startsWith("video/"),
+                videoDurationSeconds = null,
+                isFavorite = false,
+                isHidden = false,
+                assetRef = MediaAssetRef.LocalContent(contentUri, 1),
+            )
     }
 }

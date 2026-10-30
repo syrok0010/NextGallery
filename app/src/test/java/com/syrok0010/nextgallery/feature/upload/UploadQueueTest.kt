@@ -1,9 +1,13 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -16,31 +20,56 @@ import org.junit.Test
 
 class UploadQueueTest {
     private val credentials = AccountCredentials("http://cloud", "anna", "secret", "anna")
+    private val library = MediaLibraryIndex().apply {
+        publish(
+            listOf(
+                item("a", local("a")),
+                item("b", local("b")),
+                item("c", local("c")),
+                item("cloud", MediaAssetRef.MemoriesFile(10)),
+                item(
+                    "both",
+                    MediaAssetRef.LocalFirst(local("both"), MediaAssetRef.MemoriesFile(11)),
+                ),
+            ),
+        )
+    }
+
+    @Test fun `submit fixes phone copies of local-only objects and skips the rest`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+                assertEquals(1, queue.submit(ids("a", "cloud", "both", "gone", "a")))
+                assertEquals(0, queue.submit(ids("cloud")))
+                library.clear()
+
+                assertEquals(listOf(files("a")), queue.waiting.value.map { it.files })
+            } finally {
+                scope.cancel()
+            }
+        }
 
     @Test fun `released batches go to the service in order while newer ones keep waiting`() =
         runBlocking {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
-                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope)
-                val first = batch("a")
-                val second = batch("b")
-                queue.submit(first)
-                queue.submit(UploadBatch(emptyList()))
-                queue.submit(second)
-                assertEquals(listOf(first.files, second.files), queue.release().map { it.files })
-                val third = batch("c")
-                queue.submit(third)
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+                queue.submit(ids("a"))
+                queue.submit(ids("b"))
+                assertEquals(listOf(files("a"), files("b")), queue.release().map { it.files })
+                queue.submit(ids("c"))
 
                 assertEquals(2, queue.releasedFiles())
-                assertEquals(first.files, queue.next()?.files)
+                assertEquals(files("a"), queue.next()?.files)
                 assertEquals(
                     "waiting batches join the total only once released",
                     1,
                     queue.releasedFiles(),
                 )
-                assertEquals(second.files, queue.next()?.files)
+                assertEquals(files("b"), queue.next()?.files)
                 assertNull(queue.next())
-                assertEquals(listOf(third.files), queue.waiting.value.map { it.files })
+                assertEquals(listOf(files("c")), queue.waiting.value.map { it.files })
             } finally {
                 scope.cancel()
             }
@@ -51,12 +80,12 @@ class UploadQueueTest {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
                 val common = mutableListOf<UploadFollowUp>()
-                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope) {
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope) {
                     listOf(Recording()).also(common::addAll)
                 }
                 val own = Recording()
-                queue.submit(UploadBatch(batch("a").files, listOf(own)))
-                queue.submit(batch("b"))
+                queue.submit(ids("a"), listOf(own))
+                queue.submit(ids("b"))
                 queue.release()
 
                 assertEquals(listOf(common[0], own), queue.next()?.followUps)
@@ -70,21 +99,18 @@ class UploadQueueTest {
         runBlocking {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
-                val queue = UploadQueue(SessionStore(Fixed(credentials)), scope)
-                val running = batch("a")
-                val refused = batch("b")
-                queue.submit(running)
-                queue.submit(refused)
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+                queue.submit(ids("a"))
+                queue.submit(ids("b"))
                 val released = queue.release()
                 // A service that was already running took one batch before the new start was refused.
-                assertEquals(running.files, queue.next()?.files)
-                val newer = batch("c")
-                queue.submit(newer)
+                assertEquals(files("a"), queue.next()?.files)
+                queue.submit(ids("c"))
 
                 queue.restore(released)
 
                 assertEquals(
-                    listOf(refused.files, newer.files),
+                    listOf(files("b"), files("c")),
                     queue.waiting.value.map { it.files },
                 )
                 assertNull(queue.next())
@@ -99,10 +125,10 @@ class UploadQueueTest {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
                 val sessions = SessionStore(Fixed(credentials))
-                val queue = UploadQueue(sessions, scope)
-                queue.submit(batch("a"))
+                val queue = UploadQueue(sessions, library, scope)
+                queue.submit(ids("a"))
                 queue.release()
-                queue.submit(batch("b"))
+                queue.submit(ids("b"))
                 yield()
                 sessions.signOut()
                 withTimeout(5_000) { queue.waiting.first { it.isEmpty() } }
@@ -117,11 +143,11 @@ class UploadQueueTest {
             val scope = CoroutineScope(Dispatchers.Unconfined)
             try {
                 val sessions = SessionStore(Fixed(credentials))
-                val queue = UploadQueue(sessions, scope)
-                val first = UploadBatch(batch("a").files + batch("b").files)
-                queue.submit(first)
+                val queue = UploadQueue(sessions, library, scope)
+                queue.submit(ids("a", "b"))
+                val first = queue.waiting.value.single()
                 queue.uploading("content://media/a", 40)
-                queue.submit(batch("c"))
+                queue.submit(ids("c"))
                 assertEquals(
                     UploadActivity(
                         pending = setOf(
@@ -164,7 +190,7 @@ class UploadQueueTest {
                 queue.consumeResult()
                 assertNull(queue.result.value)
 
-                queue.submit(batch("d"))
+                queue.submit(ids("a"))
                 queue.passFinished(UploadResult(uploaded = 0, files = 1))
                 sessions.signOut()
                 withTimeout(5_000) { queue.activity.first { it == null } }
@@ -174,8 +200,33 @@ class UploadQueueTest {
             }
         }
 
-    private fun batch(name: String) =
-        UploadBatch(listOf(UploadSelection("content://media/$name", "$name.jpg", "image/jpeg")))
+    private fun ids(vararg names: String) = names.map(::MediaId)
+
+    private fun files(vararg names: String) =
+        names.map { UploadSelection("content://media/$it", "$it.jpg", "image/jpeg") }
+
+    private fun local(name: String) = MediaAssetRef.LocalContent("content://media/$name", 1)
+
+    private fun item(name: String, asset: MediaAssetRef) =
+        MediaItem(
+            mediaId = MediaId(name),
+            dayId = 1,
+            displayName = "$name.jpg",
+            mimeType = "image/jpeg",
+            width = null,
+            height = null,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = 1,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = asset,
+        )
 
     private class Recording : UploadFollowUp {
         override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = Unit
