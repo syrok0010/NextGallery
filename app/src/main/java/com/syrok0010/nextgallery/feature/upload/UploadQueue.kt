@@ -138,13 +138,18 @@ internal class UploadQueue(
                     processed = current.processed + done.size,
                     current = null,
                     percent = null,
-                )?.takeIf { it.pending.isNotEmpty() }
+                )
         }
     }
 
-    /** Called by the service when it has run out of batches. */
+    /**
+     * Called by the service when it has run out of batches. The upload stays active until here,
+     * through the follow-ups of the last batch, and the result comes before it ends: the app never
+     * sees a moment with neither.
+     */
     fun passFinished(result: UploadResult) {
         mutableResult.update { it?.plus(result) ?: result }
+        mutableActivity.update { current -> current?.takeIf { it.pending.isNotEmpty() } }
     }
 
     /** Called once the app has shown the result. */
