@@ -21,15 +21,17 @@ import org.junit.Test
 
 class MediaDeletionTest {
     @Test fun `plan splits copies and scope only narrows objects with both copies`() {
-        val preparation = DeletionPreparation.of(
-            listOf(
-                item("phone", local(1)),
-                item("cloud", MediaAssetRef.MemoriesFile(10)),
-                item("both", MediaAssetRef.LocalFirst(local(2), MediaAssetRef.MemoriesFile(20))),
-                item("video", local(3), isVideo = true),
+        val preparation = checkNotNull(
+            DeletionPreparation.of(
+                listOf(
+                    item("phone", local(1)),
+                    item("cloud", MediaAssetRef.MemoriesFile(10)),
+                    item("both", MediaAssetRef.LocalFirst(local(2), MediaAssetRef.MemoriesFile(20))),
+                    item("video", local(3), isVideo = true),
+                ),
             ),
         )
-        assertEquals(4, preparation.plan.total)
+        assertEquals(DeletionPlan(phoneOnly = 2, cloudOnly = 1, merged = 1), preparation.plan)
         assertEquals(
             DeletionTargets(
                 contentUris = listOf(
@@ -39,7 +41,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            preparation.confirm(DeletionScope.Everywhere).targets,
+            preparation.confirm(DeletionScope.Everywhere),
         )
         assertEquals(
             DeletionTargets(
@@ -50,7 +52,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10),
             ),
-            preparation.confirm(DeletionScope.PhoneOnly).targets,
+            preparation.confirm(DeletionScope.PhoneOnly),
         )
         assertEquals(
             DeletionTargets(
@@ -60,7 +62,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            preparation.confirm(DeletionScope.CloudOnly).targets,
+            preparation.confirm(DeletionScope.CloudOnly),
         )
     }
 
@@ -79,7 +81,7 @@ class MediaDeletionTest {
         )
     }
 
-    @Test fun `repository resolves media ids and keeps the prepared copies stable`() {
+    @Test fun `repository skips objects gone from the library and keeps the prepared copies stable`() {
         Fixture(::server).use { fixture ->
             val index = MediaLibraryIndex()
             index.publish(listOf(item("both", MediaAssetRef.LocalFirst(local(2), MediaAssetRef.MemoriesFile(20)))))
@@ -92,8 +94,8 @@ class MediaDeletionTest {
                     { it.size },
                     scope,
                 ) {}
-                val preparation = repository.prepare(listOf(MediaId("both")))
-                assertEquals(listOf(MediaId("both")), preparation?.plan?.merged)
+                val preparation = repository.prepare(listOf(MediaId("both"), MediaId("gone")))
+                assertEquals(DeletionPlan(phoneOnly = 0, cloudOnly = 0, merged = 1), preparation?.plan)
 
                 index.clear()
 
@@ -102,9 +104,9 @@ class MediaDeletionTest {
                         contentUris = listOf("content://media/external/images/media/2"),
                         fileIds = listOf(20),
                     ),
-                    preparation?.confirm(DeletionScope.Everywhere)?.targets,
+                    preparation?.confirm(DeletionScope.Everywhere),
                 )
-                assertEquals(null, repository.prepare(listOf(MediaId("missing"))))
+                assertEquals(null, repository.prepare(listOf(MediaId("both"))))
             } finally {
                 scope.cancel()
             }
@@ -171,11 +173,11 @@ class MediaDeletionTest {
                 ) { refreshed.incrementAndGet() }
                 val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
                 repository.delete(
-                    DeletionConfirmation.fromTargets(DeletionTargets(phone, listOf(1, 3))),
+                    DeletionTargets(phone, listOf(1, 3)),
                 )
                 // Queued behind the first; its result adds to the one not shown yet.
                 repository.delete(
-                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(2))),
+                    DeletionTargets(emptyList(), listOf(2)),
                 )
                 withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
@@ -189,7 +191,7 @@ class MediaDeletionTest {
                 repository.consume()
                 assertEquals(MediaDeletionState.Idle, repository.state.value)
                 repository.delete(
-                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(1))),
+                    DeletionTargets(emptyList(), listOf(1)),
                 )
                 assertEquals(
                     MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
@@ -213,7 +215,7 @@ class MediaDeletionTest {
                     scope,
                 ) {}
                 repository.delete(
-                    DeletionConfirmation.fromTargets(DeletionTargets(emptyList(), listOf(1, 2))),
+                    DeletionTargets(emptyList(), listOf(1, 2)),
                 )
                 assertEquals(
                     MediaDeletionState.Done(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),

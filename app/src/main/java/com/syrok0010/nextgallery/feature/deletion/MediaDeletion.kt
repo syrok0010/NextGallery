@@ -26,78 +26,50 @@ internal enum class DeletionScope { Everywhere, PhoneOnly, CloudOnly }
 @Serializable
 internal data class DeletionTargets(val contentUris: List<String>, val fileIds: List<Long>)
 
-/** Opaque confirmation passed from the UI back to the deletion module. */
-internal class DeletionConfirmation internal constructor(internal val targets: DeletionTargets) {
-    companion object {
-        internal fun fromTargets(targets: DeletionTargets) = DeletionConfirmation(targets)
-    }
-}
-
-/** Selection snapshot split by where the copies live; it contains no adapter identifiers. */
-internal data class DeletionPlan(
-    val phoneOnly: List<MediaId>,
-    val cloudOnly: List<MediaId>,
-    val merged: List<MediaId>,
-) {
-    val total: Int get() = phoneOnly.size + cloudOnly.size + merged.size
+/** How many selected objects have only a phone copy, only a cloud copy, or both. */
+internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val merged: Int) {
+    val total: Int get() = phoneOnly + cloudOnly + merged
 }
 
 /**
- * Resolved once before the system confirmation dialog. The physical references stay here, inside
- * the deletion module, so the UI only handles media identities and the user's scope choice.
+ * Copies of the selection, fixed before the system confirmation dialog. The physical references
+ * stay inside the deletion module: the UI only shows [plan] and returns the user's scope.
  */
 internal class DeletionPreparation private constructor(
-    val plan: DeletionPlan,
-    private val copies: Map<MediaId, Copies>,
+    private val phoneOnly: List<String>,
+    private val cloudOnly: List<Long>,
+    private val merged: List<MergedCopies>,
 ) {
-    internal fun confirm(scope: DeletionScope): DeletionConfirmation =
-        DeletionConfirmation(
-            DeletionTargets(
-                contentUris = plan.phoneOnly
-                    .mapNotNull(
-                        copies::get,
-                    ).mapNotNull(Copies::contentUri) +
-                    if (scope == DeletionScope.CloudOnly) {
-                        emptyList()
-                    } else {
-                        plan.merged.mapNotNull(copies::get).mapNotNull(Copies::contentUri)
-                    },
-                fileIds = (
-                    plan.cloudOnly.mapNotNull(copies::get).mapNotNull(Copies::fileId) +
-                        if (scope == DeletionScope.PhoneOnly) {
-                            emptyList()
-                        } else {
-                            plan.merged.mapNotNull(copies::get).mapNotNull(Copies::fileId)
-                        }
-                    ).distinct(),
-            ),
+    val plan = DeletionPlan(phoneOnly.size, cloudOnly.size, merged.size)
+
+    fun confirm(scope: DeletionScope): DeletionTargets =
+        DeletionTargets(
+            contentUris = phoneOnly +
+                if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.contentUri },
+            fileIds = (
+                cloudOnly +
+                    if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
+                ).distinct(),
         )
 
-    private data class Copies(val contentUri: String?, val fileId: Long?)
+    private class MergedCopies(val contentUri: String, val fileId: Long)
 
     companion object {
-        internal fun of(items: List<MediaItem>): DeletionPreparation {
-            val phoneOnly = mutableListOf<MediaId>()
-            val cloudOnly = mutableListOf<MediaId>()
-            val merged = mutableListOf<MediaId>()
-            val copies = buildMap {
-                items.forEach { item ->
-                    val local = item.localCopy?.contentUri?.let {
-                        mediaStoreItemUri(it, item.isVideo)
-                    }
-                    val remote = item.remoteFileId
-                    put(item.mediaId, Copies(local, remote))
-                    when {
-                        local != null && remote != null -> merged += item.mediaId
-                        local != null -> phoneOnly += item.mediaId
-                        remote != null -> cloudOnly += item.mediaId
-                    }
+        /** Objects without any copy left are skipped; null when nothing remains to delete. */
+        internal fun of(items: List<MediaItem>): DeletionPreparation? {
+            val phoneOnly = mutableListOf<String>()
+            val cloudOnly = mutableListOf<Long>()
+            val merged = mutableListOf<MergedCopies>()
+            items.forEach { item ->
+                val local = item.localCopy?.contentUri?.let { mediaStoreItemUri(it, item.isVideo) }
+                val remote = item.remoteFileId
+                when {
+                    local != null && remote != null -> merged += MergedCopies(local, remote)
+                    local != null -> phoneOnly += local
+                    remote != null -> cloudOnly += remote
                 }
             }
-            return DeletionPreparation(
-                plan = DeletionPlan(phoneOnly, cloudOnly, merged),
-                copies = copies,
-            )
+            return DeletionPreparation(phoneOnly, cloudOnly, merged).takeIf { it.plan.total > 0 }
         }
     }
 }
@@ -184,19 +156,20 @@ internal class MediaDeletionRepository(
         }
     }
 
-    /** Resolves the selected logical objects before the UI asks the user for a scope. */
+    /**
+     * Resolves the selected objects before the UI asks the user for a scope. Objects that left the
+     * library since they were selected are already gone and are skipped; null if none is left.
+     */
     fun prepare(mediaIds: Collection<MediaId>): DeletionPreparation? {
-        val ids = mediaIds.distinct()
-        val items = ids.map { library.state.value[it] ?: return null }
-        return DeletionPreparation.of(items)
+        val library = library.state.value
+        return DeletionPreparation.of(mediaIds.distinct().mapNotNull { library[it] })
     }
 
     /** Requests run one after another; a new one never cancels a deletion already started. */
-    fun delete(confirmation: DeletionConfirmation) {
+    fun delete(targets: DeletionTargets) {
         val previous = job
         job = scope.launch(operations) {
             previous?.join()
-            val targets = confirmation.targets
             val fileIds = targets.fileIds
             val phoneTrashed = if (targets.contentUris.isEmpty()) {
                 0
