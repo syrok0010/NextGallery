@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.app.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
@@ -30,7 +32,7 @@ internal fun LibraryHeader(
     onLogout: () -> Unit,
     onBack: (() -> Unit)? = null,
     title: String? = null,
-    /** While [statusActive], takes the place of the app name, up to the menu. */
+    /** While [statusActive], takes the place of the app name, between the logo and the menu. */
     statusActive: Boolean = false,
     status: @Composable () -> Unit = {},
 ) {
@@ -48,12 +50,14 @@ internal fun LibraryHeader(
                         stringResource(R.string.action_back),
                     )
                 }
+            } else {
+                AppLogo()
             }
             Crossfade(
                 targetState = statusActive,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = if (onBack != null) 4.dp else 0.dp, end = 4.dp),
+                    .padding(horizontal = 4.dp),
                 label = "header_status",
             ) { active ->
                 when {
@@ -105,6 +109,17 @@ internal fun LibraryHeader(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
         )
+    }
+}
+
+/** The launcher icon, as wide as the menu button on the other side so the status stays centered. */
+@Composable
+private fun AppLogo() {
+    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(30.dp).clip(CircleShape)) {
+            Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize())
+            Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize())
+        }
     }
 }
 
