@@ -41,7 +41,7 @@ internal fun uploadFile(
         selection,
         url,
         created = false,
-        existingFileId(transport, credentials, url),
+        existingFileId(transport, credentials, url, length),
     )
 }
 
@@ -66,13 +66,14 @@ private fun existingFileId(
     transport: NextcloudTransport,
     credentials: AccountCredentials,
     url: HttpUrl,
+    length: Long,
 ): Long? =
     runCatching {
         val request = transport
             .authenticatedRequestBuilder(credentials, url.toString(), accept = "application/xml")
             .method(
                 "PROPFIND",
-                """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>"""
+                """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><d:getcontentlength/><oc:fileid/></d:prop></d:propfind>"""
                     .toRequestBody("application/xml; charset=utf-8".toMediaType()),
             ).header("Depth", "0")
             .build()
@@ -91,7 +92,16 @@ private fun existingFileId(
             (0 until properties.length).firstNotNullOfOrNull { index ->
                 val propstat = properties.item(index) as Element
                 val status = propstat.getElementsByTagNameNS("DAV:", "status").item(0)?.textContent
-                if (status?.trim()?.split(Regex("\\s+"))?.getOrNull(1) != "200") {
+                val remoteLength = propstat
+                    .getElementsByTagNameNS("DAV:", "getcontentlength")
+                    .item(0)
+                    ?.textContent
+                    ?.trim()
+                    ?.toLongOrNull()
+                // HEAD may describe a file replaced before PROPFIND. Link only when the
+                // same successful DAV property set confirms both the size and file id.
+                val successful = status?.trim()?.split(Regex("\\s+"))?.getOrNull(1) == "200"
+                if (!successful || remoteLength != length) {
                     null
                 } else {
                     propstat

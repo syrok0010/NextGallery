@@ -66,13 +66,57 @@ class UploadFileTest {
     }
 
     @Test
+    fun `replacement with a different size between HEAD and PROPFIND is not linked`() = runBlocking {
+        Fixture(xml = properties("<d:getcontentlength>99</d:getcontentlength><oc:fileid>999</oc:fileid>")).use { fixture ->
+            val registry = InMemoryMediaIdentityRegistry()
+            val local = MediaSourceIdentity(MediaSourceKind.Local, SELECTION.contentUri)
+            val replacement = MediaSourceIdentity(MediaSourceKind.Memories, "999")
+            val candidates = listOf(
+                mediaIdentityCandidate(local, auid = null, buid = null),
+                mediaIdentityCandidate(replacement, auid = null, buid = null),
+            )
+            val before = registry.resolve(candidates).mediaIds
+            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions) {}
+
+            // HEAD still reports the original five bytes, but PROPFIND sees its replacement.
+            val uploaded = fixture.upload()
+            assertNotNull(uploaded)
+            assertFalse(uploaded!!.created)
+            assertNull(uploaded.fileId)
+            followUp.uploaded(fixture.credentials, uploaded)
+
+            assertEquals(before, registry.resolve(candidates).mediaIds)
+            assertNotEquals(before[local], before[replacement])
+            assertEquals(listOf("PUT", "HEAD", "PROPFIND"), fixture.methods)
+        }
+    }
+
+    @Test
+    fun `fileid without a valid successful DAV size is not linked`() {
+        listOf(
+            properties("<oc:fileid>183</oc:fileid>"),
+            properties("<d:getcontentlength>invalid</d:getcontentlength><oc:fileid>183</oc:fileid>"),
+            properties("<x:getcontentlength xmlns:x=\"urn:other\">5</x:getcontentlength><oc:fileid>183</oc:fileid>"),
+            properties("<oc:fileid>183</oc:fileid>")
+                .replace("</d:response>", "<d:propstat><d:prop><d:getcontentlength>5</d:getcontentlength></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>"),
+        ).forEach { xml ->
+            Fixture(xml = xml).use { fixture ->
+                val uploaded = fixture.upload()
+                assertNotNull(uploaded)
+                assertFalse(uploaded!!.created)
+                assertNull(uploaded.fileId)
+            }
+        }
+    }
+
+    @Test
     fun `failed or missing fileid keeps confirmed upload successful without a link`() {
         listOf(
             500 to "",
-            207 to properties("<oc:fileid>183</oc:fileid>", "404 Not Found"),
-            207 to properties("<oc:fileid>0</oc:fileid>"),
-            207 to properties("<x:fileid xmlns:x=\"urn:other\">183</x:fileid>"),
-            207 to properties(""),
+            207 to properties("<d:getcontentlength>5</d:getcontentlength><oc:fileid>183</oc:fileid>", "404 Not Found"),
+            207 to properties("<d:getcontentlength>5</d:getcontentlength><oc:fileid>0</oc:fileid>"),
+            207 to properties("<d:getcontentlength>5</d:getcontentlength><x:fileid xmlns:x=\"urn:other\">183</x:fileid>"),
+            207 to properties("<d:getcontentlength>5</d:getcontentlength>"),
             207 to "not xml",
         ).forEach { (status, xml) ->
             Fixture(propfindStatus = status, xml = xml).use { fixture ->
@@ -110,7 +154,7 @@ class UploadFileTest {
         private val putStatus: Int = 412,
         private val headStatus: Int = 200,
         private val propfindStatus: Int = 207,
-        private val xml: String = properties("<oc:fileid>183</oc:fileid>"),
+        private val xml: String = properties("<d:getcontentlength>5</d:getcontentlength><oc:fileid>183</oc:fileid>"),
     ) : AutoCloseable {
         private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val credentials = AccountCredentials("http://127.0.0.1:${server.address.port}", "test", "password", "uid")
@@ -128,7 +172,7 @@ class UploadFileTest {
                 exchange.use {
                     assertEquals(url.encodedPath, it.requestURI.path)
                     assertEquals(Credentials.basic("test", "password"), it.requestHeaders.getFirst("Authorization"))
-                    it.requestBody.readBytes()
+                    val requestBody = it.requestBody.readBytes().toString(Charsets.UTF_8)
                     methods += it.requestMethod
                     when (it.requestMethod) {
                         "PUT" -> {
@@ -143,6 +187,8 @@ class UploadFileTest {
                         }
                         "PROPFIND" -> {
                             assertEquals("0", it.requestHeaders.getFirst("Depth"))
+                            assertTrue(requestBody.contains("<oc:fileid/>"))
+                            assertTrue(requestBody.contains("<d:getcontentlength/>"))
                             val bytes = xml.toByteArray()
                             it.sendResponseHeaders(propfindStatus, bytes.size.toLong())
                             it.responseBody.write(bytes)
