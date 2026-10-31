@@ -160,7 +160,7 @@ class UploadedCopiesFollowUpTest {
         }
 
     @Test
-    fun `follow-up leaves a file that already existed unlinked`() =
+    fun `follow-up leaves a file without server id unlinked`() =
         runBlocking {
             val localId = resolveLocal()
             followUp.uploaded(CREDENTIALS, uploadedFile(fileId = null))
