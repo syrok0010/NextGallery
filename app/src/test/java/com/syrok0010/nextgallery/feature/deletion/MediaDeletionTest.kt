@@ -230,7 +230,7 @@ class MediaDeletionTest {
                 repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
                 repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
                 assertEquals(
-                    DeletionProgress(fileIds = setOf(1, 2, 3), total = 3, processed = 0),
+                    DeletionProgress(pendingFiles = mapOf(1L to 1, 2L to 1, 3L to 1), total = 3, processed = 0),
                     repository.progress.value,
                 )
                 release.countDown()
