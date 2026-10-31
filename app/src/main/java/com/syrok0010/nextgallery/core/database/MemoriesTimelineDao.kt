@@ -36,6 +36,9 @@ interface MemoriesTimelineDao {
     @Query("SELECT fileId FROM memories_media WHERE dayId IN (:dayIds)")
     suspend fun fileIdsForDays(dayIds: Collection<Int>): List<Long>
 
+    @Query("SELECT fileId FROM memories_media")
+    suspend fun fileIds(): List<Long>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMetadata(entity: MemoriesCacheMetadataEntity)
 
