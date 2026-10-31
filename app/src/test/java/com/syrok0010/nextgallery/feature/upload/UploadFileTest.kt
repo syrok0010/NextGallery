@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.sun.net.httpserver.HttpServer
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
@@ -135,6 +136,18 @@ class UploadFileTest {
                 val uploaded = fixture.upload()
                 assertTrue(uploaded!!.created)
                 assertEquals(190L, uploaded.fileId)
+                assertEquals(listOf("PUT"), fixture.methods)
+            }
+        }
+    }
+
+    @Test
+    fun `missing destination reports actionable directory error and stops without follow-up probes`() {
+        listOf(404, 409).forEach { status ->
+            Fixture(putStatus = status).use { fixture ->
+                val error = assertThrows(UploadException::class.java) { fixture.upload() }
+                assertEquals(R.string.upload_error_directory, error.reason)
+                assertEquals(listOf(status, "a.jpg"), error.args.toList())
                 assertEquals(listOf("PUT"), fixture.methods)
             }
         }
