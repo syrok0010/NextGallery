@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
@@ -33,7 +34,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
@@ -95,6 +95,14 @@ class UploadForegroundService : Service() {
                 RESULT_NOTIFICATION_ID,
                 resultNotification(pass),
             )
+            queue.passFinished(
+                UploadResult(
+                    uploaded = pass.uploaded,
+                    files = pass.files,
+                    failures = pass.failures.distinct(),
+                    details = pass.detailLines(),
+                ),
+            )
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelfResult(lastStartId)
@@ -134,6 +142,7 @@ class UploadForegroundService : Service() {
         pass.uploaded += progress.completed
         pass.nameTaken += progress.nameTaken.size
         val missed = progress.nameTaken + batch.files.drop(progress.processed)
+        queue.batchFinished(batch)
         batch.followUps.forEach { followUp ->
             pass.details += guarded(emptyList()) { followUp.finished(missed) }
         }
@@ -146,16 +155,7 @@ class UploadForegroundService : Service() {
             if (pass.failures.isNotEmpty()) {
                 add(getString(R.string.upload_count, pass.uploaded, pass.files))
             }
-            if (pass.nameTaken > 0) {
-                add(
-                    pluralText(
-                        R.plurals.upload_name_taken,
-                        pass.nameTaken,
-                        pass.nameTaken,
-                    ).asString(this@UploadForegroundService),
-                )
-            }
-            pass.details.mapTo(this) { it.asString(this@UploadForegroundService) }
+            pass.detailLines().mapTo(this) { it.asString(this@UploadForegroundService) }
         }
         val title = if (pass.failures.isEmpty()) {
             getString(R.string.upload_done, pass.uploaded, pass.files)
@@ -200,8 +200,12 @@ class UploadForegroundService : Service() {
                     selection.displayName,
                 ),
                 selection = selection,
-                onProgress = { percent -> onProgress(index, percent) },
+                onProgress = { percent ->
+                    queue.uploading(selection.contentUri, percent)
+                    onProgress(index, percent)
+                },
             )
+            queue.processed(selection.contentUri)
             progress.processed++
             if (uploaded == null) {
                 progress.nameTaken += selection
@@ -312,6 +316,16 @@ class UploadForegroundService : Service() {
         var nameTaken = 0
         val failures = mutableListOf<String>()
         val details = mutableListOf<UiText>()
+
+        fun detailLines(): List<UiText> =
+            buildList {
+                if (nameTaken > 0) {
+                    add(
+                        pluralText(R.plurals.upload_name_taken, nameTaken, nameTaken),
+                    )
+                }
+                addAll(details)
+            }
     }
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
@@ -353,14 +367,4 @@ private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
 
 /** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
 internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =
-    NextcloudTransport
-        .normalizeServerOrigin(serverUrl)
-        .toHttpUrl()
-        .newBuilder()
-        .addPathSegment("remote.php")
-        .addPathSegment("dav")
-        .addPathSegment("files")
-        .addPathSegment(user)
-        .apply { directory.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }
-        .addPathSegment(name)
-        .build()
+    fileUrl(serverUrl, user, directory).newBuilder().addPathSegment(name).build()

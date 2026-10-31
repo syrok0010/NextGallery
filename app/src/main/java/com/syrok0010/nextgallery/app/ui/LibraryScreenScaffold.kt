@@ -20,6 +20,7 @@ internal fun LibraryScreenScaffold(
     title: String? = null,
     library: MediaLibraryCoordinator = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
+    operations: OperationStatus = rememberOperationStatus(),
     content: @Composable BoxScope.() -> Unit,
 ) {
     Column(
@@ -42,6 +43,8 @@ internal fun LibraryScreenScaffold(
                 onLogout = onLogout,
                 onBack = onBack,
                 title = title,
+                statusActive = operations.active,
+                status = { OperationStatusPill(operations, visible = !viewerVisible) },
             )
         }
         Box(Modifier.weight(1f), content = content)
