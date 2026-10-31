@@ -20,6 +20,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
+import com.syrok0010.nextgallery.app.ui.OperationStatus
+import com.syrok0010.nextgallery.app.ui.rememberOperationStatus
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.Rule
 import org.junit.Test
 
@@ -45,6 +56,12 @@ class DeleteActionRestorationTest {
                 },
             ),
         )
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val uploads = UploadQueue(SessionStore(object : CredentialsStore {
+            override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
+            override fun save(credentials: AccountCredentials) = Unit
+            override fun clear() = Unit
+        }), MediaLibraryIndex(), scope)
         try {
             val registry = TrashRegistry()
             val owner = object : ActivityResultRegistryOwner {
@@ -53,14 +70,17 @@ class DeleteActionRestorationTest {
             val restoration = StateRestorationTester(rule)
             lateinit var selection: MediaSelection
             lateinit var delete: (DeletionTargets) -> Unit
+            lateinit var status: OperationStatus
             val confirmed = mutableListOf<DeletionTargets>()
             restoration.setContent {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                     val currentSelection = rememberMediaSelection()
                     val action = rememberDeleteAction(confirmed::add, currentSelection::clear)
+                    val operations = rememberOperationStatus(sources = listOf(uploads))
                     SideEffect {
                         selection = currentSelection
                         delete = action
+                        status = operations
                     }
                 }
             }
@@ -72,8 +92,15 @@ class DeleteActionRestorationTest {
                 delete(targets)
                 assertEquals(1, registry.requests.size)
             }
+            // A pending system confirmation is not a running operation and does not block logout.
+            rule.runOnIdle {
+                assertFalse(status.running)
+                assertTrue(confirmed.isEmpty())
+                assertTrue(status.tryLogout {})
+            }
             restoration.emulateSavedInstanceStateRestore()
             rule.runOnIdle {
+                assertFalse(status.running)
                 assertNotSame(original, selection)
                 assertTrue(selection.active)
                 registry.dispatchResult(registry.requests.single(), resultCode, null)
@@ -90,6 +117,7 @@ class DeleteActionRestorationTest {
                 }
             }
         } finally {
+            scope.cancel()
             resolver.delete(uri, null, null)
         }
     }
