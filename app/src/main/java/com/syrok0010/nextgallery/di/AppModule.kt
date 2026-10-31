@@ -90,7 +90,7 @@ val appModule = module {
         }
     }
     single {
-        UploadQueue(get(), get(named("libraryScope"))) {
+        UploadQueue(get(), get(), get(named("libraryScope"))) {
             listOf(
                 UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
             )

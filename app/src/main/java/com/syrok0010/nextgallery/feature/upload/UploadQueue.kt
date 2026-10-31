@@ -1,9 +1,11 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +52,7 @@ internal data class UploadResult(
  */
 internal class UploadQueue(
     sessions: SessionStore,
+    private val library: MediaLibraryIndex,
     scope: CoroutineScope,
     private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
 ) {
@@ -77,19 +80,27 @@ internal class UploadQueue(
         }
     }
 
-    fun submit(batch: UploadBatch) {
-        if (batch.files.isEmpty()) return
-        val complete = UploadBatch(batch.files, commonFollowUps() + batch.followUps)
-        mutableWaiting.update { it + complete }
-        mutableActivity.update { current ->
-            UploadActivity(
-                pending = current?.pending.orEmpty() + batch.files.map { it.contentUri },
-                total = (current?.total ?: 0) + batch.files.size,
-                processed = current?.processed ?: 0,
-                current = current?.current,
-                percent = current?.percent,
-            )
+    /**
+     * Queues the phone copies of [mediaIds] as one batch with [followUps] and returns how many
+     * files it has. The copies are fixed now, so a later library refresh does not change the batch.
+     * Objects that already have a server copy or left the library are skipped.
+     */
+    fun submit(mediaIds: Collection<MediaId>, followUps: List<UploadFollowUp> = emptyList()): Int {
+        val library = library.state.value
+        val files = mediaIds.distinct().mapNotNull { id -> library[id]?.let(::uploadSelection) }
+        if (files.isNotEmpty()) {
+            mutableWaiting.update { it + UploadBatch(files, commonFollowUps() + followUps) }
+            mutableActivity.update { current ->
+                UploadActivity(
+                    pending = current?.pending.orEmpty() + files.map { it.contentUri },
+                    total = (current?.total ?: 0) + files.size,
+                    processed = current?.processed ?: 0,
+                    current = current?.current,
+                    percent = current?.percent,
+                )
+            }
         }
+        return files.size
     }
 
     /** Hands all waiting batches to the service and returns them; one service start takes them all. */
