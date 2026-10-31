@@ -12,7 +12,11 @@ internal class ViewerSequenceController {
     private var liveSequence = ViewerSequence.Empty
     private var displayedSequence = ViewerSequence.Empty
 
-    fun updateSlots(slots: List<MediaSlot>, currentMediaId: MediaId?): ViewerSequence {
+    fun updateSlots(
+        slots: List<MediaSlot>,
+        currentMediaId: MediaId?,
+        completedDeletions: Set<MediaId> = emptySet(),
+    ): ViewerSequence {
         if (slots !== sourceSlots) {
             sourceSlots = slots
             liveSequence = slots.toViewerSequence()
@@ -21,7 +25,7 @@ internal class ViewerSequenceController {
         displayedSequence = reconcileCurrentMedia(
             live = liveSequence,
             previous = displayedSequence,
-            currentMediaId = currentMediaId,
+            currentMediaId = currentMediaId?.takeUnless { it in completedDeletions },
         )
         return displayedSequence
     }
@@ -31,10 +35,11 @@ internal class ViewerSequenceController {
 internal fun rememberViewerSequence(
     slots: List<MediaSlot>,
     currentMediaId: MediaId?,
+    completedDeletions: Set<MediaId> = emptySet(),
 ): ViewerSequence {
     val controller = remember { ViewerSequenceController() }
-    return remember(slots, currentMediaId) {
-        controller.updateSlots(slots, currentMediaId)
+    return remember(slots, currentMediaId, completedDeletions) {
+        controller.updateSlots(slots, currentMediaId, completedDeletions)
     }
 }
 

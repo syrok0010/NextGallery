@@ -64,7 +64,8 @@ class DeleteActionRestorationTest {
                     }
                 }
             }
-            val targets = DeletionTargets(listOf(uri.toString()), listOf(135L))
+            val targets =
+                DeletionTargets(listOf(uri.toString()), listOf(135L), listOf("disposable"))
             lateinit var original: MediaSelection
             rule.runOnIdle {
                 original = selection

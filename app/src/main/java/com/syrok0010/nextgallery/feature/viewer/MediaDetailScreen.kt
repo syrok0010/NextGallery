@@ -33,6 +33,8 @@ internal fun MediaDetailScreen(
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
+    actions: @Composable (MediaItem) -> Unit = {},
+    status: @Composable (visible: Boolean) -> Unit = {},
 ) {
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
@@ -112,6 +114,8 @@ internal fun MediaDetailScreen(
                 item = currentItem,
                 visible = chromeVisible,
                 playback = playback.current,
+                actions = { actions(currentItem) },
+                status = status,
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(
