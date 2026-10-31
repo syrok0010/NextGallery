@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.timeline.persistence
 
 import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.LoadedDayEntity
+import com.syrok0010.nextgallery.core.database.MediaIdentifierKind
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.ThumbnailCacheEntity
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
@@ -21,33 +22,37 @@ class TimelineCacheRepository(
     private val timelineDao = database.memoriesTimelineDao()
     private val thumbnailDao = database.thumbnailCacheDao()
 
-    suspend fun loadTimelineSnapshot(credentials: AccountCredentials): TimelineSnapshot? {
-        val metadata = timelineDao.metadata() ?: return null
-        if (metadata.serverUrl != credentials.normalizedServerUrl()) {
-            return null
+    suspend fun loadTimelineSnapshot(credentials: AccountCredentials): TimelineSnapshot? =
+        database.withTransaction {
+            val metadata = timelineDao.metadata() ?: return@withTransaction null
+            if (metadata.serverUrl != credentials.normalizedServerUrl()) {
+                return@withTransaction null
+            }
+
+            val loadedDayIds = timelineDao.loadedDayIds().toSet()
+            val mediaItems = timelineDao
+                .mediaItems()
+                .filter { it.media.dayId in loadedDayIds }
+                .map { it.toMediaItem() }
+
+            TimelineSnapshotAssembler.assembleMaterialized(
+                config = metadata.toMemoriesConfig(),
+                mediaItems = mediaItems,
+                loadedDayIds = loadedDayIds,
+            )
         }
-
-        val mediaItems = timelineDao.mediaItems().map { it.toMediaItem() }
-        val loadedDayIds = timelineDao.loadedDayIds().toSet()
-
-        return TimelineSnapshotAssembler.assembleMaterialized(
-            config = metadata.toMemoriesConfig(),
-            mediaItems = mediaItems,
-            loadedDayIds = loadedDayIds,
-        )
-    }
 
     suspend fun saveTimelineSnapshot(credentials: AccountCredentials, snapshot: TimelineSnapshot) {
         val normalizedServerUrl = credentials.normalizedServerUrl()
-        val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
         val newCounts = snapshot.days.associate { it.dayId to it.count }
-        val invalidatedDayIds = oldCounts
-            .filter { (dayId, oldCount) -> newCounts[dayId] != oldCount }
-            .keys
-        val staleThumbnailRows = thumbnailRowsForDays(invalidatedDayIds)
         val now = System.currentTimeMillis()
 
-        database.withTransaction {
+        val staleThumbnailRows = database.withTransaction {
+            val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
+            val invalidatedDayIds = oldCounts
+                .filter { (dayId, oldCount) -> newCounts[dayId] != oldCount }
+                .keys
+            val staleThumbnails = thumbnailRowsForDays(invalidatedDayIds)
             timelineDao.upsertMetadata(
                 requireNotNull(snapshot.config) { "Only a Memories timeline can be cached" }
                     .toCacheMetadataEntity(normalizedServerUrl, now),
@@ -59,14 +64,18 @@ class TimelineCacheRepository(
 
             if (invalidatedDayIds.isNotEmpty()) {
                 timelineDao.deleteLoadedDays(invalidatedDayIds)
-                timelineDao.deleteMediaItemsForDays(invalidatedDayIds)
             }
 
-            if (staleThumbnailRows.isNotEmpty()) {
-                thumbnailDao.deleteForFileIds(staleThumbnailRows.map { it.fileId })
+            if (staleThumbnails.isNotEmpty()) {
+                thumbnailDao.deleteForFileIds(staleThumbnails.map { it.fileId })
             }
 
+            replaceCompletedDaysInTransaction(
+                snapshot.items,
+                snapshot.loadedDayIds + (oldCounts.keys - newCounts.keys),
+            )
             saveSnapshotDetailsInTransaction(snapshot, now)
+            staleThumbnails
         }
         thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
     }
@@ -74,6 +83,7 @@ class TimelineCacheRepository(
     suspend fun saveDayDetails(items: List<MediaItem>, loadedDayIds: Set<Int>) {
         val now = System.currentTimeMillis()
         database.withTransaction {
+            replaceCompletedDaysInTransaction(items, loadedDayIds)
             if (items.isNotEmpty()) {
                 timelineDao.upsertMediaItems(items.map { it.toMemoriesMediaEntity() })
             }
@@ -95,6 +105,26 @@ class TimelineCacheRepository(
             timelineDao.deleteMetadata()
         }
         thumbnailFileStore.clear()
+    }
+
+    private suspend fun replaceCompletedDaysInTransaction(
+        items: List<MediaItem>,
+        completedDayIds: Set<Int>,
+    ) {
+        val currentFileIds = items.map { it.remoteFileId }.toSet()
+        completedDayIds.toList().chunked(500).forEach { dayIds ->
+            val vanishedKeys = timelineDao
+                .fileIdsForDays(dayIds)
+                .filterNot { it in currentFileIds }
+                .map(Long::toString)
+            vanishedKeys.chunked(500).forEach { keys ->
+                database
+                    .mediaIdentityDao()
+                    .deleteAliasesForSources(MediaIdentifierKind.MemoriesFile, keys)
+            }
+            // Invalidated metadata stays hidden until a full day proves which copies vanished.
+            timelineDao.deleteMediaItemsForDays(dayIds)
+        }
     }
 
     private suspend fun thumbnailRowsForDays(dayIds: Collection<Int>): List<ThumbnailCacheEntity> {
