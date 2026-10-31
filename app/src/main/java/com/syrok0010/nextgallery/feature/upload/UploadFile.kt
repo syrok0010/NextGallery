@@ -28,7 +28,11 @@ internal fun uploadFile(
         .build()
     val (existed, fileId) = transport.baseClient.newCall(request).execute().use { response ->
         if (!response.isSuccessful && response.code != 412) {
-            throw UploadException(R.string.upload_error_http, response.code, selection.displayName)
+            val reason = when (response.code) {
+                404, 409 -> R.string.upload_error_directory
+                else -> R.string.upload_error_http
+            }
+            throw UploadException(reason, response.code, selection.displayName)
         }
         (response.code == 412) to uploadedFileId(response.header("OC-FileId"))
     }
