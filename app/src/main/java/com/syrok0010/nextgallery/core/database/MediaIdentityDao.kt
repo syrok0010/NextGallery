@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.core.database
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -16,6 +17,35 @@ interface MediaIdentityDao {
 
     @Query("SELECT * FROM media_identifiers WHERE mediaId IN (:mediaIds)")
     suspend fun identifiersForMediaIds(mediaIds: Collection<String>): List<MediaIdentifierEntity>
+
+    @Query(
+        """
+        SELECT DISTINCT alias.kind, alias.value, identifier.mediaId
+        FROM media_source_aliases AS alias
+        INNER JOIN media_identifiers AS identifier
+            ON identifier.kind = alias.sourceKind AND identifier.value = alias.sourceKey
+        WHERE alias.kind = :kind AND alias.value IN (:values)
+        """,
+    )
+    suspend fun aliases(
+        kind: MediaIdentifierKind,
+        values: Collection<String>,
+    ): List<MediaIdentifierEntity>
+
+    @Query("SELECT * FROM media_source_aliases WHERE sourceKind = :kind AND sourceKey IN (:keys)")
+    suspend fun aliasesForSources(
+        kind: MediaIdentifierKind,
+        keys: Collection<String>,
+    ): List<MediaSourceAliasEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAliases(entities: List<MediaSourceAliasEntity>)
+
+    @Delete
+    suspend fun deleteAliases(entities: List<MediaSourceAliasEntity>)
+
+    @Query("DELETE FROM media_source_aliases WHERE sourceKind = :kind")
+    suspend fun deleteAliases(kind: MediaIdentifierKind)
 
     @Query("SELECT * FROM media_identity_conflicts")
     suspend fun conflicts(): List<MediaIdentityConflictEntity>
@@ -37,18 +67,4 @@ interface MediaIdentityDao {
 
     @Query("DELETE FROM media_identifiers WHERE kind = :kind")
     suspend fun deleteIdentifiers(kind: MediaIdentifierKind)
-
-    @Query(
-        """
-        DELETE FROM media_identifiers
-        WHERE kind IN (:aliasKinds)
-            AND mediaId NOT IN (
-                SELECT mediaId FROM media_identifiers WHERE kind IN (:sourceKinds)
-            )
-        """,
-    )
-    suspend fun deleteAliasesWithoutSource(
-        aliasKinds: Collection<MediaIdentifierKind>,
-        sourceKinds: Collection<MediaIdentifierKind>,
-    )
 }
