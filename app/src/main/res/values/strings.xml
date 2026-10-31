@@ -149,6 +149,7 @@
     <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>
     <string name="upload_error_open">не удалось открыть %1$s</string>
     <string name="upload_error_http">HTTP %1$d при загрузке %2$s</string>
+    <string name="upload_error_directory">HTTP %1$d при загрузке %2$s. Проверьте наличие первой папки таймлайна Memories в Nextcloud</string>
     <string name="upload_count">Загружено: %1$d из %2$d</string>
     <plurals name="upload_name_taken">
         <item quantity="one">%1$d не загружен: имя занято другим файлом</item>
