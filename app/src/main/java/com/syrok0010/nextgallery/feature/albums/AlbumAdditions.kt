@@ -1,17 +1,16 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
-import com.syrok0010.nextgallery.feature.upload.UploadBatch
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import com.syrok0010.nextgallery.feature.upload.UploadSelection
-import com.syrok0010.nextgallery.feature.upload.uploadSelections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -28,18 +27,18 @@ internal sealed interface AlbumTarget {
 }
 
 /**
- * Server copies join the album directly; local-only [uploads] are uploaded once the album exists
- * and join it after the upload.
+ * Server copies join the album directly; objects without one ([uploads]) are uploaded once the
+ * album exists and join it after the upload.
  */
 internal data class AlbumAdditionRequest(
     val fileIds: List<Long>,
-    val uploads: List<UploadSelection> = emptyList(),
+    val uploads: List<MediaId> = emptyList(),
 ) {
     companion object {
         fun of(items: List<MediaItem>) =
             AlbumAdditionRequest(
                 fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
-                uploads = uploadSelections(items),
+                uploads = items.filterNot { it.hasRemoteCopy }.map { it.mediaId },
             )
     }
 }
@@ -116,16 +115,14 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
-                    uploads.submit(
-                        UploadBatch(
-                            request.uploads,
-                            listOf(AlbumUploadFollowUp(writer, catalog, address)),
-                        ),
+                    val queued = uploads.submit(
+                        request.uploads,
+                        listOf(AlbumUploadFollowUp(writer, catalog, address)),
                     )
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(credentials, address, request.fileIds),
-                        request.uploads.size,
+                        queued,
                     )
                 }
             } catch (cancelled: CancellationException) {
