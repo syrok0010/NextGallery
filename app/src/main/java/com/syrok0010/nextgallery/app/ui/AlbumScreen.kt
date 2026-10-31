@@ -21,9 +21,12 @@ internal fun AlbumScreen(
 ) {
     val contents by viewModel.state.collectAsState()
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
+    val operations = rememberOperationStatus()
+    val tileActivity = remember(operations) { operations::tileActivity }
     MediaCollectionScreen(
         slots = slots,
         emptyContent = { AlbumContentsStatus(contents, viewModel::refresh) },
+        tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Albums,
@@ -32,6 +35,7 @@ internal fun AlbumScreen(
             onRefresh = viewModel::refresh,
             onBack = onBack,
             title = album.title,
+            operations = operations,
         ) {
             Column(Modifier.fillMaxSize()) {
                 if (contents.items.isNotEmpty() && (contents.loading || contents.failed)) {
