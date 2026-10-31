@@ -191,7 +191,7 @@ val appModule = module {
             changeObserver = get<AndroidMediaStoreChangeObserver>(),
         )
     }
-    single { NextcloudLoginRepository(get<NextcloudAuthClient>()) }
+    single { NextcloudLoginRepository(get<NextcloudAuthClient>(), get<NextcloudTransport>()) }
     single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
