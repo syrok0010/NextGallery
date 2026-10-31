@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.ui.AppMessageUiState
@@ -24,7 +25,7 @@ data class LoginScreenUiState(
     val login: LoginUiState = LoginUiState(),
     val message: AppMessageUiState = AppMessageUiState(),
 ) {
-    val isBusy: Boolean get() = login.attempt == LoginAttempt.Starting || login.attempt == LoginAttempt.SavingCredentials
+    val isBusy: Boolean get() = login.attempt == LoginAttempt.CheckingMemories || login.attempt == LoginAttempt.Starting || login.attempt == LoginAttempt.SavingCredentials
 }
 
 class LoginViewModel(
@@ -36,14 +37,16 @@ class LoginViewModel(
     private val mutableState = MutableStateFlow(LoginScreenUiState())
     val state = mutableState.asStateFlow()
     private var attemptJob: Job? = null
+    private var pendingCredentials: AccountCredentials? = null
 
     fun updateServerUrl(value: String) {
         mutableState.update { it.copy(login = it.login.copy(serverUrlInput = value)) }
     }
 
     fun startLogin() {
-        if (state.value.login.attempt == LoginAttempt.SavingCredentials) return
+        if (state.value.isBusy) return
         attemptJob?.cancel()
+        pendingCredentials = null
         val server = state.value.login.serverUrlInput.trim()
         if (server.isBlank()) {
             fail(R.string.error_enter_nextcloud_url)
@@ -74,20 +77,8 @@ class LoginViewModel(
                 }
                 when (result) {
                     is LoginPollResult.Ready -> {
-                        setAttempt(
-                            LoginAttempt.SavingCredentials,
-                            R.string.status_login_complete_loading_timeline
-                        )
-                        try {
-                            withContext(storageDispatcher) { credentialsStore.save(result.credentials) }
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            fail(R.string.error_save_credentials)
-                            return@launch
-                        }
-                        sessionStore.signIn(result.credentials)
-                        mutableState.value = LoginScreenUiState()
+                        pendingCredentials = result.credentials
+                        verifyAndSignIn(result.credentials)
                     }
 
                     is LoginPollResult.Failed -> {
@@ -124,7 +115,46 @@ class LoginViewModel(
     fun cancelLogin() {
         if (state.value.login.attempt == LoginAttempt.SavingCredentials) return
         attemptJob?.cancel()
-        fail(R.string.error_login_cancelled)
+        pendingCredentials = null
+        mutableState.update { it.copy(login = it.login.copy(attempt = LoginAttempt.Idle), message = AppMessageUiState()) }
+    }
+
+    fun retryMemoriesCheck() {
+        if (state.value.isBusy) return
+        val credentials = pendingCredentials ?: return
+        attemptJob = viewModelScope.launch { verifyAndSignIn(credentials) }
+    }
+
+    private suspend fun verifyAndSignIn(credentials: AccountCredentials) {
+        setAttempt(LoginAttempt.CheckingMemories, R.string.status_checking_memories)
+        val compatibility = try {
+            gateway.checkMemories(credentials)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            MemoriesCompatibility.CheckFailed
+        }
+        if (compatibility != MemoriesCompatibility.Supported) {
+            mutableState.update {
+                it.copy(
+                    login = it.login.copy(attempt = LoginAttempt.MemoriesBlocked),
+                    message = AppMessageUiState(error = compatibility.toUiText()),
+                )
+            }
+            return
+        }
+        setAttempt(LoginAttempt.SavingCredentials, R.string.status_login_complete_loading_timeline)
+        try {
+            withContext(storageDispatcher) { credentialsStore.save(credentials) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            fail(R.string.error_save_credentials)
+            return
+        }
+        pendingCredentials = null
+        sessionStore.signIn(credentials)
+        mutableState.value = LoginScreenUiState()
     }
 
     private fun setAttempt(attempt: LoginAttempt, statusRes: Int) {
@@ -154,4 +184,12 @@ private fun LoginPollFailure.toUiText() = when (this) {
     LoginPollFailure.Network -> uiText(R.string.error_login_poll_network)
     LoginPollFailure.Account -> uiText(R.string.error_login_account)
     LoginPollFailure.Unknown -> uiText(R.string.error_login_poll_unknown)
+}
+
+private fun MemoriesCompatibility.toUiText() = when (this) {
+    is MemoriesCompatibility.TooOld -> uiText(R.string.error_memories_too_old, version)
+    MemoriesCompatibility.Unavailable -> uiText(R.string.error_memories_unavailable)
+    MemoriesCompatibility.UnknownVersion -> uiText(R.string.error_memories_version_unknown)
+    MemoriesCompatibility.NetworkError -> uiText(R.string.error_memories_check_network)
+    else -> uiText(R.string.error_memories_check_failed)
 }

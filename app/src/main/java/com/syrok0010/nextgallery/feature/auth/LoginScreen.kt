@@ -34,6 +34,7 @@ internal fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                 onLoginBrowserOpened = viewModel::markBrowserOpened,
                 onLoginBrowserOpenFailed = viewModel::reportLoginBrowserOpenFailure,
                 onCancelLogin = viewModel::cancelLogin,
+                onRetryMemoriesCheck = viewModel::retryMemoriesCheck,
             )
 
             if (state.isBusy || state.login.isPolling) {
