@@ -118,6 +118,17 @@ internal class OperationStatus(
         sources.forEach(OperationStatusSource::consumeSucceeded)
     }
 
+    /** Any in-flight operation, including queued work, blocks logout. */
+    val running: Boolean
+        get() = currentSnapshots().any { it.running }
+
+    /** Re-read the aggregated snapshots immediately before logout. */
+    fun tryLogout(onLogout: () -> Unit): Boolean {
+        if (running) return false
+        onLogout()
+        return true
+    }
+
     /** Anything running or a result not shown yet. */
     val active: Boolean
         get() = currentSnapshots().isNotEmpty()
