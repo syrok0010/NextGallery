@@ -22,6 +22,7 @@ import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import com.syrok0010.nextgallery.app.ui.OperationStatusPill
+import com.syrok0010.nextgallery.app.ui.OperationStatus
 import com.syrok0010.nextgallery.app.ui.rememberOperationStatus
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
@@ -71,6 +72,7 @@ class DeleteActionRestorationTest {
             val restoration = StateRestorationTester(rule)
             lateinit var selection: MediaSelection
             lateinit var delete: DeleteAction
+            lateinit var status: OperationStatus
             val confirmed = mutableListOf<DeletionTargets>()
             restoration.setContent {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
@@ -81,6 +83,7 @@ class DeleteActionRestorationTest {
                     SideEffect {
                         selection = currentSelection
                         delete = action
+                        status = operations
                     }
                 }
             }
@@ -93,7 +96,12 @@ class DeleteActionRestorationTest {
                 delete(targets)
                 assertEquals(1, registry.requests.size)
             }
-            rule.runOnIdle { assertTrue(delete.awaitingConfirmation) }
+            rule.runOnIdle {
+                assertTrue(delete.awaitingConfirmation)
+                assertFalse(status.running)
+                assertTrue(confirmed.isEmpty())
+                assertTrue(status.tryLogout {})
+            }
             rule.runOnIdle { uploads.passFinished(UploadResult(uploaded = 1, files = 1)) }
             restoration.emulateSavedInstanceStateRestore()
             // The Activity remains STARTED beneath MediaProvider's translucent confirmation.
@@ -102,6 +110,7 @@ class DeleteActionRestorationTest {
             rule.runOnIdle { assertNotNull(uploads.result.value) }
             rule.runOnIdle {
                 assertTrue(delete.awaitingConfirmation)
+                assertFalse(status.running)
                 assertNotSame(original, selection)
                 assertTrue(selection.active)
                 registry.dispatchResult(registry.requests.single(), resultCode, null)
