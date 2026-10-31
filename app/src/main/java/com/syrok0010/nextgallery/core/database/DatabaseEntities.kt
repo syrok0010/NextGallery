@@ -68,6 +68,18 @@ data class MediaIdentifierEntity(
 )
 
 @Entity(
+    tableName = "media_source_aliases",
+    primaryKeys = ["sourceKind", "sourceKey", "kind", "value"],
+    indices = [Index(value = ["kind", "value"])],
+)
+data class MediaSourceAliasEntity(
+    val sourceKind: MediaIdentifierKind,
+    val sourceKey: String,
+    val kind: MediaIdentifierKind,
+    val value: String,
+)
+
+@Entity(
     tableName = "media_identity_conflicts",
     primaryKeys = ["source", "sourceKey"],
 )
