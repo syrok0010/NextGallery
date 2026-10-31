@@ -3,12 +3,36 @@ package com.syrok0010.nextgallery.feature.auth
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.auth.LoginFlowPollDto
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 
-class NextcloudLoginRepository(private val auth: NextcloudAuthClient) : LoginGateway {
+class NextcloudLoginRepository(
+    private val auth: NextcloudAuthClient,
+    private val transport: NextcloudTransport,
+) : LoginGateway {
+    override suspend fun checkMemories(credentials: AccountCredentials): MemoriesCompatibility =
+        try {
+            MemoriesApiClient(transport) { credentials }
+                .describe()
+                .let { memoriesCompatibility(it.version) }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: retrofit2.HttpException) {
+            when (error.code()) {
+                404, 410 -> MemoriesCompatibility.Unavailable
+                else -> MemoriesCompatibility.CheckFailed
+            }
+        } catch (_: IOException) {
+            MemoriesCompatibility.NetworkError
+        } catch (_: kotlinx.serialization.SerializationException) {
+            MemoriesCompatibility.UnknownVersion
+        } catch (_: Exception) {
+            MemoriesCompatibility.CheckFailed
+        }
+
     override suspend fun startLogin(serverUrl: String): LoginSession {
         val normalizedServerUrl = NextcloudTransport.normalizeServerOrigin(serverUrl) + "/"
         val response = auth.startLogin(normalizedServerUrl)
