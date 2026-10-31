@@ -1,7 +1,11 @@
 package com.syrok0010.nextgallery.app.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
@@ -12,6 +16,7 @@ import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
+import com.syrok0010.nextgallery.feature.collection.SelectionAction
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
@@ -57,17 +62,31 @@ internal fun PhotosScreen(
         onViewerVisibilityChanged = onViewerVisibilityChanged,
         onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
-        onUpload = { items, onStarted ->
-            // The batch starts from the app root, which also asks for the notification permission.
-            uploads.submit(UploadBatch(uploadSelections(items)))
-            onStarted()
-        },
-        onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
-        onDelete = { items, onDone ->
-            deletions.prepare(items.map { it.mediaId })?.let { preparation ->
-                deleteRequest = DeleteRequest(preparation, onDone)
-            }
-        },
+        selectionActions = listOf(
+            SelectionAction(
+                icon = rememberVectorPainter(Icons.Default.Delete),
+                label = stringResource(R.string.delete_action),
+                isDestructive = true,
+            ) { items, onDone ->
+                deletions.prepare(items.map { it.mediaId })?.let { preparation ->
+                    deleteRequest = DeleteRequest(preparation, onDone)
+                }
+            },
+            SelectionAction(
+                icon = painterResource(R.drawable.ic_albums),
+                label = stringResource(R.string.album_add_action),
+            ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
+            SelectionAction(
+                icon = painterResource(R.drawable.ic_cloud),
+                label = stringResource(R.string.upload_action),
+                isPrimary = true,
+                blocksSelectionUntilDone = true,
+            ) { items, onDone ->
+                // The app root starts the batch and asks for the notification permission.
+                uploads.submit(UploadBatch(uploadSelections(items)))
+                onDone()
+            },
+        ),
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
