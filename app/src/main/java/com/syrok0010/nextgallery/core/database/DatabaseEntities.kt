@@ -52,19 +52,23 @@ data class IdentifiedMemoriesMedia(@Embedded val media: MemoriesMediaEntity, val
 enum class MediaIdentifierKind {
     MemoriesFile,
     LocalContent,
-    Auid,
-    Buid,
 }
 
+/**
+ * Exact source copy mapped to [mediaId]. [auid] and [buid] are the aliases the copy reports now:
+ * reindexing rewrites them, so an alias the copy no longer reports stops matching other copies.
+ */
 @Entity(
     tableName = "media_identifiers",
     primaryKeys = ["kind", "value"],
-    indices = [Index(value = ["mediaId"])],
+    indices = [Index(value = ["mediaId"]), Index(value = ["auid"]), Index(value = ["buid"])],
 )
 data class MediaIdentifierEntity(
     val kind: MediaIdentifierKind,
     val value: String,
     val mediaId: String,
+    val auid: String? = null,
+    val buid: String? = null,
 )
 
 @Entity(

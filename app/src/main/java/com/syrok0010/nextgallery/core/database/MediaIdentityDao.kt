@@ -17,6 +17,12 @@ interface MediaIdentityDao {
     @Query("SELECT * FROM media_identifiers WHERE mediaId IN (:mediaIds)")
     suspend fun identifiersForMediaIds(mediaIds: Collection<String>): List<MediaIdentifierEntity>
 
+    @Query("SELECT * FROM media_identifiers WHERE auid IN (:values)")
+    suspend fun identifiersByAuid(values: Collection<String>): List<MediaIdentifierEntity>
+
+    @Query("SELECT * FROM media_identifiers WHERE buid IN (:values)")
+    suspend fun identifiersByBuid(values: Collection<String>): List<MediaIdentifierEntity>
+
     @Query("SELECT * FROM media_identity_conflicts")
     suspend fun conflicts(): List<MediaIdentityConflictEntity>
 
@@ -37,18 +43,4 @@ interface MediaIdentityDao {
 
     @Query("DELETE FROM media_identifiers WHERE kind = :kind")
     suspend fun deleteIdentifiers(kind: MediaIdentifierKind)
-
-    @Query(
-        """
-        DELETE FROM media_identifiers
-        WHERE kind IN (:aliasKinds)
-            AND mediaId NOT IN (
-                SELECT mediaId FROM media_identifiers WHERE kind IN (:sourceKinds)
-            )
-        """,
-    )
-    suspend fun deleteAliasesWithoutSource(
-        aliasKinds: Collection<MediaIdentifierKind>,
-        sourceKinds: Collection<MediaIdentifierKind>,
-    )
 }

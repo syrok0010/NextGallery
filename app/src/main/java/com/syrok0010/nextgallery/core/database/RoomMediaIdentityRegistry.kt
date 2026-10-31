@@ -54,20 +54,26 @@ class RoomMediaIdentityRegistry(
                         dao.identifiers(kind, keys)
                     }
             }.associate { entity -> entity.toSourceIdentity() to MediaId(entity.mediaId) }
-        val requestedAliases = candidates.flatMapTo(mutableSetOf()) { it.aliases }
-        val aliasMediaIds = requestedAliases
-            .groupBy { it.identifierKind() }
+        // A copy in this batch is matched by the aliases it reports now, not by its stored ones.
+        val currentAliases = candidates.associate { it.source to it.aliases }
+        val aliasMediaIds = candidates
+            .flatMapTo(mutableSetOf()) { it.aliases }
+            .groupBy { it.kind }
             .flatMap { (kind, aliases) ->
                 aliases.map { it.value }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { values ->
-                    dao.identifiers(kind, values)
+                    dao.identifiersByAlias(kind, values).mapNotNull { entity ->
+                        val alias = MediaAlias(kind, checkNotNull(entity.alias(kind)))
+                        val current = currentAliases[entity.toSourceIdentity()]
+                        val stale = current != null && alias !in current
+                        (alias to MediaId(entity.mediaId)).takeUnless { stale }
+                    }
                 }
-            }.associate { entity -> entity.toAlias() to MediaId(entity.mediaId) }
+            }.toMap()
         val aliasedCopies = aliasMediaIds.values
             .map { it.value }
             .distinct()
             .chunked(QUERY_CHUNK_SIZE)
             .flatMap { mediaIds -> dao.identifiersForMediaIds(mediaIds) }
-            .filter { it.kind in SOURCE_IDENTIFIER_KINDS }
         val localMediaIds = aliasedCopies
             .filter { it.kind == MediaIdentifierKind.LocalContent }
             .mapTo(mutableSetOf()) { MediaId(it.mediaId) }
@@ -84,9 +90,6 @@ class RoomMediaIdentityRegistry(
         reconciliation.reassignments.forEach { (from, to) ->
             dao.reassignMediaId(from.value, to.value)
         }
-        val sourceIdentifiers = reconciliation.resolution.mediaIds.map { (source, mediaId) ->
-            MediaIdentifierEntity(source.identifierKind(), source.sourceKey, mediaId.value)
-        }
         val conflictsBySource = reconciliation.resolution.conflicts.associateBy { it.source }
         val resolvedCandidates = candidates.filterNot { it.source in conflictsBySource }
         val existingConflictSources = dao.conflicts().mapTo(mutableSetOf()) { entity ->
@@ -96,15 +99,18 @@ class RoomMediaIdentityRegistry(
             .map { it.source }
             .filter { it in existingConflictSources }
             .forEach { source -> dao.deleteConflict(source.source, source.sourceKey) }
-        val aliasIdentifiers = resolvedCandidates.flatMap { candidate ->
-            val mediaId = reconciliation.resolution.mediaIds.getValue(candidate.source)
-            candidate.aliases.map { alias ->
-                MediaIdentifierEntity(alias.identifierKind(), alias.value, mediaId.value)
-            }
-        }
+        // Conflicting aliases are not published for matching, so such a copy keeps none.
+        val aliasesBySource = resolvedCandidates.associate { it.source to it.aliases }
         dao.upsertIdentifiers(
-            (sourceIdentifiers + aliasIdentifiers).distinctBy { entity ->
-                entity.kind to entity.value
+            reconciliation.resolution.mediaIds.map { (source, mediaId) ->
+                val aliases = aliasesBySource[source].orEmpty()
+                MediaIdentifierEntity(
+                    kind = source.identifierKind(),
+                    value = source.sourceKey,
+                    mediaId = mediaId.value,
+                    auid = aliases.valueOf(MediaAliasKind.Auid),
+                    buid = aliases.valueOf(MediaAliasKind.Buid),
+                )
             },
         )
         if (conflictsBySource.isNotEmpty()) {
@@ -123,10 +129,6 @@ class RoomMediaIdentityRegistry(
         database.withTransaction {
             dao.deleteIdentifiers(source.identifierKind())
             dao.deleteConflicts(source)
-            dao.deleteAliasesWithoutSource(
-                aliasKinds = ALIAS_IDENTIFIER_KINDS,
-                sourceKinds = SOURCE_IDENTIFIER_KINDS,
-            )
         }
     }
 
@@ -143,12 +145,12 @@ class RoomMediaIdentityRegistry(
                 ?.mediaId
                 ?: return@withTransaction false
             val linkedKind = linked.identifierKind()
-            val previous = dao
+            val previousEntity = dao
                 .identifiers(
                     linkedKind,
                     listOf(linked.sourceKey),
                 ).singleOrNull()
-                ?.mediaId
+            val previous = previousEntity?.mediaId
             if (previous == mediaId) {
                 dao.deleteConflict(linked.source, linked.sourceKey)
                 return@withTransaction true
@@ -164,9 +166,7 @@ class RoomMediaIdentityRegistry(
             }
 
             if (previous != null && previous != mediaId) {
-                val previousSources = dao
-                    .identifiersForMediaIds(listOf(previous))
-                    .filter { it.kind in SOURCE_IDENTIFIER_KINDS }
+                val previousSources = dao.identifiersForMediaIds(listOf(previous))
                 // An unlinked server object may have been indexed between PUT and this follow-up.
                 // Merge that object, but never take a link away from another local object.
                 if (previousSources.any { it.kind != linkedKind || it.value != linked.sourceKey }) {
@@ -175,8 +175,12 @@ class RoomMediaIdentityRegistry(
                 dao.reassignMediaId(previous, mediaId)
             }
             dao.deleteConflict(linked.source, linked.sourceKey)
+            // The linked copy keeps the aliases it was indexed with.
             dao.upsertIdentifiers(
-                listOf(MediaIdentifierEntity(linkedKind, linked.sourceKey, mediaId)),
+                listOf(
+                    previousEntity?.copy(mediaId = mediaId)
+                        ?: MediaIdentifierEntity(linkedKind, linked.sourceKey, mediaId),
+                ),
             )
             true
         }
@@ -200,8 +204,8 @@ class RoomMediaIdentityRegistry(
         MediaIdentityConflictEntity(
             source = source.source,
             sourceKey = source.sourceKey,
-            auid = aliases.firstOrNull { it.kind == MediaAliasKind.Auid }?.value,
-            buid = aliases.firstOrNull { it.kind == MediaAliasKind.Buid }?.value,
+            auid = aliases.valueOf(MediaAliasKind.Auid),
+            buid = aliases.valueOf(MediaAliasKind.Buid),
             conflictingMediaIds = conflictingMediaIds
                 .map {
                     it.value
@@ -212,14 +216,6 @@ class RoomMediaIdentityRegistry(
     private companion object {
         const val QUERY_CHUNK_SIZE = 500
         const val CONFLICT_SEPARATOR = "\n"
-        val SOURCE_IDENTIFIER_KINDS = listOf(
-            MediaIdentifierKind.MemoriesFile,
-            MediaIdentifierKind.LocalContent,
-        )
-        val ALIAS_IDENTIFIER_KINDS = listOf(
-            MediaIdentifierKind.Auid,
-            MediaIdentifierKind.Buid,
-        )
     }
 }
 
@@ -231,36 +227,29 @@ private fun MediaSourceKind.identifierKind(): MediaIdentifierKind =
         MediaSourceKind.Local -> MediaIdentifierKind.LocalContent
     }
 
-private fun MediaAlias.identifierKind(): MediaIdentifierKind =
+private suspend fun MediaIdentityDao.identifiersByAlias(
+    kind: MediaAliasKind,
+    values: Collection<String>,
+): List<MediaIdentifierEntity> =
     when (kind) {
-        MediaAliasKind.Auid -> MediaIdentifierKind.Auid
-        MediaAliasKind.Buid -> MediaIdentifierKind.Buid
+        MediaAliasKind.Auid -> identifiersByAuid(values)
+        MediaAliasKind.Buid -> identifiersByBuid(values)
     }
+
+private fun MediaIdentifierEntity.alias(kind: MediaAliasKind): String? =
+    when (kind) {
+        MediaAliasKind.Auid -> auid
+        MediaAliasKind.Buid -> buid
+    }
+
+private fun Set<MediaAlias>.valueOf(kind: MediaAliasKind): String? =
+    firstOrNull { it.kind == kind }?.value
 
 private fun MediaIdentifierEntity.toSourceIdentity(): MediaSourceIdentity =
     MediaSourceIdentity(
         source = when (kind) {
             MediaIdentifierKind.MemoriesFile -> MediaSourceKind.Memories
-
             MediaIdentifierKind.LocalContent -> MediaSourceKind.Local
-
-            MediaIdentifierKind.Auid,
-            MediaIdentifierKind.Buid,
-            -> error("Alias identifier cannot be converted to a source identity")
         },
         sourceKey = value,
-    )
-
-private fun MediaIdentifierEntity.toAlias(): MediaAlias =
-    MediaAlias(
-        kind = when (kind) {
-            MediaIdentifierKind.Auid -> MediaAliasKind.Auid
-
-            MediaIdentifierKind.Buid -> MediaAliasKind.Buid
-
-            MediaIdentifierKind.MemoriesFile,
-            MediaIdentifierKind.LocalContent,
-            -> error("Source identifier cannot be converted to an alias")
-        },
-        value = value,
     )
