@@ -15,6 +15,7 @@ internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
     onLogout: () -> Unit,
     viewerVisible: Boolean = false,
+    statusVisible: Boolean = true,
     onRefresh: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     title: String? = null,
@@ -44,7 +45,12 @@ internal fun LibraryScreenScaffold(
                 onBack = onBack,
                 title = title,
                 statusActive = operations.active,
-                status = { OperationStatusPill(operations, visible = !viewerVisible) },
+                status = {
+                    OperationStatusPill(
+                        operations,
+                        visible = !viewerVisible && statusVisible,
+                    )
+                },
             )
         }
         Box(Modifier.weight(1f), content = content)

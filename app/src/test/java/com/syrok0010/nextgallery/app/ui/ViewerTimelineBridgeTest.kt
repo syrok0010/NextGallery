@@ -219,6 +219,63 @@ class ViewerTimelineBridgeTest {
         assertSame(initial, updated)
     }
 
+    @Test fun `successful deletion releases orphan regardless of publication order`() {
+        val controller = ViewerSequenceController()
+        val current = mediaItem("current", 22)
+        val next = mediaItem("next", 33)
+        controller.updateSlots(snapshot(current, next).slots, current.mediaId)
+        val survivingSlots = snapshot(next).slots
+        assertEquals(
+            listOf(current, next),
+            controller.updateSlots(survivingSlots, current.mediaId).items,
+        )
+        assertEquals(
+            listOf(next),
+            controller.updateSlots(survivingSlots, current.mediaId, setOf(current.mediaId)).items,
+        )
+
+        val other = ViewerSequenceController()
+        val oldSlots = snapshot(current, next).slots
+        other.updateSlots(oldSlots, current.mediaId)
+        assertEquals(
+            listOf(current, next),
+            other.updateSlots(oldSlots, current.mediaId, setOf(current.mediaId)).items,
+        )
+        assertEquals(
+            listOf(next),
+            other.updateSlots(survivingSlots, current.mediaId, setOf(current.mediaId)).items,
+        )
+    }
+
+    @Test fun `deleting the only object leaves an empty sequence`() {
+        val controller = ViewerSequenceController()
+        val current = mediaItem("current", 22)
+        controller.updateSlots(snapshot(current).slots, current.mediaId)
+        assertEquals(
+            emptyList<MediaItem>(),
+            controller.updateSlots(snapshot().slots, current.mediaId, setOf(current.mediaId)).items,
+        )
+    }
+
+    @Test fun `deletion waits for placeholder neighbor instead of dropping the open viewer`() {
+        val controller = ViewerSequenceController()
+        val current = mediaItem("current", 22)
+        val neighbor = mediaItem("neighbor", 33)
+        controller.updateSlots(snapshot(current, neighbor).slots, current.mediaId)
+        val waiting = controller.updateSlots(
+            snapshot(null).slots,
+            current.mediaId,
+            setOf(current.mediaId),
+        )
+        assertEquals(current, waiting.item(current.mediaId))
+        val loaded = controller.updateSlots(
+            snapshot(neighbor).slots,
+            current.mediaId,
+            setOf(current.mediaId),
+        )
+        assertEquals(listOf(neighbor), loaded.items)
+    }
+
     private fun snapshot(vararg mediaItems: MediaItem?): TimelineSnapshot {
         val slots = mediaItems.mapIndexed { index, mediaItem ->
             MediaSlot(
