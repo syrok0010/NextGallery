@@ -90,6 +90,19 @@ internal class OperationStatus(
     private val deletion: State<DeletionProgress?>,
     private val deletionResult: State<DeletionResult?>,
 ) {
+    /** Queued uploads count too; terminal results never block logout. */
+    val running: Boolean
+        get() = operationsRunning(upload.value, addition.value, deletion.value)
+
+    /** Re-read the sources: a write may have started before the menu could recompose. */
+    fun tryLogout(onLogout: () -> Unit): Boolean {
+        if (operationsRunning(uploads.activity.value, additions.state.value, deletions.progress.value)) {
+            return false
+        }
+        onLogout()
+        return true
+    }
+
     /** Reads snapshot state: a tile recomposes only when its own activity changes. */
     fun tileActivity(item: MediaItem): MediaTileActivity? {
         val fileId = item.remoteFileId
@@ -144,6 +157,12 @@ internal class OperationStatus(
         deletions.consume()
     }
 }
+
+private fun operationsRunning(
+    upload: UploadActivity?,
+    addition: AlbumAdditionState,
+    deletion: DeletionProgress?,
+): Boolean = upload != null || addition is AlbumAdditionState.Running || deletion != null
 
 @Composable
 internal fun rememberOperationStatus(
