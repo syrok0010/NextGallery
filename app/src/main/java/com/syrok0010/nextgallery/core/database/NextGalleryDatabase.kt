@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -19,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 abstract class NextGalleryDatabase : RoomDatabase() {
@@ -36,23 +34,8 @@ abstract class NextGalleryDatabase : RoomDatabase() {
                     context,
                     NextGalleryDatabase::class.java,
                     DATABASE_NAME,
-                ).addMigrations(MIGRATION_9_10)
-                .fallbackToDestructiveMigration(true)
+                ).fallbackToDestructiveMigration(true)
                 .build()
-
-        internal val MIGRATION_9_10 = object : Migration(9, 10) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """CREATE TABLE IF NOT EXISTS local_media_metadata (
-                        contentUri TEXT NOT NULL PRIMARY KEY,
-                        fingerprint TEXT NOT NULL,
-                        metadataJson TEXT NOT NULL,
-                        exifComplete INTEGER NOT NULL
-                    )
-                    """.trimIndent(),
-                )
-            }
-        }
 
         private const val DATABASE_NAME = "next-gallery.db"
     }
