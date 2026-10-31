@@ -155,4 +155,11 @@
         <item quantity="many">%1$d не загружены: имя занято другим файлом</item>
         <item quantity="other">%1$d не загружены: имя занято другим файлом</item>
     </plurals>
+    <string name="status_checking_memories">Проверяю версию Memories…</string>
+    <string name="action_retry_memories_check">Повторить проверку</string>
+    <string name="error_memories_too_old">Установлена Memories %1$s. Для входа нужна версия 10 или новее. Попросите администратора обновить Memories и повторите проверку.</string>
+    <string name="error_memories_unavailable">Memories недоступен на этом сервере. Попросите администратора установить или включить Memories версии 10 или новее, затем повторите проверку.</string>
+    <string name="error_memories_version_unknown">Сервер не сообщил корректную версию Memories. Для входа нужна версия 10 или новее. Проверьте настройку Memories и повторите проверку.</string>
+    <string name="error_memories_check_network">Не удалось проверить Memories из-за ошибки сети. Проверьте подключение и повторите проверку.</string>
+    <string name="error_memories_check_failed">Не удалось проверить Memories. Проверьте доступ к серверу и повторите проверку. Если доступ отозван, выйдите и войдите заново.</string>
 </resources>
