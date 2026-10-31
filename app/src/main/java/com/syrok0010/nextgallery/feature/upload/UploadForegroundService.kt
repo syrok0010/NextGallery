@@ -193,7 +193,7 @@ class UploadForegroundService : Service() {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
         val config = transport.memoriesApi(credentials).config()
-        val destination = config.timelinePath?.takeIf { it.isNotBlank() }
+        val destination = timelinePaths(config.timelinePath).firstOrNull()
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
             val uploaded = put(
