@@ -200,6 +200,72 @@ class UploadQueueTest {
             }
         }
 
+    @Test fun `foreground refusal finishes released batches and permits another upload`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+                queue.submit(ids("a"))
+                queue.submit(ids("b"))
+                queue.release()
+                var attempts = 0
+
+                val entered = queue.enterForeground("foreground refused") {
+                    attempts++
+                    throw IllegalStateException("dataSync quota exhausted")
+                }
+
+                assertFalse(entered)
+                assertEquals(1, attempts)
+                assertNull(queue.next())
+                assertTrue(queue.waiting.value.isEmpty())
+                assertNull("a refused upload must not keep logout blocked", queue.activity.value)
+                assertEquals(
+                    UploadResult(0, 2, failures = listOf("foreground refused")),
+                    queue.result.value,
+                )
+                queue.consumeResult()
+                queue.submit(ids("a"))
+                queue.release()
+                assertTrue(queue.enterForeground("foreground refused") { attempts++ })
+                assertEquals(2, attempts)
+                assertEquals(files("a"), queue.next()?.files)
+                assertNotNull(queue.activity.value)
+                assertNull(queue.result.value)
+            } finally {
+                scope.cancel()
+            }
+        }
+
+    @Test fun `foreground permission refusal preserves newer waiting work and previous result`() =
+        runBlocking {
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            try {
+                val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+                queue.passFinished(UploadResult(1, 1))
+                queue.submit(ids("a", "b"))
+                queue.release()
+                queue.submit(ids("c"))
+
+                assertFalse(
+                    queue.enterForeground("foreground refused") { throw SecurityException() },
+                )
+
+                assertNull(queue.next())
+                assertEquals(listOf(files("c")), queue.waiting.value.map { it.files })
+                assertEquals(setOf("content://media/c"), queue.activity.value?.pending)
+                assertEquals(
+                    UploadResult(1, 3, failures = listOf("foreground refused")),
+                    queue.result.value,
+                )
+                queue.release()
+                assertTrue(queue.enterForeground("foreground refused") {})
+                assertEquals(files("c"), queue.next()?.files)
+            } finally {
+                scope.cancel()
+            }
+        }
+
     private fun ids(vararg names: String) = names.map(::MediaId)
 
     private fun files(vararg names: String) =
