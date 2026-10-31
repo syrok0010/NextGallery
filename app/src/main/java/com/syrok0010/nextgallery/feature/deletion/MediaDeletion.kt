@@ -109,7 +109,14 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
  * Cloud copies queued or being deleted. [total] and [processed] count files of all deletions
  * started since the queue was last empty, so a queued deletion extends the same progress.
  */
-internal data class DeletionProgress(val fileIds: Set<Long>, val total: Int, val processed: Int)
+internal data class DeletionProgress(
+    /** Number of unfinished batches referencing each file; batches may overlap. */
+    val pendingFiles: Map<Long, Int>,
+    val total: Int,
+    val processed: Int,
+) {
+    val fileIds: Set<Long> get() = pendingFiles.keys
+}
 
 /** Results of deletions not shown yet; a later deletion adds to them. */
 internal data class DeletionResult(
@@ -195,11 +202,13 @@ internal class MediaDeletionRepository(
     /** Requests run one after another; a new one never cancels a deletion already started. */
     fun delete(targets: DeletionTargets) {
         val previous = job
-        val fileIds = targets.fileIds
+        val fileIds = targets.fileIds.distinct()
         if (fileIds.isNotEmpty()) {
             mutableProgress.update { current ->
+                val pending = current?.pendingFiles.orEmpty().toMutableMap()
+                fileIds.forEach { pending[it] = (pending[it] ?: 0) + 1 }
                 DeletionProgress(
-                    fileIds = current?.fileIds.orEmpty() + fileIds,
+                    pendingFiles = pending,
                     total = (current?.total ?: 0) + fileIds.size,
                     processed = current?.processed ?: 0,
                 )
@@ -244,11 +253,15 @@ internal class MediaDeletionRepository(
             )
             mutableResult.update { it?.plus(done) ?: done }
             mutableProgress.update { current ->
-                // The ids leave only now: the tiles stay marked until the result is in.
-                current
-                    ?.copy(
-                        fileIds = current.fileIds - fileIds.toSet(),
-                    )?.takeIf { it.fileIds.isNotEmpty() }
+                // Keep a file marked while any queued batch still references it.
+                current?.let {
+                    val pending = it.pendingFiles.toMutableMap()
+                    fileIds.forEach { fileId ->
+                        val remaining = pending.getValue(fileId) - 1
+                        if (remaining == 0) pending.remove(fileId) else pending[fileId] = remaining
+                    }
+                    it.copy(pendingFiles = pending).takeIf { pending.isNotEmpty() }
+                }
             }
             if (!done.failed) {
                 mutableRemovedMediaIds.update { ids ->

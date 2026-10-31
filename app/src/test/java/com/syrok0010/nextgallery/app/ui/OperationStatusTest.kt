@@ -11,12 +11,22 @@ import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.upload.*
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
 import org.junit.Test
@@ -96,14 +106,73 @@ class OperationStatusTest {
         fixture.assertAllowed()
     }
 
-    private class Fixture(scope: CoroutineScope) {
-        private val credentials = AccountCredentials("https://example.com", "test", "secret", "test")
+    @Test fun `repeated cloud deletion blocks logout until the second batch succeeds`() =
+        checkRepeatedDeletion(secondResponse = 204)
+
+    @Test fun `repeated cloud deletion blocks logout until the second batch fails`() =
+        checkRepeatedDeletion(secondResponse = 500)
+
+    private fun checkRepeatedDeletion(secondResponse: Int) = runBlocking {
+        val entered = List(2) { CompletableDeferred<Unit>() }
+        val release = List(2) { CountDownLatch(1) }
+        val deletes = AtomicInteger()
+        MemoriesAlbumWriterTest.Fixture { request ->
+            if (request.method == "DELETE") {
+                val index = deletes.getAndIncrement()
+                entered[index].complete(Unit)
+                check(release[index].await(5, TimeUnit.SECONDS)) { "DELETE was not released" }
+                (if (index == 0) 204 else secondResponse) to ""
+            } else {
+                200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+            }
+        }.use { server ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+            try {
+                val fixture = Fixture(scope, server.credentials, server.writerTransport)
+                val targets = DeletionTargets(emptyList(), listOf(1))
+                fixture.deletions.delete(targets)
+                withTimeout(5_000) { entered[0].await() }
+                fixture.deletions.delete(targets)
+                fixture.sync()
+                fixture.assertBlocked()
+                release[0].countDown()
+                withTimeout(5_000) { entered[1].await() }
+
+                // The first batch is done, while the second DELETE is still on the wire.
+                var signedOut = false
+                assertFalse(fixture.status.tryLogout { signedOut = true })
+                assertFalse(signedOut)
+                fixture.sync()
+                fixture.assertBlocked()
+                assertEquals(setOf(1L), fixture.deletions.progress.value?.fileIds)
+                assertEquals(2, fixture.deletions.progress.value?.total)
+                assertEquals(1, fixture.deletions.progress.value?.processed)
+
+                release[1].countDown()
+                withTimeout(5_000) { fixture.deletions.progress.first { it == null } }
+                fixture.sync()
+                fixture.assertAllowed()
+                assertEquals(
+                    CloudDeleteResult(if (secondResponse == 204) 2 else 1, if (secondResponse == 204) 0 else 1),
+                    fixture.deletions.result.value?.cloud,
+                )
+            } finally {
+                release.forEach { it.countDown() }
+                scope.cancel()
+            }
+        }
+    }
+
+    private class Fixture(
+        scope: CoroutineScope,
+        private val credentials: AccountCredentials = AccountCredentials("https://example.com", "test", "secret", "test"),
+        transport: NextcloudTransport = NextcloudTransport(Json),
+    ) {
         private val sessions = SessionStore(object : CredentialsStore {
             override fun load() = credentials
             override fun save(credentials: AccountCredentials) = Unit
             override fun clear() = Unit
         })
-        private val transport = NextcloudTransport(Json)
         private val files = MemoriesFiles(transport)
         val uploads = UploadQueue(sessions, scope)
         private val catalog = AlbumCatalogRepository(
