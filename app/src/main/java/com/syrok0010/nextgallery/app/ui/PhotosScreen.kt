@@ -17,6 +17,7 @@ import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
+import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
@@ -42,8 +43,9 @@ internal fun PhotosScreen(
     val operations = rememberOperationStatus(uploads, additions, deletions)
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
-    var deleteRequest by remember { mutableStateOf<DeleteRequest?>(null) }
-    val delete = rememberDeleteAction(deletions::delete)
+    var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
+    val selection = rememberMediaSelection()
+    val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -62,14 +64,15 @@ internal fun PhotosScreen(
         onViewerVisibilityChanged = onViewerVisibilityChanged,
         onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
+        selection = selection,
         selectionActions = listOf(
             SelectionAction(
                 icon = rememberVectorPainter(Icons.Default.Delete),
                 label = stringResource(R.string.delete_action),
                 isDestructive = true,
-            ) { items, onDone ->
+            ) { items, _ ->
                 deletions.prepare(items.map { it.mediaId })?.let { preparation ->
-                    deleteRequest = DeleteRequest(preparation, onDone)
+                    deleteRequest = preparation
                 }
             },
             SelectionAction(
@@ -98,13 +101,13 @@ internal fun PhotosScreen(
             content()
         }
     }
-    deleteRequest?.let { (preparation, onDone) ->
+    deleteRequest?.let { preparation ->
         DeleteSelectionDialog(
             plan = preparation.plan,
             onDismiss = { deleteRequest = null },
             onConfirm = { scope ->
                 deleteRequest = null
-                delete(preparation.confirm(scope), onDone)
+                delete(preparation.confirm(scope))
             },
         )
     }
@@ -122,6 +125,3 @@ internal fun PhotosScreen(
         )
     }
 }
-
-/** [onDone] ends selection mode; it runs only once the deletion is confirmed. */
-private data class DeleteRequest(val preparation: DeletionPreparation, val onDone: () -> Unit)
