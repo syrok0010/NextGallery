@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import okhttp3.HttpUrl
 import okhttp3.Request
+import retrofit2.HttpException
 
 /** Owner and collection name of a Photos album addressed by Memories `cluster_id`. */
 internal data class AlbumAddress(val owner: String, val name: String) {
@@ -27,7 +28,15 @@ internal data class AlbumAddress(val owner: String, val name: String) {
     }
 }
 
-internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val failed: Int)
+internal data class AlbumAddResult(
+    val added: Int,
+    val alreadyPresent: Int,
+    val failed: Int,
+    /** image/info returned 404: Memories may not have indexed these files yet. */
+    val processing: Int = 0,
+) {
+    val hasFailures: Boolean get() = failed > 0 || processing > 0
+}
 
 internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
@@ -86,7 +95,14 @@ internal class MemoriesAlbumWriter(
                     async {
                         permits.withPermit {
                             try {
-                                val file = files.file(credentials, fileId)
+                                val file = try {
+                                    files.file(credentials, fileId)
+                                } catch (error: HttpException) {
+                                    // Only a lookup 404 indicates possible pending indexing;
+                                    // a COPY 404 is still a regular write failure.
+                                    if (error.code() == 404) return@withPermit null
+                                    throw error
+                                }
                                 copy(
                                     credentials,
                                     source = fileUrl(
@@ -117,6 +133,7 @@ internal class MemoriesAlbumWriter(
                 it == AlbumCopyOutcome.Failed
             } +
                 if (confirmed) 0 else present,
+            processing = outcomes.count { it == null },
         )
     }
 

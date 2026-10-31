@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -76,6 +78,39 @@ class MemoriesAlbumWriterTest {
                 URLDecoder.decode(copy.headers.getValue("destination").replace("+", "%2B"), "UTF-8"),
             )
             assertFalse(copy.headers.getValue("destination").contains(' '))
+        }
+    }
+
+    @Test fun `info 404 explains server processing instead of generic failure`() = runBlocking {
+        Fixture { 404 to "" }.use { fixture ->
+            val result = fixture.writer.add(fixture.credentials, AlbumAddress("anna", "Лето"), listOf(7))
+            assertEquals(0, result.failed)
+            val message = albumAdditionMessage(AlbumAdditionState.Done("Лето", result, localUploads = 0))!!
+            assertEquals(1, result.processing)
+            assertTrue(result.hasFailures)
+            assertEquals(pluralText(R.plurals.album_add_done_processing, 1, 1), message[1])
+            assertEquals(1, fixture.requests.size)
+            assertEquals("/apps/memories/api/image/info/7", fixture.requests.single().target)
+        }
+    }
+
+    @Test fun `only lookup 404 is processing while other errors preserve partial results`() = runBlocking {
+        Fixture { request ->
+            when {
+                request.target == "/apps/memories/api/image/info/1" -> 404 to ""
+                request.target == "/apps/memories/api/image/info/2" -> 500 to ""
+                request.target.startsWith("/apps/memories/api/image/info/") -> {
+                    val id = request.target.substringAfterLast('/')
+                    200 to """{"filename":"/Photos/$id.jpg","basename":"$id.jpg"}"""
+                }
+                request.decodedTarget.endsWith("/3.jpg") -> 404 to ""
+                else -> 201 to ""
+            }
+        }.use { fixture ->
+            assertEquals(
+                AlbumAddResult(added = 1, alreadyPresent = 0, failed = 2, processing = 1),
+                fixture.writer.add(fixture.credentials, AlbumAddress("anna", "Лето"), listOf(1, 2, 3, 4)),
+            )
         }
     }
 
