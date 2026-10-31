@@ -24,6 +24,7 @@ class RoomMediaIdentityRegistry(
         if (candidates.isEmpty()) return MediaIdentityResolution(emptyMap(), emptyList())
 
         return database.withTransaction {
+            removeObsoleteAliases(candidates)
             val known = lookupKnownIdentities(candidates)
             val reconciliation = reconcileMediaIdentities(
                 candidates = candidates,
@@ -36,6 +37,25 @@ class RoomMediaIdentityRegistry(
 
             persistReconciliation(candidates, reconciliation)
             reconciliation.resolution
+        }
+    }
+
+    private suspend fun removeObsoleteAliases(candidates: List<MediaIdentityCandidate>) {
+        val currentAliases = candidates.associate { candidate ->
+            (candidate.source.identifierKind() to candidate.source.sourceKey) to candidate.aliases
+        }
+        candidates.groupBy { it.source.identifierKind() }.forEach { (kind, sourceCandidates) ->
+            sourceCandidates
+                .map { it.source.sourceKey }
+                .distinct()
+                .chunked(
+                    QUERY_CHUNK_SIZE,
+                ).forEach { keys ->
+                    val obsolete = dao.aliasesForSources(kind, keys).filter { alias ->
+                        alias.toAlias() !in currentAliases.getValue(kind to alias.sourceKey)
+                    }
+                    dao.deleteAliases(obsolete)
+                }
         }
     }
 
@@ -59,7 +79,7 @@ class RoomMediaIdentityRegistry(
             .groupBy { it.identifierKind() }
             .flatMap { (kind, aliases) ->
                 aliases.map { it.value }.distinct().chunked(QUERY_CHUNK_SIZE).flatMap { values ->
-                    dao.identifiers(kind, values)
+                    dao.aliases(kind, values)
                 }
             }.associate { entity -> entity.toAlias() to MediaId(entity.mediaId) }
         val aliasedCopies = aliasMediaIds.values
@@ -97,16 +117,17 @@ class RoomMediaIdentityRegistry(
             .filter { it in existingConflictSources }
             .forEach { source -> dao.deleteConflict(source.source, source.sourceKey) }
         val aliasIdentifiers = resolvedCandidates.flatMap { candidate ->
-            val mediaId = reconciliation.resolution.mediaIds.getValue(candidate.source)
             candidate.aliases.map { alias ->
-                MediaIdentifierEntity(alias.identifierKind(), alias.value, mediaId.value)
+                MediaSourceAliasEntity(
+                    candidate.source.identifierKind(),
+                    candidate.source.sourceKey,
+                    alias.identifierKind(),
+                    alias.value,
+                )
             }
         }
-        dao.upsertIdentifiers(
-            (sourceIdentifiers + aliasIdentifiers).distinctBy { entity ->
-                entity.kind to entity.value
-            },
-        )
+        dao.upsertIdentifiers(sourceIdentifiers)
+        dao.upsertAliases(aliasIdentifiers)
         if (conflictsBySource.isNotEmpty()) {
             dao.upsertConflicts(conflictsBySource.values.map { it.toEntity() })
         }
@@ -121,12 +142,9 @@ class RoomMediaIdentityRegistry(
 
     override suspend fun removeSource(source: MediaSourceKind) {
         database.withTransaction {
+            dao.deleteAliases(source.identifierKind())
             dao.deleteIdentifiers(source.identifierKind())
             dao.deleteConflicts(source)
-            dao.deleteAliasesWithoutSource(
-                aliasKinds = ALIAS_IDENTIFIER_KINDS,
-                sourceKinds = SOURCE_IDENTIFIER_KINDS,
-            )
         }
     }
 
@@ -216,10 +234,6 @@ class RoomMediaIdentityRegistry(
             MediaIdentifierKind.MemoriesFile,
             MediaIdentifierKind.LocalContent,
         )
-        val ALIAS_IDENTIFIER_KINDS = listOf(
-            MediaIdentifierKind.Auid,
-            MediaIdentifierKind.Buid,
-        )
     }
 }
 
@@ -261,6 +275,16 @@ private fun MediaIdentifierEntity.toAlias(): MediaAlias =
             MediaIdentifierKind.MemoriesFile,
             MediaIdentifierKind.LocalContent,
             -> error("Source identifier cannot be converted to an alias")
+        },
+        value = value,
+    )
+
+private fun MediaSourceAliasEntity.toAlias(): MediaAlias =
+    MediaAlias(
+        kind = when (kind) {
+            MediaIdentifierKind.Auid -> MediaAliasKind.Auid
+            MediaIdentifierKind.Buid -> MediaAliasKind.Buid
+            else -> error("Source identifier cannot be converted to an alias")
         },
         value = value,
     )
