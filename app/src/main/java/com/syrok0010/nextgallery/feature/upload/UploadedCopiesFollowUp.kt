@@ -9,9 +9,8 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
- * Links an uploaded phone file and its new server file as one media object. Memories 10.1 does not
- * return AUID/BUID, so the server copy cannot be matched later; the upload is the only moment both
- * identities are known together. One instance serves one upload batch.
+ * Links a phone file and its uploaded or already existing server copy as one media object.
+ * The explicit link does not depend on matching AUID/BUID; upload knows both source identities. One instance serves one upload batch.
  */
 internal class UploadedCopiesFollowUp(
     private val identities: MediaIdentityRegistry,
