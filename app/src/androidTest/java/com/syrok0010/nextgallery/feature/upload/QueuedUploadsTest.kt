@@ -166,6 +166,49 @@ class QueuedUploadsTest {
         }
     }
 
+    @Test
+    fun foregroundEntryRefusalEndsTheOperationWithoutAutomaticRetries() {
+        notificationsGranted = true
+        var refuse = true
+        val screen = Screen()
+        rule.runOnUiThread { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalActivityResultRegistryOwner provides owner,
+                LocalContext provides permissionContext,
+                LocalLifecycleOwner provides screen,
+            ) {
+                QueuedUploads(queue) {
+                    starts++
+                    // onStartCommand runs after startForegroundService has already returned.
+                }
+            }
+        }
+        submit(BATCH + OTHER)
+        rule.runOnIdle {
+            assertEquals(1, starts)
+            assertEquals(false, queue.enterForeground("Android refused foreground") {
+                if (refuse) throw IllegalStateException("dataSync quota exhausted")
+            })
+            assertNull(queue.next())
+            assertNull(queue.activity.value)
+            assertEquals(3, queue.result.value?.files)
+            assertEquals(listOf("Android refused foreground"), queue.result.value?.failures)
+        }
+        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.CREATED }
+        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
+        rule.runOnIdle { assertEquals("failed work must not be retried automatically", 1, starts) }
+        refuse = false
+        submit(BATCH)
+        rule.runOnIdle {
+            assertEquals(2, starts)
+            assertEquals(true, queue.enterForeground("Android refused foreground") {
+                if (refuse) throw IllegalStateException("dataSync quota exhausted")
+            })
+            assertEquals(BATCH.files, queue.next()?.files)
+        }
+    }
+
     private fun showQueuedUploads() {
         rule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner, LocalContext provides permissionContext) {
