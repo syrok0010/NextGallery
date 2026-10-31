@@ -23,7 +23,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,25 +43,24 @@ import kotlinx.serialization.json.Json
 @Composable
 internal fun rememberDeleteAction(
     onConfirmed: (DeletionTargets) -> Unit,
-): (DeletionTargets, onStarted: () -> Unit) -> Unit {
+    onStarted: () -> Unit,
+): (DeletionTargets) -> Unit {
     val context = LocalContext.current
     val confirm by rememberUpdatedState(onConfirmed)
+    val started by rememberUpdatedState(onStarted)
     // Survives activity recreation while the system dialog is open.
     var pendingPayload by rememberSaveable { mutableStateOf<String?>(null) }
-    var onStarted by remember { mutableStateOf<(() -> Unit)?>(null) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
         val payload = pendingPayload
         pendingPayload = null
-        val started = onStarted
-        onStarted = null
         if (payload != null && result.resultCode == Activity.RESULT_OK) {
             confirm(Json.decodeFromString<DeletionTargets>(payload))
-            started?.invoke()
+            started()
         }
     }
-    return { targets, started ->
+    return { targets ->
         when {
             pendingPayload != null -> Unit
 
@@ -86,12 +84,10 @@ internal fun rememberDeleteAction(
                     true,
                 )
                 pendingPayload = Json.encodeToString(targets)
-                onStarted = started
                 launcher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (_: IllegalArgumentException) {
                 // MediaStore rejects items that disappeared or are not media rows.
                 pendingPayload = null
-                onStarted = null
                 Toast.makeText(context, R.string.delete_phone_failed, Toast.LENGTH_LONG).show()
             }
         }
