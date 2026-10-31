@@ -82,9 +82,18 @@ class ApplicationLocaleTest {
         val application = ApplicationProvider.getApplicationContext<NextGalleryApplication>()
         val manager = application.getSystemService(LocaleManager::class.java)
         val previous = manager.applicationLocales
+        val preferences = application.getSharedPreferences("app_language", Context.MODE_PRIVATE)
+        val previousInitialized = if (preferences.contains("initialized")) {
+            preferences.getBoolean("initialized", false)
+        } else {
+            null
+        }
         try {
-            // A fresh installation starts with the explicitly selected Russian default.
-            assertEquals("ru", previous[0].language)
+            // Prepare initialization explicitly, regardless of a previous run's language choice.
+            preferences.edit().remove("initialized").commit()
+            manager.applicationLocales = LocaleList.getEmptyLocaleList()
+            application.initializeAppLanguage()
+            assertEquals("ru", manager.applicationLocales.toLanguageTags())
             manager.applicationLocales = LocaleList.getEmptyLocaleList()
             application.initializeAppLanguage()
             assertEquals("", manager.applicationLocales.toLanguageTags())
@@ -100,6 +109,15 @@ class ApplicationLocaleTest {
             assertEquals("ru-RU", manager.applicationLocales.toLanguageTags())
         } finally {
             manager.applicationLocales = previous
+            preferences
+                .edit()
+                .apply {
+                    if (previousInitialized == null) {
+                        remove("initialized")
+                    } else {
+                        putBoolean("initialized", previousInitialized)
+                    }
+                }.commit()
         }
     }
 
