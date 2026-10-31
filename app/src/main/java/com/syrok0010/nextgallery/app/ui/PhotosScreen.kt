@@ -84,7 +84,7 @@ internal fun PhotosScreen(
             if (operations.active) {
                 OperationStatusPill(
                     operations,
-                    visible = visible && albumRequest == null && deleteRequest == null,
+                    visible = visible && albumRequest == null && deleteRequest == null && !delete.awaitingConfirmation,
                 )
             }
         },
@@ -109,6 +109,7 @@ internal fun PhotosScreen(
             onLogout,
             viewerVisible = viewerVisible,
             operations = operations,
+            statusVisible = albumRequest == null && deleteRequest == null && !delete.awaitingConfirmation,
         ) {
             content()
         }

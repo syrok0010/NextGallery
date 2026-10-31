@@ -18,7 +18,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
-import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 
 /** Shared grid, scroll restoration and viewer transitions; callers own loading and chrome. */
 @Composable
@@ -41,16 +40,15 @@ internal fun MediaCollectionScreen(
 ) {
     val transition = rememberViewerTransitionCoordinator()
     val gridState = rememberLazyGridState()
-    val sequence = rememberViewerSequence(slots, transition.viewerMediaId, completedDeletions)
-    var previousSequence by remember { mutableStateOf(ViewerSequence.Empty) }
+    val viewer = rememberViewerSequenceState(slots, transition.viewerMediaId, completedDeletions)
+    val sequence = viewer.sequence
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.let { current ->
-        if (current in sequence) current else {
-            val page = previousSequence.pageIndex(current) ?: 0
-            sequence.items.getOrNull(page.coerceAtMost(sequence.items.lastIndex))?.mediaId
-        }
+        current.takeIf { it in sequence } ?: viewer.replacementMediaId
     }
-    SideEffect { previousSequence = sequence }
+    LaunchedEffect(viewer.loadingRange) {
+        viewer.loadingRange?.let(onViewerRange)
+    }
     LaunchedEffect(viewerId) {
         if (viewerId == null) {
             transition.viewerMediaId?.let { transition.close(it, false) }
@@ -107,7 +105,10 @@ internal fun MediaCollectionScreen(
         if (viewerId != null) MediaDetailScreen(
             initialMediaId = viewerId,
             sequence = sequence,
-            actions = { item -> ViewerSelectionActions(viewerActions, item) },
+            replacementMediaId = viewer.replacementMediaId,
+            actions = { item ->
+                ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null)
+            },
             status = viewerStatus,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },

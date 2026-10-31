@@ -13,12 +13,16 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 
 /** The same action consumes a single current object without changing the grid selection. */
 @Composable
-internal fun ViewerSelectionActions(actions: List<SelectionAction>, item: MediaItem) {
+internal fun ViewerSelectionActions(
+    actions: List<SelectionAction>,
+    item: MediaItem,
+    enabled: Boolean = true,
+) {
     var locked by remember(item.mediaId) { mutableStateOf(false) }
     Row {
         actions.forEach { action ->
             IconButton(
-                enabled = !locked,
+                enabled = enabled && !locked,
                 onClick = {
                     locked = action.blocksSelectionUntilDone
                     action.perform(listOf(item)) { locked = false }

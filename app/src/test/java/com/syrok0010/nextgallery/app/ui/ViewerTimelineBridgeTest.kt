@@ -257,6 +257,25 @@ class ViewerTimelineBridgeTest {
         )
     }
 
+    @Test fun `deletion waits for placeholder neighbor instead of dropping the open viewer`() {
+        val controller = ViewerSequenceController()
+        val current = mediaItem("current", 22)
+        val neighbor = mediaItem("neighbor", 33)
+        controller.updateSlots(snapshot(current, neighbor).slots, current.mediaId)
+        val waiting = controller.updateSlots(
+            snapshot(null).slots,
+            current.mediaId,
+            setOf(current.mediaId),
+        )
+        assertEquals(current, waiting.item(current.mediaId))
+        val loaded = controller.updateSlots(
+            snapshot(neighbor).slots,
+            current.mediaId,
+            setOf(current.mediaId),
+        )
+        assertEquals(listOf(neighbor), loaded.items)
+    }
+
     private fun snapshot(vararg mediaItems: MediaItem?): TimelineSnapshot {
         val slots = mediaItems.mapIndexed { index, mediaItem ->
             MediaSlot(
