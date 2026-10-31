@@ -18,6 +18,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
 import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
+import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
@@ -36,9 +37,11 @@ internal fun PhotosScreen(
     additions: AlbumAdditions = koinInject(),
     uploads: UploadQueue = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
+    cloudTrash: CloudTrashAvailability = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val operations = rememberOperationStatus()
+    val cloudTrashAvailable by cloudTrash.available.collectAsStateWithLifecycle()
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
@@ -98,6 +101,7 @@ internal fun PhotosScreen(
     deleteRequest?.let { preparation ->
         DeleteSelectionDialog(
             plan = preparation.plan,
+            cloudTrashAvailable = cloudTrashAvailable,
             onDismiss = { deleteRequest = null },
             onConfirm = { scope ->
                 deleteRequest = null

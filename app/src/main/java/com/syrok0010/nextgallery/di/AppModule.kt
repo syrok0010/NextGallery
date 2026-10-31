@@ -33,9 +33,11 @@ import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
+import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
 import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
+import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
@@ -86,6 +88,14 @@ val appModule = module {
     } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
+    single { NextcloudTrashBin(get()) }
+    single {
+        CloudTrashAvailability(
+            get(),
+            get(named("libraryScope")),
+            get<NextcloudTrashBin>()::available,
+        )
+    }
     single {
         MediaDeletionRepository(
             get(),
