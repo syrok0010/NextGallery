@@ -23,6 +23,19 @@ interface MediaIdentityDao {
     @Query("SELECT * FROM media_identifiers WHERE buid IN (:values)")
     suspend fun identifiersByBuid(values: Collection<String>): List<MediaIdentifierEntity>
 
+    @Query(
+        "SELECT sourceKey FROM media_identifiers " +
+            "WHERE source = :source AND (auid IS NOT NULL OR buid IS NOT NULL)",
+    )
+    suspend fun sourceKeysWithAliases(source: MediaSourceKind): List<String>
+
+    /** The copies keep their exact identity; only their aliases stop matching. */
+    @Query(
+        "UPDATE media_identifiers SET auid = NULL, buid = NULL " +
+            "WHERE source = :source AND sourceKey IN (:keys)",
+    )
+    suspend fun clearAliases(source: MediaSourceKind, keys: Collection<String>)
+
     @Query("SELECT * FROM media_identity_conflicts")
     suspend fun conflicts(): List<MediaIdentityConflictEntity>
 

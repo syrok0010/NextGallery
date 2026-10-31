@@ -37,7 +37,7 @@ class MemoriesRepository(
             .distinctBy { it.fileid }
         val preloadedItems = preloadedPhotoDtos.toIdentifiedMediaItems()
         val loadedDayIds = dayDtos
-            .filter { it.count == 0 || it.detail.isNotEmpty() }
+            .filter { it.detail.size == it.count }
             .mapTo(mutableSetOf()) { it.dayid }
 
         val snapshot = TimelineSnapshotAssembler.assemble(
