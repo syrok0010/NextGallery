@@ -33,13 +33,19 @@ internal fun MediaDetailScreen(
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
+    replacementMediaId: MediaId? = null,
+    actions: @Composable (MediaItem) -> Unit = {},
+    status: @Composable (visible: Boolean) -> Unit = {},
 ) {
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    val currentItem = items.getOrNull(pagerState.currentPage)
+    val currentItem = replacementMediaId?.let(sequence::item) ?: items.getOrNull(pagerState.currentPage)
+    LaunchedEffect(replacementMediaId) {
+        replacementMediaId?.let(sequence::pageIndex)?.let { pagerState.scrollToPage(it) }
+    }
     val playback = rememberViewerPlaybackState(currentItem)
     val videoFullscreen = playback.current?.state?.isFullscreen == true
     LaunchedEffect(videoFullscreen) { chromeVisible = true }
@@ -57,7 +63,9 @@ internal fun MediaDetailScreen(
 
     SideEffect(pagerState.currentPage, items) {
         val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect
-        onCurrentItemChange(item)
+        if (replacementMediaId == null || item.mediaId == replacementMediaId) {
+            onCurrentItemChange(item)
+        }
 
     }
 
@@ -112,6 +120,8 @@ internal fun MediaDetailScreen(
                 item = currentItem,
                 visible = chromeVisible,
                 playback = playback.current,
+                actions = { actions(currentItem) },
+                status = status,
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(

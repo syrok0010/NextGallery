@@ -20,6 +20,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
+import com.syrok0010.nextgallery.app.ui.OperationStatusPill
+import com.syrok0010.nextgallery.app.ui.rememberOperationStatus
+import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.Rule
 import org.junit.Test
 
@@ -45,6 +57,12 @@ class DeleteActionRestorationTest {
                 },
             ),
         )
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val uploads = UploadQueue(SessionStore(object : CredentialsStore {
+            override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
+            override fun save(credentials: AccountCredentials) = Unit
+            override fun clear() = Unit
+        }), scope)
         try {
             val registry = TrashRegistry()
             val owner = object : ActivityResultRegistryOwner {
@@ -52,19 +70,22 @@ class DeleteActionRestorationTest {
             }
             val restoration = StateRestorationTester(rule)
             lateinit var selection: MediaSelection
-            lateinit var delete: (DeletionTargets) -> Unit
+            lateinit var delete: DeleteAction
             val confirmed = mutableListOf<DeletionTargets>()
             restoration.setContent {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                     val currentSelection = rememberMediaSelection()
                     val action = rememberDeleteAction(confirmed::add, currentSelection::clear)
+                    val operations = rememberOperationStatus(uploads = uploads)
+                    OperationStatusPill(operations, visible = !action.awaitingConfirmation)
                     SideEffect {
                         selection = currentSelection
                         delete = action
                     }
                 }
             }
-            val targets = DeletionTargets(listOf(uri.toString()), listOf(135L))
+            val targets =
+                DeletionTargets(listOf(uri.toString()), listOf(135L), listOf("disposable"))
             lateinit var original: MediaSelection
             rule.runOnIdle {
                 original = selection
@@ -72,13 +93,21 @@ class DeleteActionRestorationTest {
                 delete(targets)
                 assertEquals(1, registry.requests.size)
             }
+            rule.runOnIdle { assertTrue(delete.awaitingConfirmation) }
+            rule.runOnIdle { uploads.passFinished(UploadResult(uploaded = 1, files = 1)) }
             restoration.emulateSavedInstanceStateRestore()
+            // The Activity remains STARTED beneath MediaProvider's translucent confirmation.
+            // A parallel result must survive more than the real six-second expiry, including restore.
+            Thread.sleep(7_000)
+            rule.runOnIdle { assertNotNull(uploads.result.value) }
             rule.runOnIdle {
+                assertTrue(delete.awaitingConfirmation)
                 assertNotSame(original, selection)
                 assertTrue(selection.active)
                 registry.dispatchResult(registry.requests.single(), resultCode, null)
             }
             rule.runOnIdle {
+                assertFalse(delete.awaitingConfirmation)
                 if (resultCode == Activity.RESULT_OK) {
                     assertEquals(listOf(targets), confirmed)
                     assertFalse(selection.active)
@@ -89,7 +118,9 @@ class DeleteActionRestorationTest {
                     assertEquals(setOf(MediaId("disposable")), selection.selectedIds)
                 }
             }
+            rule.waitUntil(timeoutMillis = 10_000) { uploads.result.value == null }
         } finally {
+            scope.cancel()
             resolver.delete(uri, null, null)
         }
     }

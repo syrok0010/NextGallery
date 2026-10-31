@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -14,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 
@@ -29,15 +31,29 @@ internal fun MediaCollectionScreen(
     selectionEnabled: Boolean = false,
     selection: MediaSelection = rememberMediaSelection(),
     selectionActions: List<SelectionAction> = emptyList(),
+    viewerActions: List<SelectionAction> = emptyList(),
+    viewerStatus: @Composable (visible: Boolean) -> Unit = {},
+    completedDeletions: Set<MediaId> = emptySet(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
     val gridState = rememberLazyGridState()
-    val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
+    val viewer = rememberViewerSequenceState(slots, transition.viewerMediaId, completedDeletions)
+    val sequence = viewer.sequence
     val index = remember(slots) { ViewerMediaIndex(slots) }
-    val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
+    val viewerId = transition.viewerMediaId?.let { current ->
+        current.takeIf { it in sequence } ?: viewer.replacementMediaId
+    }
+    LaunchedEffect(viewer.loadingRange) {
+        viewer.loadingRange?.let(onViewerRange)
+    }
+    LaunchedEffect(viewerId) {
+        if (viewerId == null) {
+            transition.viewerMediaId?.let { transition.close(it, false) }
+        }
+    }
     var selectionLocked by remember { mutableStateOf(false) }
     val cancelSelection = {
         selection.clear()
@@ -89,6 +105,11 @@ internal fun MediaCollectionScreen(
         if (viewerId != null) MediaDetailScreen(
             initialMediaId = viewerId,
             sequence = sequence,
+            replacementMediaId = viewer.replacementMediaId,
+            actions = { item ->
+                ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null)
+            },
+            status = viewerStatus,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
             onCurrentItemChange = { item ->

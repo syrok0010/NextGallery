@@ -25,7 +25,11 @@ internal enum class DeletionScope { Everywhere, PhoneOnly, CloudOnly }
 
 /** Copies to delete: local content URIs for the system trash, cloud file ids for Nextcloud. */
 @Serializable
-internal data class DeletionTargets(val contentUris: List<String>, val fileIds: List<Long>)
+internal data class DeletionTargets(
+    val contentUris: List<String>,
+    val fileIds: List<Long>,
+    val removedMediaIds: List<String> = emptyList(),
+)
 
 /** How many selected objects have only a phone copy, only a cloud copy, or both. */
 internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val merged: Int) {
@@ -37,6 +41,8 @@ internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val mer
  * stay inside the deletion module: the UI only shows [plan] and returns the user's scope.
  */
 internal class DeletionPreparation private constructor(
+    private val mediaIds: List<String>,
+    private val mergedMediaIds: Set<String>,
     private val phoneOnly: List<String>,
     private val cloudOnly: List<Long>,
     private val merged: List<MergedCopies>,
@@ -45,6 +51,9 @@ internal class DeletionPreparation private constructor(
 
     fun confirm(scope: DeletionScope): DeletionTargets =
         DeletionTargets(
+            removedMediaIds = mediaIds.filter {
+                scope == DeletionScope.Everywhere || it !in mergedMediaIds
+            },
             contentUris = phoneOnly +
                 if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.contentUri },
             fileIds = (
@@ -70,7 +79,16 @@ internal class DeletionPreparation private constructor(
                     remote != null -> cloudOnly += remote
                 }
             }
-            return DeletionPreparation(phoneOnly, cloudOnly, merged).takeIf { it.plan.total > 0 }
+            return DeletionPreparation(
+                items.map { it.mediaId.value },
+                items
+                    .filter { it.localCopy != null && it.remoteFileId != null }
+                    .map { it.mediaId.value }
+                    .toSet(),
+                phoneOnly,
+                cloudOnly,
+                merged,
+            ).takeIf { it.plan.total > 0 }
         }
     }
 }
@@ -136,6 +154,11 @@ internal class MediaDeletionRepository(
     val progress = mutableProgress.asStateFlow()
     private val mutableResult = MutableStateFlow<DeletionResult?>(null)
     val result = mutableResult.asStateFlow()
+
+    // Successful full removals let viewers release an orphan once it leaves the live projection.
+    // Kept separately from the consumable result, including across activity recreation.
+    private val mutableRemovedMediaIds = MutableStateFlow<Set<MediaId>>(emptySet())
+    val removedMediaIds = mutableRemovedMediaIds.asStateFlow()
     private var job: Job? = null
 
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
@@ -153,6 +176,7 @@ internal class MediaDeletionRepository(
                     job = null
                     mutableProgress.value = null
                     mutableResult.value = null
+                    mutableRemovedMediaIds.value = emptySet()
                 }
                 owner = current
             }
@@ -225,6 +249,14 @@ internal class MediaDeletionRepository(
                     ?.copy(
                         fileIds = current.fileIds - fileIds.toSet(),
                     )?.takeIf { it.fileIds.isNotEmpty() }
+            }
+            if (!done.failed) {
+                mutableRemovedMediaIds.update { ids ->
+                    ids +
+                        targets.removedMediaIds.map(
+                            ::MediaId,
+                        )
+                }
             }
             onDeleted()
         }
