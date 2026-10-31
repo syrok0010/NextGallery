@@ -67,11 +67,17 @@ class UploadForegroundService : Service() {
         // Not a null check: with an empty queue the worker may finish before launch returns.
         if (worker?.isActive != true) {
             // startForegroundService requires startForeground even when the queue is already empty.
-            startForeground(
-                FOREGROUND_NOTIFICATION_ID,
-                notification(getString(R.string.upload_preparing), uploading = true),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
+            val entered = queue.enterForeground(getString(R.string.upload_error_foreground)) {
+                startForeground(
+                    FOREGROUND_NOTIFICATION_ID,
+                    notification(getString(R.string.upload_preparing), uploading = true),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+            }
+            if (!entered) {
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
             worker = serviceScope.launch { drainQueue() }
         }
         return START_NOT_STICKY
