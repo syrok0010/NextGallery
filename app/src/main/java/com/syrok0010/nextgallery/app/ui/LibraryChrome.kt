@@ -34,6 +34,7 @@ internal fun LibraryHeader(
     title: String? = null,
     /** While [statusActive], takes the place of the app name, between the logo and the menu. */
     statusActive: Boolean = false,
+    logoutEnabled: Boolean = true,
     status: @Composable () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -96,7 +97,18 @@ internal fun LibraryHeader(
                                 contentDescription = null,
                             )
                         },
-                        text = { Text(stringResource(R.string.action_logout)) },
+                        text = {
+                            Column {
+                                Text(stringResource(R.string.action_logout))
+                                if (!logoutEnabled) {
+                                    Text(
+                                        stringResource(R.string.logout_wait_for_operations),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        },
+                        enabled = logoutEnabled,
                         onClick = { menu = false; onLogout() },
                     )
                 }
