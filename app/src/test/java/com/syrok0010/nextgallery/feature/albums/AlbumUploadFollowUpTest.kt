@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
