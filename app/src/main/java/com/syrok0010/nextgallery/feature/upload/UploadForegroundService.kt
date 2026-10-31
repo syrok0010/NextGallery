@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
-import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
@@ -246,41 +245,7 @@ class UploadForegroundService : Service() {
             },
             onProgress = onProgress,
         )
-        val request = transport
-            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*")
-            .method("PUT", body)
-            .header("If-None-Match", "*")
-            .build()
-        val (existed, fileId) = transport.baseClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 412) {
-                throw UploadException(
-                    R.string.upload_error_http,
-                    response.code,
-                    selection.displayName,
-                )
-            }
-            (response.code == 412) to uploadedFileId(response.header("OC-FileId"))
-        }
-        if (existed && !sameRemoteSize(credentials, url, length)) return null
-        return UploadedFile(selection, url, created = !existed, fileId.takeUnless { existed })
-    }
-
-    private fun sameRemoteSize(
-        credentials: AccountCredentials,
-        url: HttpUrl,
-        length: Long,
-    ): Boolean {
-        if (length < 0L) return false
-        val request = transport
-            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
-            .head()
-            .build()
-        return runCatching {
-            transport.baseClient.newCall(request).execute().use { response ->
-                response.isSuccessful &&
-                    response.header("Content-Length")?.toLongOrNull() == length
-            }
-        }.getOrDefault(false)
+        return uploadFile(transport, credentials, url, selection, body)
     }
 
     private fun notification(
@@ -333,8 +298,6 @@ class UploadForegroundService : Service() {
                 addAll(details)
             }
     }
-
-    private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 
     /** Survives a failed upload so follow-ups still learn which files were missed. */
     private class UploadProgress {
