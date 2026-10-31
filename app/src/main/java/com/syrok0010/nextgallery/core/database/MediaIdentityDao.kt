@@ -47,6 +47,12 @@ interface MediaIdentityDao {
     @Query("DELETE FROM media_source_aliases WHERE sourceKind = :kind")
     suspend fun deleteAliases(kind: MediaIdentifierKind)
 
+    @Query("SELECT DISTINCT sourceKey FROM media_source_aliases WHERE sourceKind = :kind")
+    suspend fun aliasSourceKeys(kind: MediaIdentifierKind): List<String>
+
+    @Query("DELETE FROM media_source_aliases WHERE sourceKind = :kind AND sourceKey IN (:keys)")
+    suspend fun deleteAliasesForSources(kind: MediaIdentifierKind, keys: Collection<String>)
+
     @Query("SELECT * FROM media_identity_conflicts")
     suspend fun conflicts(): List<MediaIdentityConflictEntity>
 

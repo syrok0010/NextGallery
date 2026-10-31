@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.library.local
 
 import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.IdentifiedLocalMedia
+import com.syrok0010.nextgallery.core.database.MediaIdentifierKind
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.timeline.persistence.toLocalMediaEntity
@@ -22,6 +23,14 @@ class LocalMediaProjectionRepository(private val database: NextGalleryDatabase) 
 
     override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) {
         database.withTransaction {
+            val identityDao = database.mediaIdentityDao()
+            identityDao
+                .aliasSourceKeys(MediaIdentifierKind.LocalContent)
+                .filterNot { it in contentUris }
+                .chunked(500)
+                .forEach { stale ->
+                    identityDao.deleteAliasesForSources(MediaIdentifierKind.LocalContent, stale)
+                }
             dao.contentUris().filterNot { it in contentUris }.chunked(500).forEach { stale ->
                 dao.deleteUris(stale)
             }
