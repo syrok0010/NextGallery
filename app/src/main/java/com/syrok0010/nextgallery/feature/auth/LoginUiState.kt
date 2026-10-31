@@ -5,6 +5,8 @@ sealed interface LoginAttempt {
     data object Starting : LoginAttempt
     data class Awaiting(val session: LoginSession, val browserOpened: Boolean = false) :
         LoginAttempt
+    data object CheckingMemories : LoginAttempt
+    data object MemoriesBlocked : LoginAttempt
     data object SavingCredentials : LoginAttempt
     data object Failed : LoginAttempt
 }

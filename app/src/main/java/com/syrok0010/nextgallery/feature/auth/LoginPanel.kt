@@ -37,6 +37,7 @@ internal fun LoginPanel(
     onLoginBrowserOpened: () -> Unit,
     onLoginBrowserOpenFailed: () -> Unit,
     onCancelLogin: () -> Unit,
+    onRetryMemoriesCheck: () -> Unit,
 ) {
     val context = LocalContext.current
     val session = state.session
@@ -70,49 +71,61 @@ internal fun LoginPanel(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
-        OutlinedTextField(
-            value = state.serverUrlInput,
-            onValueChange = onServerUrlChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.login_server_url_label)) },
-            placeholder = { Text(stringResource(R.string.login_server_url_placeholder)) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = onStartLogin,
-                enabled = !isBusy,
-            ) {
-                Text(
-                    stringResource(
-                        if (session == null) {
-                            R.string.action_start_login
-                        } else {
-                            R.string.action_restart_login
-                        },
-                    ),
-                )
+        if (state.attempt == LoginAttempt.CheckingMemories || state.attempt == LoginAttempt.MemoriesBlocked) {
+            StatusBlock(message)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onRetryMemoriesCheck, enabled = !isBusy) {
+                    Text(stringResource(R.string.action_retry_memories_check))
+                }
+                TextButton(onClick = onCancelLogin) {
+                    Text(stringResource(R.string.action_logout))
+                }
+            }
+        } else {
+            OutlinedTextField(
+                value = state.serverUrlInput,
+                onValueChange = onServerUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.login_server_url_label)) },
+                placeholder = { Text(stringResource(R.string.login_server_url_placeholder)) },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onStartLogin,
+                    enabled = !isBusy,
+                ) {
+                    Text(
+                        stringResource(
+                            if (session == null) {
+                                R.string.action_start_login
+                            } else {
+                                R.string.action_restart_login
+                            },
+                        ),
+                    )
+                }
+
+                if (session != null) {
+                    Button(
+                        onClick = { openLoginUrl(session.loginUrl) },
+                        enabled = !isBusy,
+                    ) {
+                        Text(stringResource(R.string.action_open_browser))
+                    }
+                }
             }
 
             if (session != null) {
-                Button(
-                    onClick = { openLoginUrl(session.loginUrl) },
+                TextButton(
+                    onClick = onCancelLogin,
                     enabled = !isBusy,
                 ) {
-                    Text(stringResource(R.string.action_open_browser))
+                    Text(stringResource(R.string.action_cancel_login))
                 }
             }
-        }
 
-        if (session != null) {
-            TextButton(
-                onClick = onCancelLogin,
-                enabled = !isBusy,
-            ) {
-                Text(stringResource(R.string.action_cancel_login))
-            }
+            StatusBlock(message)
         }
-
-        StatusBlock(message)
     }
 }

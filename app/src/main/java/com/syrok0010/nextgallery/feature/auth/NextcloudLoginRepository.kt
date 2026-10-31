@@ -8,6 +8,30 @@ import okhttp3.Credentials
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(private val transport: NextcloudTransport) : LoginGateway {
+    override suspend fun checkMemories(credentials: AccountCredentials): MemoriesCompatibility =
+        try {
+            transport
+                .retrofit(
+                    transport.normalizeBaseUrl(credentials.serverUrl),
+                    transport.authenticatedClient(credentials),
+                ).create(MemoriesDescribeApi::class.java)
+                .describe()
+                .compatibility()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: HttpException) {
+            when (error.code()) {
+                404, 410 -> MemoriesCompatibility.Unavailable
+                else -> MemoriesCompatibility.CheckFailed
+            }
+        } catch (_: IOException) {
+            MemoriesCompatibility.NetworkError
+        } catch (_: kotlinx.serialization.SerializationException) {
+            MemoriesCompatibility.UnknownVersion
+        } catch (_: Exception) {
+            MemoriesCompatibility.CheckFailed
+        }
+
     override suspend fun startLogin(serverUrl: String): LoginSession {
         val normalizedServerUrl = transport.normalizeBaseUrl(serverUrl)
         val api = transport.nextcloudAuthApi(normalizedServerUrl)

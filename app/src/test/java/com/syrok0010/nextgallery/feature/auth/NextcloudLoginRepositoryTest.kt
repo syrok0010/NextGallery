@@ -37,6 +37,36 @@ class NextcloudLoginRepositoryTest {
         }
     }
 
+    @Test fun `describe uses authenticated request and distinguishes unavailable from errors`() = runBlocking {
+        val cases = listOf(
+            Triple(200, """{"version":"10.1.0","uid":"test"}""", MemoriesCompatibility.Supported),
+            Triple(200, """{"version":"8.1.0"}""", MemoriesCompatibility.TooOld("8.1.0")),
+            Triple(200, "{}", MemoriesCompatibility.UnknownVersion),
+            Triple(200, "<html>Login</html>", MemoriesCompatibility.UnknownVersion),
+            Triple(404, "", MemoriesCompatibility.Unavailable),
+            Triple(410, "", MemoriesCompatibility.Unavailable),
+            Triple(401, "", MemoriesCompatibility.CheckFailed),
+            Triple(403, "", MemoriesCompatibility.CheckFailed),
+            Triple(500, "", MemoriesCompatibility.CheckFailed),
+        )
+        for ((code, body, expected) in cases) {
+            MemoriesAlbumWriterTest.Fixture { code to body }.use { fixture ->
+                val credentials = com.syrok0010.nextgallery.core.session.AccountCredentials(fixture.origin, "test", "password", "test")
+                assertEquals(expected, repository().checkMemories(credentials))
+                val request = fixture.requests.single()
+                assertEquals("/apps/memories/api/describe", request.target)
+                assertEquals(Credentials.basic("test", "password"), request.headers["authorization"])
+            }
+        }
+    }
+
+    @Test fun `connection failure is not an unsupported version`() = runBlocking {
+        val client = okhttp3.OkHttpClient.Builder().addInterceptor { throw java.io.IOException("offline") }.build()
+        val repository = NextcloudLoginRepository(NextcloudTransport(Json, client))
+        val credentials = com.syrok0010.nextgallery.core.session.AccountCredentials("https://cloud.example", "test", "password", "test")
+        assertEquals(MemoriesCompatibility.NetworkError, repository.checkMemories(credentials))
+    }
+
     private fun repository() = NextcloudLoginRepository(NextcloudTransport(Json { ignoreUnknownKeys = true }))
 
     private fun session(origin: String) = LoginSession("$origin/", "$origin/login", "$origin/poll", "token")
