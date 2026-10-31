@@ -124,9 +124,10 @@ class LocalMediaSource(
                     val mappedItems = mapMetadata(batch.metadata, itemsByUri)
                     val changedItems = mappedItems.filter { itemsByUri[it.localContentUri()] != it }
                     projectionStore.saveLocalMediaBatch(changedItems)
+                    // A row without usable timeline metadata still proves the source exists.
+                    seenUris.addAll(batch.metadata.map { it.contentUri })
                     mappedItems.forEach { item ->
                         val uri = item.localContentUri()
-                        seenUris += uri
                         itemsByUri[uri] = item
                     }
                     dirty = dirty || changedItems.isNotEmpty()
