@@ -171,10 +171,10 @@ class VanishedSourceAliasesTest {
     }
 
     @Test
-    fun completeCloudDayReplacementRetiresAliasesAndKeepsExactLink() = runBlocking {
+    fun completeCloudSnapshotRetiresAliasesAndKeepsExactLink() = runBlocking {
         val id = saveLinkedRemote()
 
-        cloudCache.saveDayDetails(emptyList(), setOf(DAY))
+        saveSnapshot(emptyList(), emptyList(), emptySet())
         reopenDatabase()
 
         assertTrue(database.memoriesTimelineDao().mediaItems().isEmpty())
@@ -187,7 +187,7 @@ class VanishedSourceAliasesTest {
     fun disappearingCloudCopyKeepsAliasesOfLinkedLocalCopy() = runBlocking {
         val id = saveLinkedRemote(localAliases = aliases)
 
-        cloudCache.saveDayDetails(emptyList(), setOf(DAY))
+        saveSnapshot(emptyList(), emptyList(), emptySet())
 
         assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
     }
@@ -204,7 +204,7 @@ class VanishedSourceAliasesTest {
     }
 
     @Test
-    fun invalidatedCloudDayKeepsAliasesUntilFullReplacementEvenAfterRestart() = runBlocking {
+    fun invalidatedCloudDayKeepsAliasesUntilCompleteSnapshotEvenAfterRestart() = runBlocking {
         val id = saveLinkedRemote()
         saveSnapshot(listOf(TimelineDay(DAY, 2)), emptyList(), emptySet())
         reopenDatabase()
@@ -215,7 +215,7 @@ class VanishedSourceAliasesTest {
         ).size)
         assertEquals(1, database.memoriesTimelineDao().mediaItems().size)
 
-        cloudCache.saveDayDetails(emptyList(), setOf(DAY))
+        saveSnapshot(emptyList(), emptyList(), emptySet())
 
         assertAliasesRetired(id)
     }
@@ -243,6 +243,34 @@ class VanishedSourceAliasesTest {
     }
 
     @Test
+    fun vanishedDayWaitsForCompleteTimelineBeforeRetiringAliases() = runBlocking {
+        val id = saveLinkedRemote()
+        saveSnapshot(listOf(TimelineDay(DAY + 1, 1)), emptyList(), emptySet())
+        reopenDatabase()
+        assertRemoteAliasesPresent()
+        assertTrue(requireNotNull(cloudCache.loadTimelineSnapshot(credentials)).items.isEmpty())
+
+        val other = remote.copy(sourceKey = "43")
+        val replacement = item(other, resolve(other, emptySet())).copy(dayId = DAY + 1)
+        saveSnapshot(listOf(TimelineDay(DAY + 1, 1)), listOf(replacement), setOf(DAY + 1))
+
+        assertAliasesRetired(id)
+        assertEquals(listOf(replacement), cloudCache.loadTimelineSnapshot(credentials)?.items)
+    }
+
+    @Test
+    fun loadedFlagWithoutAllCountedItemsDoesNotConfirmDisappearance() = runBlocking {
+        val id = saveLinkedRemote()
+        val other = remote.copy(sourceKey = "43")
+        val replacement = item(other, resolve(other, emptySet()))
+
+        saveSnapshot(listOf(TimelineDay(DAY, 2)), listOf(replacement), setOf(DAY))
+
+        assertRemoteAliasesPresent()
+        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+    }
+
+    @Test
     fun copyMovedToAnotherDayInSameSnapshotKeepsItsAliases() = runBlocking {
         val id = saveLinkedRemote()
         val moved = item(remote, id).copy(dayId = DAY + 1)
@@ -254,7 +282,42 @@ class VanishedSourceAliasesTest {
     }
 
     @Test
-    fun partialInitialResponseAndFailedDayRequestKeepAliasesUntilSuccessfulFullResponse() = runBlocking {
+    fun copyMovedToUnloadedDayKeepsAliasForLocalCopyBetweenRequests() = runBlocking {
+        assertCopyMovedAcrossRequests(keepOldDay = false)
+    }
+
+    @Test
+    fun replacingOldDayBeforeLoadingNewDayKeepsAliasForLocalCopy() = runBlocking {
+        assertCopyMovedAcrossRequests(keepOldDay = true)
+    }
+
+    private suspend fun assertCopyMovedAcrossRequests(keepOldDay: Boolean) {
+        val id = saveLinkedRemote()
+        val days = buildList {
+            if (keepOldDay) add(TimelineDay(DAY, 1))
+            add(TimelineDay(DAY + 1, 1))
+        }
+        saveSnapshot(days, emptyList(), emptySet())
+        if (keepOldDay) cloudCache.saveDayDetails(emptyList(), setOf(DAY))
+        reopenDatabase()
+
+        assertRemoteAliasesPresent()
+        val unchangedBuid = aliases.filter { it.kind == MediaAliasKind.Buid }.toSet()
+        val newLocal = local.copy(sourceKey = "content://media/2")
+        assertEquals(id, resolve(newLocal, unchangedBuid))
+
+        val movedAliases = unchangedBuid + MediaAlias(MediaAliasKind.Auid, "moved-auid")
+        assertEquals(id, resolve(remote, movedAliases))
+        val moved = item(remote, id).copy(dayId = DAY + 1, auid = "moved-auid")
+        cloudCache.saveDayDetails(listOf(moved), setOf(DAY + 1))
+
+        assertEquals(id, resolve(newLocal, unchangedBuid))
+        assertEquals(listOf(moved), cloudCache.loadTimelineSnapshot(credentials)?.items)
+        assertTrue(registry.conflicts().isEmpty())
+    }
+
+    @Test
+    fun partialInitialResponseAndSeparateDayResponsesKeepAliases() = runBlocking {
         val id = saveLinkedRemote()
         CloudResponses().use { server ->
             val onlineCredentials = credentials.copy(serverUrl = server.origin)
@@ -282,7 +345,8 @@ class VanishedSourceAliasesTest {
 
             assertEquals(listOf(43L), full.map { it.remoteFileId })
             assertEquals(full, cloudCache.loadTimelineSnapshot(onlineCredentials)?.items)
-            assertAliasesRetired(id)
+            assertRemoteAliasesPresent()
+            assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
         }
     }
 

@@ -70,10 +70,21 @@ class TimelineCacheRepository(
                 thumbnailDao.deleteForFileIds(staleThumbnails.map { it.fileId })
             }
 
-            replaceCompletedDaysInTransaction(
-                snapshot.items,
-                snapshot.loadedDayIds + (oldCounts.keys - newCounts.keys),
-            )
+            val itemsByDay = snapshot.items.groupBy { it.dayId }
+            val completeTimeline = snapshot.days.all { day ->
+                val fileCount = itemsByDay[day.dayId]
+                    .orEmpty()
+                    .mapNotNull { it.remoteFileId }
+                    .toSet()
+                    .size
+                day.dayId in snapshot.loadedDayIds && fileCount == day.count
+            }
+            if (completeTimeline) {
+                retireMissingAliasesInTransaction(snapshot.items)
+                timelineDao.deleteAllMediaItems()
+            } else {
+                deleteCompletedDaysInTransaction(snapshot.loadedDayIds)
+            }
             saveSnapshotDetailsInTransaction(snapshot, now)
             staleThumbnails
         }
@@ -83,7 +94,7 @@ class TimelineCacheRepository(
     suspend fun saveDayDetails(items: List<MediaItem>, loadedDayIds: Set<Int>) {
         val now = System.currentTimeMillis()
         database.withTransaction {
-            replaceCompletedDaysInTransaction(items, loadedDayIds)
+            deleteCompletedDaysInTransaction(loadedDayIds)
             if (items.isNotEmpty()) {
                 timelineDao.upsertMediaItems(items.map { it.toMemoriesMediaEntity() })
             }
@@ -107,22 +118,21 @@ class TimelineCacheRepository(
         thumbnailFileStore.clear()
     }
 
-    private suspend fun replaceCompletedDaysInTransaction(
-        items: List<MediaItem>,
-        completedDayIds: Set<Int>,
-    ) {
+    private suspend fun retireMissingAliasesInTransaction(items: List<MediaItem>) {
         val currentFileIds = items.map { it.remoteFileId }.toSet()
+        // A day alone cannot prove disappearance: the same fileId may have moved to an unloaded day.
+        timelineDao.fileIds().filterNot { it in currentFileIds }.chunked(500).forEach { fileIds ->
+            database
+                .mediaIdentityDao()
+                .deleteAliasesForSources(
+                    MediaIdentifierKind.MemoriesFile,
+                    fileIds.map(Long::toString),
+                )
+        }
+    }
+
+    private suspend fun deleteCompletedDaysInTransaction(completedDayIds: Set<Int>) {
         completedDayIds.toList().chunked(500).forEach { dayIds ->
-            val vanishedKeys = timelineDao
-                .fileIdsForDays(dayIds)
-                .filterNot { it in currentFileIds }
-                .map(Long::toString)
-            vanishedKeys.chunked(500).forEach { keys ->
-                database
-                    .mediaIdentityDao()
-                    .deleteAliasesForSources(MediaIdentifierKind.MemoriesFile, keys)
-            }
-            // Invalidated metadata stays hidden until a full day proves which copies vanished.
             timelineDao.deleteMediaItemsForDays(dayIds)
         }
     }
