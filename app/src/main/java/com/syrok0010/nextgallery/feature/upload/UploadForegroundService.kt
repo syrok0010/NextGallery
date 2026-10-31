@@ -152,10 +152,10 @@ class UploadForegroundService : Service() {
                         R.plurals.upload_name_taken,
                         pass.nameTaken,
                         pass.nameTaken,
-                    ).asString(this@UploadForegroundService),
+                    ).asString(applicationContext),
                 )
             }
-            pass.details.mapTo(this) { it.asString(this@UploadForegroundService) }
+            pass.details.mapTo(this) { it.asString(applicationContext) }
         }
         val title = if (pass.failures.isEmpty()) {
             getString(R.string.upload_done, pass.uploaded, pass.files)

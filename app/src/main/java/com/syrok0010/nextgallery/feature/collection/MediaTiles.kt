@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -48,14 +49,14 @@ import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import org.koin.compose.koinInject
 
 @Composable
 internal fun MediaDayHeader(dayId: Int) {
     val pattern = stringResource(R.string.timeline_day_header_pattern)
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    val locale = LocalConfiguration.current.locales[0]
+    val formatter = remember(pattern, locale) {
+        DateTimeFormatter.ofPattern(pattern, locale)
     }
     val title = remember(dayId, formatter) {
         LocalDate.ofEpochDay(dayId.toLong()).format(formatter)
