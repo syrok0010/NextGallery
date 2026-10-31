@@ -38,9 +38,13 @@ class AlbumUploadFollowUpTest {
         assertNull(albumUploadSummary("Лето", emptyList(), missed = 0))
     }
 
-    @Test fun `uploaded files join the album and the catalog refreshes once the batch ends`() = runBlocking {
+    @Test fun `uploaded files bypass info even with file id and refresh catalog after the batch`() = runBlocking {
         MemoriesAlbumWriterTest.Fixture { request ->
-            if (request.decodedTarget.endsWith("b.jpg")) 500 to "" else 201 to ""
+            when {
+                request.target.startsWith("/apps/memories/api/image/info/") -> 404 to ""
+                request.decodedTarget.endsWith("b.jpg") -> 500 to ""
+                else -> 201 to ""
+            }
         }.use { fixture ->
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
@@ -74,6 +78,7 @@ class AlbumUploadFollowUpTest {
                     listOf("/remote.php/dav/files/anna/Photos/a.jpg", "/remote.php/dav/files/anna/Photos/b.jpg"),
                     fixture.requests.filter { it.method == "COPY" }.map { it.decodedTarget },
                 )
+                assertTrue(fixture.requests.all { it.method == "COPY" })
                 withTimeout(5_000) { while (refreshed == before) delay(10) }
             } finally {
                 scope.cancel()
@@ -84,7 +89,7 @@ class AlbumUploadFollowUpTest {
     private fun selection(name: String) = UploadSelection("content://media/$name", name, "image/jpeg")
 
     private fun uploaded(fixture: MemoriesAlbumWriterTest.Fixture, name: String) =
-        UploadedFile(selection(name), fileUrl(fixture.origin, "anna", "/Photos/$name"), created = true)
+        UploadedFile(selection(name), fileUrl(fixture.origin, "anna", "/Photos/$name"), created = true, fileId = 7)
 
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials

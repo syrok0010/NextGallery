@@ -119,6 +119,12 @@
         <item quantity="many">%1$d ошибок</item>
         <item quantity="other">%1$d ошибок</item>
     </plurals>
+    <plurals name="album_add_done_processing">
+        <item quantity="one">%1$d файл не добавлен: возможно, он ещё обрабатывается сервером. Попробуйте позже.</item>
+        <item quantity="few">%1$d файла не добавлены: возможно, они ещё обрабатываются сервером. Попробуйте позже.</item>
+        <item quantity="many">%1$d файлов не добавлены: возможно, они ещё обрабатываются сервером. Попробуйте позже.</item>
+        <item quantity="other">%1$d файла не добавлены: возможно, они ещё обрабатываются сервером. Попробуйте позже.</item>
+    </plurals>
     <plurals name="album_add_done_uploading">
         <item quantity="one">ещё %1$d загружается в облако, итог в уведомлении</item>
         <item quantity="few">ещё %1$d загружаются в облако, итог в уведомлении</item>

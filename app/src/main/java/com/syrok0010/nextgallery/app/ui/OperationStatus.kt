@@ -126,7 +126,7 @@ internal class OperationStatus(
     /** Successful results go away on their own; failures wait until the list is opened. */
     fun consumeSucceeded() {
         if (uploadResult.value?.failed == false) uploads.consumeResult()
-        if ((addition.value as? AlbumAdditionState.Done)?.result?.failed == 0) additions.consume()
+        if ((addition.value as? AlbumAdditionState.Done)?.result?.hasFailures == false) additions.consume()
         if (deletionResult.value?.failed == false) deletions.consume()
     }
 
@@ -212,7 +212,7 @@ private fun additionEntry(state: AlbumAdditionState): OperationEntry? {
         details = lines.drop(1),
         running = state is AlbumAdditionState.Running,
         failed = state is AlbumAdditionState.Failed ||
-            (state is AlbumAdditionState.Done && state.result.failed > 0),
+            (state is AlbumAdditionState.Done && state.result.hasFailures),
     )
 }
 
