@@ -157,7 +157,10 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
         is AlbumAdditionState.Running -> listOf(uiText(R.string.album_add_running, state.albumName))
 
         is AlbumAdditionState.Done -> buildList {
-            val total = state.result.added + state.result.alreadyPresent + state.result.failed
+            val total = state.result.added +
+                state.result.alreadyPresent +
+                state.result.failed +
+                state.result.processing
             if (total > 0 || state.localUploads == 0) {
                 add(uiText(R.string.album_add_done, state.albumName, state.result.added))
             }
@@ -170,6 +173,15 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
                         R.plurals.album_add_done_failed,
                         state.result.failed,
                         state.result.failed,
+                    ),
+                )
+            }
+            if (state.result.processing > 0) {
+                add(
+                    pluralText(
+                        R.plurals.album_add_done_processing,
+                        state.result.processing,
+                        state.result.processing,
                     ),
                 )
             }
