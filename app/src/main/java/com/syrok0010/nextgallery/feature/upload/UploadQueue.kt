@@ -119,6 +119,27 @@ internal class UploadQueue(
         if (back.isNotEmpty()) mutableWaiting.update { back + it }
     }
 
+    /**
+     * Enters foreground before any batch is taken. A refusal ends only released work with a
+     * visible result instead of leaving an active queue or immediately retrying the same start.
+     */
+    fun enterForeground(failureReason: String, startForeground: () -> Unit): Boolean {
+        try {
+            startForeground()
+        } catch (_: RuntimeException) {
+            // Includes dataSync quota, service type and permission failures from Android.
+            var files = 0
+            while (true) {
+                val batch = next() ?: break
+                files += batch.files.size
+                batchFinished(batch)
+            }
+            if (files > 0) passFinished(UploadResult(0, files, failures = listOf(failureReason)))
+            return false
+        }
+        return true
+    }
+
     /** Called by the service until it returns null. */
     fun next(): UploadBatch? = started.poll()
 
