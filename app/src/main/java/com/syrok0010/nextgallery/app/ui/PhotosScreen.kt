@@ -46,6 +46,20 @@ internal fun PhotosScreen(
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     val selection = rememberMediaSelection()
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
+    val completedDeletions by deletions.removedMediaIds.collectAsStateWithLifecycle()
+    val mediaActions = listOf(
+        SelectionAction(
+            icon = rememberVectorPainter(Icons.Default.Delete),
+            label = stringResource(R.string.delete_action),
+            isDestructive = true,
+        ) { items, _ ->
+            deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
+        },
+        SelectionAction(
+            icon = painterResource(R.drawable.ic_albums),
+            label = stringResource(R.string.album_add_action),
+        ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
+    )
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -65,31 +79,29 @@ internal fun PhotosScreen(
         onSelectionModeChanged = onSelectionModeChanged,
         selectionEnabled = true,
         selection = selection,
-        selectionActions = listOf(
-            SelectionAction(
-                icon = rememberVectorPainter(Icons.Default.Delete),
-                label = stringResource(R.string.delete_action),
-                isDestructive = true,
-            ) { items, _ ->
-                deletions.prepare(items.map { it.mediaId })?.let { preparation ->
-                    deleteRequest = preparation
-                }
-            },
-            SelectionAction(
-                icon = painterResource(R.drawable.ic_albums),
-                label = stringResource(R.string.album_add_action),
-            ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
-            SelectionAction(
-                icon = painterResource(R.drawable.ic_cloud),
-                label = stringResource(R.string.upload_action),
-                isPrimary = true,
-                blocksSelectionUntilDone = true,
-            ) { items, onDone ->
-                // The app root starts the batch and asks for the notification permission.
-                uploads.submit(UploadBatch(uploadSelections(items)))
-                onDone()
-            },
-        ),
+        viewerActions = mediaActions,
+        viewerStatus = { visible ->
+            if (operations.active) {
+                OperationStatusPill(
+                    operations,
+                    visible = visible && albumRequest == null && deleteRequest == null && !delete.awaitingConfirmation,
+                )
+            }
+        },
+        completedDeletions = completedDeletions,
+        selectionActions = mediaActions +
+            listOf(
+                SelectionAction(
+                    icon = painterResource(R.drawable.ic_cloud),
+                    label = stringResource(R.string.upload_action),
+                    isPrimary = true,
+                    blocksSelectionUntilDone = true,
+                ) { items, onDone ->
+                    // The app root starts the batch and asks for the notification permission.
+                    uploads.submit(UploadBatch(uploadSelections(items)))
+                    onDone()
+                },
+            ),
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
@@ -97,6 +109,7 @@ internal fun PhotosScreen(
             onLogout,
             viewerVisible = viewerVisible,
             operations = operations,
+            statusVisible = albumRequest == null && deleteRequest == null && !delete.awaitingConfirmation,
         ) {
             content()
         }

@@ -41,6 +41,7 @@ class MediaDeletionTest {
                     "content://media/external/video/media/3",
                     "content://media/external/images/media/2",
                 ),
+                removedMediaIds = listOf("phone", "cloud", "both", "video"),
                 fileIds = listOf(10, 20),
             ),
             preparation.confirm(DeletionScope.Everywhere),
@@ -52,6 +53,7 @@ class MediaDeletionTest {
                     "content://media/external/video/media/3",
                     "content://media/external/images/media/2",
                 ),
+                removedMediaIds = listOf("phone", "cloud", "video"),
                 fileIds = listOf(10),
             ),
             preparation.confirm(DeletionScope.PhoneOnly),
@@ -62,6 +64,7 @@ class MediaDeletionTest {
                     "content://media/external/images/media/1",
                     "content://media/external/video/media/3",
                 ),
+                removedMediaIds = listOf("phone", "cloud", "video"),
                 fileIds = listOf(10, 20),
             ),
             preparation.confirm(DeletionScope.CloudOnly),
@@ -104,6 +107,7 @@ class MediaDeletionTest {
                 assertEquals(
                     DeletionTargets(
                         contentUris = listOf("content://media/external/images/media/2"),
+                        removedMediaIds = listOf("both"),
                         fileIds = listOf(20),
                     ),
                     preparation?.confirm(DeletionScope.Everywhere),
@@ -175,11 +179,11 @@ class MediaDeletionTest {
                 ) { refreshed.incrementAndGet() }
                 val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
                 repository.delete(
-                    DeletionTargets(phone, listOf(1, 3)),
+                    DeletionTargets(phone, listOf(1, 3), listOf("failed")),
                 )
                 // Queued behind the first; its result adds to the one not shown yet.
                 repository.delete(
-                    DeletionTargets(emptyList(), listOf(2)),
+                    DeletionTargets(emptyList(), listOf(2), listOf("gone")),
                 )
                 withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
@@ -191,8 +195,10 @@ class MediaDeletionTest {
                     repository.result.value,
                 )
                 assertEquals("progress ends with the queue", null, repository.progress.value)
+                assertEquals(setOf(MediaId("gone")), repository.removedMediaIds.value)
                 repository.consume()
                 assertEquals(null, repository.result.value)
+                assertEquals("consuming the status must not restore a viewer orphan", setOf(MediaId("gone")), repository.removedMediaIds.value)
                 repository.delete(
                     DeletionTargets(emptyList(), listOf(1)),
                 )
