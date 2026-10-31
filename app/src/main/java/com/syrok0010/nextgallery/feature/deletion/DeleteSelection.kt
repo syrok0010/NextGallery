@@ -102,6 +102,7 @@ internal fun rememberDeleteAction(
 @Composable
 internal fun DeleteSelectionDialog(
     plan: DeletionPlan,
+    cloudTrashAvailable: Boolean?,
     onDismiss: () -> Unit,
     onConfirm: (DeletionScope) -> Unit,
 ) {
@@ -130,7 +131,17 @@ internal fun DeleteSelectionDialog(
                     }
                 }
                 Text(
-                    stringResource(R.string.delete_trash_note),
+                    stringResource(
+                        if (cloudTrashAvailable == true) {
+                            R.string.delete_trash_note
+                        } else if (plan.cloudOnly > 0 ||
+                            (plan.merged > 0 && scope != DeletionScope.PhoneOnly)
+                        ) {
+                            R.string.delete_permanent_cloud_note
+                        } else {
+                            R.string.delete_phone_trash_note
+                        },
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
