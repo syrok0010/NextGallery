@@ -2,22 +2,8 @@ package com.syrok0010.nextgallery.feature.collection
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -28,17 +14,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 import com.syrok0010.nextgallery.core.media.MediaItem
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
+import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
 
 /** Shared grid, scroll restoration and viewer transitions; callers own loading and chrome. */
 @Composable
@@ -50,11 +27,7 @@ internal fun MediaCollectionScreen(
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
     onSelectionModeChanged: (Boolean) -> Unit = {},
     selectionEnabled: Boolean = false,
-    onUpload: (List<MediaItem>, onStarted: () -> Unit) -> Unit = { _, onStarted -> onStarted() },
-    /** Hands over the selection snapshot; [onDone] ends selection mode once the action starts. */
-    onAddToAlbum: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
-    /** Same contract as [onAddToAlbum]; [onDone] runs only once the deletion is confirmed. */
-    onDelete: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
+    selectionActions: List<SelectionAction> = emptyList(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
@@ -65,10 +38,10 @@ internal fun MediaCollectionScreen(
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
     val selection = rememberMediaSelection()
-    var uploadRequested by remember { mutableStateOf(false) }
+    var selectionLocked by remember { mutableStateOf(false) }
     val cancelSelection = {
         selection.clear()
-        uploadRequested = false
+        selectionLocked = false
     }
     val selectedItems = remember(slots, selection.selectedIds) {
         slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
@@ -83,7 +56,7 @@ internal fun MediaCollectionScreen(
             onSelectionModeChanged(false)
         }
     }
-    BackHandler(enabled = selection.active && !uploadRequested, onBack = cancelSelection)
+    BackHandler(enabled = selection.active && !selectionLocked, onBack = cancelSelection)
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -104,17 +77,12 @@ internal fun MediaCollectionScreen(
         if (viewerId == null && selectionEnabled && selection.active) {
             SelectionActionBar(
                 selectedCount = selectedItems.size,
-                uploadRequested = uploadRequested,
+                selectionLocked = selectionLocked,
                 onCancel = cancelSelection,
-                onAddToAlbum = onAddToAlbum?.let { action ->
-                    { action(selectedItems, cancelSelection) }
-                },
-                onDelete = onDelete?.let { action ->
-                    { action(selectedItems, cancelSelection) }
-                },
-                onUpload = {
-                    uploadRequested = true
-                    onUpload(selectedItems, cancelSelection)
+                actions = selectionActions,
+                onPerform = { action ->
+                    selectionLocked = action.blocksSelectionUntilDone
+                    action.perform(selectedItems, cancelSelection)
                 },
             )
         }
@@ -128,78 +96,5 @@ internal fun MediaCollectionScreen(
                 transition.onCurrentItemChanged(item.mediaId, index.slotIndex(item.mediaId) != null)
             },
         )
-    }
-}
-
-@Composable
-private fun BoxScope.SelectionActionBar(
-    selectedCount: Int,
-    uploadRequested: Boolean,
-    onCancel: () -> Unit,
-    onAddToAlbum: (() -> Unit)?,
-    onDelete: (() -> Unit)?,
-    onUpload: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 4.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onCancel, enabled = !uploadRequested) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(com.syrok0010.nextgallery.R.string.selection_cancel))
-            }
-            val selectedLabel =
-                stringResource(com.syrok0010.nextgallery.R.string.selection_count, selectedCount)
-            Text(
-                "$selectedCount",
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .semantics { contentDescription = selectedLabel },
-            )
-            Spacer(Modifier.width(4.dp))
-            if (onDelete != null) {
-                IconButton(onClick = onDelete, enabled = selectedCount > 0 && !uploadRequested) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = stringResource(
-                            com.syrok0010.nextgallery.R.string.delete_action,
-                        ),
-                    )
-                }
-            }
-            if (onAddToAlbum != null) {
-                // Icon-only keeps the bar on one line next to the primary upload action.
-                FilledTonalIconButton(
-                    onClick = onAddToAlbum,
-                    enabled = selectedCount > 0 && !uploadRequested,
-                ) {
-                    Icon(
-                        painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_albums),
-                        contentDescription = stringResource(
-                            com.syrok0010.nextgallery.R.string.album_add_action,
-                        ),
-                    )
-                }
-            }
-            Button(onClick = onUpload, enabled = selectedCount > 0 && !uploadRequested) {
-                Icon(
-                    painter = painterResource(com.syrok0010.nextgallery.R.drawable.ic_cloud),
-                    contentDescription = null,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(com.syrok0010.nextgallery.R.string.upload_action))
-            }
-        }
     }
 }

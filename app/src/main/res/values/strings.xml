@@ -135,6 +135,7 @@
     <string name="album_add_failed_not_writable">Нет прав на изменение альбома «%1$s»</string>
     <string name="album_upload_summary">В «%1$s»: %2$d</string>
     <string name="album_upload_summary_failed">В «%1$s»: %2$d, не добавлено: %3$d</string>
+    <string name="selection_more_actions">Ещё действия</string>
     <string name="selection_cancel">Отменить выбор</string>
     <string name="selection_count">Выбрано: %1$d</string>
     <string name="upload_action">Загрузить</string>
