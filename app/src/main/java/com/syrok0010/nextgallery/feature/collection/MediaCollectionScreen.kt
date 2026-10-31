@@ -24,6 +24,7 @@ internal fun MediaCollectionScreen(
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
     onSelectionModeChanged: (Boolean) -> Unit = {},
     selectionEnabled: Boolean = false,
+    selection: MediaSelection = rememberMediaSelection(),
     selectionActions: List<SelectionAction> = emptyList(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
@@ -34,7 +35,6 @@ internal fun MediaCollectionScreen(
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
-    val selection = rememberMediaSelection()
     val cancelSelection = { selection.clear() }
     val selectedItems = remember(slots, selection.selectedIds) {
         slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
