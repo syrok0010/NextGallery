@@ -42,6 +42,7 @@
     <string name="status_waiting_browser_confirmation">Жду подтверждения входа в браузере</string>
     <string name="timeline_empty">Пока нет загруженных элементов</string>
     <string name="upload_without_notifications">Уведомления выключены. Загрузка началась.</string>
+    <string name="upload_error_foreground">Android не разрешил начать загрузку. Повторите попытку</string>
     <string name="upload_start_refused">Android не дал начать загрузку. Она начнётся, когда вы снова откроете приложение.</string>
     <string name="timeline_day_header_pattern">d MMMM</string>
     <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
