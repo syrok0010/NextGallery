@@ -5,13 +5,20 @@ import com.syrok0010.nextgallery.core.network.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -44,8 +51,27 @@ internal class NextcloudTrashBin(private val transport: NextcloudTransport) {
                 transport.normalizeBaseUrl(credentials.serverUrl) +
                     "ocs/v2.php/cloud/capabilities?format=json",
             ).build()
-        return transport.baseClient.newCall(request).await().use { response ->
-            if (response.isSuccessful) cloudTrashAvailable(response.body.string()) else null
+        return withContext(Dispatchers.IO) {
+            val call = transport.baseClient.newCall(request)
+            // await() covers cancellation until headers arrive. Keep it active during body reads.
+            val cancelCall = launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    awaitCancellation()
+                } finally {
+                    call.cancel()
+                }
+            }
+            try {
+                call.await().use { response ->
+                    if (response.isSuccessful) cloudTrashAvailable(response.body.string()) else null
+                }
+            } catch (failure: IOException) {
+                // Closing the socket on cancellation must remain cancellation for the caller.
+                currentCoroutineContext().ensureActive()
+                throw failure
+            } finally {
+                cancelCall.cancel()
+            }
         }
     }
 }
