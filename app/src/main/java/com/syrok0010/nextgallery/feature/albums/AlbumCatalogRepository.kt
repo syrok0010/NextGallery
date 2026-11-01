@@ -43,6 +43,7 @@ internal class AlbumCatalogRepository(
     private val mutableState = MutableStateFlow(AlbumsUiState())
     val state = mutableState.asStateFlow()
     private val refreshes = MutableStateFlow(0)
+    val changes = refreshes.asStateFlow()
 
     fun refresh() {
         refreshes.update { it + 1 }

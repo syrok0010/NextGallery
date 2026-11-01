@@ -197,4 +197,13 @@
     <string name="media_activity_album">Добавляется в альбом</string>
     <string name="media_activity_delete">Удаляется</string>
     <string name="media_activity_progress">%1$s, %2$d%%</string>
+    <string name="album_remove_action">Убрать из альбома</string>
+    <string name="album_add_other">Добавить в другой альбом</string>
+    <string name="album_remove_title">Убрать из «%1$s»: %2$d?</string>
+    <string name="album_remove_note">Фото и видео останутся на телефоне, в облаке и в других альбомах. Меняется только состав этого альбома.</string>
+    <string name="album_remove_running">Убираем из «%1$s»</string>
+    <string name="album_remove_done">Убрано из альбомов: %1$d</string>
+    <string name="album_remove_failed">Не удалось убрать: %1$d</string>
+    <string name="album_remove_busy">Дождитесь завершения предыдущего удаления из альбома.</string>
+    <string name="delete_album_note">Удаление облачной копии уберёт её из всех серверных альбомов, в которые она входит.</string>
 </resources>
