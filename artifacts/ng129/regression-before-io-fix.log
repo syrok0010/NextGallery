@@ -1,0 +1,33 @@
+# Намеренно красный Android regression test до исправления IO; не результат финальной APK.
+com.syrok0010.nextgallery.feature.favorites.FavoriteDavContractTest > writeFromMainDispatcherReadsDelayedResponseBodyOffMainThread[nextgallery-api36-dev(AVD) - 16] FAILED
+	android.os.NetworkOnMainThreadException
+	at android.os.StrictMode$AndroidBlockGuardPolicy.onNetwork(StrictMode.java:1737)
+Tests on nextgallery-api36-dev(AVD) - 16 failed: There was 1 failure(s).
+Finished 2 tests on nextgallery-api36-dev(AVD) - 16
+Execute com.syrok0010.nextgallery.feature.favorites.FavoriteDavContractTest.writeFromMainDispatcherReadsDelayedResponseBodyOffMainThread: FAILED
+android.os.NetworkOnMainThreadException
+at android.os.StrictMode$AndroidBlockGuardPolicy.onNetwork(StrictMode.java: android.os.NetworkOnMainThreadException
+at android.os.StrictMode$AndroidBlockGuardPolicy.onNetwork(StrictMode.java:1737)
+at java.net.SocketInputStream.read(SocketInputStream.java:172)
+at java.net.SocketInputStream.read(SocketInputStream.java:143)
+at okio.internal.DefaultSocket$SocketSource.read(DefaultSocket.kt:124)
+at okio.RealBufferedSource.read(RealBufferedSource.kt:215)
+at okhttp3.internal.http1.Http1ExchangeCodec$AbstractSource.read(Http1ExchangeCodec.kt:375)
+at okhttp3.internal.http1.Http1ExchangeCodec$FixedLengthSource.read(Http1ExchangeCodec.kt:419)
+at okhttp3.internal.connection.Exchange$ResponseBodySource.read(Exchange.kt:346)
+at okio.RealBufferedSource.select(RealBufferedSource.kt:255)
+at okhttp3.internal._UtilJvmKt.readBomAsCharset(-UtilJvm.kt:88)
+at okhttp3.ResponseBody.string(ResponseBody.kt:190)
+at com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter.set(MemoriesFavoriteWriter.kt:56)
+at com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter$set$1.invokeSuspend(Unknown Source:18)
+at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+at android.os.Handler.handleCallback(Handler.java:995)
+at android.os.Handler.dispatchMessage(Handler.java:103)
+at android.os.Looper.loopOnce(Looper.java:248)
+at android.os.Looper.loop(Looper.java:338)
+at android.app.ActivityThread.main(ActivityThread.java:9067)
+at java.lang.reflect.Method.invoke(Native Method)
+at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:932)
+Suppressed: android.os.NetworkOnMainThreadException
