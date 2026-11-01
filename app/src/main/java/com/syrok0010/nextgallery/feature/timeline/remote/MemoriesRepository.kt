@@ -55,7 +55,7 @@ internal class MemoriesRepository(
             val byId = items.associateBy { it.remoteFileId }
             cacheRepository.saveTimelineSnapshot(credentials, snapshot.copy(slots = snapshot.slots.map { slot ->
                 slot.copy(mediaItem = slot.mediaItem?.let { old -> byId.getValue(old.remoteFileId) })
-            }), preservedFileIds = favorites.confirmedFileIds())
+            }), preservedFileIds = favorites.fileIdsNewerThan(read))
         }
         val byId = corrected.associateBy { it.remoteFileId }
         // The online index is authoritative here. Re-reading the materialized

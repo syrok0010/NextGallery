@@ -3,6 +3,11 @@ package com.syrok0010.nextgallery.feature.albums
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.CredentialsStore
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
+import com.syrok0010.nextgallery.feature.library.favoriteProjection
 import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -18,6 +23,29 @@ import org.junit.Test
 import retrofit2.HttpException
 
 class MemoriesAlbumContentsTest {
+    @Test fun `fresh album read accepts external favorite and persists it without timeline metadata`() = runBlocking {
+        Fixture().use { fixture ->
+            val item = fixture.load().last().items.first { it.remoteFileId == 1L }
+            fixture.metadata.confirm(fixture.metadata.begin(fixture.credentials), item, true) { fixture.persist(listOf(it)) }
+            assertTrue(favoriteProjection(listOf(item), fixture.metadata.values.value).single().isFavorite)
+            val refreshed = fixture.load().last().items.first { it.remoteFileId == 1L }
+            assertFalse(favoriteProjection(listOf(refreshed), fixture.metadata.values.value).single().isFavorite)
+            assertFalse(fixture.persisted.getValue(1).isFavorite)
+        }
+    }
+    @Test fun `album response begun before favorite confirmation cannot undo it in metadata or cache`() = runBlocking {
+        Fixture().use { fixture ->
+            val item = fixture.load().last().items.first { it.remoteFileId == 1L }
+            fixture.beforeIndexResponse = {
+                runBlocking {
+                    fixture.metadata.confirm(fixture.metadata.begin(fixture.credentials), item, true) { fixture.persist(listOf(it)) }
+                }
+            }
+            val stale = fixture.load().last().items.first { it.remoteFileId == 1L }
+            assertTrue(stale.isFavorite)
+            assertTrue(fixture.persisted.getValue(1).isFavorite)
+        }
+    }
     @Test fun `all batches carry encoded cluster filter and use media identity`() = runBlocking {
         Fixture().use { fixture ->
             val batches = fixture.load()
@@ -45,6 +73,15 @@ class MemoriesAlbumContentsTest {
         private val server = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
         private val executor = Executors.newSingleThreadExecutor()
         val requests = CopyOnWriteArrayList<List<String>>()
+        val credentials = AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture")
+        val metadata = CloudFavoriteMetadata(SessionStore(object : CredentialsStore {
+            override fun load() = credentials
+            override fun save(credentials: AccountCredentials) = Unit
+            override fun clear() = Unit
+        }))
+        val persisted = mutableMapOf<Long, MediaItem>()
+        fun persist(items: List<MediaItem>) { items.forEach { persisted[requireNotNull(it.remoteFileId)] = it } }
+        var beforeIndexResponse: () -> Unit = { }
         init { executor.execute {
             while (!server.isClosed) {
                 val socket = try { server.accept() } catch (_: IOException) { break }
@@ -53,6 +90,7 @@ class MemoriesAlbumContentsTest {
                     val lines = generateSequence { reader.readLine()?.takeIf(String::isNotEmpty) }.toList()
                     requests += lines
                     val index = lines.first().contains("/days?")
+                    if (index) beforeIndexResponse()
                     val body = if (index) """[{"dayid":20,"count":3,"detail":[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048}]}]"""
                         else """[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":2,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":3,"dayid":20,"epoch":1716768000,"isvideo":1}]"""
                     val bytes = body.toByteArray()
@@ -63,9 +101,9 @@ class MemoriesAlbumContentsTest {
                 }
             }
         } }
-        suspend fun load() = MemoriesAlbumContents(NextcloudTransport(Json { ignoreUnknownKeys = true }), InMemoryMediaIdentityRegistry()).load(
+        suspend fun load() = MemoriesAlbumContents(NextcloudTransport(Json { ignoreUnknownKeys = true }), InMemoryMediaIdentityRegistry(), metadata, ::persist).load(
             AlbumLocation.Remote("anna/Лето & море"),
-            AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture"),
+            credentials,
         ).toList()
         override fun close() { server.close(); executor.shutdownNow() }
     }

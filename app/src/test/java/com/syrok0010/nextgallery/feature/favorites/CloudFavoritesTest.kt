@@ -24,6 +24,27 @@ internal class CloudFavoritesTest {
         864000, false, null, favorite, false, MediaAssetRef.MemoriesFile(id),
     )
 
+    @Test fun `cache failure does not discard server metadata or block accepting external favorite`() = runTest {
+        val metadata = CloudFavoriteMetadata(sessions())
+        metadata.confirm(metadata.begin(credentials), item(), true) { }
+        val received = metadata.ingest(metadata.begin(credentials), listOf(item())) {
+            throw IOException("cache unavailable")
+        }
+        assertFalse(received.single().isFavorite)
+        assertFalse(metadata.values.value.getValue(1).favorite)
+    }
+
+    @Test fun `cancelled cache ingestion still cancels the read`() = runTest {
+        val metadata = CloudFavoriteMetadata(sessions())
+        try {
+            metadata.ingest(metadata.begin(credentials), listOf(item())) {
+                throw kotlinx.coroutines.CancellationException("cancelled cache")
+            }
+            fail("Cancellation swallowed")
+        } catch (_: kotlinx.coroutines.CancellationException) { }
+        assertTrue(metadata.values.value.isEmpty())
+    }
+
     @Test fun `pending keeps previous value blocks repeated taps and failure leaves metadata intact`() = runTest {
         val sessions = sessions()
         val metadata = CloudFavoriteMetadata(sessions)

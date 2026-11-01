@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.library
 
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -18,7 +19,6 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
     private val mutex = Mutex()
     private var owner = -1L
     private var revision = 0L
-    private var confirmedIds = emptySet<Long>()
     private val mutableValues = MutableStateFlow<Map<Long, FavoriteValue>>(emptyMap())
     val values = mutableValues.asStateFlow()
 
@@ -27,7 +27,6 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
         if (owner != sessions.generation) {
             owner = sessions.generation
             revision = 0
-            confirmedIds = emptySet()
             mutableValues.value = emptyMap()
         }
         return FavoriteRead(owner, revision)
@@ -55,7 +54,8 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
                     item
                 }
             }
-            persist(corrected)
+            // A cache failure must not discard successful server metadata. Cancellation still wins.
+            bestEffort { persist(corrected) }
             ensureCurrent(read)
             // Retain a confirmed value for already-published snapshots, but allow a later server read
             // to observe changes made in another client. Only writes advance the revision.
@@ -80,20 +80,20 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
         ensureCurrent(read)
         persist(item.copy(isFavorite = favorite))
         ensureCurrent(read)
-        confirmedIds = confirmedIds + requireNotNull(item.remoteFileId)
         mutableValues.value = mutableValues.value +
             (requireNotNull(item.remoteFileId) to FavoriteValue(++revision, favorite))
     }
 
-    // Index refreshes may invalidate whole days without returning their metadata. Keep confirmed
-    // items materialized; accepting a later detail response still updates their favorite value.
-    fun confirmedFileIds(): Set<Long> =
-        if (owner == sessions.generation) confirmedIds else emptySet()
+    // Only a read begun before the write needs protection from whole-day invalidation. A newer
+    // authoritative index must be allowed to evict metadata, including a deleted day's last photo.
+    fun fileIdsNewerThan(read: FavoriteRead): Set<Long> {
+        ensureCurrent(read)
+        return mutableValues.value.filterValues { it.revision > read.revision }.keys
+    }
 
     suspend fun clear(persist: suspend () -> Unit) =
         mutex.withLock {
             persist()
-            confirmedIds = emptySet()
             mutableValues.value = emptyMap()
         }
 

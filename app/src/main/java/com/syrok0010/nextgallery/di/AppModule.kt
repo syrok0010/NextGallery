@@ -128,7 +128,12 @@ val appModule = module {
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get(), get()) }
+    single {
+        val cache = get<TimelineCacheRepository>()
+        MemoriesAlbumContents(get(), get(), get()) { items ->
+            cache.updateCachedFavorites(items)
+        }
+    }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
