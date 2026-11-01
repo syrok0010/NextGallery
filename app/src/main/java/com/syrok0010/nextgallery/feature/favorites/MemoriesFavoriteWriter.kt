@@ -7,6 +7,8 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -34,7 +36,7 @@ internal class MemoriesFavoriteWriter(private val transport: NextcloudTransport)
     // Never follow a redirect with the app password, including the file-id lookup.
     private val client = transport.baseClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
-    suspend fun set(credentials: AccountCredentials, fileId: Long, favorite: Boolean) {
+    suspend fun set(credentials: AccountCredentials, fileId: Long, favorite: Boolean) = withContext(Dispatchers.IO) {
         require(fileId > 0)
         val api = transport.retrofit(
             transport.normalizeBaseUrl(credentials.serverUrl),
