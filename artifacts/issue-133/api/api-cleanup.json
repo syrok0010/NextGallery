@@ -1,0 +1,62 @@
+[
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-1",
+    "status": 404
+  },
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-2",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-local-D.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-local-E.jpg",
+    "status": 204
+  },
+  {
+    "method": "PROPFIND",
+    "path": "remote.php/dav/trashbin/test/trash",
+    "status": 207
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/ng133-ui-local-D.jpg.d1793524652",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/ng133-ui-local-E.jpg.d1793524652",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/ng133-ui-1793523508.d1793524651/",
+    "status": 204
+  },
+  {
+    "method": "HEAD",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508",
+    "status": 404
+  },
+  {
+    "method": "HEAD",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-local-D.jpg",
+    "status": 404
+  },
+  {
+    "method": "HEAD",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-local-E.jpg",
+    "status": 404
+  }
+]

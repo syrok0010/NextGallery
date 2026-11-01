@@ -1,0 +1,7 @@
+[
+  {
+    "method": "DELETE",
+    "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-1",
+    "status": 204
+  }
+]

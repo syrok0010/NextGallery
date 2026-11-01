@@ -1,0 +1,11 @@
+MKCOL /remote.php/dav/files/test/Photos/ng133-contract-e43a88b3: 201
+POST /apps/memories/api/image/reindex/309: 200
+Production MemoriesAlbumRemover: removed=1, failed=0
+HEAD /remote.php/dav/files/test/Photos/ng133-contract-e43a88b3/photo.jpg: 200
+GET /apps/memories/api/image/info/309: 200
+Memories: intimeline=true; removed album empty; second album contains 309
+HEAD /remote.php/dav/files/test/Photos/ng133-contract-e43a88b3/photo.jpg: 200
+DELETE /remote.php/dav/photos/test/albums/ng133-contract-e43a88b3-a: 204
+DELETE /remote.php/dav/photos/test/albums/ng133-contract-e43a88b3-b: 204
+DELETE /remote.php/dav/files/test/Photos/ng133-contract-e43a88b3: 204
+DELETE /remote.php/dav/trashbin/test/trash/ng133-contract-e43a88b3.d1793521067/: 204
