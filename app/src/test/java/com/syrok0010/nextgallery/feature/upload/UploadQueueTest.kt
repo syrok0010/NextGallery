@@ -266,6 +266,46 @@ class UploadQueueTest {
             }
         }
 
+    @Test fun `new work and consuming summary preserve per-file history until explicit clearing`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            queue.submit(ids("a", "b"))
+            val first = queue.waiting.value.single()
+            first.items[0].complete(UploadPhase.Uploaded)
+            first.items[1].cancel()
+            queue.batchFinished(first)
+            queue.passFinished(UploadResult(1, 2, cancelled = 1))
+            queue.consumeResult()
+            queue.submit(ids("c"))
+            assertEquals(2, queue.batches.value.size)
+            assertEquals(UploadPhase.Cancelled, queue.batches.value.first().items[1].state.value.phase)
+            queue.clearFinished()
+            assertEquals(listOf(files("c")), queue.batches.value.map { it.files })
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `foreground refusal resolves follow-up even for cancelled batch`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            val finished = kotlinx.coroutines.CompletableDeferred<List<UploadSelection>>()
+            queue.submit(ids("a"), listOf(object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) { error("No transfer allowed") }
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    finished.complete(missed)
+                    return emptyList()
+                }
+            }))
+            queue.cancelAll()
+            queue.release()
+            assertFalse(queue.enterForeground("refused") { throw SecurityException() })
+            assertEquals(files("a"), withTimeout(1_000) { finished.await() })
+            assertNull(queue.activity.value)
+            assertEquals(UploadPhase.Cancelled, queue.batches.value.single().items.single().state.value.phase)
+        } finally { scope.cancel() }
+    }
+
     private fun ids(vararg names: String) = names.map(::MediaId)
 
     private fun files(vararg names: String) =

@@ -17,6 +17,9 @@ internal sealed interface NextGalleryRoute : NavKey {
     data object Photos : NextGalleryRoute
 
     @Serializable
+    data object Uploads : NextGalleryRoute
+
+    @Serializable
     data object Albums : NextGalleryRoute
 
     @Serializable
@@ -29,6 +32,8 @@ internal sealed interface NextGalleryRoute : NavKey {
             Photos -> "photos"
 
             Albums -> "albums"
+
+            Uploads -> "uploads"
 
             is Album ->
                 when (val location = location) {
