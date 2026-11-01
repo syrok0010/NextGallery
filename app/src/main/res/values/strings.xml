@@ -222,4 +222,17 @@
     <string name="album_remove_failed">Couldn\'t remove: %1$d</string>
     <string name="album_remove_busy">Wait for the previous album removal to finish.</string>
     <string name="delete_album_note">Deleting the cloud copy will remove it from every server album it belongs to.</string>
+    <string name="favorite_add">Add to cloud favorites</string>
+    <string name="favorite_remove">Remove from cloud favorites</string>
+    <string name="favorite_cloud_only">Favorites are available for cloud photos</string>
+    <string name="favorite_error_title">Couldn\'t change favorites</string>
+    <string name="favorite_error">The change wasn\'t confirmed. The previous value is shown. Check the connection and photo access, refresh favorites, and try again.</string>
+    <string name="favorite_error_close">Got it</string>
+    <string name="favorite_filter_all">All</string>
+    <string name="favorite_filter_cloud">Cloud favorites</string>
+    <string name="favorite_empty">No favorite photos in the cloud yet</string>
+    <string name="favorite_filter_failed">Couldn\'t refresh all favorites. Saved photos are shown. Retry</string>
+    <string name="favorite_filter_cached">Saved favorite photos. Refresh from server</string>
+    <string name="favorite_loading">Loading cloud favorites…</string>
+    <string name="favorite_no_cache">No saved favorite photos</string>
 </resources>
