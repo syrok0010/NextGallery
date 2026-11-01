@@ -240,6 +240,81 @@ class UploadQueueRuntimeTest {
         assertTrue(queue.batches.value.isEmpty())
     }
 
+    @Test fun executorCancellationStopsTheWholeReleasedPassWithoutAReopenLoop() = runBlocking {
+        val active = enqueue()
+        val queued = enqueue(listOf(ids.first()))
+        assertEquals(listOf(active, queued), queue.release())
+        assertEquals(active, queue.next())
+        val sending = CompletableDeferred<Unit>()
+        val runner = launch(Dispatchers.Default) {
+            queue.runBatch(active) { _, _, _ -> sending.complete(Unit); awaitCancellation() }
+        }
+        sending.await()
+        runner.cancelAndJoin()
+        assertTrue("Every released file must expose the executor stop", (active.items + queued.items).all {
+            it.state.value.phase == UploadPhase.NeedsAttention
+        })
+        assertNull(queue.next())
+        assertEquals(0, queue.releasedFiles())
+        assertTrue(queue.waiting.value.isEmpty())
+        assertNull(queue.activity.value)
+        reopen()
+        waitFor { queue.batches.value.size == 2 }
+        assertTrue(queue.waiting.value.isEmpty())
+        assertTrue(queue.batches.value.flatMap { it.items }.all { it.state.value.phase == UploadPhase.NeedsAttention })
+        assertFalse(queue.logout { error("Stopped jobs need explicit cancellation") })
+        val fresh = enqueue(listOf(ids.last()))
+        assertEquals(listOf(fresh), queue.release())
+    }
+
+    @Test fun viewingAttentionConsumesOnlyTheSummaryAndCancellationPublishesANewResult() = runBlocking {
+        val batch = enqueue(listOf(ids.first()))
+        stamp = null
+        queue.runBatch(batch, ::transfer)
+        assertEquals(1, queue.result.value!!.attention)
+        queue.consumeResult()
+        waitFor { queue.result.value == null }
+        assertEquals(UploadPhase.NeedsAttention, batch.items.single().state.value.phase)
+        assertFalse(queue.logout { error("Viewing a result does not finish the job") })
+        reopen()
+        waitFor { queue.batches.value.isNotEmpty() }
+        assertNull(queue.result.value)
+        queue.cancelAll()
+        waitFor { queue.result.value?.cancelled == 1 }
+        assertTrue(queue.logout { sessions.signOut() })
+    }
+
+    @Test fun stopBetweenBatchesPreservesReceiptAndSuppressesReleasedPendingAlbumWithoutPut() = runBlocking {
+        val completed = enqueue(listOf(ids.first()))
+        val pending = enqueue(listOf(ids.last()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
+        queue.release()
+        val pendingClaim = journal.claim(pending.items.single().id, credentials.uploadOwner, "fixture")!!
+        val receipt = UploadReceipt("http://test.syrok/already-uploaded", true, 43)
+        val accepted = journal.accept(pendingClaim, receipt)!!
+        journal.release(accepted)
+        assertEquals(completed, queue.next())
+        queue.runBatch(completed, ::transfer)
+        assertEquals(1, transfers)
+        queue.stopExecutor()
+        val stopped = journal.jobs(credentials.uploadOwner).last()
+        assertEquals(receipt, stopped.receipt)
+        assertEquals("Attention", stopped.linkStep)
+        assertEquals("Attention", stopped.albumStep)
+        assertNull(stopped.executor)
+        assertNull(queue.next())
+        assertTrue(queue.waiting.value.isEmpty())
+        queue.consumeResult()
+        waitFor { queue.result.value == null }
+        assertTrue(pending.items.single().state.value.pendingAction)
+        assertFalse(queue.logout { error("Unresolved steps must block logout") })
+        queue.cancel(pending)
+        waitFor { !pending.items.single().state.value.pendingAction }
+        assertEquals(UploadPhase.Uploaded, pending.items.single().state.value.phase)
+        assertEquals(1, queue.result.value!!.uploaded)
+        assertEquals(1, transfers)
+        assertTrue(queue.logout { sessions.signOut() })
+    }
+
     private fun media(id: MediaId) = MediaItem(id, 1, "${id.value}.jpg", "image/jpeg", null, null, null, null, null, null, null,
         1, false, null, false, false, MediaAssetRef.LocalContent("content://media/external/images/media/${if (id == ids.first()) 1 else 2}", 1))
 }
