@@ -78,7 +78,8 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
         persist: suspend (MediaItem) -> Unit,
     ) = mutex.withLock {
         ensureCurrent(read)
-        persist(item.copy(isFavorite = favorite))
+        // DAV has already confirmed the change. Cache availability cannot undo server truth.
+        bestEffort { persist(item.copy(isFavorite = favorite)) }
         ensureCurrent(read)
         mutableValues.value = mutableValues.value +
             (requireNotNull(item.remoteFileId) to FavoriteValue(++revision, favorite))
