@@ -103,3 +103,7 @@ dataSync quota/timeout на ОС, ENOSPC, backup/restore, миграция бу�
 ## Исправления Standards review
 
 На runtime `80ef6c115b339a4799ff0b7a36a6f8ff22c20814` оба замечания исправлены и проверены отдельно: [red/green и ограничения](standards-fixes.md). Итог — 262 JVM и 29 instrumentation; первоначальный ручной SIGKILL-прогон выше не выдаётся за повторный прогон нового SHA.
+
+## Исправление Spec review
+
+На runtime `8abccae2c98f231c7414574aeb3a2abc8c2bd1cc` исправлено единственное P3/nit: [сброс прогресса, red/green и границы](spec-fix.md). Повторные проверки — 262 JVM и 30 instrumentation, форматирование, boundaries и сборка.
