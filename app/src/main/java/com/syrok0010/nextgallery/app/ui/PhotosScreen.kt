@@ -68,7 +68,8 @@ internal fun PhotosScreen(
             label = stringResource(R.string.delete_action),
             isDestructive = true,
         ) { items, _ ->
-            deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
+            // Server-filtered favorites may not be hydrated into the ordinary timeline index.
+            deleteRequest = DeletionPreparation.of(items)
         },
         SelectionAction(
             icon = painterResource(R.drawable.ic_albums),
