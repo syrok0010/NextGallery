@@ -49,6 +49,9 @@ interface MemoriesTimelineDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMediaItems(entities: List<MemoriesMediaEntity>)
 
+    @Query("UPDATE memories_media SET isFavorite = :favorite WHERE fileId = :fileId")
+    suspend fun updateFavorite(fileId: Long, favorite: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLoadedDays(entities: List<LoadedDayEntity>)
 
