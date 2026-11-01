@@ -1,17 +1,10 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import com.syrok0010.nextgallery.core.ui.UiText
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicLong
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.Call
+import okhttp3.Response
 
 internal enum class UploadPhase {
     Waiting,
@@ -20,6 +13,7 @@ internal enum class UploadPhase {
     Existing,
     NameConflict,
     Failed,
+    NeedsAttention,
     Cancelled,
     ;
 
@@ -30,19 +24,34 @@ internal data class UploadItemState(
     val phase: UploadPhase = UploadPhase.Waiting,
     val percent: Int? = null,
     val failure: String? = null,
+    val pendingAction: Boolean = false,
+    val attention: Boolean = false,
+    val actionSuppressed: Boolean = false,
+    val albumAdded: String? = null,
+    val httpStatus: Int? = null,
 )
 
-/** Serializes cancellation with response acceptance and with the start of the file's DAV work. */
-internal class UploadItem(val selection: UploadSelection) {
-    val id = nextItemId.incrementAndGet()
+/** Serializes cancellation with response acceptance, including registration of the next DAV call. */
+internal class UploadItem(
+    val selection: UploadSelection,
+    val id: String = java.util.UUID.randomUUID().toString(),
+) {
     private val mutableState = MutableStateFlow(UploadItemState())
     val state = mutableState.asStateFlow()
-    private var work: Job? = null
+    private var call: Call? = null
+
+    fun restore(state: UploadItemState) {
+        mutableState.value = state
+    }
+
+    fun stopCall() {
+        synchronized(this) { call?.cancel() }
+    }
 
     @Synchronized fun cancel() {
         if (state.value.phase.terminal) return
         mutableState.value = UploadItemState(UploadPhase.Cancelled)
-        work?.cancel()
+        call?.cancel()
     }
 
     @Synchronized fun progress(percent: Int?): Boolean {
@@ -54,87 +63,20 @@ internal class UploadItem(val selection: UploadSelection) {
     @Synchronized fun complete(phase: UploadPhase, failure: String? = null): Boolean {
         if (state.value.phase.terminal) return false
         mutableState.value = UploadItemState(phase, failure = failure)
-        work = null
+        call = null
         return true
     }
 
-    /**
-     * Runs the file's DAV work so that [cancel] aborts it: DAV calls cancel their sockets with the
-     * coroutine, including a response body still being read. A cancelled file fails with
-     * [IOException] like a closed socket; cancellation of the caller still propagates.
-     */
-    suspend fun <T> run(block: suspend () -> T): T =
-        coroutineScope {
-            val next = async(start = CoroutineStart.LAZY) { block() }
-            synchronized(this@UploadItem) {
-                if (state.value.phase == UploadPhase.Cancelled) {
-                    next.cancel()
-                    throw IOException("Upload cancelled")
-                }
-                work = next
+    fun execute(next: Call): Response {
+        synchronized(this) {
+            if (state.value.phase == UploadPhase.Cancelled) {
+                next.cancel()
+                throw IOException("Upload cancelled")
             }
-            try {
-                next.await()
-            } catch (cancelled: CancellationException) {
-                currentCoroutineContext().ensureActive()
-                throw IOException("Upload cancelled", cancelled)
-            }
+            call = next
         }
-}
-
-private val nextItemId = AtomicLong()
-
-/** Keeps per-file outcomes even when a later file fails. Cancelled files never reach follow-ups. */
-internal suspend fun runUploadFiles(
-    batch: UploadBatch,
-    transfer: suspend (UploadItem) -> UploadedFile?,
-    accepted: suspend (UploadedFile) -> Unit,
-    failureReason: (Exception) -> String,
-    processed: (UploadSelection) -> Unit,
-) {
-    var failure: String? = null
-    for (item in batch.items) {
-        try {
-            if (!item.state.value.phase.terminal) {
-                if (failure != null) {
-                    item.complete(UploadPhase.Failed, failure)
-                } else {
-                    try {
-                        val uploaded = transfer(item)
-                        val phase = when {
-                            uploaded == null -> UploadPhase.NameConflict
-                            uploaded.created -> UploadPhase.Uploaded
-                            else -> UploadPhase.Existing
-                        }
-                        if (item.complete(phase) && uploaded != null) accepted(uploaded)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        // A cancelled socket is not a batch failure; later files can still run.
-                        val reason = failureReason(error)
-                        if (item.complete(UploadPhase.Failed, reason)) failure = reason
-                    }
-                }
-            }
-        } finally {
-            processed(item.selection)
-        }
-    }
-}
-
-/** Always resolves batch follow-ups, including a batch whose every file was cancelled. */
-internal suspend fun finishUploadBatch(batch: UploadBatch): List<UiText> {
-    val missed = batch.items
-        .filter {
-            it.state.value.phase !in setOf(UploadPhase.Uploaded, UploadPhase.Existing)
-        }.map { it.selection }
-    return batch.followUps.flatMap { followUp ->
-        try {
-            followUp.finished(missed)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
-        }
+        // Keep the call registered while response bodies are read (not just until headers).
+        // The next DAV call replaces it; accepting the outcome releases the last reference.
+        return next.execute()
     }
 }

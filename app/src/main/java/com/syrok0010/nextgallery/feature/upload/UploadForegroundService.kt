@@ -11,18 +11,14 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
 import android.util.Log
-import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
-import com.syrok0010.nextgallery.core.network.dav.DavHttpException
-import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
@@ -40,17 +36,18 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 import retrofit2.HttpException
 
 /**
  * Uploads batches from [UploadQueue] and runs their follow-ups. It knows nothing about why a file
- * is uploaded: everything after the upload belongs to [UploadFollowUp].
+ * is uploaded: the journal decides which persisted steps remain after transfer.
  */
 class UploadForegroundService : Service() {
-    private val credentialsStore: CredentialsStore by inject()
-    private val dav: FilesDavClient by inject()
+    private val transport: NextcloudTransport by inject()
     private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -109,17 +106,6 @@ class UploadForegroundService : Service() {
                 RESULT_NOTIFICATION_ID,
                 resultNotification(pass),
             )
-            queue.passFinished(
-                UploadResult(
-                    uploaded = pass.uploaded,
-                    files = pass.files,
-                    failures = pass.failures.distinct(),
-                    details = pass.detailLines(),
-                    existing = pass.existing,
-                    cancelled = pass.cancelled,
-                    conflicts = pass.nameTaken,
-                ),
-            )
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelfResult(lastStartId)
@@ -167,8 +153,12 @@ class UploadForegroundService : Service() {
         pass.cancelled += states.count { it.phase == UploadPhase.Cancelled }
         pass.nameTaken += states.count { it.phase == UploadPhase.NameConflict }
         pass.failures += states.mapNotNull { it.failure }.distinct()
-        queue.batchFinished(batch)
-        pass.details += finishUploadBatch(batch)
+        if (states.any {
+                it.attention || it.pendingAction
+            }
+        ) {
+            pass.failures += getString(R.string.uploads_attention)
+        }
         // Leaves room for the result after the last progress update.
         delay(500L)
     }
@@ -220,47 +210,43 @@ class UploadForegroundService : Service() {
         batch: UploadBatch,
         onProgress: (index: Int, percent: Int?) -> Unit,
     ) {
-        var credentials: AccountCredentials? = null
         var destination: String? = null
-        runUploadFiles(
-            batch = batch,
-            transfer = { item ->
-                val account = credentials ?: (
-                    credentialsStore.load()
-                        ?: throw UploadException(R.string.upload_error_session)
-                    ).also { credentials = it }
+        queue.runBatch(batch) { account, item, claim ->
+            val selection = item.selection
+            val url = claim.destination ?: run {
                 val directory = destination ?: (
                     timelinePaths(
                         memories.config().timelinePath,
                     ).firstOrNull()
                         ?: throw UploadException(R.string.upload_error_timeline)
                     ).also { destination = it }
-                val selection = item.selection
-                put(
-                    // DAV paths use the Nextcloud uid, not the login name.
-                    path = DavFilePath.of(account.userId, directory, selection.displayName),
-                    item = item,
-                    onProgress = { percent ->
-                        if (item.progress(percent)) {
-                            queue.uploading(selection.contentUri, percent)
-                            onProgress(batch.items.indexOf(item), percent)
-                        }
-                    },
-                )
-            },
-            accepted = { uploaded ->
-                batch.followUps.forEach { followUp ->
-                    guarded(Unit) { followUp.uploaded(checkNotNull(credentials), uploaded) }
+                val proposed = uploadUrl(
+                    account.serverUrl,
+                    account.userId,
+                    directory,
+                    selection.displayName,
+                ).toString()
+                queue.pinDestination(
+                    claim,
+                    proposed,
+                ) ?: throw java.io.IOException("Upload no longer claimed")
+            }
+            put(account, url.toHttpUrl(), item) { percent ->
+                if (item.progress(percent)) {
+                    queue.uploading(selection.contentUri, percent)
+                    onProgress(batch.items.indexOf(item), percent)
                 }
-            },
-            failureReason = ::failureReason,
-            processed = { queue.processed(it.contentUri) },
-        )
+            }
+        }
     }
 
-    /** Returns null when no free name is left for a file that differs from the taken ones. */
-    private suspend fun put(
-        path: DavFilePath,
+    /**
+     * Returns null when the name is taken by a different file: an existing file counts as this
+     * upload only if sizes match, since the server keeps no hash to compare.
+     */
+    private fun put(
+        credentials: AccountCredentials,
+        url: HttpUrl,
         item: UploadItem,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
@@ -271,25 +257,16 @@ class UploadForegroundService : Service() {
             contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
-        val openLocal = {
-            val stream = readSource(name) { contentResolver.openInputStream(uri) }
-            stream ?: throw SourceUnavailable(name)
-        }
         val body = UploadRequestBody(
             length = length,
             mediaType = selection.mimeType?.toMediaTypeOrNull(),
-            openStream = openLocal,
+            openStream = {
+                val stream = readSource(name) { contentResolver.openInputStream(uri) }
+                stream ?: throw SourceUnavailable(name)
+            },
             onProgress = onProgress,
         )
-        return try {
-            item.run { placeUpload(dav, path, selection, body, openLocal) }
-        } catch (error: DavHttpException) {
-            val reason = when (error.code) {
-                404, 409 -> R.string.upload_error_directory
-                else -> R.string.upload_error_http
-            }
-            throw UploadException(reason, error.code, selection.displayName)
-        }
+        return uploadFile(transport, credentials, url, selection, body, item::execute)
     }
 
     private fun notification(
@@ -315,6 +292,12 @@ class UploadForegroundService : Service() {
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        serviceScope.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -371,8 +354,6 @@ class UploadForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
-
     /**
      * The local file can no longer be read. An [IOException], so OkHttp passes it out of the
      * request body unchanged instead of rethrowing it on its dispatcher thread.
@@ -408,12 +389,4 @@ class UploadForegroundService : Service() {
     }
 }
 
-/** A failing follow-up must not stop the upload or the other follow-ups. */
-private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
-    try {
-        block()
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
-        fallback
-    }
+

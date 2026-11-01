@@ -15,6 +15,8 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.feature.upload.EnqueueResult
+import com.syrok0010.nextgallery.feature.upload.UploadIntent
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +53,7 @@ internal data class AlbumAdditionRequest(
     }
 }
 
-internal enum class AlbumAdditionFailure { AlbumExists, Network, NotWritable }
+internal enum class AlbumAdditionFailure { AlbumExists, Network, NotWritable, QueueStorage }
 
 internal sealed interface AlbumAdditionState {
     data object Idle : AlbumAdditionState
@@ -80,7 +82,7 @@ internal class AlbumAdditions(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
-    private val uploads: UploadQueue,
+    private val enqueueUploads: suspend (Collection<MediaId>, List<UploadIntent>) -> EnqueueResult,
     private val scope: CoroutineScope,
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
@@ -112,7 +114,7 @@ internal class AlbumAdditions(
      * Local-only objects are queued for upload once the album exists, so they never race album
      * creation; they are not uploaded when the album cannot be written.
      */
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
+    fun add(target: AlbumTarget, request: AlbumAdditionRequest, onAccepted: () -> Unit = {}): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
@@ -126,10 +128,15 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
-                    val queued = uploads.submit(
+                    val queued = if (request.uploads.isEmpty()) 0 else when (val enqueue = enqueueUploads(
                         request.uploads,
-                        listOf(AlbumUploadFollowUp(writer, catalog, address)),
-                    )
+                        listOf(UploadIntent("album", owner = address.owner, target = address.name)),
+                    )) {
+                        is EnqueueResult.Accepted -> enqueue.count
+                        EnqueueResult.NothingToUpload -> 0
+                        EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                    }
+                    onAccepted()
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(address, request.fileIds),
@@ -138,6 +145,8 @@ internal class AlbumAdditions(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (_: UploadEnqueueRejected) {
+                AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
             } catch (_: AlbumAlreadyExistsException) {
                 AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
             } catch (_: Exception) {
@@ -237,8 +246,11 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
                     AlbumAdditionFailure.AlbumExists -> R.string.album_add_failed_exists
                     AlbumAdditionFailure.Network -> R.string.album_add_failed_network
                     AlbumAdditionFailure.NotWritable -> R.string.album_add_failed_not_writable
+                    AlbumAdditionFailure.QueueStorage -> R.string.uploads_enqueue_rejected
                 },
                 state.albumName,
             ),
         )
     }
+
+private class UploadEnqueueRejected : Exception()

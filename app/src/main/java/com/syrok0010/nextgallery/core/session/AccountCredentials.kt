@@ -9,4 +9,6 @@ data class AccountCredentials(
     val appPassword: String,
     /** Nextcloud uid for DAV paths; Login Flow may hand out an e-mail as [loginName]. */
     val userId: String,
+    /** Durable login lifetime; a fresh Login Flow always creates a new token. */
+    val ownerToken: String = java.util.UUID.randomUUID().toString(),
 )
