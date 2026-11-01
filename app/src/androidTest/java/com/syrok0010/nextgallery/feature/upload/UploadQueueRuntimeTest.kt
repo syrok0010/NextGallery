@@ -200,6 +200,36 @@ class UploadQueueRuntimeTest {
         queue.cancelAll()
     }
 
+    @Test fun completedAndCancelledFilesDoNotKeepProgressWhileAnotherFileWaits() = runBlocking {
+        val active = enqueue()
+        val waiting = enqueue(listOf(ids.first()))
+        queue.runBatch(active) { account, item, claim ->
+            if (item == active.items.first()) {
+                queue.uploading(item.selection.contentUri, 100)
+            } else {
+                assertEquals(1, queue.activity.value!!.processed)
+                assertNull("Completed file must not remain current", queue.activity.value!!.current)
+                assertNull(queue.activity.value!!.percent)
+                queue.uploading(item.selection.contentUri, 25)
+                queue.consumeResult()
+                waitFor { queue.result.value == null }
+                assertEquals(item.selection.identityUri, queue.activity.value!!.current)
+                assertEquals(25, queue.activity.value!!.percent)
+                queue.cancel(item)
+                waitFor { item.state.value.phase == UploadPhase.Cancelled }
+                assertNull("Cancelled file must not remain current", queue.activity.value!!.current)
+                assertNull(queue.activity.value!!.percent)
+            }
+            transfer(account, item, claim)
+        }
+        assertEquals(UploadPhase.Uploaded, active.items.first().state.value.phase)
+        assertEquals(UploadPhase.Cancelled, active.items.last().state.value.phase)
+        assertEquals(UploadPhase.Waiting, waiting.items.single().state.value.phase)
+        assertEquals(2, queue.activity.value!!.processed)
+        assertEquals(3, queue.activity.value!!.total)
+        assertEquals(1, links)
+    }
+
     @Test fun newlyAcceptedAlbumRunsOnceAndReceiptPendingAlbumDoesNotReplayOnReopen() = runBlocking {
         val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
         queue.runBatch(batch, ::transfer)
