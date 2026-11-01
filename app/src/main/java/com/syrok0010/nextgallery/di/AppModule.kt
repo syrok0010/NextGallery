@@ -132,6 +132,8 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
             get<AlbumCatalogRepository>().refresh()
+            val favorites = get<CloudFavorites>()
+            if (favorites.state.value.loaded) favorites.refresh()
         }
     } bind OperationStatusSource::class
     single { UploadQueueDatabase.open(androidContext()) }

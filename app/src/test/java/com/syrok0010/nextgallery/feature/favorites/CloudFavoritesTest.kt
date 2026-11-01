@@ -34,6 +34,39 @@ internal class CloudFavoritesTest {
         assertFalse(metadata.values.value.getValue(1).favorite)
     }
 
+    @Test fun `successful DAV survives cache failure and next tap sends inverse of server value`() = runTest {
+        val sessions = sessions()
+        val metadata = CloudFavoriteMetadata(sessions)
+        val targets = mutableListOf<Boolean>()
+        val favorites = CloudFavorites(sessions, metadata, { emptyList() }, MediaLibraryIndex(), backgroundScope,
+            write = { _, _, target -> targets += target }, persist = { throw IOException("Room unavailable") })
+        runCurrent()
+        assertTrue(favorites.set(item()))
+        runCurrent()
+        assertEquals(listOf(true), targets)
+        assertNull(favorites.pending.value)
+        assertFalse(favorites.error.value)
+        assertTrue(favoriteProjection(listOf(item()), metadata.values.value).single().isFavorite)
+        assertTrue(favorites.state.value.items.single().isFavorite)
+        // The viewer may still hold an older item snapshot. Confirmed server metadata wins.
+        assertTrue(favorites.set(item()))
+        runCurrent()
+        assertEquals(listOf(true, false), targets)
+        assertFalse(favorites.error.value)
+        assertFalse(metadata.values.value.getValue(1).favorite)
+    }
+
+    @Test fun `cancelled confirmation cache does not publish metadata`() = runTest {
+        val metadata = CloudFavoriteMetadata(sessions())
+        try {
+            metadata.confirm(metadata.begin(credentials), item(), true) {
+                throw kotlinx.coroutines.CancellationException("cancelled confirmation")
+            }
+            fail("Cancellation swallowed")
+        } catch (_: kotlinx.coroutines.CancellationException) { }
+        assertTrue(metadata.values.value.isEmpty())
+    }
+
     @Test fun `cancelled cache ingestion still cancels the read`() = runTest {
         val metadata = CloudFavoriteMetadata(sessions())
         try {

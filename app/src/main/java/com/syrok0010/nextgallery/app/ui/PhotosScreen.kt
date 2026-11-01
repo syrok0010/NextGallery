@@ -89,7 +89,8 @@ internal fun PhotosScreen(
         isDestructive = true,
     ) { items, _ ->
         deletedIds = items.map { it.mediaId.value }
-        deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
+        // The filtered photos may not be hydrated in the ordinary timeline index.
+        deleteRequest = DeletionPreparation.of(items)
     }
     val albumAction = SelectionAction(
         icon = painterResource(R.drawable.ic_albums),
