@@ -58,13 +58,14 @@ internal data class UploadedFile(
  * Work that belongs to the caller of an upload, for example adding files to an album or removing
  * the phone copy. One instance serves one batch, so it may keep the batch's results.
  *
- * Both calls run in the upload service before it leaves the foreground, so the work is not cut
- * short by the process being stopped right after the last upload.
+ * Normally both calls run in the upload service before it leaves the foreground. If entering
+ * foreground is refused, only [finished] is scheduled in the queue's process scope, with every
+ * file missed. That completion has no foreground protection and may be lost on process death.
  */
 internal interface UploadFollowUp {
     /** Runs right after [file] is on the server, one file at a time. */
     suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile)
 
-    /** Runs after the batch; [missed] never reached the server. Returns notification lines. */
+    /** Runs after the batch; [missed] have no accepted upload result. Returns notification lines. */
     suspend fun finished(missed: List<UploadSelection>): List<UiText>
 }
