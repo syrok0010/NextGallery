@@ -32,6 +32,10 @@ internal class MediaSelection(active: Boolean = false, selectedIds: Set<MediaId>
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
     }
 
+    fun remove(ids: Set<MediaId>) {
+        selectedIds -= ids
+    }
+
     fun clear() {
         active = false
         selectedIds = emptySet()
