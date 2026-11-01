@@ -1,0 +1,38 @@
+[
+  {
+    "name": "durable156-cancelled.jpg",
+    "state": "Cancelled",
+    "receipt": false,
+    "link": "None",
+    "album": "None",
+    "attempts": 0,
+    "destination": null
+  },
+  {
+    "name": "durable156-receipt.jpg",
+    "state": "Accepted",
+    "receipt": true,
+    "link": "Pending",
+    "album": "None",
+    "attempts": 1,
+    "destination": "http://test.syrok/remote.php/dav/files/test/Photos/durable156-receipt.jpg"
+  },
+  {
+    "name": "durable156-uncertain.jpg",
+    "state": "Running",
+    "receipt": false,
+    "link": "None",
+    "album": "None",
+    "attempts": 1,
+    "destination": "http://test.syrok/remote.php/dav/files/test/Photos/durable156-uncertain.jpg"
+  },
+  {
+    "name": "durable156-pending.jpg",
+    "state": "Pending",
+    "receipt": false,
+    "link": "None",
+    "album": "None",
+    "attempts": 0,
+    "destination": null
+  }
+]
