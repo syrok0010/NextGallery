@@ -1,0 +1,14 @@
+{
+  "app": {
+    "tests": 271,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "core-media": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}
