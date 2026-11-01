@@ -1,0 +1,7 @@
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:41:30 +0300] "MKCOL /remote.php/dav/photos/test/albums/durable158-kill-final2 HTTP/1.0" 201 1437 "-" "okhttp/5.3.2"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:41:30 +0300] "PUT /remote.php/dav/files/test/Photos/durable158-kill-final2.jpg HTTP/1.0" 201 1591 "-" "okhttp/5.3.2"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:41:31 +0300] "PROPFIND /remote.php/dav/files/test/Photos/durable158-kill-final2.jpg HTTP/1.0" 207 2056 "-" "okhttp/5.3.2"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:41:31 +0300] "PROPFIND /remote.php/dav/photos/test/albums/durable158-kill-final2 HTTP/1.0" 207 2083 "-" "okhttp/5.3.2"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:41:32 +0300] "COPY /remote.php/dav/files/test/Photos/durable158-kill-final2.jpg HTTP/1.0" 201 1423 "-" "okhttp/5.3.2"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:42:03 +0300] "PROPFIND /remote.php/dav/files/test/Photos/durable158-kill-final2.jpg HTTP/1.0" 207 2058 "-" "NextGallery/0.1 Android"
+app-1  | 10.9.0.1 - test [01/Nov/2026:17:42:04 +0300] "PROPFIND /remote.php/dav/photos/test/albums/durable158-kill-final2 HTTP/1.0" 207 2181 "-" "NextGallery/0.1 Android"
