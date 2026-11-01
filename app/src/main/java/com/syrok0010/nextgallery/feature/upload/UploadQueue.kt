@@ -33,6 +33,9 @@ internal data class UploadResult(
     val files: Int,
     val failures: List<String> = emptyList(),
     val details: List<UiText> = emptyList(),
+    val existing: Int = 0,
+    val cancelled: Int = 0,
+    val conflicts: Int = 0,
 ) {
     operator fun plus(other: UploadResult) =
         UploadResult(
@@ -40,6 +43,9 @@ internal data class UploadResult(
             files + other.files,
             failures + other.failures,
             details + other.details,
+            existing + other.existing,
+            cancelled + other.cancelled,
+            conflicts + other.conflicts,
         )
 }
 
@@ -53,11 +59,27 @@ internal data class UploadResult(
 internal class UploadQueue(
     sessions: SessionStore,
     private val library: MediaLibraryIndex,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
 ) {
     private val mutableWaiting = MutableStateFlow<List<UploadBatch>>(emptyList())
     val waiting = mutableWaiting.asStateFlow()
+    private val mutableBatches = MutableStateFlow<List<UploadBatch>>(emptyList())
+    val batches = mutableBatches.asStateFlow()
+
+    fun cancelAll() = batches.value.forEach(UploadBatch::cancel)
+
+    /** History is only removed explicitly, never when another pass starts or a pill times out. */
+    fun clearFinished() {
+        mutableBatches.update { batches ->
+            batches.filter { batch ->
+                batch.items.any {
+                    !it.state.value.phase.terminal
+                }
+            }
+        }
+    }
+
     private val started = ConcurrentLinkedQueue<UploadBatch>()
     private val mutableActivity = MutableStateFlow<UploadActivity?>(null)
     val activity = mutableActivity.asStateFlow()
@@ -70,6 +92,8 @@ internal class UploadQueue(
             sessions.session.collect { session ->
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 if (current == null || (owner != null && current != owner)) {
+                    cancelAll()
+                    mutableBatches.value = emptyList()
                     mutableWaiting.value = emptyList()
                     started.clear()
                     mutableActivity.value = null
@@ -89,7 +113,9 @@ internal class UploadQueue(
         val library = library.state.value
         val files = mediaIds.distinct().mapNotNull { id -> library[id]?.let(::uploadSelection) }
         if (files.isNotEmpty()) {
-            mutableWaiting.update { it + UploadBatch(files, commonFollowUps() + followUps) }
+            val batch = UploadBatch(files, commonFollowUps() + followUps)
+            mutableBatches.update { it + batch }
+            mutableWaiting.update { it + batch }
             mutableActivity.update { current ->
                 UploadActivity(
                     pending = current?.pending.orEmpty() + files.map { it.contentUri },
@@ -129,12 +155,27 @@ internal class UploadQueue(
         } catch (_: RuntimeException) {
             // Includes dataSync quota, service type and permission failures from Android.
             var files = 0
+            val refused = mutableListOf<UploadBatch>()
             while (true) {
                 val batch = next() ?: break
                 files += batch.files.size
+                refused += batch
+                batch.items.forEach { it.complete(UploadPhase.Failed, failureReason) }
                 batchFinished(batch)
             }
-            if (files > 0) passFinished(UploadResult(0, files, failures = listOf(failureReason)))
+            if (files > 0) {
+                passFinished(UploadResult(0, files, failures = listOf(failureReason)))
+                scope.launch {
+                    val details = refused.flatMap { finishUploadBatch(it) }
+                    if (details.isNotEmpty()) {
+                        mutableResult.update { current ->
+                            current?.copy(
+                                details = current.details + details,
+                            )
+                        }
+                    }
+                }
+            }
             return false
         }
         return true
