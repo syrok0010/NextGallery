@@ -32,6 +32,17 @@ class SelectionActionPlacementTest {
         )
     }
 
+    @Test fun albumSecondaryActionsStayInMenuWhilePrimaryHasRoomForItsLabel() {
+        val primary = action("Убрать из альбома", primary = true)
+        val secondary = listOf("Добавить в другой альбом", "Удалить").map {
+            SelectionAction(ColorPainter(Color.Black), it, inOverflow = true) { _, _ -> }
+        }
+        assertEquals(
+            SelectionActionPlacement(listOf(primary), secondary),
+            placeSelectionActions(listOf(primary) + secondary),
+        )
+    }
+
     private fun action(label: String, primary: Boolean = false) =
         SelectionAction(
             icon = ColorPainter(Color.Black),
