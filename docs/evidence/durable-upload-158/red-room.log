@@ -1,0 +1,41 @@
+
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest:
+Error in versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared(com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest):
+java.lang.AssertionError: expected:<1> but was:<0>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest$versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared$1.invokeSuspend(UploadQueueRuntimeTest.kt:357)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest.versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared(UploadQueueRuntimeTest.kt:348)
+
+
+Time: 0.075
+There was 1 failure:
+1) versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared(com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest)
+java.lang.AssertionError: expected:<1> but was:<0>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest$versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared$1.invokeSuspend(UploadQueueRuntimeTest.kt:357)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest.versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared(UploadQueueRuntimeTest.kt:348)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1

@@ -1,0 +1,11 @@
+[
+  "21389a48-8aa8-429a-af87-36efcbd9bebf",
+  "Accepted",
+  "{\"url\":\"http://test.syrok/remote.php/dav/files/test/Photos/durable158-kill-final2.jpg\",\"created\":true,\"fileId\":343,\"version\":1}",
+  "Done",
+  "Running",
+  8,
+  "durable158-crash",
+  "[{\"kind\":\"link\",\"version\":1,\"owner\":\"\",\"target\":\"\",\"albumId\":null,\"albumHref\":null},{\"kind\":\"album\",\"version\":2,\"owner\":\"test\",\"target\":\"durable158-kill-final2\",\"albumId\":42,\"albumHref\":\"http://test.syrok/remote.php/dav/photos/test/albums/durable158-kill-final2\"}]",
+  "{\"contentUri\":\"content://media/external/images/media/401\",\"displayName\":\"durable158-kill-final2.jpg\",\"mimeType\":\"image/jpeg\",\"identityUri\":\"content://media/external/images/media/401\",\"mediaId\":\"b2049a41-3b31-4c4d-978e-6e801d54979f\",\"stamp\":{\"size\":809,\"modified\":1793544087,\"generation\":4363}}"
+]

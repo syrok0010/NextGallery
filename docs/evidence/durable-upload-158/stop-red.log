@@ -1,0 +1,39 @@
+
+com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest:
+Error in stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults(com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest):
+java.lang.AssertionError: A finished step claim must not keep queue activity alive after stop expected null, but was:<process-1>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotNull(Assert.java:756)
+	at org.junit.Assert.assertNull(Assert.java:738)
+	at com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest$stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults$1.invokeSuspend(DurableUploadJournalTest.kt:157)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest.stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults(DurableUploadJournalTest.kt:149)
+
+
+Time: 0.047
+There was 1 failure:
+1) stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults(com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest)
+java.lang.AssertionError: A finished step claim must not keep queue activity alive after stop expected null, but was:<process-1>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotNull(Assert.java:756)
+	at org.junit.Assert.assertNull(Assert.java:738)
+	at com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest$stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults$1.invokeSuspend(DurableUploadJournalTest.kt:157)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest.stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults(DurableUploadJournalTest.kt:149)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1

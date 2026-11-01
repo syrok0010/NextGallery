@@ -1,0 +1,8 @@
+[
+  "21389a48-8aa8-429a-af87-36efcbd9bebf",
+  "Accepted",
+  "{\"url\":\"http://test.syrok/remote.php/dav/files/test/Photos/durable158-kill-final2.jpg\",\"created\":true,\"fileId\":343,\"version\":1}",
+  "Done",
+  "Done",
+  "{\"state\":\"Done\",\"problem\":null,\"fileId\":343,\"targetId\":42,\"href\":\"http://test.syrok/remote.php/dav/photos/test/albums/durable158-kill-final2/343-durable158-kill-final2.jpg\",\"version\":1}"
+]
