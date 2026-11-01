@@ -55,7 +55,7 @@ class UploadsRetryUiTest {
             UploadJournal(db),
             { SourceStamp(10, 1, 1) },
             { _, _, _ -> linked },
-            { _, _, _, _ -> UploadStepResult("Done") },
+            { _, _, _, _, _ -> UploadStepResult("Done") },
             {},
         )
     }

@@ -27,6 +27,8 @@ internal data class SourceStamp(val size: Long, val modified: Long?, val generat
 @Serializable
 internal data class UploadReceipt(val url: String, val created: Boolean, val fileId: Long?, val version: Int = 1)
 
+internal enum class AlbumStepMode { Initial, Reconcile }
+
 internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
 internal enum class StepState { None, Pending, Running, Done, Attention, Uncertain, Suppressed }
 

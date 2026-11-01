@@ -125,7 +125,16 @@ class DurableAlbumLiveEvidence {
             writer.create(account, album)
             val queue = UploadQueue(sessions, library, scope, journal, UploadSource(context.contentResolver)::snapshot,
                 { credentials, local, id -> UploadedCopiesFollowUp(identities, sessions).link(credentials, local, id) },
-                step::run, {}, "durable158-live", step::snapshot)
+                { credentials, intent, file, attempt, current ->
+                    val result = step.run(credentials, intent, file, attempt, current)
+                    if (mode == "stage" && result.state == "Done") {
+                        val row = journal.jobs(account.uploadOwner).single { it.selection.displayName == name }
+                        manifest.appendText("${row.id}|${item.mediaId.value}|${row.receipt!!.fileId}|$uri|$album|${row.receipt!!.url}\n")
+                        Log.i("Durable158Evidence", "READY initial queue COPY, persisted Running, no step commit; SIGKILL automation now")
+                        awaitCancellation()
+                    }
+                    result
+                }, {}, "durable158-live", step::snapshot)
             assertTrue(queue.submit(listOf(item.mediaId), listOf(UploadIntent("album", owner = "test", target = album)), "durable158-$suffix") is EnqueueResult.Accepted)
             val batch = queue.waiting.value.single()
             check(batch.items.single().selection.displayName == name) { "Fixture aliases collided with an existing local copy; use distinct real bytes/EXIF, never override identity" }
@@ -138,39 +147,16 @@ class DurableAlbumLiveEvidence {
                 withContext(Dispatchers.IO) { uploadFile(transport, credentials, url, selection, body, upload::execute) }
             }
             assertEquals(1, puts)
-            var row = journal.jobs(account.uploadOwner).single { it.id == batch.items.single().id }
+            val row = journal.jobs(account.uploadOwner).single { it.id == batch.items.single().id }
             assertEquals("Done", row.linkStep)
-            assertEquals("Attention", row.albumStep)
-            assertEquals("ReplayUnsupported", uploadJson.decodeFromString<UploadStepResult>(row.albumResultJson!!).problem)
+            assertEquals("Done", row.albumStep)
             val receipt = row.receipt!!
             val remote = MediaSourceIdentity(MediaSourceKind.Memories, receipt.fileId.toString())
             assertEquals(item.mediaId, identities.resolve(listOf(mediaIdentityCandidate(remote, auid = null, buid = null))).mediaIds[remote])
             assertTrue(row.intents.single { it.kind == "album" }.albumId!! > 0)
             manifest.appendText("${row.id}|${item.mediaId.value}|${receipt.fileId}|$uri|$album|${receipt.url}\n")
-            if (mode == "attention") {
-                Log.i("Durable158Evidence", "ATTENTION uploaded=${row.receipt} album=${row.albumResultJson}")
-                return@runBlocking
-            }
-            // Explicit separate addition uses the existing production writer. The durable runner
-            // deliberately cannot issue this COPY: DAV cannot condition it on the collection id.
-            if (mode == "stage") {
-                journal.retrySteps(account.uploadOwner, row.id)
-                val claim = journal.claim(row.id, account.uploadOwner, "durable158-crash")!!
-                val running = journal.beginStep(claim, "album")!!
-                assertTrue(journal.stepCurrent(running, "album"))
-                assertEquals(AlbumCopyOutcome.Added, writer.addFile(account, receipt.url.toHttpUrl(), AlbumAddress("test", album)))
-                Log.i("Durable158Evidence", "READY real server COPY, persisted Running, no step commit; SIGKILL automation now")
-                awaitCancellation()
-            }
-            assertEquals(AlbumCopyOutcome.Added, writer.addFile(account, receipt.url.toHttpUrl(), AlbumAddress("test", album)))
-            queue.retryActions(batch.items.single())
-            withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }
-            queue.runBatch(batch) { _, _, _ -> error("Step retry must not PUT") }
-            row = journal.jobs(account.uploadOwner).single { it.id == row.id }
-            assertEquals("Done", row.albumStep)
-            assertEquals(receipt, row.receipt)
+            assertEquals(1, trace.readLines().count { it.startsWith("COPY ") && it.contains("/Photos/$name ") })
             assertEquals(1, puts)
-            assertEquals(item.mediaId, identities.resolve(listOf(mediaIdentityCandidate(remote, auid = null, buid = null))).mediaIds[remote])
             Log.i("Durable158Evidence", "FLOW registered MediaStore uri=$uri MediaId=${item.mediaId} receipt=$receipt exact album membership=${row.albumResultJson}; PUT=1")
         } finally {
             scope.cancel(); scope.coroutineContext[Job]!!.join()

@@ -1,8 +1,8 @@
 # ADR 0015: Добавление выбранных медиа в альбом
 
 Уточнение durable AddToAlbum: [ADR 0020](0020-upload-follow-up-reconciliation.md)
-заменяет переходный adapter безопасным read-only reconciliation и явным attention
-при отсутствии доказанного membership.
+сохраняет первый пользовательский COPY; после сбоя/retry выполняет только
+проверку membership с явным attention, если результат подтвердить нельзя.
 
 ## Контекст
 

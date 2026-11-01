@@ -377,7 +377,8 @@ reconciliation. Переименование или перенос папки м
   Нельзя гарантировать, что между проверкой и COPY путь не стал другим альбомом.
 
 [ADR 0020](../adr/0020-upload-follow-up-reconciliation.md) разрешает durable
-read-only reconciliation точного membership и запрещает name-addressed COPY
-из durable runner до появления атомарного серверного контракта. Это не меняет
+read-only reconciliation точного membership при восстановлении. Первый явно
+пользовательский COPY сохраняется; автоматический повтор name-addressed COPY
+запрещён до появления атомарного серверного контракта. Это не меняет
 контракт отдельного добавления cloud-only объектов и не приписывает ему durable
 гарантии. [Записанные запросы](../evidence/durable-upload-158/api-trace.json).

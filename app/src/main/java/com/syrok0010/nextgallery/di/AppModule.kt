@@ -119,8 +119,8 @@ val appModule = module {
             link = { account, identity, fileId ->
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
-            album = { account, intent, file, current ->
-                albumStep.run(account, intent, file, current).also { catalog.refresh() }
+            album = { account, intent, file, mode, current ->
+                albumStep.run(account, intent, file, mode, current).also { catalog.refresh() }
             },
             prepareAlbum = albumStep::snapshot,
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },

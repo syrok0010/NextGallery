@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.await
 import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.upload.AlbumStepMode
 import com.syrok0010.nextgallery.feature.upload.UploadIntent
 import com.syrok0010.nextgallery.feature.upload.UploadStepResult
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
@@ -24,7 +25,7 @@ import org.xml.sax.InputSource
 
 /**
  * Photos exposes membership, but no conditional destination collection identity for COPY.
- * Only proven membership is accepted. Neither initial execution nor recovery writes by name.
+ * Initial execution may COPY once; recovery only reconciles proven membership.
  */
 internal class DurableAlbumStep(private val transport: NextcloudTransport) {
     private val client = transport.baseClient.newBuilder()
@@ -41,8 +42,10 @@ internal class DurableAlbumStep(private val transport: NextcloudTransport) {
         account: AccountCredentials,
         intent: UploadIntent,
         file: UploadedFile,
+        mode: AlbumStepMode = AlbumStepMode.Reconcile,
         current: suspend () -> Boolean,
     ): UploadStepResult = withContext(Dispatchers.IO) {
+        var copyStarted = false
         try {
             if (intent.version != 2 || intent.albumId == null || intent.albumId <= 0 || intent.albumHref == null) return@withContext attention("LegacyTarget")
             if (intent.owner != account.userId) return@withContext attention("Owner")
@@ -82,12 +85,26 @@ internal class DurableAlbumStep(private val transport: NextcloudTransport) {
                 return member?.let { UploadStepResult("Done", fileId = fileId, targetId = intent.albumId, href = it.href.toString()) }
             }
             reconcile()?.let { return@withContext it }
-            // The separate Memories id is not a DAV precondition: even a first COPY could
-            // reach a replacement album between the identity check and the mutation.
-            attention("ReplayUnsupported")
+            if (mode != AlbumStepMode.Initial) return@withContext attention("ReplayUnsupported")
+            val etag = source.text(DAV, "getetag")
+                ?.takeIf { it.length >= 2 && it.startsWith('"') && it.endsWith('"') && !it.contains('\r') && !it.contains('\n') }
+                ?: return@withContext attention("SourceChanged")
+            val destination = album.newBuilder().addPathSegment(file.url.pathSegments.last()).build()
+            val request = transport.authenticatedRequestBuilder(account, file.url.toString())
+                .method("COPY", null).header("Destination", destination.toString())
+                .header("If-Match", etag).header("Overwrite", "F").build()
+            if (!current()) return@withContext attention("Stopped")
+            // This permission lives only in the pass that durably accepted the receipt.
+            // The server cannot atomically fence a concurrently recreated destination.
+            copyStarted = true
+            val status = client.newCall(request).await().use { it.code }
+            val result = reconcile()
+            if (result?.state == "Done") return@withContext result
+            if (status in 400..499) return@withContext result ?: attention("CopyRejected")
+            UploadStepResult.uncertain()
         } catch (cancelled: CancellationException) { throw cancelled
         } catch (_: Exception) {
-            attention("Contract")
+            if (copyStarted) UploadStepResult.uncertain() else attention("Contract")
         }
     }
 
