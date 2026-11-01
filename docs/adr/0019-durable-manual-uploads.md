@@ -1,5 +1,9 @@
 # ADR 0019: Журнал ручных загрузок и восстановление при открытии
 
+Уточнение durable AddToAlbum: [ADR 0020](0020-upload-follow-up-reconciliation.md)
+заменяет переходный adapter безопасным read-only reconciliation и явным attention
+при отсутствии доказанного membership.
+
 ## Статус
 
 Принято для первого runtime-среза #156 поверх #152. Уточняет upload-контракт

@@ -86,6 +86,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
     // Files that need attention come before ordinary outcomes.
     val done = entries.filter { it.state.phase.terminal }.sortedBy { !it.state.phase.problem }
     val sizes = rememberFileSizes(items)
+    val storageError by queue.storageError.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -102,7 +103,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             )
         },
     ) { padding ->
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && !storageError) {
             Box(
                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 contentAlignment = Alignment.Center,
@@ -119,6 +120,16 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
+            if (storageError) {
+                item(key = "storage-error") {
+                    Text(
+                        stringResource(R.string.uploads_storage_error),
+                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
             if (uploading.isNotEmpty()) {
                 item(
                     key = "uploading",
@@ -139,7 +150,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     waiting,
                     key = { it.item.id },
-                ) { UploadRow(it, sizes[it.item.selection.contentUri]) { queue.cancel(it.item) } }
+                ) { UploadRow(it, sizes[it.item.selection.contentUri], { queue.cancel(it.item) }, { queue.retryActions(it.item) }) }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
@@ -152,7 +163,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     done,
                     key = { it.item.id },
-                ) { UploadRow(it, sizes[it.item.selection.contentUri]) { queue.cancel(it.item) } }
+                ) { UploadRow(it, sizes[it.item.selection.contentUri], { queue.cancel(it.item) }, { queue.retryActions(it.item) }) }
             }
         }
     }
@@ -241,14 +252,10 @@ private fun UploadingRow(entry: UploadEntry, size: Long?, onCancel: () -> Unit) 
 }
 
 @Composable
-private fun UploadRow(entry: UploadEntry, size: Long?, onCancel: () -> Unit) {
-    val phase = entry.state.phase
-    val problem = when (phase) {
-        UploadPhase.Failed, UploadPhase.NeedsAttention ->
-            stringResource(R.string.uploads_failed, entry.state.failure.orEmpty())
-        UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
-        else -> null
-    }
+private fun UploadRow(entry: UploadEntry, size: Long?, onCancel: () -> Unit, onRetry: () -> Unit) {
+    val state = entry.state
+    val phase = state.phase
+    val details = uploadDetails(entry)
     Row(
         Modifier
             .fillMaxWidth()
@@ -259,20 +266,73 @@ private fun UploadRow(entry: UploadEntry, size: Long?, onCancel: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Thumbnail(entry.item, 32)
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(vertical = if (details.isEmpty()) 0.dp else 4.dp)) {
             FileName(entry.item)
-            if (problem != null) {
+            details.forEach { (text, error) ->
                 Text(
-                    problem,
+                    text,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (state.retryActions) {
+                TextButton(onClick = onRetry, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                    Text(stringResource(R.string.uploads_retry_actions))
+                }
             }
         }
         size?.let { SizeText(fileSize(it)) }
-        if (phase.terminal) StatusIcon(entry.state) else CancelButton(onCancel)
+        // A file waiting for its follow-up or for attention can still be cancelled after upload.
+        if (!phase.terminal || phase == UploadPhase.NeedsAttention || state.pendingAction) {
+            CancelButton(onCancel)
+        } else {
+            StatusIcon(state)
+        }
+    }
+}
+
+/** Lines under the file name: the outcome when it needs explaining, then follow-up steps; `true` marks errors. */
+@Composable
+private fun uploadDetails(entry: UploadEntry): List<Pair<String, Boolean>> {
+    val state = entry.state
+    val name = entry.item.selection.displayName
+    return buildList {
+        when (state.phase) {
+            UploadPhase.Failed -> add(stringResource(R.string.uploads_failed, state.failure.orEmpty()) to true)
+            UploadPhase.NameConflict -> add(stringResource(R.string.uploads_conflict) to true)
+            UploadPhase.NeedsAttention -> add(
+                when (state.failure) {
+                    "Source" -> stringResource(R.string.uploads_source_attention)
+                    "Foreground" -> stringResource(R.string.upload_error_foreground)
+                    "Format" -> stringResource(R.string.uploads_format_attention)
+                    "Directory" -> stringResource(R.string.upload_error_directory, state.httpStatus ?: 0, name)
+                    "Http" -> stringResource(R.string.upload_error_http, state.httpStatus ?: 0, name)
+                    else -> stringResource(R.string.uploads_attention)
+                } to true,
+            )
+            else -> Unit
+        }
+        if (state.actionSuppressed) add(stringResource(R.string.uploads_action_suppressed) to false)
+        state.albumAdded?.let { add(stringResource(R.string.album_upload_summary, it, 1) to false) }
+        if (state.pendingAction) {
+            val text = if (state.attention) R.string.uploads_action_attention else R.string.uploads_action_pending
+            add(stringResource(text) to true)
+        }
+        state.linkProblem?.let {
+            add(stringResource(if (it == "Format") R.string.uploads_format_attention else R.string.uploads_link_attention) to true)
+        }
+        state.albumProblem?.let { problem ->
+            val text = when (problem) {
+                "Format" -> R.string.uploads_format_attention
+                "TargetChanged" -> R.string.uploads_album_changed
+                "SourceChanged", "Owner" -> R.string.uploads_album_source
+                "LegacyTarget" -> R.string.uploads_album_legacy
+                "ReplayUnsupported" -> R.string.uploads_album_replay
+                "Uncertain" -> R.string.uploads_album_uncertain
+                else -> R.string.uploads_album_attention
+            }
+            add(stringResource(text) to true)
+        }
     }
 }
 

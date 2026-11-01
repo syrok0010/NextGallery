@@ -33,3 +33,4 @@
 - [ADR 0017: Связь локальной и облачной копий после загрузки](adr/0017-link-uploaded-copies.md)
 
 - [ADR 0019: Durable manual uploads](adr/0019-durable-manual-uploads.md)
+- [ADR 0020: Подтверждение действий после принятой загрузки](adr/0020-upload-follow-up-reconciliation.md)

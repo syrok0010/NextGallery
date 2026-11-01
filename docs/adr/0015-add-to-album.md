@@ -1,5 +1,9 @@
 # ADR 0015: Добавление выбранных медиа в альбом
 
+Уточнение durable AddToAlbum: [ADR 0020](0020-upload-follow-up-reconciliation.md)
+заменяет переходный adapter безопасным read-only reconciliation и явным attention
+при отсутствии доказанного membership.
+
 ## Контекст
 
 Режим выбора в таймлайне (ADR 0014) позволяет действовать над несколькими медиаобъектами. Следующее действие — собрать выбранное в серверный альбом. Альбомы Memories — это альбомы Nextcloud Photos. Каталог и содержимое читаются через Memories API, но endpoint для записи у Memories нет: Memories Web добавляет фото в альбом через Nextcloud DAV.
