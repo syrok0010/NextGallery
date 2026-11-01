@@ -51,6 +51,14 @@ interface MemoriesTimelineDao {
     @Query("DELETE FROM memories_timeline_days")
     suspend fun deleteTimelineDays()
 
+    @Query(
+        "DELETE FROM memories_media WHERE dayId IN (:dayIds) AND fileId NOT IN (:preservedFileIds)",
+    )
+    suspend fun deleteMediaItemsForDaysExcept(
+        dayIds: Collection<Int>,
+        preservedFileIds: Collection<Long>,
+    )
+
     @Query("DELETE FROM memories_media WHERE dayId IN (:dayIds)")
     suspend fun deleteMediaItemsForDays(dayIds: Collection<Int>)
 

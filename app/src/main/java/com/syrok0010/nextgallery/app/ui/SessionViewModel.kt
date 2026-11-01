@@ -9,7 +9,7 @@ import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class SessionViewModel(
+internal class SessionViewModel(
     private val sessionStore: SessionStore,
     private val credentials: CredentialsStore,
     private val memories: MemoriesRepository,

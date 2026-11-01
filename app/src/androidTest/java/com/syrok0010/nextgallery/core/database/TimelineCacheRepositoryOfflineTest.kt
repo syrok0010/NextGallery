@@ -68,6 +68,43 @@ class TimelineCacheRepositoryOfflineTest {
     }
 
     @Test
+    fun confirmedFavoriteSurvivesStaleRefreshInvalidationAndDatabaseReopen() = runBlocking {
+        val item = remoteItem().copy(auid = null, buid = null)
+        identityRegistry.resolve(listOf(MediaIdentityCandidate(
+            source = item.sourceIdentity(), publishedMediaId = item.mediaId, aliases = emptySet(),
+        )))
+        repository.saveTimelineSnapshot(credentials, TimelineSnapshotAssembler.assemble(
+            config = memoriesConfig(), days = listOf(TimelineDay(item.dayId, 1)),
+            mediaItems = listOf(item), loadedDayIds = setOf(item.dayId),
+        ))
+        val sessions = com.syrok0010.nextgallery.core.session.SessionStore(object : com.syrok0010.nextgallery.core.session.CredentialsStore {
+            override fun load() = credentials
+            override fun save(credentials: AccountCredentials) = Unit
+            override fun clear() = Unit
+        })
+        val favorites = com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata(sessions)
+        val read = favorites.begin(credentials)
+        favorites.confirm(read, item, true) { repository.saveDayDetails(listOf(it), emptySet()) }
+        favorites.ingest(read, listOf(item.copy(isFavorite = false))) { repository.saveDayDetails(it, emptySet()) }
+        // A late index response invalidates this day's count but has no details for the old photo.
+        favorites.ingest(read, emptyList()) {
+            repository.saveTimelineSnapshot(credentials, TimelineSnapshotAssembler.assemble(
+                config = memoriesConfig(), days = listOf(TimelineDay(item.dayId, 2)),
+            ), preservedFileIds = favorites.confirmedFileIds())
+        }
+        database.close()
+        database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
+        identityRegistry = RoomMediaIdentityRegistry(database) { MediaId("unused") }
+        repository = TimelineCacheRepository(database, thumbnailFileStore, identityRegistry)
+        val restored = requireNotNull(repository.loadTimelineSnapshot(credentials)).items.single()
+        org.junit.Assert.assertTrue(restored.isFavorite)
+        assertEquals(item.mediaId, restored.mediaId)
+        // A later authoritative item read can remove a star made in another client from warm cache.
+        repository.saveDayDetails(listOf(restored.copy(isFavorite = false)), emptySet())
+        assertFalse(requireNotNull(repository.loadTimelineSnapshot(credentials)).items.single().isFavorite)
+    }
+
+    @Test
     fun cachedSnapshotContainsOnlyMaterializedCloudObjects() =
         runBlocking {
             val materialized = remoteItem()
