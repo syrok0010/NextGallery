@@ -1,0 +1,15 @@
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest > viewingAttentionConsumesOnlyTheSummaryAndCancellationPublishesANewResult[nextgallery-api36-dev(AVD) - 16] [31mFAILED [0m
+	kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 5000 ms
+	at kotlinx.coroutines.TimeoutKt.TimeoutCancellationException(Timeout.kt:189)
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest > executorCancellationStopsTheWholeReleasedPassWithoutAReopenLoop[nextgallery-api36-dev(AVD) - 16] [31mFAILED [0m
+	java.lang.AssertionError: Every released file must expose the executor stop
+Execute com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest.viewingAttentionConsumesOnlyTheSummaryAndCancellationPublishesANewResult: FAILED
+kotlinx.coroutines.TimeoutCancellationException: kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 5000 ms
+at kotlinx.coroutines.TimeoutKt.TimeoutCancellationException(Timeout.kt:189)
+kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 5000 ms
+at kotlinx.coroutines.TimeoutKt.TimeoutCancellationException(Timeout.kt:189)
+Execute com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest.executorCancellationStopsTheWholeReleasedPassWithoutAReopenLoop: FAILED
+java.lang.AssertionError: java.lang.AssertionError: Every released file must expose the executor stop
+java.lang.AssertionError: Every released file must expose the executor stop
+> Task :app:connectedAutomationAndroidTest FAILED
+BUILD FAILED in 32s

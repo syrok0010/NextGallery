@@ -99,3 +99,7 @@ dataSync quota/timeout на ОС, ENOSPC, backup/restore, миграция бу�
 а не заполнением диска. Без spool metadata не доказывает неизменности bytes
 и не устраняет гонку изменения во время чтения. JVM/protocol tests не выдаются
 за UI evidence этих сценариев.
+
+## Исправления Standards review
+
+На runtime `80ef6c115b339a4799ff0b7a36a6f8ff22c20814` оба замечания исправлены и проверены отдельно: [red/green и ограничения](standards-fixes.md). Итог — 262 JVM и 29 instrumentation; первоначальный ручной SIGKILL-прогон выше не выдаётся за повторный прогон нового SHA.
