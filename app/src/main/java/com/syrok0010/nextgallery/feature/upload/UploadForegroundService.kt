@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.upload
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.net.Uri
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
+import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.fileUrl
@@ -106,6 +108,9 @@ class UploadForegroundService : Service() {
                     files = pass.files,
                     failures = pass.failures.distinct(),
                     details = pass.detailLines(),
+                    existing = pass.existing,
+                    cancelled = pass.cancelled,
+                    conflicts = pass.nameTaken,
                 ),
             )
         }
@@ -119,7 +124,6 @@ class UploadForegroundService : Service() {
         // Android drops bursts of notification updates, including the terminal result.
         // Keep only the latest progress and leave room for foreground/final updates.
         val updates = Channel<Notification>(Channel.CONFLATED)
-        val progress = UploadProgress()
         val result = coroutineScope {
             val publisher = launch {
                 for (update in updates) {
@@ -129,7 +133,7 @@ class UploadForegroundService : Service() {
             }
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    upload(batch, progress) { index, percent ->
+                    upload(batch) { index, percent ->
                         // Read per update: batches released meanwhile join the total at once.
                         val total = pass.files + queue.releasedFiles()
                         val message = getString(R.string.upload_progress, before + index + 1, total)
@@ -142,15 +146,22 @@ class UploadForegroundService : Service() {
             result
         }
         (result.exceptionOrNull() as? CancellationException)?.let { throw it }
-        result.exceptionOrNull()?.let { pass.failures += failureReason(it) }
-        pass.processed += batch.files.size
-        pass.uploaded += progress.completed
-        pass.nameTaken += progress.nameTaken.size
-        val missed = progress.nameTaken + batch.files.drop(progress.processed)
-        queue.batchFinished(batch)
-        batch.followUps.forEach { followUp ->
-            pass.details += guarded(emptyList()) { followUp.finished(missed) }
+        result.exceptionOrNull()?.let { error ->
+            val reason = failureReason(error)
+            pass.failures += reason
+            batch.items.forEach { it.complete(UploadPhase.Failed, reason) }
         }
+        pass.processed += batch.files.size
+        val states = batch.items.map { it.state.value }
+        pass.uploaded += states.count {
+            it.phase == UploadPhase.Uploaded || it.phase == UploadPhase.Existing
+        }
+        pass.existing += states.count { it.phase == UploadPhase.Existing }
+        pass.cancelled += states.count { it.phase == UploadPhase.Cancelled }
+        pass.nameTaken += states.count { it.phase == UploadPhase.NameConflict }
+        pass.failures += states.mapNotNull { it.failure }.distinct()
+        queue.batchFinished(batch)
+        pass.details += finishUploadBatch(batch)
         // Leaves room for the result after the last progress update.
         delay(500L)
     }
@@ -170,6 +181,7 @@ class UploadForegroundService : Service() {
         return Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
+            .setContentIntent(uploadsIntent())
             .setContentTitle(title)
             .apply {
                 if (lines.isNotEmpty()) {
@@ -187,40 +199,49 @@ class UploadForegroundService : Service() {
 
     private suspend fun upload(
         batch: UploadBatch,
-        progress: UploadProgress,
         onProgress: (index: Int, percent: Int?) -> Unit,
     ) {
-        val credentials = credentialsStore.load()
-            ?: throw UploadException(R.string.upload_error_session)
-        val config = transport.memoriesApi(credentials).config()
-        val destination = timelinePaths(config.timelinePath).firstOrNull()
-            ?: throw UploadException(R.string.upload_error_timeline)
-        batch.files.forEachIndexed { index, selection ->
-            val uploaded = put(
-                credentials = credentials,
-                url = uploadUrl(
-                    credentials.serverUrl,
-                    credentials.userId,
-                    destination,
-                    selection.displayName,
-                ),
-                selection = selection,
-                onProgress = { percent ->
-                    queue.uploading(selection.contentUri, percent)
-                    onProgress(index, percent)
-                },
-            )
-            queue.processed(selection.contentUri)
-            progress.processed++
-            if (uploaded == null) {
-                progress.nameTaken += selection
-            } else {
-                progress.completed++
+        var credentials: AccountCredentials? = null
+        var destination: String? = null
+        runUploadFiles(
+            batch = batch,
+            transfer = { item ->
+                val account = credentials ?: (
+                    credentialsStore.load()
+                        ?: throw UploadException(R.string.upload_error_session)
+                    ).also { credentials = it }
+                val directory = destination ?: (
+                    timelinePaths(
+                        transport.memoriesApi(account).config().timelinePath,
+                    ).firstOrNull()
+                        ?: throw UploadException(R.string.upload_error_timeline)
+                    ).also { destination = it }
+                val selection = item.selection
+                put(
+                    credentials = account,
+                    url = uploadUrl(
+                        account.serverUrl,
+                        account.userId,
+                        directory,
+                        selection.displayName,
+                    ),
+                    item = item,
+                    onProgress = { percent ->
+                        if (item.progress(percent)) {
+                            queue.uploading(selection.contentUri, percent)
+                            onProgress(batch.items.indexOf(item), percent)
+                        }
+                    },
+                )
+            },
+            accepted = { uploaded ->
                 batch.followUps.forEach { followUp ->
-                    guarded(Unit) { followUp.uploaded(credentials, uploaded) }
+                    guarded(Unit) { followUp.uploaded(checkNotNull(credentials), uploaded) }
                 }
-            }
-        }
+            },
+            failureReason = ::failureReason,
+            processed = { queue.processed(it.contentUri) },
+        )
     }
 
     /**
@@ -230,9 +251,10 @@ class UploadForegroundService : Service() {
     private fun put(
         credentials: AccountCredentials,
         url: HttpUrl,
-        selection: UploadSelection,
+        item: UploadItem,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
+        val selection = item.selection
         val uri = Uri.parse(selection.contentUri)
         val length = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
@@ -245,7 +267,7 @@ class UploadForegroundService : Service() {
             },
             onProgress = onProgress,
         )
-        return uploadFile(transport, credentials, url, selection, body)
+        return uploadFile(transport, credentials, url, selection, body, item::execute)
     }
 
     private fun notification(
@@ -256,6 +278,7 @@ class UploadForegroundService : Service() {
         Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
+            .setContentIntent(uploadsIntent())
             .setContentTitle(message)
             .setOngoing(uploading)
             .setOnlyAlertOnce(true)
@@ -285,11 +308,29 @@ class UploadForegroundService : Service() {
         var processed = 0
         var uploaded = 0
         var nameTaken = 0
+        var existing = 0
+        var cancelled = 0
         val failures = mutableListOf<String>()
         val details = mutableListOf<UiText>()
 
         fun detailLines(): List<UiText> =
             buildList {
+                if (existing > 0) {
+                    add(
+                        com.syrok0010.nextgallery.core.ui.uiText(
+                            R.string.upload_existing_count,
+                            existing,
+                        ),
+                    )
+                }
+                if (cancelled > 0) {
+                    add(
+                        com.syrok0010.nextgallery.core.ui.uiText(
+                            R.string.upload_cancelled_count,
+                            cancelled,
+                        ),
+                    )
+                }
                 if (nameTaken > 0) {
                     add(
                         pluralText(R.plurals.upload_name_taken, nameTaken, nameTaken),
@@ -299,14 +340,18 @@ class UploadForegroundService : Service() {
             }
     }
 
-    /** Survives a failed upload so follow-ups still learn which files were missed. */
-    private class UploadProgress {
-        var processed = 0
-        var completed = 0
-        val nameTaken = mutableListOf<UploadSelection>()
-    }
+    private fun uploadsIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            this,
+            128,
+            Intent(this, MainActivity::class.java)
+                .setAction(ACTION_UPLOADS)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     companion object {
+        const val ACTION_UPLOADS = "com.syrok0010.nextgallery.UPLOADS"
         private const val CHANNEL_ID = "cloud-upload"
         private const val FOREGROUND_NOTIFICATION_ID = 42
         private const val RESULT_NOTIFICATION_ID = 43

@@ -6,10 +6,12 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
+import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
 
@@ -20,13 +22,14 @@ internal fun uploadFile(
     url: HttpUrl,
     selection: UploadSelection,
     body: RequestBody,
+    execute: (Call) -> Response = { it.execute() },
 ): UploadedFile? {
     val request = transport
         .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
         .method("PUT", body)
         .header("If-None-Match", "*")
         .build()
-    val (existed, fileId) = transport.baseClient.newCall(request).execute().use { response ->
+    val (existed, fileId) = execute(transport.baseClient.newCall(request)).use { response ->
         if (!response.isSuccessful && response.code != 412) {
             val reason = when (response.code) {
                 404, 409 -> R.string.upload_error_directory
@@ -38,14 +41,14 @@ internal fun uploadFile(
     }
     if (!existed) return UploadedFile(selection, url, created = true, fileId)
     val length = body.contentLength()
-    if (length < 0L || !sameRemoteSize(transport, credentials, url, length)) return null
+    if (length < 0L || !sameRemoteSize(transport, credentials, url, length, execute)) return null
     // A 412 has no OC-FileId, and Nextcloud 34 also omits it from HEAD. Size equality is the
     // product's accepted identity heuristic; only then ask DAV for the explicit link (#131).
     return UploadedFile(
         selection,
         url,
         created = false,
-        existingFileId(transport, credentials, url, length),
+        existingFileId(transport, credentials, url, length, execute),
     )
 }
 
@@ -54,13 +57,14 @@ private fun sameRemoteSize(
     credentials: AccountCredentials,
     url: HttpUrl,
     length: Long,
+    execute: (Call) -> Response,
 ): Boolean {
     val request = transport
         .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
         .head()
         .build()
     return runCatching {
-        transport.baseClient.newCall(request).execute().use { response ->
+        execute(transport.baseClient.newCall(request)).use { response ->
             response.isSuccessful && response.header("Content-Length")?.toLongOrNull() == length
         }
     }.getOrDefault(false)
@@ -71,6 +75,7 @@ private fun existingFileId(
     credentials: AccountCredentials,
     url: HttpUrl,
     length: Long,
+    execute: (Call) -> Response,
 ): Long? =
     runCatching {
         val request = transport
@@ -81,7 +86,7 @@ private fun existingFileId(
                     .toRequestBody("application/xml; charset=utf-8".toMediaType()),
             ).header("Depth", "0")
             .build()
-        transport.baseClient.newCall(request).execute().use { response ->
+        execute(transport.baseClient.newCall(request)).use { response ->
             if (!response.isSuccessful) return@use null
             val builder = DocumentBuilderFactory
                 .newInstance()

@@ -203,4 +203,22 @@
     <string name="media_activity_album">Добавляется в альбом</string>
     <string name="media_activity_delete">Удаляется</string>
     <string name="media_activity_progress">%1$s, %2$d%%</string>
+    <string name="uploads_title">Загрузки</string>
+    <string name="uploads_back">Назад</string>
+    <string name="uploads_cancel_all">Отменить все</string>
+    <string name="uploads_cancel_batch">Отменить партию</string>
+    <string name="uploads_cancel_file">Отменить</string>
+    <string name="uploads_clear">Убрать завершённые</string>
+    <string name="uploads_empty">Здесь появятся файлы, отправленные в облако</string>
+    <string name="uploads_batch">Партия %1$d</string>
+    <string name="uploads_waiting">Ждёт загрузки</string>
+    <string name="uploads_uploading">Загружается</string>
+    <string name="uploads_percent">Загружается: %1$d%%</string>
+    <string name="uploads_uploaded">Загружен</string>
+    <string name="uploads_existing">Уже в облаке</string>
+    <string name="uploads_conflict">Имя занято другим файлом</string>
+    <string name="uploads_failed">Ошибка: %1$s</string>
+    <string name="uploads_cancelled">Отменён</string>
+    <string name="upload_existing_count">Уже в облаке: %1$d</string>
+    <string name="upload_cancelled_count">Отменено: %1$d</string>
 </resources>

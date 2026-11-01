@@ -53,7 +53,11 @@ private fun AnimatedContentTransitionScope<*>.horizontalTransition(
 } ?: (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
 
 @Composable
-internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()) {
+internal fun NextGalleryApp(
+    openUploads: Boolean = false,
+    onUploadsOpened: () -> Unit = {},
+    sessionViewModel: SessionViewModel = koinViewModel(),
+) {
     val session by sessionViewModel.session.collectAsState()
     val backStack = rememberNavBackStack(session.rootRoute())
     val routes = syncedBackStack(backStack.toList(), session)
@@ -69,11 +73,22 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
             backStack.addAll(routes)
         }
     }
+    LaunchedEffect(openUploads, signedIn) {
+        if (openUploads && signedIn) {
+            if (backStack.lastOrNull() != NextGalleryRoute.Uploads) backStack.add(NextGalleryRoute.Uploads)
+            onUploadsOpened()
+        }
+    }
     LocalMediaPermissionFlow(isSignedIn = signedIn)
     if (signedIn) QueuedUploads()
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
         CompositionLocalProvider(
+            LocalOpenUploads provides {
+                if (backStack.lastOrNull() != NextGalleryRoute.Uploads) {
+                    backStack.add(NextGalleryRoute.Uploads)
+                }
+            },
             LocalContentColor provides MaterialTheme.colorScheme.onBackground,
         ) {
             Box(
@@ -113,6 +128,9 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                         )
                     },
                     entryProvider = entryProvider {
+                        entry<NextGalleryRoute.Uploads>(clazzContentKey = { it.navContentKey() }) {
+                            if (signedIn) UploadsScreen(onBack = { backStack.removeLastOrNull() })
+                        }
                         entry<NextGalleryRoute.Login>(
                             clazzContentKey = { it.navContentKey() },
                         ) { LoginScreen() }
@@ -158,7 +176,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                         }
                     },
                 )
-                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album) {
+                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
                     LibraryIsland(
                         page,
                         { destination ->

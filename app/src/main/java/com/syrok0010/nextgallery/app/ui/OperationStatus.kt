@@ -22,6 +22,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -246,6 +247,7 @@ private fun deletionResultEntry(result: DeletionResult): OperationEntry? {
 @Composable
 internal fun OperationStatusPill(status: OperationStatus, visible: Boolean, modifier: Modifier = Modifier) {
     val entries = status.entries()
+    val openUploads = LocalOpenUploads.current
     var expanded by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val finished = entries.filterNot { it.running }
@@ -295,7 +297,13 @@ internal fun OperationStatusPill(status: OperationStatus, visible: Boolean, modi
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                entries.forEach { OperationRow(it) }
+                entries.forEach { entry -> OperationRow(entry) }
+                if (entries.any { it.operation == MediaTileOperation.Upload }) {
+                    TextButton(onClick = {
+                        expanded = false
+                        openUploads()
+                    }) { Text(stringResource(R.string.uploads_title)) }
+                }
             }
         }
     }

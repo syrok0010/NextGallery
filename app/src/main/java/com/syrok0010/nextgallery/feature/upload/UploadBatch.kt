@@ -5,6 +5,7 @@ import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
+import java.util.concurrent.atomic.AtomicLong
 import okhttp3.HttpUrl
 
 /** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
@@ -31,7 +32,15 @@ internal fun uploadSelection(item: MediaItem): UploadSelection? =
 internal class UploadBatch(
     val files: List<UploadSelection>,
     val followUps: List<UploadFollowUp> = emptyList(),
-)
+) {
+    val id = nextBatchId.incrementAndGet()
+    val items = files.map(::UploadItem)
+    fun cancel() = items.forEach(UploadItem::cancel)
+
+    companion object {
+        private val nextBatchId = AtomicLong()
+    }
+}
 
 /**
  * [selection] is on the server at [url]: uploaded now ([created]) or already there with the same
@@ -49,13 +58,15 @@ internal data class UploadedFile(
  * Work that belongs to the caller of an upload, for example adding files to an album or removing
  * the phone copy. One instance serves one batch, so it may keep the batch's results.
  *
- * Both calls run in the upload service before it leaves the foreground, so the work is not cut
- * short by the process being stopped right after the last upload.
+ * Normally both calls run in the upload service before it leaves the foreground. If entering
+ * foreground is refused or a waiting batch is fully cancelled, only [finished] is scheduled in
+ * the queue's process scope, with every file missed. That completion has no foreground protection
+ * and may be lost on process death.
  */
 internal interface UploadFollowUp {
     /** Runs right after [file] is on the server, one file at a time. */
     suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile)
 
-    /** Runs after the batch; [missed] never reached the server. Returns notification lines. */
+    /** Runs after the batch; [missed] have no accepted upload result. Returns notification lines. */
     suspend fun finished(missed: List<UploadSelection>): List<UiText>
 }
