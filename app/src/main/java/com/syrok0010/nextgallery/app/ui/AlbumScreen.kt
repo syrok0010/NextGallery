@@ -24,6 +24,7 @@ import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
+import com.syrok0010.nextgallery.feature.favorites.*
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -38,8 +39,10 @@ internal fun AlbumScreen(
     removals: AlbumRemovals = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
     sessions: SessionStore = koinInject(),
+    favorites: CloudFavorites = koinInject(),
 ) {
     val contents by viewModel.state.collectAsStateWithLifecycle()
+    FavoriteError(favorites)
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
     val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
@@ -90,6 +93,8 @@ internal fun AlbumScreen(
         selection = selection,
         selectionActions = actions,
         viewerActions = actions,
+        viewerAccessory = { item, enabled -> FavoriteViewerAction(item, favorites, enabled) },
+        viewerItemNote = { FavoriteItemNote(it) },
         completedDeletions = contents.departedIds,
         viewerStatus = { visible ->
             if (operations.active) OperationStatusPill(operations, visible = visible && statusVisible)

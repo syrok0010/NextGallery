@@ -371,3 +371,25 @@ reconciliation. Переименование или перенос папки м
 - `DELETE` самой коллекции имеет другие последствия: `AlbumRoot::delete` удаляет альбом; `SharedAlbumRoot::delete` исключает пользователя из collaborators. Клиент исключения никогда не адресует эти URL.
 - Для shared-альбомов DAV использует отдельный `sharedalbums` namespace. Каталог Memories не является моделью прав на изменение каждого исходного файла. В #133 клиент ограничивает изменения собственными коллекциями; shared mutation/permission contract не считается подтверждённым.
 - `GET image/info/{id}?clusters=albums` возвращает `clusters.albums` одного файла. В проверенных API нет пакетного запроса «другие альбомы всех выбранных объектов». Для общего предупреждения перед удалением не делается N+1.
+
+### Облачное избранное (#129)
+
+Проверено по исходникам установленного Memories **10.1.0** на `test.syrok`:
+`Controller/DaysController.php::getTransformations`,
+`Db/TimelineQueryFilters.php::transformFavoriteFilter`, `addFavoriteTag`.
+
+- Query `fav=1` применяется и к индексу `/days`, и к `/days/{ids}`. SQL фильтрует
+  favorite tags авторизованного uid до группировки дней. API возвращает индекс
+  всех доступных дней; page token нет. Параметр `limit` ограничивает ответ
+  деталей максимум сотней и здесь намеренно не используется.
+- Неполные `detail` требуют дочитывания соответствующих дней с тем же `fav=1`.
+  Сумма и per-day counts позволяют обнаружить обрезанный/изменившийся результат.
+- Live-проверка 2026-11-01 на одноразовом `ng129-old.jpg` за 2010-01-02:
+  `PROPPATCH oc:favorite` → `207`, нужный `propstat 200`; отдельный `PROPFIND`
+  подтвердил последовательность `1 → 0 → 1`. Оба favorite query нашли старый
+  dayId `14611`, fileId `321`, независимо от viewport основной ленты.
+- `207` сам по себе не подтверждает запись: нужно проверить namespace свойства,
+  статус его `propstat` и href. Чтение `image/info` даёт owneruid, fileid,
+  filename и etag; точный DAV path дополнительно проверяется по `oc:fileid`.
+
+Границы первой реализации и варианты модели — [ADR 0019](../adr/0019-cloud-favorites.md).
