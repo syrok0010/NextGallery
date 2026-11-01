@@ -359,10 +359,14 @@ internal class UploadQueue(
         val activePasses = rows.filter { it.runnable || it.executor != null }.map { it.passId }.toSet()
         val passRows = rows.filter { it.passId in activePasses }
         val runnable = passRows.filter { it.runnable || it.executor != null }
+        val progress = mutableActivity.value
+        val current = progress?.current?.takeIf { uri ->
+            runnable.any { it.state == "Running" && it.executor != null && it.selection.identityUri == uri }
+        }
         mutableActivity.value = if (runnable.isEmpty()) null else UploadActivity(
             pending = runnable.map { it.selection.identityUri }.toSet(), total = passRows.size,
-            processed = passRows.size - runnable.size, current = mutableActivity.value?.current,
-            percent = mutableActivity.value?.percent,
+            processed = passRows.size - runnable.size, current = current,
+            percent = progress?.percent?.takeIf { current != null },
         )
         val summaries = rows.filter { !it.seen && it.hasResult }
         mutableResult.value = if (summaries.isEmpty()) null else UploadResult(
