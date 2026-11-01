@@ -68,7 +68,8 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - WebDAV fallback без подтверждённого пробела Memories API.
 
 Уточнение durable local→album: [ADR 0020](../adr/0020-upload-follow-up-reconciliation.md)
-сохраняет upload и explicit link независимо от album-step. На текущем Photos DAV
+сохраняет upload, explicit link и первую попытку добавления в альбом. После сбоя
+на текущем Photos DAV
 безопасно восстановить уже существующий точный membership; выполнять COPY из
 сохранённой очереди нельзя без атомарного условия на identity альбома. Поэтому
 отсутствующее членство остаётся явным attention с повтором проверки/отменой.

@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.feature.upload.UploadIntent
+import com.syrok0010.nextgallery.feature.upload.AlbumStepMode
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
 import kotlinx.coroutines.runBlocking
@@ -21,6 +22,73 @@ class DurableAlbumStepTest {
     private val memberProps = """<d:resourcetype/><oc:fileid>42</oc:fileid><nc:photos-collection-file-original-filename>/Photos/source.jpg</nc:photos-collection-file-original-filename>"""
     private fun xml(entries: String) = """<d:multistatus $prefix>$entries</d:multistatus>"""
     private fun albums(id: Int = 12) = """[{"album_id":$id,"name":"slice","user":"anna","cluster_id":"anna/slice"}]"""
+
+    @Test fun `first upload adds the file once and verifies exact membership`() = runBlocking {
+        var present = false
+        MemoriesAlbumWriterTest.Fixture { request ->
+            when {
+                request.method == "COPY" -> { present = true; 201 to "" }
+                request.target.contains("clusters/albums") -> 200 to albums()
+                request.target == source -> 207 to xml(entry(source, sourceProps))
+                request.target == target -> 207 to xml(entry(target, albumProps) + if (present) entry(member, memberProps) else "")
+                else -> 404 to ""
+            }
+        }.use { f ->
+            val step = DurableAlbumStep(f.writerTransport)
+            val intent = UploadIntent("album", 2, "anna", "slice", 12, f.origin + target)
+            val file = UploadedFile(UploadSelection("content://missing", "source.jpg", "image/jpeg"), fileUrl(f.origin, "anna", "/Photos/source.jpg"), true, 42)
+            val result = step.run(f.credentials, intent, file, AlbumStepMode.Initial) { true }
+            assertEquals("First addition must actually add the uploaded file", "Done", result.state)
+            assertEquals(42L, result.fileId)
+            assertEquals(12L, result.targetId)
+            val copy = f.requests.single { it.method == "COPY" }
+            assertEquals(f.origin + target + "/source.jpg", copy.headers["destination"])
+            assertEquals("\"etag\"", copy.headers["if-match"])
+            assertEquals("F", copy.headers["overwrite"])
+            assertEquals("Done", step.run(f.credentials, intent, file) { true }.state)
+            assertEquals(1, f.requests.count { it.method == "COPY" })
+            assertTrue(f.requests.none { it.method == "PUT" })
+        }
+    }
+
+    @Test fun `initial attempt never repeats a COPY whose outcome is not confirmed`() = runBlocking {
+        for (status in listOf(201, 409, 412, 500)) {
+            MemoriesAlbumWriterTest.Fixture { request ->
+                when {
+                    request.method == "COPY" -> status to ""
+                    request.target.contains("clusters/albums") -> 200 to albums()
+                    request.target == source -> 207 to xml(entry(source, sourceProps))
+                    request.target == target -> 207 to xml(entry(target, albumProps))
+                    else -> 404 to ""
+                }
+            }.use { f ->
+                val step = DurableAlbumStep(f.writerTransport)
+                val intent = UploadIntent("album", 2, "anna", "slice", 12, f.origin + target)
+                val file = UploadedFile(UploadSelection("content://missing", "source.jpg", "image/jpeg"), fileUrl(f.origin, "anna", "/Photos/source.jpg"), true, 42)
+                val result = step.run(f.credentials, intent, file, AlbumStepMode.Initial) { true }
+                assertEquals(if (status in 400..499) "Attention" else "Uncertain", result.state)
+                assertEquals("ReplayUnsupported", step.run(f.credentials, intent, file) { true }.problem)
+                assertEquals(1, f.requests.count { it.method == "COPY" })
+            }
+        }
+    }
+
+    @Test fun `cancel after reconciliation prevents initial COPY`() = runBlocking {
+        MemoriesAlbumWriterTest.Fixture { request ->
+            when {
+                request.target.contains("clusters/albums") -> 200 to albums()
+                request.target == source -> 207 to xml(entry(source, sourceProps))
+                request.target == target -> 207 to xml(entry(target, albumProps))
+                else -> error("Cancelled attempt must not write")
+            }
+        }.use { f ->
+            var checks = 0
+            val intent = UploadIntent("album", 2, "anna", "slice", 12, f.origin + target)
+            val file = UploadedFile(UploadSelection("content://missing", "source.jpg", null), fileUrl(f.origin, "anna", "/Photos/source.jpg"), true, 42)
+            assertEquals("Stopped", DurableAlbumStep(f.writerTransport).run(f.credentials, intent, file, AlbumStepMode.Initial) { ++checks == 1 }.problem)
+            assertTrue(f.requests.none { it.method == "COPY" })
+        }
+    }
 
     private suspend fun exercise(
         present: Boolean = true,

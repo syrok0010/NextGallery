@@ -33,6 +33,8 @@ internal data class UploadReceipt(
     val version: Int = 1,
 )
 
+internal enum class AlbumStepMode { Initial, Reconcile }
+
 internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
 internal enum class StepState { None, Pending, Running, Done, Attention, Uncertain, Suppressed }
 

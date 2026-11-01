@@ -24,6 +24,7 @@ class UploadQueueRuntimeTest {
     private var stamp: SourceStamp? = SourceStamp(5, 10, 20)
     private var links = 0
     private var albums = 0
+    private val albumModes = mutableListOf<AlbumStepMode>()
     private var transfers = 0
     private var allowLink = true
     private var albumSuccess = true
@@ -46,7 +47,7 @@ class UploadQueueRuntimeTest {
         queue = UploadQueue(sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
             { _, _, _ -> links++; allowLink },
-            { _, _, _, current -> albums++; if (current() && albumSuccess) UploadStepResult("Done") else UploadStepResult.attention("Album") }, {}, UUID.randomUUID().toString())
+            { _, _, _, mode, current -> albumModes += mode; albums++; if (current() && albumSuccess) UploadStepResult("Done") else UploadStepResult.attention("Album") }, {}, UUID.randomUUID().toString())
     }
     @After fun cleanup() = runBlocking { scope.cancel(); scope.coroutineContext[Job]!!.join(); db.close(); context.deleteDatabase(dbName); Unit }
     private suspend fun reopen() {
@@ -244,6 +245,26 @@ class UploadQueueRuntimeTest {
         assertEquals(1, albums)
         assertTrue(restored.items.single().state.value.attention)
         assertFalse(queue.logout { error("Pending album action must block logout") })
+    }
+
+    @Test fun albumCopyPermissionIsOnlyForThePassThatAcceptsReceipt() = runBlocking {
+        val intent = UploadIntent("album", 2, "test", "slice", 1, "http://test.syrok/album")
+        albumSuccess = false
+        val fresh = enqueue(listOf(ids.first()), listOf(intent))
+        queue.runBatch(fresh, ::transfer)
+        assertEquals(listOf(AlbumStepMode.Initial), albumModes)
+        queue.retryActions(fresh.items.single())
+        withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }
+        queue.runBatch(fresh) { _, _, _ -> error("Retry must not transfer") }
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        val pending = enqueue(listOf(ids.last()), listOf(intent))
+        val claim = journal.claim(pending.items.single().id, credentials.uploadOwner, "dead-process")!!
+        journal.accept(claim, UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/b.jpg", true, 43))
+        reopen()
+        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
+        queue.runBatch(restored) { _, _, _ -> error("Existing receipt must not transfer") }
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(1, transfers)
     }
 
     @Test fun missingCredentialsDoNotEraseJournalAndEmptySelectionIsNotAStorageFailure() = runBlocking {

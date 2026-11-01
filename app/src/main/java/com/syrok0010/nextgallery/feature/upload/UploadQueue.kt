@@ -60,7 +60,7 @@ internal class UploadQueue(
     private val journal: UploadJournal,
     private val snapshot: (UploadSelection) -> SourceStamp,
     private val link: suspend (AccountCredentials, String, Long) -> Boolean,
-    private val album: suspend (AccountCredentials, UploadIntent, UploadedFile, suspend () -> Boolean) -> UploadStepResult,
+    private val album: suspend (AccountCredentials, UploadIntent, UploadedFile, AlbumStepMode, suspend () -> Boolean) -> UploadStepResult,
     private val refreshLibrary: () -> Unit,
     private val processId: String = uploadProcessId,
     private val prepareAlbum: suspend (AccountCredentials, UploadIntent) -> UploadIntent = { _, intent -> intent },
@@ -239,6 +239,7 @@ internal class UploadQueue(
         for (item in batch.items) {
             val id = item.id
             var claim = journal.claim(id, account.uploadOwner, processId) ?: continue
+            var acceptedNow = false
             try {
                 if (!current(account)) continue
                 val intents = try { claim.intents } catch (_: Exception) { emptyList() }
@@ -267,6 +268,7 @@ internal class UploadQueue(
                     if (!validSource(item.selection)) { journal.problem(claim, UploadProblem.Source); continue }
                     if (!current(account)) continue
                     claim = journal.accept(claim, UploadReceipt(uploaded.path.segments, uploaded.created, uploaded.fileId)) ?: continue
+                    acceptedNow = true
                 }
                 val receipt = claim.receipt ?: continue
                 if (receipt.version != 1) {
@@ -291,7 +293,7 @@ internal class UploadQueue(
                     val result = if (intent == null || intent.version != 2 || intent.albumId == null || intent.albumHref == null) {
                         UploadStepResult.attention("LegacyTarget")
                     } else try {
-                        album(account, intent, UploadedFile(item.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId)) {
+                        album(account, intent, UploadedFile(item.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId), if (acceptedNow) AlbumStepMode.Initial else AlbumStepMode.Reconcile) {
                             current(account) && journal.stepCurrent(claim, "album")
                         }
                     } catch (cancelled: CancellationException) { throw cancelled
