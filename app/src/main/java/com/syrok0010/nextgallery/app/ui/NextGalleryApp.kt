@@ -59,6 +59,16 @@ internal fun NextGalleryApp(
     sessionViewModel: SessionViewModel = koinViewModel(),
 ) {
     val session by sessionViewModel.session.collectAsState()
+    val logoutBlocked by sessionViewModel.logoutBlocked.collectAsState()
+    if (logoutBlocked) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { sessionViewModel.logoutBlocked.value = false },
+        text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.syrok0010.nextgallery.R.string.uploads_logout_blocked)) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { sessionViewModel.logoutBlocked.value = false }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(android.R.string.ok))
+            }
+        },
+    )
     val backStack = rememberNavBackStack(session.rootRoute())
     val routes = syncedBackStack(backStack.toList(), session)
     val page = routes.last()

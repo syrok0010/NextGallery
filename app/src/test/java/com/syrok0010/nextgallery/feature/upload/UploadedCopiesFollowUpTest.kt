@@ -6,7 +6,11 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
+<<<<<<< HEAD
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.url
+=======
+>>>>>>> 2ac922c6 (feat(upload): persist manual queue and recover on app reopen)
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -14,6 +18,7 @@ import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -25,7 +30,17 @@ class UploadedCopiesFollowUpTest {
     private val registry = InMemoryMediaIdentityRegistry()
     private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
-    private val followUp = UploadedCopiesFollowUp(registry, sessions) { refreshes++ }
+    private val followUp = UploadedCopiesFollowUp(registry, sessions)
+
+    @Test
+    fun `file id is read from the OC-FileId header`() {
+        assertEquals(183L, uploadedFileId("00000183ocmsigiy9k16"))
+        assertEquals(123_456_789L, uploadedFileId("123456789ocmsigiy9k16"))
+        assertNull(uploadedFileId(null))
+        assertNull(uploadedFileId(""))
+        assertNull(uploadedFileId("ocmsigiy9k16"))
+        assertNull(uploadedFileId("00000000ocmsigiy9k16"))
+    }
 
     @Test
     fun `linked server copy joins the phone file as one object`() =
@@ -137,6 +152,7 @@ class UploadedCopiesFollowUpTest {
             assertEquals(0, refreshes)
         }
 
+<<<<<<< HEAD
     @Test
     fun `follow-up links a created file and refreshes the library after the batch`() =
         runBlocking {
@@ -171,11 +187,13 @@ class UploadedCopiesFollowUpTest {
     private fun uploadedFile(fileId: Long?) =
         UploadedFile(
             selection = SELECTION,
-            path = DavFilePath.of("test", "/Photos/a.jpg"),
+            url = DavFilePath.of("test", "/Photos/a.jpg").url(CREDENTIALS.serverUrl),
             created = fileId != null,
             fileId = fileId,
         )
 
+=======
+>>>>>>> 2ac922c6 (feat(upload): persist manual queue and recover on app reopen)
     private suspend fun resolveLocal(
         contentUri: String = CONTENT_URI,
         auid: String = LOCAL_AUID,
