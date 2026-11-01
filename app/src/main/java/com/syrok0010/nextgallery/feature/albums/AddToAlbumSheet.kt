@@ -36,7 +36,8 @@ internal fun AddToAlbumSheet(
     catalog: AlbumCatalogRepository = koinInject(),
     sessions: SessionStore = koinInject(),
 ) {
-    val busy = additions.state.collectAsStateWithLifecycle().value is AlbumAdditionState.Running
+    val additionState by additions.state.collectAsStateWithLifecycle()
+    val busy = additionState is AlbumAdditionState.Running
     val albums by catalog.state.collectAsStateWithLifecycle()
     val session by sessions.session.collectAsStateWithLifecycle()
     val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
@@ -77,6 +78,9 @@ internal fun AddToAlbumSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
+        }
+        if ((additionState as? AlbumAdditionState.Failed)?.reason == AlbumAdditionFailure.QueueStorage) {
+            Text(stringResource(R.string.uploads_enqueue_rejected), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp))
         }
         if (albums.remote.failed) {
             Text(

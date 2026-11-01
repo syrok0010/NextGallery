@@ -33,6 +33,19 @@ class JsonCredentialsStoreTest {
     }
 
     @Test
+    fun `old credentials receive one durable owner and a new login has a different owner`() {
+        val text = FakeCredentialsTextStore("""{"serverUrl":"https://cloud.example.com","loginName":"alice","appPassword":"fixture","userId":"alice"}""")
+        val store = JsonCredentialsStore(text, json)
+        val restored = store.load()!!
+        assertEquals(restored.ownerToken, store.load()!!.ownerToken)
+        store.clear()
+        val newLogin = AccountCredentials(restored.serverUrl, restored.loginName, restored.appPassword, restored.userId)
+        org.junit.Assert.assertNotEquals(restored.ownerToken, newLogin.ownerToken)
+        store.save(newLogin)
+        assertEquals(newLogin.ownerToken, store.load()!!.ownerToken)
+    }
+
+    @Test
     fun `load clears malformed payload`() {
         val textStore = FakeCredentialsTextStore(initialValue = "not-json")
         val store = JsonCredentialsStore(textStore, json)

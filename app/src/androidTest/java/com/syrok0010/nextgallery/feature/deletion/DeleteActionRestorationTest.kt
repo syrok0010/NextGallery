@@ -13,6 +13,8 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.app.ui.OperationStatus
+import com.syrok0010.nextgallery.app.ui.rememberOperationStatus
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.feature.collection.MediaSelection
 import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
@@ -20,17 +22,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
-import com.syrok0010.nextgallery.app.ui.OperationStatus
-import com.syrok0010.nextgallery.app.ui.rememberOperationStatus
-import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.CredentialsStore
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import org.junit.Rule
 import org.junit.Test
 
@@ -56,12 +47,6 @@ class DeleteActionRestorationTest {
                 },
             ),
         )
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val uploads = UploadQueue(SessionStore(object : CredentialsStore {
-            override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
-            override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
-        }), MediaLibraryIndex(), scope)
         try {
             val registry = TrashRegistry()
             val owner = object : ActivityResultRegistryOwner {
@@ -76,7 +61,7 @@ class DeleteActionRestorationTest {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                     val currentSelection = rememberMediaSelection()
                     val action = rememberDeleteAction(confirmed::add, currentSelection::clear)
-                    val operations = rememberOperationStatus(sources = listOf(uploads))
+                    val operations = rememberOperationStatus(sources = emptyList())
                     SideEffect {
                         selection = currentSelection
                         delete = action
@@ -117,7 +102,6 @@ class DeleteActionRestorationTest {
                 }
             }
         } finally {
-            scope.cancel()
             resolver.delete(uri, null, null)
         }
     }

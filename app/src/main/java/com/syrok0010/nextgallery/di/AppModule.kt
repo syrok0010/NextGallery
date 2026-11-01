@@ -9,19 +9,16 @@ import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
-import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
-import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
-import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
-import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
+import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
@@ -34,11 +31,11 @@ import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
-import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
-import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
+import com.syrok0010.nextgallery.feature.deletion.MemoriesFileDeleter
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import com.syrok0010.nextgallery.feature.images.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
@@ -54,7 +51,10 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
+import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
+import com.syrok0010.nextgallery.feature.upload.UploadSource
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
@@ -66,11 +66,10 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
-import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val appModule = module {
-    single<RemoteAlbumSource> { MemoriesAlbumSource(get<MemoriesApiClient>()) }
+    single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     single {
@@ -82,12 +81,19 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
-    single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
+    single { MemoriesFiles(get()) }
+    single { MemoriesAlbumWriter(get(), get()) }
     single {
-        AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
-    } bind OperationStatusSource::class
-    single { MemoriesFiles(get<MemoriesApiClient>()) }
-    single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
+        val uploads: UploadQueue = get()
+        AlbumAdditions(
+            get(),
+            get(),
+            get(),
+            { ids, intents -> uploads.submit(ids, intents) },
+            get(named("libraryScope")),
+        )
+    }
+    single { MemoriesFileDeleter(get(), get()) }
     single { NextcloudTrashBin(get()) }
     single {
         MediaDeletionRepository(
@@ -99,14 +105,36 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
         }
-    } bind OperationStatusSource::class
+    }
+    single { UploadQueueDatabase.open(androidContext()) }
+    single { UploadJournal(get()) }
+    single { UploadSource(androidContext().contentResolver) }
     single {
-        UploadQueue(get(), get(), get(named("libraryScope"))) {
-            listOf(
-                UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
-            )
-        }
-    } bind OperationStatusSource::class
+        val identities: MediaIdentityRegistry = get()
+        val sessions: SessionStore = get()
+        val writer: MemoriesAlbumWriter = get()
+        val catalog: AlbumCatalogRepository = get()
+        UploadQueue(
+            get(),
+            get(),
+            get(named("libraryScope")),
+            get(),
+            get<UploadSource>()::snapshot,
+            link = { account, identity, fileId ->
+                UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
+            },
+            album = { account, intent, file ->
+                val success = writer.addFile(
+                    account,
+                    file.url,
+                    AlbumAddress(intent.owner, intent.target),
+                ) == AlbumCopyOutcome.Added
+                catalog.refresh()
+                success
+            },
+            refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
+        )
+    }
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }
@@ -120,14 +148,14 @@ val appModule = module {
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get<MemoriesApiClient>(), get()) }
+    single { MemoriesAlbumContents(get(), get()) }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
         val local = get<AndroidAlbumContents>()
-        AlbumContentsSource { location, _ ->
+        AlbumContentsSource { location, credentials ->
             when (location) {
-                is AlbumLocation.Remote -> remote.load(location)
+                is AlbumLocation.Remote -> remote.load(location, credentials)
                 is AlbumLocation.Folder -> local.load(location)
             }
         }
@@ -151,10 +179,6 @@ val appModule = module {
     }
 
     single { NextcloudTransport(get()) }
-    single { NextcloudAuthClient(get()) }
-    single { MemoriesApiClient(get(), get<SessionStore>()::requireCredentials) }
-    single { PhotosAlbumsDavClient(get(), get<SessionStore>()::requireCredentials) }
-    single { FilesDavClient(get(), get<SessionStore>()::requireCredentials) }
     single { NextcloudCapabilitiesClient(get(), get<SessionStore>()::requireCredentials) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
     single { NextGalleryDatabase.create(androidContext()) }
@@ -192,13 +216,14 @@ val appModule = module {
         )
     }
     single { NextcloudLoginRepository(get<NextcloudAuthClient>(), get<NextcloudTransport>()) }
-    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
+    single { MemoriesMultipreviewClient(get(), get()) }
+    single { MemoriesRepository(get(), get(), get()) }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {
         val images = get<RemoteImageRepository>()
         ThumbnailBatchLoader(
-            loadBatch = images::ensureThumbnails,
+            loadBatch = { credentials, keys -> images.ensureThumbnails(credentials, keys).toSet() },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }

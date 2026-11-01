@@ -9,15 +9,22 @@ import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class SessionViewModel(
+internal class SessionViewModel(
     private val sessionStore: SessionStore,
     private val credentials: CredentialsStore,
     private val memories: MemoriesRepository,
+    private val uploads: com.syrok0010.nextgallery.feature.upload.UploadQueue,
 ) : ViewModel() {
+    val logoutBlocked = kotlinx.coroutines.flow.MutableStateFlow(false)
     fun logout() {
-        credentials.clear()
-        viewModelScope.launch { memories.clearCache() }
-        sessionStore.signOut()
+        viewModelScope.launch {
+            val allowed = uploads.logout {
+                credentials.clear()
+                sessionStore.signOut()
+            }
+            logoutBlocked.value = !allowed
+            if (allowed) memories.clearCache()
+        }
     }
     val session: StateFlow<SessionUiState> = sessionStore.session
 }
