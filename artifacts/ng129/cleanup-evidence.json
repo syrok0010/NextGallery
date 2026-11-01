@@ -1,0 +1,48 @@
+{
+  "server": "http://test.syrok",
+  "account": "test",
+  "operations": [
+    {
+      "method": "DELETE",
+      "path": "/remote.php/dav/photos/test/albums/ng129-favorites",
+      "status": 204
+    },
+    {
+      "method": "DELETE",
+      "path": "/remote.php/dav/files/test/Photos/ng129-favorites",
+      "status": 204
+    },
+    {
+      "method": "DELETE",
+      "path": "/remote.php/dav/trashbin/test/trash/ng129-favorites.d1793527534/",
+      "status": 204
+    },
+    {
+      "method": "DELETE",
+      "path": "/remote.php/dav/trashbin/test/trash/ng129-error.jpg.d1793527326",
+      "status": 204
+    }
+  ],
+  "trashTargets": [
+    {
+      "path": "/remote.php/dav/trashbin/test/trash/ng129-favorites.d1793527534/",
+      "originalLocation": "Photos/ng129-favorites"
+    },
+    {
+      "path": "/remote.php/dav/trashbin/test/trash/ng129-error.jpg.d1793527326",
+      "originalLocation": "Photos/ng129-favorites/ng129-error.jpg"
+    }
+  ],
+  "verifiedAbsent": {
+    "album": true,
+    "cloudFolder": true,
+    "taskTrashEntries": true,
+    "localMediaStoreRows": [
+      387,
+      389
+    ],
+    "localFolder": true,
+    "temporaryContainerExif": true
+  },
+  "deviceSession": "Closed: t3-f89cd0f0e3f8fcf316024b58"
+}
