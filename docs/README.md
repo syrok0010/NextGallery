@@ -24,3 +24,4 @@
 - [ADR 0014: Ручная загрузка в облако: размещение и передача](adr/0014-timeline-upload.md)
 - [ADR 0019: Журнал ручных загрузок и выполнение через WorkManager](adr/0019-durable-manual-uploads.md)
 - [ADR 0021: Английский и русский языки приложения](adr/0021-app-languages.md)
+- [ADR 0022: Облачное избранное](adr/0022-cloud-favorites.md)
