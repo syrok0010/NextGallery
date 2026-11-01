@@ -25,7 +25,7 @@ class UploadedCopiesFollowUpTest {
     private val registry = InMemoryMediaIdentityRegistry()
     private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
-    private val followUp = UploadedCopiesFollowUp(registry, sessions) { refreshes++ }
+    private val followUp = UploadedCopiesFollowUp(registry, sessions)
 
     @Test
     fun `file id is read from the OC-FileId header`() {
@@ -146,45 +146,6 @@ class UploadedCopiesFollowUpTest {
             assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
             assertEquals(0, refreshes)
         }
-
-    @Test
-    fun `follow-up links a created file and refreshes the library after the batch`() =
-        runBlocking {
-            val localId = resolveLocal()
-            followUp.uploaded(CREDENTIALS, uploadedFile(fileId = FILE_ID))
-            assertEquals(0, refreshes)
-            assertEquals(emptyList<UiText>(), followUp.finished(emptyList()))
-
-            assertEquals(localId, resolveRemote())
-            assertEquals(1, refreshes)
-        }
-
-    @Test
-    fun `follow-up leaves a file without server id unlinked`() =
-        runBlocking {
-            val localId = resolveLocal()
-            followUp.uploaded(CREDENTIALS, uploadedFile(fileId = null))
-            followUp.finished(emptyList())
-
-            assertNotEquals(localId, resolveRemote())
-            assertEquals("the file is on the server either way", 1, refreshes)
-        }
-
-    @Test
-    fun `follow-up without files on the server leaves the library alone`() =
-        runBlocking {
-            followUp.finished(listOf(SELECTION))
-
-            assertEquals(0, refreshes)
-        }
-
-    private fun uploadedFile(fileId: Long?) =
-        UploadedFile(
-            selection = SELECTION,
-            url = "http://test.example/remote.php/dav/files/test/Photos/a.jpg".toHttpUrl(),
-            created = fileId != null,
-            fileId = fileId,
-        )
 
     private suspend fun resolveLocal(
         contentUri: String = CONTENT_URI,

@@ -20,6 +20,8 @@ class AppCompositionTest {
             try {
                 store.put("auth", koin.get<LoginViewModel>())
                 koin.get<MediaLibraryIndex>()
+                koin.get<com.syrok0010.nextgallery.feature.upload.UploadQueue>()
+                store.put("session", koin.get<com.syrok0010.nextgallery.app.ui.SessionViewModel>())
                 store.put("albums", koin.get<AlbumsViewModel>())
                 koin.get<MediaImageRequestFactory>()
             } finally {

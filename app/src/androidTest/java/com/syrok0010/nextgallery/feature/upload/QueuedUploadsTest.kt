@@ -30,6 +30,7 @@ import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -46,7 +47,11 @@ class QueuedUploadsTest {
     private val context get() = instrumentation.targetContext
     private val scope = CoroutineScope(Dispatchers.Unconfined)
     private val library = MediaLibraryIndex().apply { publish(BATCH + OTHER) }
-    private val queue = UploadQueue(SessionStore(SignedIn), library, scope)
+    private val db by lazy { UploadQueueDatabase.open(context, "queued-uploads-ui-test.db") }
+    private val queue by lazy {
+        UploadQueue(SessionStore(SignedIn), library, scope, UploadJournal(db),
+            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _, _ -> true }, {})
+    }
     private var starts = 0
     private val registry = PermissionRegistry()
     private var notificationsGranted = false
@@ -68,12 +73,15 @@ class QueuedUploadsTest {
     fun resetPermission() {
         assumeTrue(Build.VERSION.SDK_INT >= 33)
         clearPreferences()
+        context.deleteDatabase("queued-uploads-ui-test.db")
     }
 
     @After
     fun cleanup() {
         clearPreferences()
         scope.cancel()
+        db.close()
+        context.deleteDatabase("queued-uploads-ui-test.db")
     }
 
     @Test
@@ -87,7 +95,7 @@ class QueuedUploadsTest {
         }
         rule.runOnIdle {
             assertEquals(1, starts)
-            assertEquals(BATCH.files, queue.next()?.files)
+            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
         }
         submit(BATCH)
         rule.runOnIdle {
@@ -147,7 +155,7 @@ class QueuedUploadsTest {
         submit(BATCH)
         rule.runOnIdle {
             assertEquals(1, starts)
-            assertEquals(listOf(BATCH.files), queue.waiting.value.map { it.files })
+            assertEquals(listOf(BATCH.files), queue.waiting.value.map { batch -> batch.files.map { it.copy(stamp = null) } })
             assertNull(queue.next())
         }
         submit(OTHER)
@@ -160,8 +168,8 @@ class QueuedUploadsTest {
         rule.runOnIdle {
             assertEquals("one start for all waiting batches", 2, starts)
             assertEquals(emptyList<UploadBatch>(), queue.waiting.value)
-            assertEquals(BATCH.files, queue.next()?.files)
-            assertEquals(OTHER.files, queue.next()?.files)
+            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
+            assertEquals(OTHER.files, queue.next()?.files?.map { it.copy(stamp = null) })
             assertNull(queue.next())
         }
     }
@@ -191,9 +199,11 @@ class QueuedUploadsTest {
                 if (refuse) throw IllegalStateException("dataSync quota exhausted")
             })
             assertNull(queue.next())
+        }
+        rule.waitUntil(5_000) { queue.batches.value.flatMap { it.items }.all { it.state.value.phase == UploadPhase.NeedsAttention } }
+        rule.runOnIdle {
             assertNull(queue.activity.value)
             assertEquals(3, queue.result.value?.files)
-            assertEquals(listOf("Android refused foreground"), queue.result.value?.failures)
         }
         rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.CREATED }
         rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
@@ -205,7 +215,7 @@ class QueuedUploadsTest {
             assertEquals(true, queue.enterForeground("Android refused foreground") {
                 if (refuse) throw IllegalStateException("dataSync quota exhausted")
             })
-            assertEquals(BATCH.files, queue.next()?.files)
+            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
         }
     }
 
@@ -243,7 +253,7 @@ class QueuedUploadsTest {
         override val lifecycle = LifecycleRegistry(this)
     }
 
-    private fun submit(items: List<MediaItem>) = queue.submit(items.map { it.mediaId })
+    private fun submit(items: List<MediaItem>) = runBlocking { queue.submit(items.map { it.mediaId }) }
 
     private val List<MediaItem>.files get() = mapNotNull(::uploadSelection)
 

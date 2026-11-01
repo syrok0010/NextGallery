@@ -10,7 +10,8 @@ import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
-import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.EnqueueResult
+import com.syrok0010.nextgallery.feature.upload.UploadIntent
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CoroutineScope
@@ -105,19 +106,22 @@ class AlbumAdditionTest {
                     scope,
                 )
                 val library = MediaLibraryIndex().apply { publish(listOf(item("local", local("local")))) }
-                val uploads = UploadQueue(sessions, library, scope)
+                val submittedIntents = MutableStateFlow<List<UploadIntent>>(emptyList())
                 val additions = AlbumAdditions(
                     sessions,
                     fixture.writer,
                     catalog,
-                    uploads,
+                    { ids, intents ->
+                        submittedIntents.value = intents
+                        EnqueueResult.Accepted("batch", ids.size)
+                    },
                     scope,
                 )
                 val before = refreshed
                 var mkcolBeforeSubmit = false
                 // Unconfined: runs inside submit, before the addition goes on.
                 val submitted = scope.launch(Dispatchers.Unconfined) {
-                    uploads.waiting.first { it.isNotEmpty() }
+                    submittedIntents.first { it.isNotEmpty() }
                     mkcolBeforeSubmit = fixture.requests.any { it.method == "MKCOL" }
                 }
                 val local = UploadSelection("content://media/local", "local.jpg", "image/jpeg")
@@ -133,9 +137,7 @@ class AlbumAdditionTest {
                 assertEquals(1, done.localUploads)
                 submitted.join()
                 assertTrue("uploads must start after the album exists", mkcolBeforeSubmit)
-                val batch = uploads.waiting.value.single()
-                assertEquals(listOf(local), batch.files)
-                assertTrue(batch.followUps.single() is AlbumUploadFollowUp)
+                assertEquals(listOf(UploadIntent("album", owner = "anna", target = "Поход")), submittedIntents.value)
                 assertTrue(fixture.requests.any { it.method == "MKCOL" && it.decodedTarget.endsWith("/photos/anna/albums/Поход") })
                 withTimeout(5_000) { while (refreshed == before) kotlinx.coroutines.delay(10) }
                 additions.consume()
@@ -166,7 +168,7 @@ class AlbumAdditionTest {
                     sessions,
                     fixture.writer,
                     emptyCatalog(sessions, scope),
-                    UploadQueue(sessions, MediaLibraryIndex(), scope),
+                    { ids, _ -> EnqueueResult.Accepted("batch", ids.size) },
                     scope,
                 )
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")

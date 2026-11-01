@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import androidx.core.content.edit
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -67,14 +66,17 @@ private class KeystoreEncryptedTextStore(
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
         val ciphertext = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
 
-        preferences.edit {
-            putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            putString(KEY_CIPHERTEXT, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-        }
+        check(
+            preferences
+                .edit()
+                .putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+                .putString(KEY_CIPHERTEXT, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+                .commit(),
+        ) { "Could not persist the secure session" }
     }
 
     override fun clear() {
-        preferences.edit { clear() }
+        check(preferences.edit().clear().commit()) { "Could not clear the secure session" }
     }
 
     private fun getOrCreateSecretKey(): SecretKey {

@@ -31,13 +31,13 @@ class UploadFileTest {
             val remoteCandidate = mediaIdentityCandidate(remote, auid = "different-cloud-date-and-size", buid = null)
             val before = registry.resolve(listOf(localCandidate, remoteCandidate)).mediaIds
             assertNotEquals(before[local], before[remote])
-            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions) {}
+            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions)
 
             val uploaded = fixture.upload()
             assertNotNull(uploaded)
             assertFalse(uploaded!!.created)
             assertEquals(183L, uploaded.fileId)
-            followUp.uploaded(fixture.credentials, uploaded)
+            uploaded.fileId?.let { followUp.link(fixture.credentials, uploaded.selection.identityUri, it) }
 
             val after = registry.resolve(listOf(localCandidate, remoteCandidate)).mediaIds
             assertEquals(before[local], after[local])
@@ -54,10 +54,10 @@ class UploadFileTest {
             val remote = MediaSourceIdentity(MediaSourceKind.Memories, "183")
             val candidates = listOf(mediaIdentityCandidate(local, auid = null, buid = null), mediaIdentityCandidate(remote, auid = null, buid = null))
             val before = registry.resolve(candidates).mediaIds
-            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions) {}
+            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions)
 
             val uploaded = fixture.upload()
-            uploaded?.let { followUp.uploaded(fixture.credentials, it) }
+            uploaded?.fileId?.let { followUp.link(fixture.credentials, uploaded.selection.identityUri, it) }
 
             assertNull(uploaded)
             assertEquals(before, registry.resolve(candidates).mediaIds)
@@ -77,14 +77,14 @@ class UploadFileTest {
                 mediaIdentityCandidate(replacement, auid = null, buid = null),
             )
             val before = registry.resolve(candidates).mediaIds
-            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions) {}
+            val followUp = UploadedCopiesFollowUp(registry, fixture.sessions)
 
             // HEAD still reports the original five bytes, but PROPFIND sees its replacement.
             val uploaded = fixture.upload()
             assertNotNull(uploaded)
             assertFalse(uploaded!!.created)
             assertNull(uploaded.fileId)
-            followUp.uploaded(fixture.credentials, uploaded)
+            uploaded.fileId?.let { followUp.link(fixture.credentials, uploaded.selection.identityUri, it) }
 
             assertEquals(before, registry.resolve(candidates).mediaIds)
             assertNotEquals(before[local], before[replacement])

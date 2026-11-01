@@ -1,7 +1,9 @@
 package com.syrok0010.nextgallery.app.ui
 
+import android.widget.Toast
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
@@ -17,7 +19,10 @@ import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
+import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import java.util.UUID
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @Composable
@@ -32,6 +37,9 @@ internal fun PhotosScreen(
     deletions: MediaDeletionRepository = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var uploadRequestId by remember { mutableStateOf(UUID.randomUUID().toString()) }
     val operations = rememberOperationStatus(uploads, additions, deletions)
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
@@ -57,8 +65,25 @@ internal fun PhotosScreen(
         selectionEnabled = true,
         onUpload = { items, onStarted ->
             // The batch starts from the app root, which also asks for the notification permission.
-            uploads.submit(items.map { it.mediaId })
-            onStarted()
+            val requestId = uploadRequestId
+            scope.launch {
+                when (uploads.submit(items.map { it.mediaId }, requestId = requestId)) {
+                    is EnqueueResult.Accepted -> {
+                        uploadRequestId = UUID.randomUUID().toString()
+                        onStarted()
+                    }
+
+                    EnqueueResult.NothingToUpload -> onStarted()
+
+                    EnqueueResult.Rejected ->
+                        Toast
+                            .makeText(
+                                context,
+                                R.string.uploads_enqueue_rejected,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                }
+            }
         },
         onAddToAlbum = { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
         onDelete = { items, onDone ->
@@ -93,7 +118,7 @@ internal fun PhotosScreen(
             onDismiss = { albumRequest = null },
             onPick = { target ->
                 // A rejected request keeps the sheet and the selection; the sheet explains why.
-                if (additions.add(target, request)) {
+                additions.add(target, request) {
                     albumRequest = null
                     onDone()
                 }
