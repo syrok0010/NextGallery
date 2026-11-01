@@ -1,0 +1,133 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+
+> Configure project :app
+WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
+The current default is 'true'.
+
+> Task :spotlessKotlin
+> Task :spotlessKotlinApply
+> Task :spotlessKotlinGradle UP-TO-DATE
+> Task :spotlessKotlinGradleApply UP-TO-DATE
+> Task :spotlessApply
+> Task :core:media:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:media:compileKotlin UP-TO-DATE
+> Task :core:media:compileJava NO-SOURCE
+> Task :core:media:processResources NO-SOURCE
+> Task :core:media:classes UP-TO-DATE
+> Task :core:media:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preAutomationBuild UP-TO-DATE
+> Task :app:generateAutomationResources UP-TO-DATE
+> Task :app:packageAutomationResources UP-TO-DATE
+> Task :app:processAutomationNavigationResources UP-TO-DATE
+> Task :app:parseAutomationLocalResources UP-TO-DATE
+> Task :app:generateAutomationRFile UP-TO-DATE
+> Task :app:kspAutomationKotlin
+
+> Task :app:compileAutomationKotlin
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/main/java/com/syrok0010/nextgallery/feature/upload/UploadForegroundService.kt:331:35 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+
+> Task :app:javaPreCompileAutomation UP-TO-DATE
+> Task :app:compileAutomationJavaWithJavac NO-SOURCE
+> Task :app:checkAutomationAarMetadata UP-TO-DATE
+> Task :app:mapAutomationSourceSetPaths UP-TO-DATE
+> Task :app:compileAutomationNavigationResources UP-TO-DATE
+> Task :app:mergeAutomationResources UP-TO-DATE
+> Task :app:createAutomationCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksAutomation UP-TO-DATE
+> Task :app:processAutomationMainManifest UP-TO-DATE
+> Task :app:processAutomationManifest UP-TO-DATE
+> Task :app:processAutomationManifestForPackage UP-TO-DATE
+> Task :app:processAutomationResources UP-TO-DATE
+> Task :app:bundleAutomationClassesToRuntimeJar
+> Task :app:bundleAutomationClassesToCompileJar
+> Task :app:kspAutomationUnitTestKotlin
+> Task :app:preAutomationUnitTestBuild UP-TO-DATE
+> Task :app:compileAutomationUnitTestKotlin
+> Task :app:javaPreCompileAutomationUnitTest UP-TO-DATE
+> Task :app:compileAutomationUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processAutomationJavaRes UP-TO-DATE
+> Task :app:processAutomationUnitTestJavaRes UP-TO-DATE
+> Task :app:testAutomationUnitTest
+> Task :core:media:compileTestKotlin UP-TO-DATE
+> Task :core:media:compileTestJava NO-SOURCE
+> Task :core:media:processTestResources NO-SOURCE
+> Task :core:media:testClasses UP-TO-DATE
+> Task :core:media:test UP-TO-DATE
+> Task :app:verifyFeatureBoundaries
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/main/java/com/syrok0010/nextgallery/feature/upload/UploadForegroundService.kt:331:35 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:generateDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug
+> Task :app:preAutomationAndroidTestBuild SKIPPED
+> Task :app:generateAutomationAndroidTestResources UP-TO-DATE
+> Task :app:packageAutomationAndroidTestResources UP-TO-DATE
+> Task :app:processAutomationAndroidTestNavigationResources UP-TO-DATE
+> Task :app:parseAutomationAndroidTestLocalResources UP-TO-DATE
+> Task :app:generateAutomationAndroidTestRFile UP-TO-DATE
+> Task :app:kspAutomationAndroidTestKotlin
+
+> Task :app:compileAutomationAndroidTestKotlin
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/androidTest/java/com/syrok0010/nextgallery/core/ui/MediaAssetImageTest.kt:31:23 'fun createComposeRule(effectContext: CoroutineContext = ...): ComposeContentTestRule' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/FilmstripTest.kt:29:23 'fun createComposeRule(effectContext: CoroutineContext = ...): ComposeContentTestRule' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/MediaDetailScreenTest.kt:40:16 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/VideoPlaybackIntegrationTest.kt:62:26 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/ViewerMotionStateTest.kt:28:16 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+
+> Task :spotlessKotlinCheck UP-TO-DATE
+> Task :spotlessKotlinGradleCheck UP-TO-DATE
+> Task :spotlessCheck UP-TO-DATE
+
+BUILD SUCCESSFUL in 1m 18s
+81 actionable tasks: 17 executed, 64 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html
