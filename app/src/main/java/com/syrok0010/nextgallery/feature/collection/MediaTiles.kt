@@ -250,6 +250,7 @@ private fun activityDescription(activity: MediaTileActivity): String {
         when (activity.operation) {
             MediaTileOperation.Upload -> R.string.media_activity_upload
             MediaTileOperation.AddToAlbum -> R.string.media_activity_album
+            MediaTileOperation.RemoveFromAlbum -> R.string.album_remove_action
             MediaTileOperation.Delete -> R.string.media_activity_delete
         },
     )

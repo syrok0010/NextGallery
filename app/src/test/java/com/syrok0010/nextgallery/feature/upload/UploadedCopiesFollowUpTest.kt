@@ -56,6 +56,33 @@ class UploadedCopiesFollowUpTest {
         }
 
     @Test
+    fun `folder upload links the exact volume bytes to the aggregate local identity`() =
+        runBlocking {
+            for ((volume, collection) in listOf(
+                "external_primary" to "images",
+                "1234-5678" to "video",
+            )) {
+                val aggregate = "content://media/external/$collection/media/42"
+                val physical = "content://media/$volume/$collection/media/42"
+                val localId =
+                    resolveLocal(aggregate, auid = "auid-$collection", buid = "buid-$collection")
+                val fileId = if (collection == "images") FILE_ID else SECOND_FILE_ID
+
+                assertTrue(followUp.link(CREDENTIALS, physical, fileId))
+                assertEquals(localId, resolveRemote(fileId))
+            }
+        }
+
+    @Test
+    fun `non MediaStore upload source keeps its exact identity`() =
+        runBlocking {
+            val uri = "content://other.provider/pictures/42"
+            val localId = resolveLocal(uri)
+            assertTrue(followUp.link(CREDENTIALS, uri, FILE_ID))
+            assertEquals(localId, resolveRemote())
+        }
+
+    @Test
     fun `without the link Memories 10_1 copies stay separate`() =
         runBlocking {
             val localId = resolveLocal()

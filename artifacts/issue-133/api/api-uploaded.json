@@ -1,0 +1,12 @@
+[
+  {
+    "method": "PROPFIND",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-local-D.jpg",
+    "status": 207
+  },
+  {
+    "method": "POST",
+    "path": "apps/memories/api/image/reindex/317",
+    "status": 200
+  }
+]

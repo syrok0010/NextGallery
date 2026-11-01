@@ -1,0 +1,97 @@
+[
+  {
+    "method": "GET",
+    "path": "status.php",
+    "status": 200
+  },
+  {
+    "method": "MKCOL",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508",
+    "status": 201
+  },
+  {
+    "method": "MKCOL",
+    "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-1",
+    "status": 201
+  },
+  {
+    "method": "MKCOL",
+    "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-2",
+    "status": 201
+  },
+  {
+    "method": "PUT",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-A.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-A.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-A.jpg",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "apps/memories/api/image/reindex/314",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "core/preview?fileId=314&x=512&y=512&a=0",
+    "status": 200
+  },
+  {
+    "method": "PUT",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-B.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-B.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-B.jpg",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "apps/memories/api/image/reindex/315",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "core/preview?fileId=315&x=512&y=512&a=0",
+    "status": 200
+  },
+  {
+    "method": "PUT",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-C.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-C.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-C.jpg",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "apps/memories/api/image/reindex/316",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "core/preview?fileId=316&x=512&y=512&a=0",
+    "status": 200
+  }
+]

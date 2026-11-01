@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 
 /** Operations that change the copies of an object while its tile is on screen. */
-internal enum class MediaTileOperation { Upload, AddToAlbum, Delete }
+internal enum class MediaTileOperation { Upload, AddToAlbum, RemoveFromAlbum, Delete }
 
 /** [progress] is in 0..1, null when the operation cannot tell it for a single object. */
 internal data class MediaTileActivity(
@@ -72,5 +72,6 @@ internal fun MediaTileOperation.icon(): Painter =
     when (this) {
         MediaTileOperation.Upload -> painterResource(R.drawable.ic_cloud)
         MediaTileOperation.AddToAlbum -> painterResource(R.drawable.ic_albums)
+        MediaTileOperation.RemoveFromAlbum -> painterResource(R.drawable.ic_album_remove)
         MediaTileOperation.Delete -> rememberVectorPainter(Icons.Default.Delete)
     }

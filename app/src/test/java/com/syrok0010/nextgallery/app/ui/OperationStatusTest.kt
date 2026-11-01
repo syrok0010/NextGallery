@@ -84,6 +84,15 @@ class OperationStatusTest {
         deletionOnly.assertBlocked()
     }
 
+    @Test fun `album removal synchronously blocks logout and marks only its members`() = runTest {
+        val fixture = Fixture(backgroundScope)
+        runCurrent()
+        assertTrue(fixture.removals.remove(AlbumLocation.Remote("test/album"), "album", setOf(1)))
+        assertFalse(fixture.status.tryLogout { fail("Removal already accepted") })
+        fixture.sync()
+        fixture.assertBlocked()
+    }
+
     @Test fun `phone-only verification does not block logout`() = runTest {
         val fixture = Fixture(backgroundScope)
         runCurrent()
@@ -196,9 +205,14 @@ class OperationStatusTest {
         val addition = mutableStateOf<AlbumAdditionState>(AlbumAdditionState.Idle)
         private val deletion = mutableStateOf<DeletionProgress?>(null)
         val deletionResult = mutableStateOf<DeletionResult?>(null)
-        val status = OperationStatus(uploads, additions, deletions, upload, uploadResult, addition, deletion, deletionResult)
+        val removals = AlbumRemovals(sessions, MemoriesAlbumRemover(transport), scope) {}
+        private val removal = mutableStateOf<AlbumRemovalProgress?>(null)
+        private val removalResult = mutableStateOf<AlbumRemovalOutcome?>(null)
+        val status = OperationStatus(uploads, removals, removal, removalResult, additions, deletions, upload, uploadResult, addition, deletion, deletionResult)
 
         fun sync() {
+            removal.value = removals.progress.value
+            removalResult.value = removals.result.value
             upload.value = uploads.activity.value
             uploadResult.value = uploads.result.value
             addition.value = additions.state.value

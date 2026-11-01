@@ -12,6 +12,7 @@ internal class SelectionAction(
     val icon: Painter,
     val label: String,
     val isPrimary: Boolean = false,
+    val inOverflow: Boolean = false,
     val isDestructive: Boolean = false,
     val blocksSelectionUntilDone: Boolean = false,
     val perform: (items: List<MediaItem>, onDone: () -> Unit) -> Unit,
@@ -25,8 +26,8 @@ internal data class SelectionActionPlacement(
 /** Keep the first primary action visible; reserve a slot for overflow when needed. */
 internal fun placeSelectionActions(actions: List<SelectionAction>): SelectionActionPlacement {
     val primary = actions.firstOrNull { it.isPrimary }
-    val secondary = actions.filter { it !== primary }
-    val buttonCount = if (actions.size > 3) 2 else 3
+    val secondary = actions.filter { it !== primary && !it.inOverflow }
+    val buttonCount = if (actions.size > 3 || actions.any { it.inOverflow }) 2 else 3
     val visible = secondary.take(buttonCount - if (primary == null) 0 else 1).toSet()
     return SelectionActionPlacement(
         buttons = actions.filter { it === primary || it in visible },

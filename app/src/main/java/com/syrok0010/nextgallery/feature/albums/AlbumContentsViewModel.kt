@@ -2,18 +2,21 @@ package com.syrok0010.nextgallery.feature.albums
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,6 +28,7 @@ internal data class AlbumContentsState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val permissionRequired: Boolean = false,
+    val departedIds: Set<MediaId> = emptySet(),
 )
 
 internal class AlbumContentsViewModel(
@@ -33,6 +37,7 @@ internal class AlbumContentsViewModel(
     library: MediaLibraryIndex,
     permission: StateFlow<LocalMediaPermissionMode?>,
     private val location: AlbumLocation,
+    changes: Flow<Unit> = emptyFlow(),
 ) : ViewModel() {
     private val refreshes = MutableStateFlow(0)
     private val mutableState = MutableStateFlow(AlbumContentsState())
@@ -62,7 +67,9 @@ internal class AlbumContentsViewModel(
     }
 
     init {
+        viewModelScope.launch { changes.collect { refresh() } }
         viewModelScope.launch {
+            var owner: SessionUiState? = null
             combine(
                 sessionStore.session,
                 permission,
@@ -75,7 +82,8 @@ internal class AlbumContentsViewModel(
                     refresh,
                 )
             }.distinctUntilChanged().collectLatest { (session, location, needsPermission) ->
-                mutableState.value = AlbumContentsState()
+                if (owner != session || needsPermission) mutableState.value = AlbumContentsState()
+                owner = session
                 if (session !is SessionUiState.SignedIn) return@collectLatest
                 if (needsPermission) {
                     mutableState.value = AlbumContentsState(
@@ -83,18 +91,33 @@ internal class AlbumContentsViewModel(
                     )
                     return@collectLatest
                 }
-                mutableState.update { it.copy(loading = true) }
+                val previous = mutableState.value.items
+                mutableState.update { it.copy(loading = true, failed = false) }
                 try {
+                    var latest = AlbumContentsBatch(emptyList(), 0)
                     source.load(location, session.credentials).collect { batch ->
-                        mutableState.update {
-                            it.copy(
-                                items = batch.items,
-                                total = batch.total,
-                                loaded = batch.loaded,
-                            )
+                        latest = batch
+                        if (previous.isEmpty()) {
+                            mutableState.update {
+                                it.copy(
+                                    items = batch.items,
+                                    total = batch.total,
+                                    loaded = batch.loaded,
+                                )
+                            }
                         }
                     }
-                    mutableState.update { it.copy(loading = false) }
+                    val currentIds = latest.items.mapTo(mutableSetOf()) { it.mediaId }
+                    val previousIds = previous.mapTo(mutableSetOf()) { it.mediaId }
+                    mutableState.update {
+                        it.copy(
+                            items = latest.items,
+                            total = latest.total,
+                            loaded = latest.loaded,
+                            loading = false,
+                            departedIds = (it.departedIds + previousIds) - currentIds,
+                        )
+                    }
                 } catch (
                     cancelled: CancellationException,
                 ) {

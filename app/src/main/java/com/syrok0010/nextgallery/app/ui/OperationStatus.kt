@@ -49,6 +49,9 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.ui.asString
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovalProgress
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovalOutcome
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionState
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
@@ -82,6 +85,9 @@ internal data class OperationEntry(
  */
 internal class OperationStatus(
     private val uploads: UploadQueue,
+    private val removals: AlbumRemovals,
+    private val removal: State<AlbumRemovalProgress?>,
+    private val removalResult: State<AlbumRemovalOutcome?>,
     private val additions: AlbumAdditions,
     private val deletions: MediaDeletionRepository,
     private val upload: State<UploadActivity?>,
@@ -92,11 +98,11 @@ internal class OperationStatus(
 ) {
     /** Queued uploads count too; terminal results never block logout. */
     val running: Boolean
-        get() = operationsRunning(upload.value, addition.value, deletion.value)
+        get() = operationsRunning(upload.value, addition.value, deletion.value) || removal.value != null
 
     /** Re-read the sources: a write may have started before the menu could recompose. */
     fun tryLogout(onLogout: () -> Unit): Boolean {
-        if (operationsRunning(uploads.activity.value, additions.state.value, deletions.progress.value)) {
+        if (operationsRunning(uploads.activity.value, additions.state.value, deletions.progress.value) || removals.progress.value != null) {
             return false
         }
         onLogout()
@@ -123,6 +129,9 @@ internal class OperationStatus(
         if (fileId != null && addition is AlbumAdditionState.Running && fileId in addition.fileIds) {
             return MediaTileActivity(MediaTileOperation.AddToAlbum)
         }
+        if (fileId != null && fileId in removal.value?.fileIds.orEmpty()) {
+            return MediaTileActivity(MediaTileOperation.RemoveFromAlbum)
+        }
         return null
     }
 
@@ -132,6 +141,17 @@ internal class OperationStatus(
             upload.value?.let { uploadEntry(it) },
             uploadResult.value?.let { uploadResultEntry(it) },
             additionEntry(addition.value),
+            removal.value?.let {
+                OperationEntry(MediaTileOperation.RemoveFromAlbum, stringResource(R.string.album_remove_running, it.name), running = true)
+            },
+            removalResult.value?.let {
+                OperationEntry(
+                    MediaTileOperation.RemoveFromAlbum,
+                    stringResource(R.string.album_remove_done, it.result.removed),
+                    details = if (it.result.failed > 0) listOf(stringResource(R.string.album_remove_failed, it.result.failed)) else emptyList(),
+                    failed = it.result.failed > 0,
+                )
+            },
             deletion.value?.let { deletionEntry(it) },
             deletionResult.value?.let { deletionResultEntry(it) },
         )
@@ -141,11 +161,12 @@ internal class OperationStatus(
         if (uploadResult.value?.failed == false) uploads.consumeResult()
         if ((addition.value as? AlbumAdditionState.Done)?.result?.failed == 0) additions.consume()
         if (deletionResult.value?.failed == false) deletions.consume()
+        if (removalResult.value?.result?.failed == 0) removals.consume()
     }
 
     /** Anything running or a result not shown yet. */
     val active: Boolean
-        get() = upload.value != null ||
+        get() = removal.value != null || removalResult.value != null || upload.value != null ||
             uploadResult.value != null ||
             addition.value != AlbumAdditionState.Idle ||
             deletion.value != null ||
@@ -155,6 +176,7 @@ internal class OperationStatus(
         uploads.consumeResult()
         additions.consume()
         deletions.consume()
+        removals.consume()
     }
 }
 
@@ -169,15 +191,19 @@ internal fun rememberOperationStatus(
     uploads: UploadQueue = koinInject(),
     additions: AlbumAdditions = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
+    removals: AlbumRemovals = koinInject(),
 ): OperationStatus {
+    val removal = removals.progress.collectAsStateWithLifecycle()
+    val removalResult = removals.result.collectAsStateWithLifecycle()
     val upload = uploads.activity.collectAsStateWithLifecycle()
     val uploadResult = uploads.result.collectAsStateWithLifecycle()
     val addition = additions.state.collectAsStateWithLifecycle()
     val deletion = deletions.progress.collectAsStateWithLifecycle()
     val deletionResult = deletions.result.collectAsStateWithLifecycle()
-    return remember(uploads, additions, deletions) {
+    return remember(uploads, additions, deletions, removals) {
         OperationStatus(
             uploads,
+            removals, removal, removalResult,
             additions,
             deletions,
             upload,
