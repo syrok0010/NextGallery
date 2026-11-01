@@ -1,0 +1,7 @@
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest > completedAndCancelledFilesDoNotKeepProgressWhileAnotherFileWaits[nextgallery-api36-dev(AVD) - 16] [31mFAILED [0m
+	java.lang.AssertionError: Completed file must not remain current expected null, but was:<content://media/external/images/media/1>
+Execute com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest.completedAndCancelledFilesDoNotKeepProgressWhileAnotherFileWaits: FAILED
+java.lang.AssertionError: java.lang.AssertionError: Completed file must not remain current expected null, but was:<content://media/external/images/media/1>
+java.lang.AssertionError: Completed file must not remain current expected null, but was:<content://media/external/images/media/1>
+> Task :app:connectedAutomationAndroidTest FAILED
+BUILD FAILED in 27s
