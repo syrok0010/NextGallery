@@ -13,15 +13,14 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
-import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
+import com.syrok0010.nextgallery.feature.albums.DurableAlbumStep
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
@@ -109,7 +108,7 @@ val appModule = module {
     single {
         val identities: MediaIdentityRegistry = get()
         val sessions: SessionStore = get()
-        val writer: MemoriesAlbumWriter = get()
+        val albumStep = DurableAlbumStep(get())
         val catalog: AlbumCatalogRepository = get()
         UploadQueue(
             get(),
@@ -120,15 +119,10 @@ val appModule = module {
             link = { account, identity, fileId ->
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
-            album = { account, intent, file ->
-                val success = writer.addFile(
-                    account,
-                    file.url,
-                    AlbumAddress(intent.owner, intent.target),
-                ) == AlbumCopyOutcome.Added
-                catalog.refresh()
-                success
+            album = { account, intent, file, current ->
+                albumStep.run(account, intent, file, current).also { catalog.refresh() }
             },
+            prepareAlbum = albumStep::snapshot,
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
         )
     }

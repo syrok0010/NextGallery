@@ -231,4 +231,12 @@
     <string name="uploads_format_attention">Формат задания не поддерживается. Требуется внимание.</string>
     <string name="uploads_action_suppressed">Действие отменено; загруженный файл остаётся в облаке.</string>
     <string name="uploads_attention_summary">Заданий требуют внимания: %1$d</string>
+    <string name="uploads_retry_actions">Повторить действие</string>
+    <string name="uploads_link_attention">Не удалось связать копии. Можно повторить действие без загрузки файла.</string>
+    <string name="uploads_album_changed">Исходный альбом удалён, заменён или недоступен. Отмените действие и выберите альбом заново.</string>
+    <string name="uploads_album_source">Облачный файл или его адрес изменился. Добавление остановлено.</string>
+    <string name="uploads_album_legacy">Исходный альбом не был подтверждён. Отмените действие и выберите альбом заново.</string>
+    <string name="uploads_album_replay">Файл не найден в исходном альбоме. Сервер не позволяет безопасно повторить добавление. Отмените действие и добавьте файл в альбом заново.</string>
+    <string name="uploads_album_uncertain">Результат добавления неизвестен. Повтор действия проверит состав исходного альбома без новой загрузки.</string>
+    <string name="uploads_album_attention">Не удалось проверить добавление в альбом. Можно повторить проверку или отменить действие.</string>
 </resources>
