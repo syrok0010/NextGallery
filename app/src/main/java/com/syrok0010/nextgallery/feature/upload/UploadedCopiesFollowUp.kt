@@ -28,7 +28,10 @@ internal class UploadedCopiesFollowUp(
         fileId: Long,
     ): Boolean =
         identities.link(
-            existing = MediaSourceIdentity(MediaSourceKind.Local, contentUri),
+            existing = MediaSourceIdentity(
+                MediaSourceKind.Local,
+                uploadedLocalIdentityUri(contentUri),
+            ),
             linked = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString()),
             isCurrent = {
                 (sessions.session.value as? SessionUiState.SignedIn)?.credentials == credentials
@@ -49,6 +52,15 @@ internal class UploadedCopiesFollowUp(
         return emptyList()
     }
 }
+
+/** Folder assets read an exact volume, but the device index registers aggregate external URIs. */
+private fun uploadedLocalIdentityUri(contentUri: String): String {
+    val match = externalMediaUri.matchEntire(contentUri) ?: return contentUri
+    if (match.groupValues[1] == "internal") return contentUri
+    return "content://media/external/${match.groupValues[2]}/media/${match.groupValues[3]}"
+}
+
+private val externalMediaUri = Regex("content://media/([^/]+)/(images|video)/media/([0-9]+)")
 
 /**
  * File id from the `OC-FileId` response header: the id zero-padded to eight digits, followed by
