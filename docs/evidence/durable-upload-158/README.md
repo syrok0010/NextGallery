@@ -26,15 +26,20 @@ AlbumRootBase `faa89d445aadbc87762b1d77902830dd489da04ac68ce04edb5b6849b80ea291`
 
 ## Принятая граница
 
-[ADR 0020](../../adr/0020-upload-follow-up-reconciliation.md) разрешает только
-проверку уже существующего membership. Durable runner не делает COPY, включая
-первую попытку. Отсутствующий участник требует внимания; upload/link сохраняются.
+Историческая production-реализация этого evidence (до review fix `b10a5db`)
+выполняла только reconciliation и оставляла отсутствующее membership как attention;
+описание отдельного writer ниже относится именно к тому старому прогону.
+В текущем runtime первый проход, принявший новый transfer receipt, выполняет один
+условный COPY (`If-Match` ETag источника, `Overwrite: F`) и принимает только
+доказанный точный membership. Reopen и targeted retry всегда read-only и не
+повторяют COPY. Новая проверка этого поведения записана в
+[review-fix evidence](review-fix/README.md).
 
-**Blocker полного AddToAlbum:** нужен серверный атомарный insert membership с
-условиями на album_id и source fileId либо доказанный DAV эквивалент. Отдельный
-lookup перед name-addressed COPY оставляет гонку с replacement и не заменяет
-такой контракт. Обычная отдельная cloud-only операция не изменена; новых durable
-гарантий для неё нет. Это ограничение относится и к принятию результата live flow.
+**Ограничение replay:** нужен серверный атомарный insert membership с условиями на
+album_id и source fileId либо доказанный DAV эквивалент. Отдельный lookup перед
+первым COPY оставляет гонку с replacement; автоматический повтор после
+неопределённого исхода поэтому не выполняется. Обычная отдельная cloud-only
+операция не изменена.
 
 ## Ревизии и автоматические проверки
 
@@ -88,13 +93,12 @@ membership, replacement, конфликт ID/href, propstat/redirect/permission 
 link и album interfaces. Файл вставлен в MediaStore, индексирован обычным local
 reader; fake MediaId не назначался. Это проверка интерфейсов, не UI выбор фото.
 
-[Flow](live-flow.log): `durable158-flow.jpg`, cloud fileId 339,
-MediaId `7526c614-1e17-48db-80ef-b848c794a7b0`. Один PUT, production explicit link,
-затем **отдельное явное действие существующего writer** выполняет COPY.
-Targeted retry durable шага принимает точный membership без PUT/COPY.
-[Manifest](live-manifest.txt) связывает jobs, настоящие MediaId и fileId.
-Это подтверждает обычные upload/link/album interfaces, но не обещает, что новый
-runner сам выполняет добавление: до отдельного COPY он показывает attention.
+[Flow](live-flow.log) — исторический прогон до `b10a5db`: `durable158-flow.jpg`,
+cloud fileId 339, MediaId `7526c614-1e17-48db-80ef-b848c794a7b0`. Один PUT,
+production explicit link, затем отдельный writer COPY. Targeted retry принимал
+точный membership без PUT/COPY. [Manifest](live-manifest.txt) связывает jobs,
+настоящие MediaId и fileId. Этот trace не является evidence текущей Initial-ветки;
+для неё см. [review-fix evidence](review-fix/README.md).
 
 ## Реальный SIGKILL и reopen
 
