@@ -218,6 +218,15 @@ internal class UploadQueue(
     /** Existing executor supplies conditional transfer; journal selects transfer vs receipt replay. */
     suspend fun runBatch(batch: UploadBatch, transfer: suspend (AccountCredentials, UploadItem, UploadJob) -> UploadedFile?) {
         val account = credentials() ?: return
+        try {
+            runClaimedBatch(account, batch, transfer)
+        } catch (cancelled: CancellationException) {
+            stopExecutor(account, batch)
+            throw cancelled
+        }
+    }
+
+    private suspend fun runClaimedBatch(account: AccountCredentials, batch: UploadBatch, transfer: suspend (AccountCredentials, UploadItem, UploadJob) -> UploadedFile?) {
         var changed = false
         for (item in batch.items) {
             val id = item.id
@@ -270,9 +279,7 @@ internal class UploadQueue(
                 }
                 changed = true
             } catch (cancelled: CancellationException) {
-                // A graceful executor stop needs attention; abrupt process death is recovered as uncertain.
                 item.stopCall()
-                withContext(NonCancellable) { journal.interrupted(claim) }
                 throw cancelled
             } catch (_: Exception) {
                 if (claim.receiptJson == null) journal.problem(claim, UploadProblem.Transfer)
@@ -294,6 +301,26 @@ internal class UploadQueue(
         }
     }
 
+    /** Graceful stop fences the whole handed-off pass; Attention prevents an immediate start loop. */
+    suspend fun stopExecutor() {
+        val account = credentials() ?: return
+        stopExecutor(account, null)
+    }
+
+    private suspend fun stopExecutor(account: AccountCredentials, currentBatch: UploadBatch?) = withContext(NonCancellable) {
+        commands.withLock {
+            if (owner != account.uploadOwner || !current(account)) return@withLock
+            val batches = synchronized(this@UploadQueue) { released.toSet() + listOfNotNull(currentBatch?.id) }
+            journal.interrupt(account.uploadOwner, batches, processId)
+            synchronized(this@UploadQueue) {
+                started.removeAll { it.id in batches }
+                released.removeAll(batches)
+                records.filter { it.batchId in batches }.forEach { items[it.id]?.stopCall() }
+            }
+            if (current(account)) project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
+        }
+    }
+
     suspend fun pinDestination(claim: UploadJob, url: String): String? = journal.destination(claim, url)?.destination
     private fun current(account: AccountCredentials) = credentials()?.uploadOwner == account.uploadOwner
     private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
@@ -309,7 +336,7 @@ internal class UploadQueue(
         records = rows
         rows.forEach { row ->
             val item = items.getOrPut(row.id) { UploadItem(row.selection, row.id) }
-            val attention = row.state == "Attention" || row.linkStep == "Attention" || row.albumStep == "Attention"
+            val attention = row.hasAttention
             val phase = when (row.state) {
                 "Pending", "Uncertain" -> UploadPhase.Waiting
                 "Running" -> UploadPhase.Uploading
@@ -337,10 +364,10 @@ internal class UploadQueue(
             processed = passRows.size - runnable.size, current = mutableActivity.value?.current,
             percent = mutableActivity.value?.percent,
         )
-        val summaries = rows.filter { !it.seen && (!it.unfinished || it.state == "Attention" || it.linkStep == "Attention" || it.albumStep == "Attention") }
+        val summaries = rows.filter { !it.seen && it.hasResult }
         mutableResult.value = if (summaries.isEmpty()) null else UploadResult(
             uploaded = summaries.count { it.receiptJson != null }, files = summaries.size,
-            attention = summaries.count { it.state == "Attention" || it.linkStep == "Attention" || it.albumStep == "Attention" },
+            attention = summaries.count { it.hasAttention },
             existing = summaries.count { it.receipt?.created == false }, cancelled = summaries.count { it.state == "Cancelled" }, conflicts = summaries.count { it.state == "Conflict" },
         )
     }

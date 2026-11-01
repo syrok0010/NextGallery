@@ -64,6 +64,8 @@ internal data class UploadJob(
         linkStep in unfinishedSteps || albumStep in unfinishedSteps
     val runnable get() = state in setOf("Pending", "Uncertain") ||
         (receiptJson != null && (linkStep == "Pending" || albumStep == "Pending"))
+    val hasAttention get() = state == "Attention" || linkStep == "Attention" || albumStep == "Attention"
+    val hasResult get() = !unfinished || hasAttention
 }
 
 private val unfinishedSteps = setOf("Pending", "Running", "Attention")
@@ -174,18 +176,24 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     }
 
     suspend fun problem(claim: UploadJob, problem: UploadProblem, conflict: Boolean = false, httpStatus: Int? = null) =
-        mutate(claim) { it.copy(state = if (conflict) "Conflict" else "Attention", problem = problem.name, httpStatus = httpStatus, executor = null) }
+        mutate(claim) { it.copy(state = if (conflict) "Conflict" else "Attention", problem = problem.name, httpStatus = httpStatus, executor = null, seen = false) }
 
     suspend fun step(claim: UploadJob, kind: String, state: StepState): UploadJob? = mutate(claim) {
-        if (kind == "link") it.copy(linkStep = state.name) else it.copy(albumStep = state.name)
+        if (kind == "link") it.copy(linkStep = state.name, seen = false) else it.copy(albumStep = state.name, seen = false)
     }
     suspend fun release(claim: UploadJob) = mutate(claim) { it.copy(executor = null) }
 
-    suspend fun interrupted(claim: UploadJob) = mutate(claim) {
-        it.copy(state = if (it.receiptJson == null) "Attention" else it.state,
-            linkStep = if (it.linkStep in setOf("Pending", "Running")) "Attention" else it.linkStep,
-            albumStep = if (it.albumStep in setOf("Pending", "Running")) "Attention" else it.albumStep,
-            problem = UploadProblem.Transfer.name, executor = null)
+    suspend fun interrupt(owner: String, batches: Set<String>, process: String) = db.withTransaction {
+        if (dao.owner()?.token != owner) return@withTransaction
+        dao.jobs(owner).filter {
+            it.batchId in batches && it.unfinished && (it.executor == null || it.executor == process) &&
+                (it.runnable || it.state == "Running" || it.linkStep == "Running" || it.albumStep == "Running")
+        }.forEach {
+            dao.update(it.copy(state = if (it.receiptJson == null) "Attention" else it.state,
+                linkStep = if (it.linkStep in setOf("Pending", "Running")) "Attention" else it.linkStep,
+                albumStep = if (it.albumStep in setOf("Pending", "Running")) "Attention" else it.albumStep,
+                problem = UploadProblem.Transfer.name, executor = null, revision = it.revision + 1, seen = false))
+        }
     }
 
     suspend fun cancel(owner: String, ids: Set<String>? = null) = db.withTransaction {
@@ -194,14 +202,14 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
             dao.update(it.copy(state = if (it.receiptJson == null) "Cancelled" else it.state,
                 linkStep = if (it.linkStep in unfinishedSteps) "Suppressed" else it.linkStep,
                 albumStep = if (it.albumStep in unfinishedSteps) "Suppressed" else it.albumStep,
-                executor = null, revision = it.revision + 1))
+                executor = null, revision = it.revision + 1, seen = false))
         }
     }
     suspend fun clearFinished(owner: String) = db.withTransaction {
         dao.jobs(owner).groupBy { it.batchId }.values.filter { batch -> batch.none { it.unfinished } }.flatten().forEach { dao.update(it.copy(hidden = true)) }
     }
     suspend fun seen(owner: String) = db.withTransaction {
-        dao.jobs(owner).filterNot { it.unfinished }.forEach { dao.update(it.copy(seen = true)) }
+        dao.jobs(owner).filter { it.hasResult && !it.seen }.forEach { dao.update(it.copy(seen = true)) }
     }
     suspend fun revokeIfFinished(owner: String): Boolean = db.withTransaction {
         if (dao.owner()?.token != owner || dao.jobs(owner).any { it.unfinished }) return@withTransaction false

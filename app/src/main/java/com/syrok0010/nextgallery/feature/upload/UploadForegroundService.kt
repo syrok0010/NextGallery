@@ -91,9 +91,15 @@ class UploadForegroundService : Service() {
      */
     private suspend fun drainQueue() {
         val pass = UploadPass()
-        while (true) {
-            val batch = queue.next() ?: break
-            runBatch(batch, pass)
+        try {
+            while (true) {
+                val batch = queue.next() ?: break
+                runBatch(batch, pass)
+            }
+        } catch (error: Exception) {
+            // Also covers a stop during the notification delay between two batches.
+            queue.stopExecutor()
+            throw error
         }
         // No suspension from the empty check to here, so no start can slip in between.
         if (pass.files > 0) {
