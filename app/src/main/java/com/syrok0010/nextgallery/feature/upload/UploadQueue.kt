@@ -60,9 +60,10 @@ internal class UploadQueue(
     private val journal: UploadJournal,
     private val snapshot: (UploadSelection) -> SourceStamp,
     private val link: suspend (AccountCredentials, String, Long) -> Boolean,
-    private val album: suspend (AccountCredentials, UploadIntent, UploadedFile) -> Boolean,
+    private val album: suspend (AccountCredentials, UploadIntent, UploadedFile, AlbumStepMode, suspend () -> Boolean) -> UploadStepResult,
     private val refreshLibrary: () -> Unit,
     private val processId: String = uploadProcessId,
+    private val prepareAlbum: suspend (AccountCredentials, UploadIntent) -> UploadIntent = { _, intent -> intent },
 ) {
     private val commands = Mutex()
     private val ready = CompletableDeferred<Unit>()
@@ -131,7 +132,9 @@ internal class UploadQueue(
                     files.map { file -> file.copy(stamp = try { snapshot(file) } catch (_: Exception) { null }) }
                 }
                 if (credentials()?.uploadOwner != account.uploadOwner) return@withLock EnqueueResult.Rejected
-                val result = journal.enqueue(account.uploadOwner, requestId, snapshots, listOf(UploadIntent("link")) + intents)
+                val prepared = intents.map { if (it.kind == "album") prepareAlbum(account, it) else it }
+                if (!current(account)) return@withLock EnqueueResult.Rejected
+                val result = journal.enqueue(account.uploadOwner, requestId, snapshots, listOf(UploadIntent("link")) + prepared)
                 project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
                 mutableError.value = result == EnqueueResult.Rejected
                 result
@@ -139,6 +142,7 @@ internal class UploadQueue(
         }
     }
 
+    fun retryActions(item: UploadItem) = command { token -> journal.retrySteps(token, item.id) }
     fun cancelAll() = command { token -> journal.cancel(token) }
     fun cancel(batch: UploadBatch) = command { token -> journal.cancel(token, batch.items.map { it.id }.toSet()) }
     fun cancel(item: UploadItem) = command { token -> journal.cancel(token, setOf(item.id)) }
@@ -231,14 +235,15 @@ internal class UploadQueue(
         for (item in batch.items) {
             val id = item.id
             var claim = journal.claim(id, account.uploadOwner, processId) ?: continue
+            var acceptedNow = false
             try {
                 if (!current(account)) continue
                 val intents = try { claim.intents } catch (_: Exception) { emptyList() }
-                if (intents.isEmpty() || intents.any { it.version != 1 || it.kind !in setOf("link", "album") }) {
+                if (intents.isEmpty() || intents.any { (it.kind == "link" && it.version != 1) || (it.kind == "album" && it.version !in setOf(1, 2)) || it.kind !in setOf("link", "album") }) {
                     if (claim.receiptJson == null) journal.problem(claim, UploadProblem.Format)
                     else {
-                        journal.step(claim, "link", StepState.Attention)
-                        journal.step(claim, "album", StepState.Attention)
+                        journal.step(claim, "link", StepState.Attention, "Format")
+                        journal.step(claim, "album", StepState.Attention, "Format")
                     }
                     continue
                 }
@@ -259,23 +264,37 @@ internal class UploadQueue(
                     if (!validSource(item.selection)) { journal.problem(claim, UploadProblem.Source); continue }
                     if (!current(account)) continue
                     claim = journal.accept(claim, UploadReceipt(uploaded.url.toString(), uploaded.created, uploaded.fileId)) ?: continue
+                    acceptedNow = true
                 }
                 val receipt = claim.receipt ?: continue
                 if (receipt.version != 1) {
-                    journal.step(claim, "link", StepState.Attention)
-                    journal.step(claim, "album", StepState.Attention)
+                    journal.step(claim, "link", StepState.Attention, "Format")
+                    journal.step(claim, "album", StepState.Attention, "Format")
                     continue
                 }
                 if (claim.linkStep == "Pending" && current(account)) {
-                    journal.step(claim, "link", StepState.Running) ?: continue
-                    val linked = receipt.fileId?.let { link(account, item.selection.identityUri, it) } == true
-                    claim = journal.step(claim, "link", if (linked) StepState.Done else StepState.Attention) ?: continue
+                    claim = journal.beginStep(claim, "link") ?: continue
+                    val result = try {
+                        val linked = journal.stepCurrent(claim, "link") && current(account) &&
+                            receipt.fileId?.let { link(account, item.selection.identityUri, it) } == true
+                        if (linked) UploadStepResult("Done", fileId = receipt.fileId, href = item.selection.identityUri)
+                        else UploadStepResult.attention("Link")
+                    } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (_: Exception) { UploadStepResult.attention("Link") }
+                    claim = journal.finishStep(claim, "link", result) ?: continue
                 }
                 if (claim.albumStep == "Pending" && current(account)) {
-                    claim = journal.step(claim, "album", StepState.Running) ?: continue
+                    claim = journal.beginStep(claim, "album") ?: continue
                     val intent = intents.singleOrNull { it.kind == "album" }
-                    val success = intent != null && album(account, intent, UploadedFile(item.selection, receipt.url.toHttpUrl(), receipt.created, receipt.fileId))
-                    journal.step(claim, "album", if (success) StepState.Done else StepState.Attention)
+                    val result = if (intent == null || intent.version != 2 || intent.albumId == null || intent.albumHref == null) {
+                        UploadStepResult.attention("LegacyTarget")
+                    } else try {
+                        album(account, intent, UploadedFile(item.selection, receipt.url.toHttpUrl(), receipt.created, receipt.fileId), if (acceptedNow) AlbumStepMode.Initial else AlbumStepMode.Reconcile) {
+                            current(account) && journal.stepCurrent(claim, "album")
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (_: Exception) { UploadStepResult.uncertain() }
+                    claim = journal.finishStep(claim, "album", result) ?: continue
                 }
                 changed = true
             } catch (cancelled: CancellationException) {
@@ -349,6 +368,9 @@ internal class UploadQueue(
             item.restore(UploadItemState(phase, if (phase == UploadPhase.Uploading) old.percent else null,
                 failure = row.problem, pendingAction = row.receiptJson != null && row.unfinished, attention = attention,
                 actionSuppressed = row.linkStep == "Suppressed" || row.albumStep == "Suppressed",
+                retryActions = row.receiptJson != null && row.executor == null && row.hasAttention,
+                linkProblem = row.linkResultJson?.takeIf { row.linkStep in setOf("Attention", "Uncertain") }?.let { uploadJson.decodeFromString<UploadStepResult>(it).problem },
+                albumProblem = row.albumResultJson?.takeIf { row.albumStep in setOf("Attention", "Uncertain") }?.let { uploadJson.decodeFromString<UploadStepResult>(it).problem },
                 albumAdded = if (row.albumStep == "Done") row.intents.firstOrNull { it.kind == "album" }?.target else null, httpStatus = row.httpStatus))
         }
         val batches = rows.groupBy { it.batchId }.map { (id, jobs) ->

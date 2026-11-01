@@ -29,6 +29,9 @@ internal data class UploadItemState(
     val actionSuppressed: Boolean = false,
     val albumAdded: String? = null,
     val httpStatus: Int? = null,
+    val retryActions: Boolean = false,
+    val linkProblem: String? = null,
+    val albumProblem: String? = null,
 )
 
 /** Serializes cancellation with response acceptance, including registration of the next DAV call. */

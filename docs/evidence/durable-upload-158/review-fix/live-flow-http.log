@@ -1,0 +1,10 @@
+MKCOL http://test.syrok/remote.php/dav/photos/test/albums/durable158-review-fix-flow 201
+GET http://test.syrok/apps/memories/api/clusters/albums 200
+PUT http://test.syrok/remote.php/dav/files/test/Photos/durable158-review-fix-flow.jpg 201
+GET http://test.syrok/apps/memories/api/clusters/albums 200
+PROPFIND http://test.syrok/remote.php/dav/files/test/Photos/durable158-review-fix-flow.jpg 207
+PROPFIND http://test.syrok/remote.php/dav/photos/test/albums/durable158-review-fix-flow 207
+GET http://test.syrok/apps/memories/api/clusters/albums 200
+COPY http://test.syrok/remote.php/dav/files/test/Photos/durable158-review-fix-flow.jpg 201
+PROPFIND http://test.syrok/remote.php/dav/photos/test/albums/durable158-review-fix-flow 207
+GET http://test.syrok/apps/memories/api/clusters/albums 200

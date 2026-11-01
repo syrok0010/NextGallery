@@ -24,6 +24,7 @@ class UploadQueueRuntimeTest {
     private var stamp: SourceStamp? = SourceStamp(5, 10, 20)
     private var links = 0
     private var albums = 0
+    private val albumModes = mutableListOf<AlbumStepMode>()
     private var transfers = 0
     private var allowLink = true
     private var albumSuccess = true
@@ -46,7 +47,7 @@ class UploadQueueRuntimeTest {
         queue = UploadQueue(sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
             { _, _, _ -> links++; allowLink },
-            { _, _, _ -> albums++; albumSuccess }, {}, UUID.randomUUID().toString())
+            { _, _, _, mode, current -> albumModes += mode; albums++; if (current() && albumSuccess) UploadStepResult("Done") else UploadStepResult.attention("Album") }, {}, UUID.randomUUID().toString())
     }
     @After fun cleanup() = runBlocking { scope.cancel(); scope.coroutineContext[Job]!!.join(); db.close(); context.deleteDatabase(dbName); Unit }
     private suspend fun reopen() {
@@ -231,7 +232,7 @@ class UploadQueueRuntimeTest {
     }
 
     @Test fun newlyAcceptedAlbumRunsOnceAndReceiptPendingAlbumDoesNotReplayOnReopen() = runBlocking {
-        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
+        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "slice1", albumId = 1, albumHref = "http://test.syrok/album")))
         queue.runBatch(batch, ::transfer)
         assertEquals(1, albums)
         assertEquals("slice1", batch.items.single().state.value.albumAdded)
@@ -244,6 +245,26 @@ class UploadQueueRuntimeTest {
         assertEquals(1, albums)
         assertTrue(restored.items.single().state.value.attention)
         assertFalse(queue.logout { error("Pending album action must block logout") })
+    }
+
+    @Test fun albumCopyPermissionIsOnlyForThePassThatAcceptsReceipt() = runBlocking {
+        val intent = UploadIntent("album", 2, "test", "slice", 1, "http://test.syrok/album")
+        albumSuccess = false
+        val fresh = enqueue(listOf(ids.first()), listOf(intent))
+        queue.runBatch(fresh, ::transfer)
+        assertEquals(listOf(AlbumStepMode.Initial), albumModes)
+        queue.retryActions(fresh.items.single())
+        withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }
+        queue.runBatch(fresh) { _, _, _ -> error("Retry must not transfer") }
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        val pending = enqueue(listOf(ids.last()), listOf(intent))
+        val claim = journal.claim(pending.items.single().id, credentials.uploadOwner, "dead-process")!!
+        journal.accept(claim, UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/b.jpg", true, 43))
+        reopen()
+        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
+        queue.runBatch(restored) { _, _, _ -> error("Existing receipt must not transfer") }
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(1, transfers)
     }
 
     @Test fun missingCredentialsDoNotEraseJournalAndEmptySelectionIsNotAStorageFailure() = runBlocking {
@@ -343,6 +364,117 @@ class UploadQueueRuntimeTest {
         assertEquals(1, queue.result.value!!.uploaded)
         assertEquals(1, transfers)
         assertTrue(queue.logout { sessions.signOut() })
+    }
+
+    @Test fun versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared() = runBlocking {
+        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "slice2", albumId = 12, albumHref = "http://test.syrok/remote.php/dav/photos/test/albums/slice2")))
+        val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
+        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/local-a.jpg", true, 42)
+        journal.accept(claim, receipt)
+        stamp = null
+        reopen()
+        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
+        queue.runBatch(restored) { _, _, _ -> error("Receipt recovery must never PUT or read source") }
+        assertEquals(1, links)
+        assertEquals(1, albums)
+        assertEquals(0, transfers)
+        assertFalse(restored.items.single().state.value.pendingAction)
+        assertEquals(receipt, journal.jobs(credentials.uploadOwner).single().receipt)
+    }
+
+    @Test fun manualRetryFinishesOnlyFailedStepWithoutOriginalOrNewPut() = runBlocking {
+        allowLink = false
+        val batch = enqueue(listOf(ids.first()))
+        queue.runBatch(batch, ::transfer)
+        assertEquals(1, transfers)
+        assertTrue(batch.items.single().state.value.retryActions)
+        val receipt = journal.jobs(credentials.uploadOwner).single().receipt
+        queue.consumeResult()
+        waitFor { queue.result.value == null }
+        stamp = null
+        allowLink = true
+        queue.retryActions(batch.items.single())
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.runBatch(batch) { _, _, _ -> error("Retry must not PUT") }
+        assertEquals(2, links)
+        assertEquals(1, transfers)
+        assertEquals(receipt, journal.jobs(credentials.uploadOwner).single().receipt)
+        assertFalse(batch.items.single().state.value.pendingAction)
+        assertEquals(1, queue.result.value!!.uploaded)
+        reopen()
+        waitFor { queue.batches.value.isNotEmpty() }
+        assertFalse(queue.batches.value.single().items.single().state.value.pendingAction)
+    }
+
+    @Test fun albumRetryNeverRepeatsCompletedLinkAndReceiptSurvivesReopen() = runBlocking {
+        albumSuccess = false
+        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "retry", albumId = 5, albumHref = "http://test.syrok/album")))
+        queue.runBatch(batch, ::transfer)
+        assertEquals(1, links); assertEquals(1, albums)
+        val original = journal.jobs(credentials.uploadOwner).single()
+        assertEquals("Done", original.linkStep)
+        queue.consumeResult()
+        waitFor { queue.result.value == null }
+        reopen()
+        waitFor { queue.batches.value.isNotEmpty() }
+        val restored = queue.batches.value.single()
+        assertNull(queue.result.value)
+        albumSuccess = true
+        queue.retryActions(restored.items.single())
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.runBatch(restored) { _, _, _ -> error("No PUT") }
+        assertEquals(1, links); assertEquals(2, albums); assertEquals(1, transfers)
+        assertEquals(original.receipt, journal.jobs(credentials.uploadOwner).single().receipt)
+        assertEquals(original.linkResultJson, journal.jobs(credentials.uploadOwner).single().linkResultJson)
+        assertFalse(restored.items.single().state.value.pendingAction)
+        assertNotNull(queue.result.value)
+    }
+
+    @Test fun cancelDuringStepFencesLateSuccessAndSuppressesNextStep() = runBlocking {
+        val queued = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "cancel", albumId = 5, albumHref = "http://test.syrok/album")))
+        val accepted = journal.accept(journal.claim(queued.items.single().id, credentials.uploadOwner, "fixture")!!,
+            UploadReceipt("http://test.syrok/source.jpg", true, 42))!!
+        val running = journal.beginStep(accepted, "link")!!
+        journal.cancel(credentials.uploadOwner)
+        assertFalse(journal.stepCurrent(running, "link"))
+        assertNull(journal.finishStep(running, "link", UploadStepResult("Done", fileId = 42)))
+        assertNull(journal.beginStep(running, "album"))
+        reopen()
+        waitFor { queue.batches.value.isNotEmpty() }
+        assertEquals(0, albums); assertEquals(0, links); assertEquals(0, transfers)
+        assertEquals("Suppressed", journal.jobs(credentials.uploadOwner).single().linkStep)
+        assertEquals("Suppressed", journal.jobs(credentials.uploadOwner).single().albumStep)
+        assertEquals(UploadPhase.Uploaded, queue.batches.value.single().items.single().state.value.phase)
+    }
+
+    @Test fun twoStepClaimsAndOldProcessReplyCannotCommitAcrossRecovery() = runBlocking {
+        val batch = enqueue(listOf(ids.first()))
+        val accepted = journal.accept(journal.claim(batch.items.single().id, credentials.uploadOwner, "old")!!,
+            UploadReceipt("http://test.syrok/source.jpg", true, 42))!!
+        val old = journal.beginStep(accepted, "link")!!
+        assertNull(journal.beginStep(accepted, "link"))
+        reopen()
+        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
+        assertNull(journal.finishStep(old, "link", UploadStepResult("Done")))
+        queue.runBatch(restored) { _, _, _ -> error("No PUT") }
+        assertEquals(1, links)
+        assertEquals("Done", journal.jobs(credentials.uploadOwner).single().linkStep)
+    }
+
+    @Test fun unknownPersistedIntentLeavesReceiptVisibleAndReportsFormatWithoutPut() = runBlocking {
+        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 99)))
+        val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "old-process")!!
+        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/local-a.jpg", true, 42)
+        journal.accept(claim, receipt)
+        reopen()
+        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
+        queue.runBatch(restored) { _, _, _ -> error("Unknown intent cannot PUT") }
+        val state = restored.items.single().state.value
+        assertEquals(UploadPhase.Uploaded, state.phase)
+        assertEquals("Format", state.linkProblem)
+        assertTrue(state.attention)
+        assertEquals(receipt, journal.jobs(credentials.uploadOwner).single().receipt)
+        assertEquals(0, links); assertEquals(0, albums); assertEquals(0, transfers)
     }
 
     private fun media(id: MediaId) = MediaItem(id, 1, "${id.value}.jpg", "image/jpeg", null, null, null, null, null, null, null,

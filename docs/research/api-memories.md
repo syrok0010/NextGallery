@@ -361,3 +361,24 @@ reconciliation. Переименование или перенос папки м
 - Содержимое хранится в памяти и перечитывается при открытии/ручном обновлении.
   Смена альбома, logout и потеря полного локального разрешения отменяют загрузку.
   Автоматическое наблюдение изменений открытой папки и offline-каталог не реализованы.
+
+### Durable membership: уточнение контракта 01.11.2026
+
+Для восстановления AddToAlbum правило «409 + альбом существует» выше
+недостаточно. Проверка Photos 7.0.0 / Nextcloud 34.0.5 / Memories 10.1.0:
+
+- `clusters/albums` отдаёт `album_id` из Photos DB; после DELETE/MKCOL того же
+  имени проверено изменение ID 36→37. DAV альбома не отдаёт `resource-id`,
+  `oc:fileid`, ETag; `getLastModified()` в upstream возвращает 0.
+- `PROPFIND Depth:1` альбома отдаёт точные `oc:fileid` участника и
+  `nc:photos-collection-file-original-filename`; href — `{fileId}-{basename}`.
+  Источник подтверждается отдельным Depth:0: fileId, owner-id, permissions, href.
+- Числовой ID из отдельного Memories lookup не является условием DAV COPY.
+  Нельзя гарантировать, что между проверкой и COPY путь не стал другим альбомом.
+
+[ADR 0020](../adr/0020-upload-follow-up-reconciliation.md) разрешает durable
+read-only reconciliation точного membership при восстановлении. Первый явно
+пользовательский COPY сохраняется; автоматический повтор name-addressed COPY
+запрещён до появления атомарного серверного контракта. Это не меняет
+контракт отдельного добавления cloud-only объектов и не приписывает ему durable
+гарантии. [Записанные запросы](../evidence/durable-upload-158/api-trace.json).

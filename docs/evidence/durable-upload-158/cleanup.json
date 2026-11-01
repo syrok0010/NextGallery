@@ -1,0 +1,134 @@
+[
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-flow",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-stage",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-stage2",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-kill-final",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-kill-final2",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-attention",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/photos/test/albums/durable158-contract",
+    "status": 404
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-attention.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-contract.txt",
+    "status": 404
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-flow.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-kill-final.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-kill-final2.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-stage.jpg",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/files/test/Photos/durable158-stage2.jpg",
+    "status": 204
+  },
+  {
+    "method": "PROPFIND",
+    "path": "/remote.php/dav/trashbin/test/trash",
+    "status": 207
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-stage.jpg.d1793544712",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-stage2.jpg.d1793544712",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-kill-final.jpg.d1793544712",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-kill-final2.jpg.d1793544712",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-flow.jpg.d1793544711",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-attention.jpg.d1793544711",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-attention.jpg.d1793544426",
+    "status": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/remote.php/dav/trashbin/test/trash/durable158-contract.txt.d1793541812",
+    "status": 204
+  },
+  {
+    "method": "GET",
+    "path": "/status.php",
+    "status": 200
+  },
+  {
+    "stand": {
+      "installed": true,
+      "maintenance": false,
+      "needsDbUpgrade": false,
+      "version": "34.0.5.1",
+      "versionstring": "34.0.5",
+      "edition": "",
+      "productname": "Nextcloud",
+      "extendedSupport": false
+    }
+  }
+]

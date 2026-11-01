@@ -23,7 +23,11 @@ import kotlinx.coroutines.launch
 internal sealed interface AlbumTarget {
     val name: String
 
-    data class Existing(val location: AlbumLocation.Remote, override val name: String) : AlbumTarget
+    data class Existing(
+        val location: AlbumLocation.Remote,
+        override val name: String,
+        val albumId: Long? = null,
+    ) : AlbumTarget
 
     data class New(override val name: String) : AlbumTarget
 }
@@ -103,7 +107,11 @@ internal class AlbumAdditions(
      * Local-only objects are queued for upload once the album exists, so they never race album
      * creation; they are not uploaded when the album cannot be written.
      */
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest, onAccepted: () -> Unit = {}): Boolean {
+    fun add(
+        target: AlbumTarget,
+        request: AlbumAdditionRequest,
+        onAccepted: () -> Unit = {},
+    ): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
@@ -117,13 +125,26 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
-                    val queued = if (request.uploads.isEmpty()) 0 else when (val enqueue = enqueueUploads(
-                        request.uploads,
-                        listOf(UploadIntent("album", owner = address.owner, target = address.name)),
-                    )) {
-                        is EnqueueResult.Accepted -> enqueue.count
-                        EnqueueResult.NothingToUpload -> 0
-                        EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                    val queued = if (request.uploads.isEmpty()) {
+                        0
+                    } else {
+                        when (
+                            val enqueue = enqueueUploads(
+                                request.uploads,
+                                listOf(
+                                    UploadIntent(
+                                        "album",
+                                        owner = address.owner,
+                                        target = address.name,
+                                        albumId = (target as? AlbumTarget.Existing)?.albumId,
+                                    ),
+                                ),
+                            )
+                        ) {
+                            is EnqueueResult.Accepted -> enqueue.count
+                            EnqueueResult.NothingToUpload -> 0
+                            EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                        }
                     }
                     onAccepted()
                     AlbumAdditionState.Done(

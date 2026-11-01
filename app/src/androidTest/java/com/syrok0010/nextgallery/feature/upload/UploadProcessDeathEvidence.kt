@@ -61,7 +61,7 @@ class UploadProcessDeathEvidence {
         }
         library.publish(ids)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val queue = UploadQueue(sessions, library, scope, journal, source::snapshot, { _, _, _ -> true }, { _, _, _ -> true }, {})
+        val queue = UploadQueue(sessions, library, scope, journal, source::snapshot, { _, _, _ -> true }, { _, _, _, _, _ -> UploadStepResult("Done") }, {})
         check(queue.submit(ids.map { it.mediaId }, requestId = "durable156-process-kill") is EnqueueResult.Accepted)
         val rows = journal.jobs(credentials.uploadOwner)
         journal.cancel(credentials.uploadOwner, setOf(rows[0].id))

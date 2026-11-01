@@ -50,7 +50,7 @@ class QueuedUploadsTest {
     private val db by lazy { UploadQueueDatabase.open(context, "queued-uploads-ui-test.db") }
     private val queue by lazy {
         UploadQueue(SessionStore(SignedIn), library, scope, UploadJournal(db),
-            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _, _ -> true }, {})
+            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _, _, _, _ -> UploadStepResult("Done") }, {})
     }
     private var starts = 0
     private val registry = PermissionRegistry()

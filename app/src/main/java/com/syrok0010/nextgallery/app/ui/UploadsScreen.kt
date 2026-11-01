@@ -54,14 +54,14 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                         TextButton(onClick = { queue.cancel(batch) }) { Text(stringResource(R.string.uploads_cancel_batch)) }
                     }
                 }
-                items(batch.items, key = { it.id }) { item -> UploadRow(item, onCancel = { queue.cancel(item) }) }
+                items(batch.items, key = { it.id }) { item -> UploadRow(item, onCancel = { queue.cancel(item) }, onRetry = { queue.retryActions(item) }) }
             }
         }
     }
 }
 
 @Composable
-private fun UploadRow(item: UploadItem, onCancel: () -> Unit) {
+private fun UploadRow(item: UploadItem, onCancel: () -> Unit, onRetry: () -> Unit) {
     val state by item.state.collectAsStateWithLifecycle()
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -92,6 +92,19 @@ private fun UploadRow(item: UploadItem, onCancel: () -> Unit) {
                 if (state.actionSuppressed) Text(stringResource(R.string.uploads_action_suppressed))
                 state.albumAdded?.let { Text(stringResource(R.string.album_upload_summary, it, 1)) }
                 if (state.pendingAction) Text(stringResource(if (state.attention) R.string.uploads_action_attention else R.string.uploads_action_pending), color = MaterialTheme.colorScheme.error)
+                state.linkProblem?.let { Text(stringResource(if (it == "Format") R.string.uploads_format_attention else R.string.uploads_link_attention)) }
+                state.albumProblem?.let { problem ->
+                    Text(stringResource(when (problem) {
+                        "Format" -> R.string.uploads_format_attention
+                        "TargetChanged" -> R.string.uploads_album_changed
+                        "SourceChanged", "Owner" -> R.string.uploads_album_source
+                        "LegacyTarget" -> R.string.uploads_album_legacy
+                        "ReplayUnsupported" -> R.string.uploads_album_replay
+                        "Uncertain" -> R.string.uploads_album_uncertain
+                        else -> R.string.uploads_album_attention
+                    }))
+                }
+                if (state.retryActions) TextButton(onClick = onRetry) { Text(stringResource(R.string.uploads_retry_actions)) }
                 if (state.phase == UploadPhase.Uploading) {
                     state.percent?.let { LinearProgressIndicator(progress = { it / 100f }, modifier = Modifier.fillMaxWidth()) }
                         ?: LinearProgressIndicator(Modifier.fillMaxWidth())
