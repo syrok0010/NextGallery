@@ -36,6 +36,7 @@ internal fun MediaDetailScreen(
     replacementMediaId: MediaId? = null,
     actions: @Composable (MediaItem) -> Unit = {},
     status: @Composable (visible: Boolean) -> Unit = {},
+    itemNote: @Composable (MediaItem) -> Unit = {},
 ) {
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
@@ -122,6 +123,7 @@ internal fun MediaDetailScreen(
                 playback = playback.current,
                 actions = { actions(currentItem) },
                 status = status,
+                itemNote = itemNote,
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(

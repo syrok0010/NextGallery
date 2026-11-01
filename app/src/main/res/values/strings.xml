@@ -206,4 +206,17 @@
     <string name="album_remove_failed">Не удалось убрать: %1$d</string>
     <string name="album_remove_busy">Дождитесь завершения предыдущего удаления из альбома.</string>
     <string name="delete_album_note">Удаление облачной копии уберёт её из всех серверных альбомов, в которые она входит.</string>
+    <string name="favorite_add">Добавить в облачное избранное</string>
+    <string name="favorite_remove">Убрать из облачного избранного</string>
+    <string name="favorite_cloud_only">Избранное доступно для фото в облаке</string>
+    <string name="favorite_error_title">Не удалось изменить избранное</string>
+    <string name="favorite_error">Изменение не подтверждено. Показано прежнее значение. Проверьте соединение и доступ к фото, обновите избранное и повторите попытку.</string>
+    <string name="favorite_error_close">Понятно</string>
+    <string name="favorite_filter_all">Все</string>
+    <string name="favorite_filter_cloud">Избранное в облаке</string>
+    <string name="favorite_empty">В облаке пока нет избранных фото</string>
+    <string name="favorite_filter_failed">Не удалось обновить всё избранное. Показаны сохранённые фото. Повторить</string>
+    <string name="favorite_filter_cached">Сохранённые избранные фото. Обновить с сервера</string>
+    <string name="favorite_loading">Загружаем избранное из облака…</string>
+    <string name="favorite_no_cache">Нет сохранённых избранных фото</string>
 </resources>

@@ -6,7 +6,9 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.favoriteProjection
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -38,11 +40,17 @@ internal class AlbumContentsViewModel(
     permission: StateFlow<LocalMediaPermissionMode?>,
     private val location: AlbumLocation,
     changes: Flow<Unit> = emptyFlow(),
+    favorites: CloudFavoriteMetadata? = null,
 ) : ViewModel() {
     private val refreshes = MutableStateFlow(0)
     private val mutableState = MutableStateFlow(AlbumContentsState())
     private val knownItems = library.state
-    val state = combine(mutableState, knownItems, permission) { contents, libraryItems, access ->
+    val state = combine(
+        mutableState,
+        knownItems,
+        permission,
+        favorites?.values ?: kotlinx.coroutines.flow.flowOf(emptyMap()),
+    ) { contents, libraryItems, access, values ->
         if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
             contents.copy(
                 items = emptyList(),
@@ -53,10 +61,13 @@ internal class AlbumContentsViewModel(
             )
         } else {
             contents.copy(
-                items = albumMediaProjection(
-                    contents.items,
-                    libraryItems,
-                    access == LocalMediaPermissionMode.Full,
+                items = favoriteProjection(
+                    albumMediaProjection(
+                        contents.items,
+                        libraryItems,
+                        access == LocalMediaPermissionMode.Full,
+                    ),
+                    values,
                 ),
             )
         }

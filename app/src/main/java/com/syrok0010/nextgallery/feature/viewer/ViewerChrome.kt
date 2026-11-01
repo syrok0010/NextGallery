@@ -45,6 +45,7 @@ internal fun ViewerChrome(
     modifier: Modifier = Modifier,
     actions: @Composable () -> Unit = {},
     status: @Composable (visible: Boolean) -> Unit = {},
+    itemNote: @Composable (MediaItem) -> Unit = {},
 ) {
     Box(modifier = modifier) {
         playback?.let { VideoPlaybackChrome(it, controlsVisible = visible) }
@@ -100,6 +101,7 @@ internal fun ViewerChrome(
                         }
                         Box(Modifier.widthIn(min = 48.dp)) { actions() }
                     }
+                    itemNote(item)
                     status(visible && playback?.state?.isFullscreen != true)
                 }
             }

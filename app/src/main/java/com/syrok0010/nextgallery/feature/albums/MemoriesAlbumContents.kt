@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesDayDto
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
@@ -31,9 +32,12 @@ internal interface AlbumContentsApi {
 internal class MemoriesAlbumContents(
     private val transport: NextcloudTransport,
     private val identities: MediaIdentityRegistry,
+    private val favorites: CloudFavoriteMetadata,
+    private val persist: suspend (List<MediaItem>) -> Unit,
 ) {
     fun load(location: AlbumLocation.Remote, credentials: AccountCredentials) =
         flow {
+            val read = favorites.begin(credentials)
             val api = transport
                 .retrofit(
                     transport.normalizeBaseUrl(credentials.serverUrl),
@@ -51,12 +55,15 @@ internal class MemoriesAlbumContents(
                     )
                 }
                 val resolution = identities.resolve(candidates)
-                photos.forEach { photo ->
-                    items[photo.fileid] = photo.toMediaItem(
+                val incoming = photos.map { photo ->
+                    photo.toMediaItem(
                         resolution.mediaIds.getValue(
                             MediaSourceIdentity(MediaSourceKind.Memories, photo.fileid.toString()),
                         ),
                     )
+                }
+                favorites.ingest(read, incoming, persist).forEach { item ->
+                    items[requireNotNull(item.remoteFileId)] = item
                 }
             }
 

@@ -32,12 +32,16 @@ import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesFileDeleter
+import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoritesSource
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
@@ -101,6 +105,8 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
             get<AlbumCatalogRepository>().refresh()
+            val favorites = get<CloudFavorites>()
+            if (favorites.state.value.loaded) favorites.refresh()
         }
     }
     single {
@@ -120,10 +126,16 @@ val appModule = module {
             remoteSource = get<MemoriesRepository>(),
             localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
+            favorites = get(),
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get(), get()) }
+    single {
+        val cache = get<TimelineCacheRepository>()
+        MemoriesAlbumContents(get(), get(), get()) { items ->
+            cache.updateCachedFavorites(items)
+        }
+    }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
@@ -150,6 +162,7 @@ val appModule = module {
             } else {
                 get<AlbumCatalogRepository>().changes.map { Unit }
             },
+            favorites = get(),
         )
     }
 
@@ -199,7 +212,45 @@ val appModule = module {
     }
     single { NextcloudLoginRepository(get()) }
     single { MemoriesMultipreviewClient(get(), get()) }
-    single { MemoriesRepository(get(), get(), get()) }
+    single { CloudFavoriteMetadata(get()) }
+    single { MemoriesRepository(get(), get(), get(), get()) }
+    single { MemoriesFavoriteWriter(get()) }
+    single {
+        MemoriesFavoritesSource(
+            get(),
+            get(),
+            get(),
+            get(),
+        )
+    }
+    single {
+        CloudFavorites(
+            get(),
+            get(),
+            { credentials ->
+                get<MemoriesFavoritesSource>()
+                    .load(
+                        credentials,
+                    )
+            },
+            get(),
+            get(named("libraryScope")),
+            write = { credentials, id, value ->
+                get<MemoriesFavoriteWriter>()
+                    .set(
+                        credentials,
+                        id,
+                        value,
+                    )
+            },
+            persist = { item ->
+                get<TimelineCacheRepository>().saveDayDetails(
+                    listOf(item),
+                    emptySet(),
+                )
+            },
+        )
+    }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {
