@@ -88,6 +88,12 @@ class DurableAlbumLiveEvidence {
                 Log.i("Durable158Evidence", "VERIFIED job=${job.id} MediaId=${saved[1]} fileId=${saved[2]} no pending steps")
                 return@runBlocking
             }
+            if (mode == "attention") {
+                val previous = journal.jobs(account.uploadOwner)
+                check(previous.all { it.selection.displayName.startsWith("durable158-") })
+                journal.cancel(account.uploadOwner, previous.map { it.id }.toSet())
+                journal.clearFinished(account.uploadOwner)
+            }
             secure.save(account)
             instrumentation.uiAutomation.grantRuntimePermission(context.packageName, "android.permission.READ_MEDIA_IMAGES")
             instrumentation.uiAutomation.grantRuntimePermission(context.packageName, "android.permission.READ_MEDIA_VIDEO")
@@ -103,7 +109,8 @@ class DurableAlbumLiveEvidence {
             }
             val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
             context.contentResolver.openOutputStream(uri)!!.use { output ->
-                Bitmap.createBitmap(if (mode == "stage") 96 else 64, 64, Bitmap.Config.ARGB_8888).also { bitmap ->
+                Bitmap.createBitmap(InstrumentationRegistry.getArguments().getString("durable158Width")?.toInt()
+                    ?: when (mode) { "stage" -> 128; "attention" -> 192; else -> 64 }, 64, Bitmap.Config.ARGB_8888).also { bitmap ->
                     bitmap.eraseColor(android.graphics.Color.rgb(40, 160, 100))
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
                     bitmap.recycle()
@@ -121,6 +128,7 @@ class DurableAlbumLiveEvidence {
                 step::run, {}, "durable158-live", step::snapshot)
             assertTrue(queue.submit(listOf(item.mediaId), listOf(UploadIntent("album", owner = "test", target = album)), "durable158-$suffix") is EnqueueResult.Accepted)
             val batch = queue.waiting.value.single()
+            check(batch.items.single().selection.displayName == name) { "Fixture aliases collided with an existing local copy; use distinct real bytes/EXIF, never override identity" }
             var puts = 0
             queue.runBatch(batch) { credentials, upload, claim ->
                 puts++
