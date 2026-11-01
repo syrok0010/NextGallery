@@ -17,7 +17,6 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.fileUrl
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
@@ -35,15 +34,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
 /**
  * Uploads batches from [UploadQueue] and runs their follow-ups. It knows nothing about why a file
- * is uploaded: everything after the upload belongs to [UploadFollowUp].
+ * is uploaded: the journal decides which persisted steps remain after transfer.
  */
 class UploadForegroundService : Service() {
-    private val credentialsStore: CredentialsStore by inject()
     private val transport: NextcloudTransport by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -92,26 +91,21 @@ class UploadForegroundService : Service() {
      */
     private suspend fun drainQueue() {
         val pass = UploadPass()
-        while (true) {
-            val batch = queue.next() ?: break
-            runBatch(batch, pass)
+        try {
+            while (true) {
+                val batch = queue.next() ?: break
+                runBatch(batch, pass)
+            }
+        } catch (error: Exception) {
+            // Also covers a stop during the notification delay between two batches.
+            queue.stopExecutor()
+            throw error
         }
         // No suspension from the empty check to here, so no start can slip in between.
         if (pass.files > 0) {
             notificationManager.notify(
                 RESULT_NOTIFICATION_ID,
                 resultNotification(pass),
-            )
-            queue.passFinished(
-                UploadResult(
-                    uploaded = pass.uploaded,
-                    files = pass.files,
-                    failures = pass.failures.distinct(),
-                    details = pass.detailLines(),
-                    existing = pass.existing,
-                    cancelled = pass.cancelled,
-                    conflicts = pass.nameTaken,
-                ),
             )
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -160,8 +154,12 @@ class UploadForegroundService : Service() {
         pass.cancelled += states.count { it.phase == UploadPhase.Cancelled }
         pass.nameTaken += states.count { it.phase == UploadPhase.NameConflict }
         pass.failures += states.mapNotNull { it.failure }.distinct()
-        queue.batchFinished(batch)
-        pass.details += finishUploadBatch(batch)
+        if (states.any {
+                it.attention || it.pendingAction
+            }
+        ) {
+            pass.failures += getString(R.string.uploads_attention)
+        }
         // Leaves room for the result after the last progress update.
         delay(500L)
     }
@@ -201,47 +199,34 @@ class UploadForegroundService : Service() {
         batch: UploadBatch,
         onProgress: (index: Int, percent: Int?) -> Unit,
     ) {
-        var credentials: AccountCredentials? = null
         var destination: String? = null
-        runUploadFiles(
-            batch = batch,
-            transfer = { item ->
-                val account = credentials ?: (
-                    credentialsStore.load()
-                        ?: throw UploadException(R.string.upload_error_session)
-                    ).also { credentials = it }
+        queue.runBatch(batch) { account, item, claim ->
+            val selection = item.selection
+            val url = claim.destination ?: run {
                 val directory = destination ?: (
                     timelinePaths(
                         transport.memoriesApi(account).config().timelinePath,
                     ).firstOrNull()
                         ?: throw UploadException(R.string.upload_error_timeline)
                     ).also { destination = it }
-                val selection = item.selection
-                put(
-                    credentials = account,
-                    url = uploadUrl(
-                        account.serverUrl,
-                        account.userId,
-                        directory,
-                        selection.displayName,
-                    ),
-                    item = item,
-                    onProgress = { percent ->
-                        if (item.progress(percent)) {
-                            queue.uploading(selection.contentUri, percent)
-                            onProgress(batch.items.indexOf(item), percent)
-                        }
-                    },
-                )
-            },
-            accepted = { uploaded ->
-                batch.followUps.forEach { followUp ->
-                    guarded(Unit) { followUp.uploaded(checkNotNull(credentials), uploaded) }
+                val proposed = uploadUrl(
+                    account.serverUrl,
+                    account.userId,
+                    directory,
+                    selection.displayName,
+                ).toString()
+                queue.pinDestination(
+                    claim,
+                    proposed,
+                ) ?: throw java.io.IOException("Upload no longer claimed")
+            }
+            put(account, url.toHttpUrl(), item) { percent ->
+                if (item.progress(percent)) {
+                    queue.uploading(selection.contentUri, percent)
+                    onProgress(batch.items.indexOf(item), percent)
                 }
-            },
-            failureReason = ::failureReason,
-            processed = { queue.processed(it.contentUri) },
-        )
+            }
+        }
     }
 
     /**
@@ -293,6 +278,12 @@ class UploadForegroundService : Service() {
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        serviceScope.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -368,16 +359,6 @@ class UploadForegroundService : Service() {
         }
     }
 }
-
-/** A failing follow-up must not stop the upload or the other follow-ups. */
-private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
-    try {
-        block()
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
-        fallback
-    }
 
 /** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
 internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =

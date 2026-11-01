@@ -31,3 +31,5 @@
 - [ADR 0015: Добавление выбранных медиа в альбом](adr/0015-add-to-album.md)
 - [ADR 0016: Удаление выбранных медиа в корзины](adr/0016-delete-selection.md)
 - [ADR 0017: Связь локальной и облачной копий после загрузки](adr/0017-link-uploaded-copies.md)
+
+- [ADR 0019: Durable manual uploads](adr/0019-durable-manual-uploads.md)

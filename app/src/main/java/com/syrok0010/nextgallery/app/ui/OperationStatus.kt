@@ -171,7 +171,7 @@ internal fun rememberOperationStatus(
     }
 }
 
-private val UploadResult.failed: Boolean get() = failures.isNotEmpty() || uploaded < files
+private val UploadResult.failed: Boolean get() = failures.isNotEmpty() || attention > 0 || uploaded < files
 
 @Composable
 private fun uploadEntry(activity: UploadActivity) =
@@ -190,7 +190,9 @@ private fun uploadEntry(activity: UploadActivity) =
 private fun uploadResultEntry(result: UploadResult) =
     OperationEntry(
         operation = MediaTileOperation.Upload,
-        title = if (result.failures.isEmpty()) {
+        title = if (result.attention > 0) {
+            stringResource(R.string.uploads_attention_summary, result.attention)
+        } else if (result.failures.isEmpty()) {
             stringResource(R.string.upload_done, result.uploaded, result.files)
         } else {
             stringResource(R.string.upload_stopped, result.failures.joinToString(", "))

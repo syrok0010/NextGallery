@@ -221,4 +221,14 @@
     <string name="uploads_cancelled">Отменён</string>
     <string name="upload_existing_count">Уже в облаке: %1$d</string>
     <string name="upload_cancelled_count">Отменено: %1$d</string>
+    <string name="uploads_attention">Требуется внимание: источник или передача недоступны. Можно отменить задание и выбрать файл заново.</string>
+    <string name="uploads_action_attention">Загружен, действие требует внимания. Отмена оставит файл в облаке.</string>
+    <string name="uploads_action_pending">Загружен, действие ещё выполняется</string>
+    <string name="uploads_enqueue_rejected">Не удалось сохранить очередь. Выбор сохранён, попробуйте снова.</string>
+    <string name="uploads_storage_error">Журнал загрузок недоступен. Сохранённые задания не удалены.</string>
+    <string name="uploads_logout_blocked">Есть незавершённые загрузки или действия. Завершите или отмените их на экране «Загрузки» перед выходом.</string>
+    <string name="uploads_source_attention">Нет доступа к оригиналу, он исчез или изменился. Отмените задание и выберите файл заново.</string>
+    <string name="uploads_format_attention">Формат задания не поддерживается. Требуется внимание.</string>
+    <string name="uploads_action_suppressed">Действие отменено; загруженный файл остаётся в облаке.</string>
+    <string name="uploads_attention_summary">Заданий требуют внимания: %1$d</string>
 </resources>

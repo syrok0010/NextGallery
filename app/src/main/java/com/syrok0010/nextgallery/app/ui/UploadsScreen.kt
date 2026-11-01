@@ -25,6 +25,7 @@ internal val LocalOpenUploads = staticCompositionLocalOf<() -> Unit> { {} }
 @Composable
 internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
     val batches by queue.batches.collectAsStateWithLifecycle()
+    val storageError by queue.storageError.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,6 +45,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                     TextButton(onClick = queue::clearFinished) { Text(stringResource(R.string.uploads_clear)) }
                 }
             }
+            if (storageError) item { Text(stringResource(R.string.uploads_storage_error), color = MaterialTheme.colorScheme.error) }
             if (batches.isEmpty()) item { Text(stringResource(R.string.uploads_empty)) }
             batches.forEachIndexed { index, batch ->
                 item(key = "batch-${batch.id}") {
@@ -52,7 +54,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                         TextButton(onClick = { queue.cancel(batch) }) { Text(stringResource(R.string.uploads_cancel_batch)) }
                     }
                 }
-                items(batch.items, key = { "${batch.id}-${batch.items.indexOf(it)}" }) { item -> UploadRow(item, onCancel = { queue.cancel(item) }) }
+                items(batch.items, key = { it.id }) { item -> UploadRow(item, onCancel = { queue.cancel(item) }) }
             }
         }
     }
@@ -75,16 +77,27 @@ private fun UploadRow(item: UploadItem, onCancel: () -> Unit) {
                         UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
                         UploadPhase.Failed -> stringResource(R.string.uploads_failed, state.failure.orEmpty())
                         UploadPhase.Cancelled -> stringResource(R.string.uploads_cancelled)
+                        UploadPhase.NeedsAttention -> when (state.failure) {
+                            "Source" -> stringResource(R.string.uploads_source_attention)
+                            "Foreground" -> stringResource(R.string.upload_error_foreground)
+                            "Format" -> stringResource(R.string.uploads_format_attention)
+                            "Directory" -> stringResource(R.string.upload_error_directory, state.httpStatus ?: 0, item.selection.displayName)
+                            "Http" -> stringResource(R.string.upload_error_http, state.httpStatus ?: 0, item.selection.displayName)
+                            else -> stringResource(R.string.uploads_attention)
+                        }
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (state.phase == UploadPhase.Failed || state.phase == UploadPhase.NameConflict) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (state.actionSuppressed) Text(stringResource(R.string.uploads_action_suppressed))
+                state.albumAdded?.let { Text(stringResource(R.string.album_upload_summary, it, 1)) }
+                if (state.pendingAction) Text(stringResource(if (state.attention) R.string.uploads_action_attention else R.string.uploads_action_pending), color = MaterialTheme.colorScheme.error)
                 if (state.phase == UploadPhase.Uploading) {
                     state.percent?.let { LinearProgressIndicator(progress = { it / 100f }, modifier = Modifier.fillMaxWidth()) }
                         ?: LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             }
-            if (!state.phase.terminal) TextButton(onClick = onCancel) { Text(stringResource(R.string.uploads_cancel_file)) }
+            if (!state.phase.terminal || state.phase == UploadPhase.NeedsAttention || state.pendingAction) TextButton(onClick = onCancel) { Text(stringResource(R.string.uploads_cancel_file)) }
         }
     }
 }

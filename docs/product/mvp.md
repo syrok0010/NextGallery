@@ -30,7 +30,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 - Приложение поддерживает один подключённый аккаунт. Его замена проходит через logout и новый Login Flow.
 - Android partial photo access пока не считается полной локальной библиотекой.
 - Warm-start cache не является полноценным offline mode.
-- Миграции Room и совместимость локального dev-состояния пока не гарантируются; destructive reset допустим.
+- Cache Room и совместимость локального dev-состояния пока допускают destructive reset. Отдельный журнал ручных загрузок сохраняет пользовательские намерения без destructive fallback ([ADR 0019](../adr/0019-durable-manual-uploads.md)).
 
 ## Планируемые направления
 
@@ -38,7 +38,7 @@ Login Flow v2 -> Memories API -> unified timeline -> viewer -> warm-start cache
 
 ### Управление медиатекой
 
-- ручной выбор и загрузка фото;
+- восстановление ручных заданий при следующем открытии уже поддерживает journal; фоновый scheduler и пользовательские политики загрузки остаются следующим срезом;
 - безопасное освобождение места на устройстве для медиа с подтверждённой cloud copy.
 
 ### Альбомы и sharing
