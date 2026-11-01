@@ -285,6 +285,190 @@ class UploadQueueTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun `cancelling restored waiting batches completes them without another service start`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            val finished = mutableListOf<List<UploadSelection>>()
+            val followUp = object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = error("No transfer allowed")
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    finished += missed
+                    return emptyList()
+                }
+            }
+            queue.submit(ids("a"), listOf(followUp))
+            queue.submit(ids("b"), listOf(followUp))
+            val released = queue.release()
+            queue.restore(released) // startForegroundService refused; UI awaits the next foreground.
+
+            queue.cancelAll()
+
+            assertEquals(listOf(files("a"), files("b")), finished)
+            assertTrue(queue.waiting.value.isEmpty())
+            assertNull(queue.next())
+            assertNull(queue.activity.value)
+            assertEquals(2, queue.result.value?.cancelled)
+            assertEquals(2, queue.result.value?.files)
+            queue.restore(released)
+            queue.cancelAll()
+            assertTrue(queue.release().isEmpty())
+            assertEquals("completed batches cannot run callbacks twice", 2, finished.size)
+            assertEquals(2, queue.result.value?.files)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `foreground refusal counts cancelled files separately from failed files`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            queue.submit(ids("a", "b"))
+            val batch = queue.release().single()
+            batch.items.first().cancel()
+
+            assertFalse(queue.enterForeground("refused") { throw SecurityException() })
+
+            assertEquals(UploadPhase.Cancelled, batch.items.first().state.value.phase)
+            assertEquals(UploadPhase.Failed, batch.items.last().state.value.phase)
+            assertEquals(1, queue.result.value?.cancelled)
+            assertEquals(listOf("refused"), queue.result.value?.failures)
+            assertTrue(queue.result.value?.details?.isNotEmpty() == true)
+            assertNull(queue.activity.value)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `cancelling the last waiting file completes the batch exactly once`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            val finished = mutableListOf<List<UploadSelection>>()
+            queue.submit(ids("a", "b"), listOf(object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = error("No transfer allowed")
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    finished += missed
+                    return emptyList()
+                }
+            }))
+            val batch = queue.waiting.value.single()
+            queue.cancel(batch.items.first())
+            assertTrue(finished.isEmpty())
+            assertEquals(listOf(batch), queue.waiting.value)
+
+            queue.cancel(batch.items.last())
+            queue.cancel(batch)
+
+            assertEquals(listOf(files("a", "b")), finished)
+            assertTrue(queue.waiting.value.isEmpty())
+            assertNull(queue.activity.value)
+            assertEquals(2, queue.result.value?.cancelled)
+            assertEquals(2, queue.result.value?.files)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `cancelling waiting batch preserves running progress and service ownership`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            val finished = mutableListOf<List<UploadSelection>>()
+            val followUp = object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = Unit
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    finished += missed
+                    return emptyList()
+                }
+            }
+            queue.submit(ids("a"), listOf(followUp))
+            queue.release()
+            val running = checkNotNull(queue.next())
+            queue.uploading("content://media/a", 40)
+            queue.submit(ids("b"), listOf(followUp))
+            queue.cancel(queue.waiting.value.single())
+
+            assertEquals(listOf(files("b")), finished)
+            assertEquals("content://media/a", queue.activity.value?.current)
+            assertEquals(40, queue.activity.value?.percent)
+            assertEquals(setOf("content://media/a"), queue.activity.value?.pending)
+
+            queue.cancel(running)
+            assertEquals("the service owns completion of a taken batch", 1, finished.size)
+            finishUploadBatch(running)
+            assertEquals(listOf(files("b"), files("a")), finished)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `released cancellation remains with service until foreground refusal`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            var completions = 0
+            queue.submit(ids("a"), listOf(object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = error("No transfer allowed")
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    completions++
+                    return emptyList()
+                }
+            }))
+            queue.release()
+            queue.cancelAll()
+
+            assertEquals("released work remains in the service pass and its notification", 1, queue.releasedFiles())
+            assertEquals(0, completions)
+            assertFalse(queue.enterForeground("refused") { throw SecurityException() })
+            assertEquals(1, completions)
+            assertEquals(1, queue.result.value?.cancelled)
+            assertEquals(1, queue.result.value?.files)
+            assertTrue(queue.result.value?.failures?.isEmpty() == true)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `restoring work cancelled during handoff completes it without retry`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val queue = UploadQueue(SessionStore(Fixed(credentials)), library, scope)
+            queue.submit(ids("a"))
+            val released = queue.release()
+            queue.cancelAll()
+            assertEquals(1, queue.releasedFiles())
+
+            queue.restore(released)
+
+            assertTrue(queue.waiting.value.isEmpty())
+            assertNull(queue.next())
+            assertNull(queue.activity.value)
+            assertEquals(1, queue.result.value?.cancelled)
+            assertEquals(1, queue.result.value?.files)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `late cancellation completion cannot publish into another session`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        try {
+            val sessions = SessionStore(Fixed(credentials))
+            val queue = UploadQueue(sessions, library, scope)
+            val finish = kotlinx.coroutines.CompletableDeferred<Unit>()
+            queue.submit(ids("a"), listOf(object : UploadFollowUp {
+                override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) = Unit
+                override suspend fun finished(missed: List<UploadSelection>): List<UiText> {
+                    finish.await()
+                    return emptyList()
+                }
+            }))
+            queue.cancelAll()
+            assertTrue(queue.waiting.value.isEmpty())
+            assertNotNull("completion is still running", queue.activity.value)
+
+            sessions.signOut()
+            sessions.signIn(credentials.copy(userId = "other"))
+            val newResult = UploadResult(1, 1)
+            queue.passFinished(newResult)
+            finish.complete(Unit)
+
+            assertEquals(newResult, queue.result.value)
+            assertNull(queue.activity.value)
+            assertTrue(queue.batches.value.isEmpty())
+        } finally { scope.cancel() }
+    }
+
     @Test fun `foreground refusal resolves follow-up even for cancelled batch`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         try {

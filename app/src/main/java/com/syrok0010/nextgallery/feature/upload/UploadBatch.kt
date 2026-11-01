@@ -59,8 +59,9 @@ internal data class UploadedFile(
  * the phone copy. One instance serves one batch, so it may keep the batch's results.
  *
  * Normally both calls run in the upload service before it leaves the foreground. If entering
- * foreground is refused, only [finished] is scheduled in the queue's process scope, with every
- * file missed. That completion has no foreground protection and may be lost on process death.
+ * foreground is refused or a waiting batch is fully cancelled, only [finished] is scheduled in
+ * the queue's process scope, with every file missed. That completion has no foreground protection
+ * and may be lost on process death.
  */
 internal interface UploadFollowUp {
     /** Runs right after [file] is on the server, one file at a time. */

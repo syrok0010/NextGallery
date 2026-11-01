@@ -49,17 +49,17 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 item(key = "batch-${batch.id}") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(stringResource(R.string.uploads_batch, index + 1), style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = batch::cancel) { Text(stringResource(R.string.uploads_cancel_batch)) }
+                        TextButton(onClick = { queue.cancel(batch) }) { Text(stringResource(R.string.uploads_cancel_batch)) }
                     }
                 }
-                items(batch.items, key = { "${batch.id}-${batch.items.indexOf(it)}" }) { item -> UploadRow(item) }
+                items(batch.items, key = { "${batch.id}-${batch.items.indexOf(it)}" }) { item -> UploadRow(item, onCancel = { queue.cancel(item) }) }
             }
         }
     }
 }
 
 @Composable
-private fun UploadRow(item: UploadItem) {
+private fun UploadRow(item: UploadItem, onCancel: () -> Unit) {
     val state by item.state.collectAsStateWithLifecycle()
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -84,7 +84,7 @@ private fun UploadRow(item: UploadItem) {
                         ?: LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             }
-            if (!state.phase.terminal) TextButton(onClick = item::cancel) { Text(stringResource(R.string.uploads_cancel_file)) }
+            if (!state.phase.terminal) TextButton(onClick = onCancel) { Text(stringResource(R.string.uploads_cancel_file)) }
         }
     }
 }

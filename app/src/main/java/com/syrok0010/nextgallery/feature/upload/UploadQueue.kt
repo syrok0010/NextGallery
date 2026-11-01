@@ -1,10 +1,12 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
+import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CoroutineScope
@@ -67,7 +69,20 @@ internal class UploadQueue(
     private val mutableBatches = MutableStateFlow<List<UploadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
 
-    fun cancelAll() = batches.value.forEach(UploadBatch::cancel)
+    fun cancelAll() {
+        batches.value.forEach(UploadBatch::cancel)
+        finishCancelledWaiting()
+    }
+
+    fun cancel(batch: UploadBatch) {
+        batch.cancel()
+        finishCancelledWaiting()
+    }
+
+    fun cancel(item: UploadItem) {
+        item.cancel()
+        finishCancelledWaiting()
+    }
 
     /** History is only removed explicitly, never when another pass starts or a pill times out. */
     fun clearFinished() {
@@ -85,6 +100,7 @@ internal class UploadQueue(
     val activity = mutableActivity.asStateFlow()
     private val mutableResult = MutableStateFlow<UploadResult?>(null)
     val result = mutableResult.asStateFlow()
+    private var sessionGeneration = 0L
 
     init {
         scope.launch {
@@ -92,12 +108,15 @@ internal class UploadQueue(
             sessions.session.collect { session ->
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 if (current == null || (owner != null && current != owner)) {
-                    cancelAll()
-                    mutableBatches.value = emptyList()
-                    mutableWaiting.value = emptyList()
-                    started.clear()
-                    mutableActivity.value = null
-                    mutableResult.value = null
+                    synchronized(this@UploadQueue) {
+                        sessionGeneration++
+                        batches.value.forEach(UploadBatch::cancel)
+                        mutableBatches.value = emptyList()
+                        mutableWaiting.value = emptyList()
+                        started.clear()
+                        mutableActivity.value = null
+                        mutableResult.value = null
+                    }
                 }
                 owner = current
             }
@@ -130,7 +149,7 @@ internal class UploadQueue(
     }
 
     /** Hands all waiting batches to the service and returns them; one service start takes them all. */
-    fun release(): List<UploadBatch> {
+    @Synchronized fun release(): List<UploadBatch> {
         val batches = mutableWaiting.getAndUpdate { emptyList() }
         started.addAll(batches)
         return batches
@@ -141,8 +160,11 @@ internal class UploadQueue(
      * wait again ahead of batches submitted since.
      */
     fun restore(batches: List<UploadBatch>) {
-        val back = batches.filter(started::remove)
-        if (back.isNotEmpty()) mutableWaiting.update { back + it }
+        synchronized(this) {
+            val back = batches.filter(started::remove)
+            if (back.isNotEmpty()) mutableWaiting.update { back + it }
+        }
+        finishCancelledWaiting()
     }
 
     /**
@@ -154,35 +176,59 @@ internal class UploadQueue(
             startForeground()
         } catch (_: RuntimeException) {
             // Includes dataSync quota, service type and permission failures from Android.
-            var files = 0
+            val generation = synchronized(this) { sessionGeneration }
             val refused = mutableListOf<UploadBatch>()
             while (true) {
                 val batch = next() ?: break
-                files += batch.files.size
                 refused += batch
                 batch.items.forEach { it.complete(UploadPhase.Failed, failureReason) }
-                batchFinished(batch)
             }
-            if (files > 0) {
-                passFinished(UploadResult(0, files, failures = listOf(failureReason)))
-                scope.launch {
-                    val details = refused.flatMap { finishUploadBatch(it) }
-                    if (details.isNotEmpty()) {
-                        mutableResult.update { current ->
-                            current?.copy(
-                                details = current.details + details,
-                            )
-                        }
-                    }
-                }
-            }
+            if (refused.isNotEmpty()) finishWithoutService(refused, generation)
             return false
         }
         return true
     }
 
     /** Called by the service until it returns null. */
-    fun next(): UploadBatch? = started.poll()
+    @Synchronized fun next(): UploadBatch? = started.poll()
+
+    /** Claims waiting batches only; released work remains part of the service's pass. */
+    private fun finishCancelledWaiting() {
+        val (cancelled, generation) = synchronized(this) {
+            fun UploadBatch.cancelled() = items.all { it.state.value.phase == UploadPhase.Cancelled }
+            val waiting = mutableWaiting.value
+            val cancelledWaiting = waiting.filter { it.cancelled() }
+            if (cancelledWaiting.isNotEmpty()) mutableWaiting.value = waiting - cancelledWaiting.toSet()
+            cancelledWaiting to sessionGeneration
+        }
+        if (cancelled.isNotEmpty()) finishWithoutService(cancelled, generation)
+    }
+
+    /** Completes untaken work in process scope, without relying on another service start. */
+    private fun finishWithoutService(batches: List<UploadBatch>, generation: Long) {
+        scope.launch {
+            if (synchronized(this@UploadQueue) { sessionGeneration != generation }) return@launch
+            val details = batches.flatMap { finishUploadBatch(it) }
+            synchronized(this@UploadQueue) {
+                if (sessionGeneration != generation) return@synchronized
+                val states = batches.flatMap { batch -> batch.items.map { it.state.value } }
+                val cancelled = states.count { it.phase == UploadPhase.Cancelled }
+                batches.forEach(::batchFinished)
+                passFinished(
+                    UploadResult(
+                        uploaded = 0,
+                        files = states.size,
+                        failures = states.mapNotNull { it.failure }.distinct(),
+                        cancelled = cancelled,
+                        details = buildList {
+                            if (cancelled > 0) add(uiText(R.string.upload_cancelled_count, cancelled))
+                            addAll(details)
+                        },
+                    ),
+                )
+            }
+        }
+    }
 
     /** Files in batches released to the service but not taken yet, for the overall progress. */
     fun releasedFiles(): Int = started.sumOf { it.files.size }
@@ -209,8 +255,8 @@ internal class UploadQueue(
                 ?.copy(
                     pending = current.pending - done,
                     processed = current.processed + done.size,
-                    current = null,
-                    percent = null,
+                    current = current.current?.takeUnless { it in contentUris },
+                    percent = current.percent.takeUnless { current.current in contentUris },
                 )
         }
     }
