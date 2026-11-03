@@ -13,6 +13,7 @@ import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -91,6 +92,16 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
         }
+    }
+    single<OperationStatusSource> { get<UploadQueue>() }
+    single<OperationStatusSource> { get<AlbumAdditions>() }
+    single<OperationStatusSource> { get<MediaDeletionRepository>() }
+    single<List<OperationStatusSource>> {
+        listOf(
+            get<UploadQueue>(),
+            get<AlbumAdditions>(),
+            get<MediaDeletionRepository>(),
+        )
     }
     single {
         UploadQueue(get(), get(named("libraryScope"))) {

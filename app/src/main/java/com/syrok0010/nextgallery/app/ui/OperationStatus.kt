@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,20 +47,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.ui.asString
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditionState
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.albumAdditionMessage
 import com.syrok0010.nextgallery.feature.collection.MediaTileActivity
 import com.syrok0010.nextgallery.feature.collection.MediaTileOperation
 import com.syrok0010.nextgallery.feature.collection.icon
-import com.syrok0010.nextgallery.feature.deletion.DeletionProgress
-import com.syrok0010.nextgallery.feature.deletion.DeletionResult
-import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
-import com.syrok0010.nextgallery.feature.deletion.mediaDeletionMessage
-import com.syrok0010.nextgallery.feature.upload.UploadActivity
-import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import com.syrok0010.nextgallery.feature.upload.UploadResult
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -81,161 +74,79 @@ internal data class OperationEntry(
  * modules keep the state, so it outlives the screen that started an operation.
  */
 internal class OperationStatus(
-    private val uploads: UploadQueue,
-    private val additions: AlbumAdditions,
-    private val deletions: MediaDeletionRepository,
-    private val upload: State<UploadActivity?>,
-    private val uploadResult: State<UploadResult?>,
-    private val addition: State<AlbumAdditionState>,
-    private val deletion: State<DeletionProgress?>,
-    private val deletionResult: State<DeletionResult?>,
+    private val sources: List<OperationStatusSource>,
+    private val snapshots: List<State<List<OperationStatusSnapshot>>>,
 ) {
     /** Reads snapshot state: a tile recomposes only when its own activity changes. */
     fun tileActivity(item: MediaItem): MediaTileActivity? {
-        val fileId = item.remoteFileId
-        if (fileId != null && deletion.value?.fileIds?.contains(fileId) == true) {
-            return MediaTileActivity(MediaTileOperation.Delete)
-        }
-        val contentUri = item.localCopy?.contentUri
-        val upload = upload.value
-        if (contentUri != null && upload != null) {
-            if (contentUri == upload.current) {
-                return MediaTileActivity(MediaTileOperation.Upload, upload.percent?.div(100f))
+        val activities = currentSnapshots()
+            .sortedBy { it.kind.priority }
+            .flatMap { snapshot ->
+                snapshot.media.map { snapshot.kind.toTileOperation() to it }
             }
-            if (contentUri in upload.pending) {
-                return MediaTileActivity(MediaTileOperation.Upload, 0f)
+        val localUri = item.localCopy?.contentUri
+        val remoteFileId = item.remoteFileId
+        activities
+            .firstOrNull { (_, activity) ->
+                when (val reference = activity.reference) {
+                    is OperationMediaReference.LocalUri -> reference.value == localUri
+                    is OperationMediaReference.RemoteFileId -> reference.value == remoteFileId
+                }
+            }?.let { (operation, activity) ->
+                return MediaTileActivity(operation, activity.progress)
             }
-        }
-        val addition = addition.value
-        if (fileId != null && addition is AlbumAdditionState.Running && fileId in addition.fileIds) {
-            return MediaTileActivity(MediaTileOperation.AddToAlbum)
-        }
         return null
     }
 
     @Composable
     fun entries(): List<OperationEntry> =
-        listOfNotNull(
-            upload.value?.let { uploadEntry(it) },
-            uploadResult.value?.let { uploadResultEntry(it) },
-            additionEntry(addition.value),
-            deletion.value?.let { deletionEntry(it) },
-            deletionResult.value?.let { deletionResultEntry(it) },
-        )
+        currentSnapshots().map { snapshot ->
+            OperationEntry(
+                operation = snapshot.kind.toTileOperation(),
+                title = snapshot.title.asString(),
+                details = snapshot.details.map { it.asString() },
+                running = snapshot.running,
+                progress = snapshot.progress,
+                failed = snapshot.failed,
+            )
+        }
 
     /** Successful results go away on their own; failures wait until the list is opened. */
     fun consumeSucceeded() {
-        if (uploadResult.value?.failed == false) uploads.consumeResult()
-        if ((addition.value as? AlbumAdditionState.Done)?.result?.failed == 0) additions.consume()
-        if (deletionResult.value?.failed == false) deletions.consume()
+        sources.forEach(OperationStatusSource::consumeSucceeded)
     }
 
     /** Anything running or a result not shown yet. */
     val active: Boolean
-        get() = upload.value != null ||
-            uploadResult.value != null ||
-            addition.value != AlbumAdditionState.Idle ||
-            deletion.value != null ||
-            deletionResult.value?.let { mediaDeletionMessage(it).isNotEmpty() } == true
+        get() = currentSnapshots().isNotEmpty()
 
     fun consumeAll() {
-        uploads.consumeResult()
-        additions.consume()
-        deletions.consume()
+        sources.forEach(OperationStatusSource::consumeAll)
     }
+
+    private fun currentSnapshots() = snapshots.flatMap { it.value }
 }
+
+private val OperationKind.priority: Int
+    get() = when (this) {
+        OperationKind.Delete -> 0
+        OperationKind.Upload -> 1
+        OperationKind.AddToAlbum -> 2
+    }
+
+private fun OperationKind.toTileOperation(): MediaTileOperation =
+    when (this) {
+        OperationKind.Upload -> MediaTileOperation.Upload
+        OperationKind.AddToAlbum -> MediaTileOperation.AddToAlbum
+        OperationKind.Delete -> MediaTileOperation.Delete
+    }
 
 @Composable
 internal fun rememberOperationStatus(
-    uploads: UploadQueue = koinInject(),
-    additions: AlbumAdditions = koinInject(),
-    deletions: MediaDeletionRepository = koinInject(),
+    sources: List<OperationStatusSource> = koinInject(),
 ): OperationStatus {
-    val upload = uploads.activity.collectAsStateWithLifecycle()
-    val uploadResult = uploads.result.collectAsStateWithLifecycle()
-    val addition = additions.state.collectAsStateWithLifecycle()
-    val deletion = deletions.progress.collectAsStateWithLifecycle()
-    val deletionResult = deletions.result.collectAsStateWithLifecycle()
-    return remember(uploads, additions, deletions) {
-        OperationStatus(
-            uploads,
-            additions,
-            deletions,
-            upload,
-            uploadResult,
-            addition,
-            deletion,
-            deletionResult,
-        )
-    }
-}
-
-private val UploadResult.failed: Boolean get() = failures.isNotEmpty() || uploaded < files
-
-@Composable
-private fun uploadEntry(activity: UploadActivity) =
-    OperationEntry(
-        operation = MediaTileOperation.Upload,
-        title = stringResource(
-            R.string.upload_progress,
-            (activity.processed + 1).coerceAtMost(activity.total),
-            activity.total,
-        ),
-        running = true,
-        progress = (activity.processed + (activity.percent ?: 0) / 100f) / activity.total,
-    )
-
-@Composable
-private fun uploadResultEntry(result: UploadResult) =
-    OperationEntry(
-        operation = MediaTileOperation.Upload,
-        title = if (result.failures.isEmpty()) {
-            stringResource(R.string.upload_done, result.uploaded, result.files)
-        } else {
-            stringResource(R.string.upload_stopped, result.failures.joinToString(", "))
-        },
-        details = buildList {
-            if (result.failures.isNotEmpty()) {
-                add(stringResource(R.string.upload_count, result.uploaded, result.files))
-            }
-            result.details.mapTo(this) { it.asString() }
-        },
-        failed = result.failed,
-    )
-
-@Composable
-private fun additionEntry(state: AlbumAdditionState): OperationEntry? {
-    val lines = albumAdditionMessage(state)?.map { it.asString() } ?: return null
-    return OperationEntry(
-        operation = MediaTileOperation.AddToAlbum,
-        title = lines.first(),
-        details = lines.drop(1),
-        running = state is AlbumAdditionState.Running,
-        failed = state is AlbumAdditionState.Failed ||
-            (state is AlbumAdditionState.Done && state.result.failed > 0),
-    )
-}
-
-@Composable
-private fun deletionEntry(progress: DeletionProgress) =
-    OperationEntry(
-        operation = MediaTileOperation.Delete,
-        title = stringResource(R.string.delete_progress, progress.processed, progress.total),
-        running = true,
-        progress = progress.processed.toFloat() / progress.total,
-    )
-
-@Composable
-private fun deletionResultEntry(result: DeletionResult): OperationEntry? {
-    val lines = mediaDeletionMessage(result).map { it.asString() }.ifEmpty { return null }
-    return OperationEntry(
-        operation = MediaTileOperation.Delete,
-        title = stringResource(
-            if (result.failed) R.string.delete_done_with_errors else R.string.delete_done,
-        ),
-        details = lines,
-        failed = result.failed,
-    )
+    val snapshots = sources.map { it.operations.collectAsStateWithLifecycle() }
+    return remember(sources) { OperationStatus(sources, snapshots) }
 }
 
 /**
@@ -244,7 +155,11 @@ private fun deletionResultEntry(result: DeletionResult): OperationEntry? {
  * visible screen; failures stay until the list has been opened.
  */
 @Composable
-internal fun OperationStatusPill(status: OperationStatus, visible: Boolean, modifier: Modifier = Modifier) {
+internal fun OperationStatusPill(
+    status: OperationStatus,
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val entries = status.entries()
     var expanded by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -345,9 +260,12 @@ private fun PillContent(entries: List<OperationEntry>) {
             when {
                 // A running operation matters more than results waiting next to it.
                 running.size == 1 -> running.single().title
+
                 running.isNotEmpty() ->
                     pluralStringResource(R.plurals.operations_running, running.size, running.size)
+
                 entries.size == 1 -> entries.single().title
+
                 else -> pluralStringResource(R.plurals.operations_done, entries.size, entries.size)
             },
             style = MaterialTheme.typography.labelLarge,
@@ -372,7 +290,11 @@ private fun OperationRow(entry: OperationEntry) {
             modifier = Modifier.size(32.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(entry.operation.icon(), contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(
+                    entry.operation.icon(),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

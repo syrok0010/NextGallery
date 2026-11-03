@@ -34,7 +34,7 @@ internal fun PhotosScreen(
     deletions: MediaDeletionRepository = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
-    val operations = rememberOperationStatus(uploads, additions, deletions)
+    val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeleteRequest?>(null) }
