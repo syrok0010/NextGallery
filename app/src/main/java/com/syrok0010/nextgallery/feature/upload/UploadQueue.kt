@@ -1,5 +1,11 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -7,8 +13,11 @@ import com.syrok0010.nextgallery.core.ui.UiText
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -50,9 +59,9 @@ internal data class UploadResult(
  */
 internal class UploadQueue(
     sessions: SessionStore,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
-) {
+) : OperationStatusSource {
     private val mutableWaiting = MutableStateFlow<List<UploadBatch>>(emptyList())
     val waiting = mutableWaiting.asStateFlow()
     private val started = ConcurrentLinkedQueue<UploadBatch>()
@@ -60,6 +69,8 @@ internal class UploadQueue(
     val activity = mutableActivity.asStateFlow()
     private val mutableResult = MutableStateFlow<UploadResult?>(null)
     val result = mutableResult.asStateFlow()
+    override val operations = combine(activity, result, ::uploadOperationSnapshots)
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
         scope.launch {
@@ -156,4 +167,93 @@ internal class UploadQueue(
     fun consumeResult() {
         mutableResult.value = null
     }
+
+    override fun consumeSucceeded() {
+        if (result.value?.let {
+                it.failures.isEmpty() && it.uploaded >= it.files
+            } == true
+        ) {
+            consumeResult()
+        }
+    }
+
+    override fun consumeAll() {
+        consumeResult()
+    }
 }
+
+private fun uploadOperationSnapshots(
+    activity: UploadActivity?,
+    result: UploadResult?,
+): List<OperationStatusSnapshot> =
+    buildList {
+        if (activity != null) {
+            val progress = if (activity.total == 0) {
+                null
+            } else {
+                (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
+            }
+            val media = buildList {
+                activity.current?.let {
+                    add(
+                        OperationMediaActivity(
+                            OperationMediaReference.LocalUri(it),
+                            activity.percent?.div(100f),
+                        ),
+                    )
+                }
+                activity.pending
+                    .asSequence()
+                    .filterNot { it == activity.current }
+                    .mapTo(this) {
+                        OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
+                    }
+            }
+            add(
+                OperationStatusSnapshot(
+                    kind = OperationKind.Upload,
+                    title = com.syrok0010.nextgallery.core.ui.uiText(
+                        R.string.upload_progress,
+                        (activity.processed + 1).coerceAtMost(activity.total),
+                        activity.total,
+                    ),
+                    running = true,
+                    progress = progress,
+                    media = media,
+                ),
+            )
+        }
+        if (result != null) {
+            val failed = result.failures.isNotEmpty() || result.uploaded < result.files
+            add(
+                OperationStatusSnapshot(
+                    kind = OperationKind.Upload,
+                    title = if (result.failures.isEmpty()) {
+                        com.syrok0010.nextgallery.core.ui.uiText(
+                            R.string.upload_done,
+                            result.uploaded,
+                            result.files,
+                        )
+                    } else {
+                        com.syrok0010.nextgallery.core.ui.uiText(
+                            R.string.upload_stopped,
+                            result.failures.joinToString(", "),
+                        )
+                    },
+                    details = buildList {
+                        if (result.failures.isNotEmpty()) {
+                            add(
+                                com.syrok0010.nextgallery.core.ui.uiText(
+                                    R.string.upload_count,
+                                    result.uploaded,
+                                    result.files,
+                                ),
+                            )
+                        }
+                        addAll(result.details)
+                    },
+                    failed = failed,
+                ),
+            )
+        }
+    }

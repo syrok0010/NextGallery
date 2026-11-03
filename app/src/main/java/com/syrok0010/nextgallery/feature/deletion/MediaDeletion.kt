@@ -1,6 +1,11 @@
 package com.syrok0010.nextgallery.feature.deletion
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
@@ -15,7 +20,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -131,15 +139,17 @@ internal class MediaDeletionRepository(
     private val phoneTrash: PhoneTrashCheck,
     private val scope: CoroutineScope,
     private val onDeleted: () -> Unit,
-) {
+) : OperationStatusSource {
     private val mutableProgress = MutableStateFlow<DeletionProgress?>(null)
     val progress = mutableProgress.asStateFlow()
     private val mutableResult = MutableStateFlow<DeletionResult?>(null)
     val result = mutableResult.asStateFlow()
+    override val operations = combine(progress, result, ::deletionOperationSnapshots)
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private var job: Job? = null
 
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
-    private var operations = SupervisorJob(scope.coroutineContext[Job])
+    private var operationParent = SupervisorJob(scope.coroutineContext[Job])
 
     init {
         scope.launch {
@@ -148,8 +158,8 @@ internal class MediaDeletionRepository(
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 // The first emission only records the owner; results never cross accounts.
                 if (current == null || (owner != null && current != owner)) {
-                    operations.cancel()
-                    operations = SupervisorJob(scope.coroutineContext[Job])
+                    operationParent.cancel()
+                    operationParent = SupervisorJob(scope.coroutineContext[Job])
                     job = null
                     mutableProgress.value = null
                     mutableResult.value = null
@@ -181,7 +191,7 @@ internal class MediaDeletionRepository(
                 )
             }
         }
-        job = scope.launch(operations) {
+        job = scope.launch(operationParent) {
             previous?.join()
             val phoneTrashed = if (targets.contentUris.isEmpty()) {
                 0
@@ -235,8 +245,54 @@ internal class MediaDeletionRepository(
         mutableResult.value = null
     }
 
+    override fun consumeSucceeded() {
+        if (result.value?.failed == false) consume()
+    }
+
+    override fun consumeAll() {
+        consume()
+    }
+
     private fun credentials(): AccountCredentials? =
         (sessions.session.value as? SessionUiState.SignedIn)?.credentials
+}
+
+private fun deletionOperationSnapshots(
+    progress: DeletionProgress?,
+    result: DeletionResult?,
+): List<OperationStatusSnapshot> = buildList {
+    progress?.let {
+        add(
+            OperationStatusSnapshot(
+                kind = OperationKind.Delete,
+                title = com.syrok0010.nextgallery.core.ui.uiText(
+                    R.string.delete_progress,
+                    it.processed,
+                    it.total,
+                ),
+                running = true,
+                progress = if (it.total == 0) null else it.processed.toFloat() / it.total,
+                media = it.fileIds.map {
+                    OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
+                },
+            ),
+        )
+    }
+    result?.let {
+        val lines = mediaDeletionMessage(it)
+        if (lines.isNotEmpty()) {
+            add(
+                OperationStatusSnapshot(
+                    kind = OperationKind.Delete,
+                    title = com.syrok0010.nextgallery.core.ui.uiText(
+                        if (it.failed) R.string.delete_done_with_errors else R.string.delete_done,
+                    ),
+                    details = lines,
+                    failed = it.failed,
+                ),
+            )
+        }
+    }
 }
 
 /** Lines of a result; zero counters stay silent. */
