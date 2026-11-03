@@ -12,7 +12,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 class NextcloudTransport(
-    private val json: Json,
+    internal val json: Json,
     internal val baseClient: OkHttpClient = defaultBaseClient(),
 ) {
 
