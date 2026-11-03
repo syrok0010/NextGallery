@@ -7,6 +7,8 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.bestEffort
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
@@ -15,17 +17,22 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 
 class MemoriesRepository(
-    private val transport: NextcloudTransport,
+    private val memories: MemoriesApiClient,
     private val cacheRepository: TimelineCacheRepository,
     private val identityRegistry: MediaIdentityRegistry,
 ) : RemoteTimelineSource {
+    internal constructor(
+        transport: NextcloudTransport,
+        cacheRepository: TimelineCacheRepository,
+        identityRegistry: MediaIdentityRegistry,
+    ) : this(MemoriesApiClient(transport), cacheRepository, identityRegistry)
+
     override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? =
         bestEffort { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
 
     override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
-        val api = transport.memoriesApi(credentials)
-        val config = api.config()
-        val dayDtos = api.days()
+        val config = memories.config(credentials)
+        val dayDtos = memories.days(credentials)
         val days = dayDtos.map { day ->
             TimelineDay(
                 dayId = day.dayid,
@@ -62,9 +69,8 @@ class MemoriesRepository(
             return emptyList()
         }
 
-        val api = transport.memoriesApi(credentials)
-        val photoDtos = api
-            .dayDetails(dayIds.joinToString(","))
+        val photoDtos = memories
+            .dayDetails(credentials, dayIds.joinToString(","))
             .distinctBy { it.fileid }
         val items = photoDtos.toIdentifiedMediaItems()
 

@@ -1,18 +1,20 @@
 package com.syrok0010.nextgallery.feature.images
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesMultipreviewFileRequest
+import com.syrok0010.nextgallery.core.network.memories.MemoriesMultipreviewRequest
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 
-class MemoriesMultipreviewClient(
-    private val transport: NextcloudTransport,
-    private val json: Json,
-) {
+class MemoriesMultipreviewClient(private val memories: MemoriesApiClient, private val json: Json) {
+    internal constructor(
+        transport: NextcloudTransport,
+        json: Json,
+    ) : this(MemoriesApiClient(transport), json)
+
     suspend fun loadThumbnails(
         credentials: AccountCredentials,
         fileIds: List<Long>,
@@ -32,32 +34,16 @@ class MemoriesMultipreviewClient(
                 reqid = index + 1,
             )
         }
-        val body = json
-            .encodeToString(MemoriesMultipreviewRequest(files = requests))
-            .toRequestBody("application/json".toMediaType())
-        val request = transport
-            .authenticatedRequestBuilder(
-                credentials = credentials,
-                url = "${transport.normalizeBaseUrl(
-                    credentials.serverUrl,
-                )}apps/memories/api/image/multipreview",
-                accept = "application/octet-stream",
-            ).post(body)
-            .build()
         return withContext(Dispatchers.IO) {
-            val response = transport.authenticatedClient(credentials).newCall(request).execute()
-            response.use {
-                if (!it.isSuccessful) {
-                    error("Multipreview failed with HTTP ${it.code}")
-                }
+            val responseBytes = memories.multipreview(
+                credentials,
+                MemoriesMultipreviewRequest(files = requests),
+            )
+            val previewsByRequestId = parseMemoriesMultipreviewResponse(responseBytes, json)
+                .associateBy { preview -> preview.requestId }
 
-                val responseBytes = checkNotNull(it.body).bytes()
-                val previewsByRequestId = parseMemoriesMultipreviewResponse(responseBytes, json)
-                    .associateBy { preview -> preview.requestId }
-
-                requests.mapNotNull { previewRequest ->
-                    previewsByRequestId[previewRequest.reqid]?.copy(fileId = previewRequest.fileid)
-                }
+            requests.mapNotNull { previewRequest ->
+                previewsByRequestId[previewRequest.reqid]?.copy(fileId = previewRequest.fileid)
             }
         }
     }
@@ -66,15 +52,3 @@ class MemoriesMultipreviewClient(
         const val DEFAULT_THUMBNAIL_SIZE = 512
     }
 }
-
-@Serializable
-private data class MemoriesMultipreviewRequest(val files: List<MemoriesMultipreviewFileRequest>)
-
-@Serializable
-private data class MemoriesMultipreviewFileRequest(
-    val fileid: Long,
-    val x: Int,
-    val y: Int,
-    val a: String,
-    val reqid: Int,
-)

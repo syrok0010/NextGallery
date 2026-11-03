@@ -14,12 +14,13 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
-import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,8 @@ import org.koin.android.ext.android.inject
  */
 class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
-    private val transport: NextcloudTransport by inject()
+    private val dav: PhotosDavClient by inject()
+    private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val notificationManager: NotificationManager by lazy {
@@ -187,7 +189,7 @@ class UploadForegroundService : Service() {
     ) {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
-        val config = transport.memoriesApi(credentials).config()
+        val config = memories.config(credentials)
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
@@ -218,7 +220,7 @@ class UploadForegroundService : Service() {
      * Returns null when the name is taken by a different file: an existing file counts as this
      * upload only if sizes match, since the server keeps no hash to compare.
      */
-    private fun put(
+    private suspend fun put(
         credentials: AccountCredentials,
         url: HttpUrl,
         selection: UploadSelection,
@@ -236,39 +238,30 @@ class UploadForegroundService : Service() {
             },
             onProgress = onProgress,
         )
-        val request = transport
-            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*")
-            .method("PUT", body)
-            .header("If-None-Match", "*")
-            .build()
-        val (existed, fileId) = transport.baseClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 412) {
+        val response = dav.put(credentials, url, body, ifNoneMatch = "*")
+        val (existed, fileId) = response.let {
+            if (!it.isSuccessful && it.code != 412) {
                 throw UploadException(
                     R.string.upload_error_http,
-                    response.code,
+                    it.code,
                     selection.displayName,
                 )
             }
-            (response.code == 412) to uploadedFileId(response.header("OC-FileId"))
+            (it.code == 412) to uploadedFileId(it.header("OC-FileId"))
         }
         if (existed && !sameRemoteSize(credentials, url, length)) return null
         return UploadedFile(selection, url, created = !existed, fileId.takeUnless { existed })
     }
 
-    private fun sameRemoteSize(
+    private suspend fun sameRemoteSize(
         credentials: AccountCredentials,
         url: HttpUrl,
         length: Long,
     ): Boolean {
         if (length < 0L) return false
-        val request = transport
-            .authenticatedRequestBuilder(credentials, url.toString(), accept = "*/*")
-            .head()
-            .build()
         return runCatching {
-            transport.baseClient.newCall(request).execute().use { response ->
-                response.isSuccessful &&
-                    response.header("Content-Length")?.toLongOrNull() == length
+            dav.head(credentials, url).let { response ->
+                response.isSuccessful && response.header("Content-Length")?.toLongOrNull() == length
             }
         }.getOrDefault(false)
     }

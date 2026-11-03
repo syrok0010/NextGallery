@@ -1,34 +1,20 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.AlbumPath
+import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
+import com.syrok0010.nextgallery.core.network.dav.davFileUrl
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.serialization.Serializable
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.Request
-import okhttp3.Response
-import retrofit2.http.GET
-import retrofit2.http.Path
-
-internal interface AlbumWriteApi {
-    @GET("apps/memories/api/image/info/{id}")
-    suspend fun info(@Path("id") fileId: Long): ImageInfoDto
-}
-
-/** [filename] is the path from the user's files root, [basename] the file name. */
-@Serializable
-internal data class ImageInfoDto(val filename: String, val basename: String)
 
 /** Owner and collection name of a Photos album addressed by Memories `cluster_id`. */
 internal data class AlbumAddress(val owner: String, val name: String) {
@@ -62,17 +48,18 @@ internal class AlbumAlreadyExistsException(name: String) : IOException("Album $n
  * Writes Photos albums through Nextcloud DAV, the contract Memories Web uses: Memories API
  * itself has no album write endpoint.
  */
-internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
+internal class MemoriesAlbumWriter(
+    private val dav: PhotosDavClient,
+    private val memories: MemoriesApiClient,
+) {
+    internal constructor(transport: NextcloudTransport) : this(
+        PhotosDavClient(transport),
+        MemoriesApiClient(transport),
+    )
+
     suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
         val user = credentials.userId
-        val request = transport
-            .authenticatedRequestBuilder(
-                credentials,
-                albumUrl(credentials.serverUrl, AlbumAddress(user, name)).toString(),
-                accept = "*/*",
-            ).method("MKCOL", null)
-            .build()
-        transport.baseClient.newCall(request).await().use { response ->
+        dav.mkcol(credentials, AlbumPath(user, name)).let { response ->
             // DAV answers MKCOL on an existing collection with 405 Method Not Allowed.
             if (response.code == 405) throw AlbumAlreadyExistsException(name)
             if (!response.isSuccessful) {
@@ -89,7 +76,6 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
         album: AlbumAddress,
         fileIds: List<Long>,
     ): AlbumAddResult {
-        val api = api(credentials)
         val permits = Semaphore(PARALLEL_COPIES)
         val outcomes = coroutineScope {
             fileIds
@@ -98,7 +84,7 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
                     async {
                         permits.withPermit {
                             try {
-                                val info = api.info(fileId)
+                                val info = memories.imageInfo(credentials, fileId)
                                 copy(
                                     credentials,
                                     source = fileUrl(
@@ -157,65 +143,25 @@ internal class MemoriesAlbumWriter(private val transport: NextcloudTransport) {
      * Confirms a 409 against the album. A failed check must not discard the whole batch, so an
      * unconfirmed conflict counts as a failure for that file only.
      */
-    private suspend fun albumExists(credentials: AccountCredentials, album: AlbumAddress): Boolean {
-        val request = transport
-            .authenticatedRequestBuilder(
-                credentials,
-                albumUrl(credentials.serverUrl, album).toString(),
-                accept = "*/*",
-            ).method("PROPFIND", null)
-            .header("Depth", "0")
-            .build()
-        return try {
-            transport.baseClient.newCall(request).await().use { it.isSuccessful }
+    private suspend fun albumExists(credentials: AccountCredentials, album: AlbumAddress): Boolean =
+        try {
+            dav.propfind(credentials, AlbumPath(album.owner, album.name)).isSuccessful
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             false
         }
-    }
 
     private suspend fun copy(
         credentials: AccountCredentials,
         source: HttpUrl,
         destination: HttpUrl,
-    ): AlbumCopyOutcome {
-        val request: Request = transport
-            .authenticatedRequestBuilder(credentials, source.toString(), accept = "*/*")
-            .method("COPY", null)
-            .header("Destination", destination.toString())
-            .build()
-        return transport.baseClient.newCall(request).await().use { albumCopyOutcome(it.code) }
-    }
-
-    private fun api(credentials: AccountCredentials) =
-        transport
-            .retrofit(
-                transport.normalizeBaseUrl(credentials.serverUrl),
-                transport.authenticatedClient(credentials),
-            ).create(AlbumWriteApi::class.java)
+    ): AlbumCopyOutcome = albumCopyOutcome(dav.copy(credentials, source, destination).code)
 
     private companion object {
         const val PARALLEL_COPIES = 4
     }
 }
-
-/** Unlike `execute()`, cancelling the caller cancels the call, so logout stops pending writes. */
-internal suspend fun Call.await(): Response =
-    suspendCancellableCoroutine { continuation ->
-        continuation.invokeOnCancellation { cancel() }
-        enqueue(
-            object : Callback {
-                override fun onResponse(call: Call, response: Response) {
-                    continuation.resume(response) { _, value, _ -> value.close() }
-                }
-
-                override fun onFailure(call: Call, e: IOException) {
-                    continuation.resumeWithException(e)
-                }
-            },
-        )
-    }
 
 internal fun albumUrl(serverUrl: String, album: AlbumAddress): HttpUrl =
     davRoot(serverUrl)
@@ -227,11 +173,7 @@ internal fun albumUrl(serverUrl: String, album: AlbumAddress): HttpUrl =
 
 /** [path] is relative to the user's files root as reported by Memories image info. */
 internal fun fileUrl(serverUrl: String, user: String, path: String): HttpUrl =
-    davRoot(serverUrl)
-        .addPathSegment("files")
-        .addPathSegment(user)
-        .apply { path.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }
-        .build()
+    davFileUrl(serverUrl, user, path)
 
 private fun davRoot(serverUrl: String): HttpUrl.Builder =
     NextcloudTransport

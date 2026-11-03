@@ -9,6 +9,9 @@ import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
+import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -58,7 +61,7 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val appModule = module {
-    single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
+    single<RemoteAlbumSource> { MemoriesAlbumSource(get<MemoriesApiClient>()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     single {
@@ -70,7 +73,7 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
-    single { MemoriesAlbumWriter(get()) }
+    single { MemoriesAlbumWriter(get<PhotosDavClient>(), get<MemoriesApiClient>()) }
     single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
     single {
         UploadQueue(get(), get(named("libraryScope"))) {
@@ -92,7 +95,7 @@ val appModule = module {
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get(), get()) }
+    single { MemoriesAlbumContents(get<MemoriesApiClient>(), get()) }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
@@ -123,6 +126,9 @@ val appModule = module {
     }
 
     single { NextcloudTransport(get()) }
+    single { NextcloudAuthClient(get()) }
+    single { MemoriesApiClient(get()) }
+    single { PhotosDavClient(get()) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
     single { NextGalleryDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }
@@ -158,9 +164,13 @@ val appModule = module {
             changeObserver = get<AndroidMediaStoreChangeObserver>(),
         )
     }
-    single { NextcloudLoginRepository(get()) }
-    single { MemoriesMultipreviewClient(get(), get()) }
-    single { MemoriesRepository(get(), get(), get()) }
+    single {
+        NextcloudLoginRepository(
+            get<com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient>(),
+        )
+    }
+    single { MemoriesMultipreviewClient(get<MemoriesApiClient>(), get()) }
+    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {

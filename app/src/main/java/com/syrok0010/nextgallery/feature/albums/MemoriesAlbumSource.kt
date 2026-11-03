@@ -1,27 +1,15 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import retrofit2.http.GET
+internal class MemoriesAlbumSource(private val memories: MemoriesApiClient) : RemoteAlbumSource {
+    internal constructor(transport: NextcloudTransport) : this(MemoriesApiClient(transport))
 
-internal interface AlbumApi {
-    @GET("apps/memories/api/config")
-    suspend fun config(): JsonObject
-
-    @GET("apps/memories/api/clusters/albums")
-    suspend fun albums(): List<JsonObject>
-}
-
-internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : RemoteAlbumSource {
     override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
-        val api = transport
-            .retrofit(
-                transport.normalizeBaseUrl(credentials.serverUrl),
-                transport.authenticatedClient(credentials),
-            ).create(AlbumApi::class.java)
-        val config = api.config()
+        val config = memories.albumConfig(credentials)
         if (config.text(
                 "albums_enabled",
             ) !in setOf("true", "1")
@@ -30,8 +18,8 @@ internal class MemoriesAlbumSource(private val transport: NextcloudTransport) : 
         }
         val showHidden = config.text("show_hidden_albums") in setOf("true", "1")
         return RemoteAlbums(
-            api
-                .albums()
+            memories
+                .albums(credentials)
                 .map(::remoteAlbumSummary)
                 .filter { showHidden || !it.name.startsWith('.') }
                 .distinctBy { it.id },
