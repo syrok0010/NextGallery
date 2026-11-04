@@ -178,7 +178,7 @@ class TimelineCacheRepositoryOfflineTest {
                 ),
             )
             imageCache.saveThumbnails(
-                previews = listOf(ThumbnailPreview(FILE_ID, 0, "image/jpeg", byteArrayOf(1, 2, 3))),
+                previews = listOf(ThumbnailPreview(FILE_ID, "image/jpeg", byteArrayOf(1, 2, 3))),
                 width = THUMBNAIL_SIZE,
                 height = THUMBNAIL_SIZE,
                 etagsByFileId = mapOf(FILE_ID to remote.etag),

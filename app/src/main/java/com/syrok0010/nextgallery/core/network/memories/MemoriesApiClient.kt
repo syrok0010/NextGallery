@@ -4,7 +4,9 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.http.GET
@@ -36,29 +38,35 @@ class MemoriesApiClient(
 
     suspend fun imageInfo(fileId: Long): MemoriesImageInfoDto = api().imageInfo(fileId)
 
-    suspend fun multipreview(request: MemoriesMultipreviewRequest): ByteArray {
-        val account = credentials()
-        val body = transport.json
-            .encodeToString(request)
-            .toRequestBody("application/json".toMediaType())
-        val httpRequest = transport
-            .authenticatedRequestBuilder(
-                account,
-                "${transport.normalizeBaseUrl(
-                    account.serverUrl,
-                )}apps/memories/api/image/multipreview",
-                accept = "application/octet-stream",
-            ).post(body)
-            .build()
-        return withContext(Dispatchers.IO) {
+    /**
+     * Streams previews in server order as they arrive. Unavailable previews are absent, not
+     * errors. A block read blocks the IO thread, so cancellation takes effect between blocks.
+     */
+    fun multipreview(request: MemoriesMultipreviewRequest): Flow<MemoriesPreviewDto> =
+        flow {
+            val account = credentials()
+            val body = transport.json
+                .encodeToString(request)
+                .toRequestBody("application/json".toMediaType())
+            val httpRequest = transport
+                .authenticatedRequestBuilder(
+                    account,
+                    "${transport.normalizeBaseUrl(
+                        account.serverUrl,
+                    )}apps/memories/api/image/multipreview",
+                    accept = "application/octet-stream",
+                ).post(body)
+                .build()
             transport.baseClient.newCall(httpRequest).await().use { response ->
                 if (!response.isSuccessful) {
                     error("Multipreview failed with HTTP ${response.code}")
                 }
-                checkNotNull(response.body).bytes()
+                val source = checkNotNull(response.body).source()
+                while (true) {
+                    emit(readMemoriesPreview(source, transport.json) ?: break)
+                }
             }
-        }
-    }
+        }.flowOn(Dispatchers.IO)
 
     private fun api(): MemoriesApi {
         val account = credentials()

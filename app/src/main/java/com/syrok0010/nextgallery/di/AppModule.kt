@@ -165,14 +165,14 @@ val appModule = module {
         )
     }
     single { NextcloudLoginRepository(get<NextcloudAuthClient>()) }
-    single { MemoriesMultipreviewClient(get<MemoriesApiClient>(), get()) }
+    single { MemoriesMultipreviewClient(get<MemoriesApiClient>()) }
     single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {
         val images = get<RemoteImageRepository>()
         ThumbnailBatchLoader(
-            loadBatch = { credentials, keys -> images.ensureThumbnails(credentials, keys).toSet() },
+            loadBatch = images::ensureThumbnails,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
