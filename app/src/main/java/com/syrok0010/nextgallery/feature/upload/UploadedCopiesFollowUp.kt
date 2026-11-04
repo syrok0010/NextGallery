@@ -49,13 +49,3 @@ internal class UploadedCopiesFollowUp(
         return emptyList()
     }
 }
-
-/**
- * File id from the `OC-FileId` response header: the id zero-padded to eight digits, followed by
- * the instance id, which always starts with "oc".
- */
-internal fun uploadedFileId(header: String?): Long? =
-    header
-        ?.takeWhile(Char::isDigit)
-        ?.toLongOrNull()
-        ?.takeIf { it > 0L }

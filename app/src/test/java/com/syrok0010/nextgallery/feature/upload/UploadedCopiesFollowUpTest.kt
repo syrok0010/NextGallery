@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -13,7 +14,6 @@ import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlinx.coroutines.runBlocking
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -26,16 +26,6 @@ class UploadedCopiesFollowUpTest {
     private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
     private val followUp = UploadedCopiesFollowUp(registry, sessions) { refreshes++ }
-
-    @Test
-    fun `file id is read from the OC-FileId header`() {
-        assertEquals(183L, uploadedFileId("00000183ocmsigiy9k16"))
-        assertEquals(123_456_789L, uploadedFileId("123456789ocmsigiy9k16"))
-        assertNull(uploadedFileId(null))
-        assertNull(uploadedFileId(""))
-        assertNull(uploadedFileId("ocmsigiy9k16"))
-        assertNull(uploadedFileId("00000000ocmsigiy9k16"))
-    }
 
     @Test
     fun `linked server copy joins the phone file as one object`() =
@@ -181,7 +171,7 @@ class UploadedCopiesFollowUpTest {
     private fun uploadedFile(fileId: Long?) =
         UploadedFile(
             selection = SELECTION,
-            url = "http://test.example/remote.php/dav/files/test/Photos/a.jpg".toHttpUrl(),
+            path = DavFilePath.of("test", "/Photos/a.jpg"),
             created = fileId != null,
             fileId = fileId,
         )

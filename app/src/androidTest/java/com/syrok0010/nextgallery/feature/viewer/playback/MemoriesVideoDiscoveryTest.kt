@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer.playback
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesVideoClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
@@ -109,6 +110,6 @@ class MemoriesVideoDiscoveryTest {
                             ).toResponseBody(),
                     ).build()
             }.build()
-        return MemoriesVideoDiscovery(transport, client)
+        return MemoriesVideoDiscovery(MemoriesVideoClient(transport, client))
     }
 }

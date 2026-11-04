@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.images
 
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.ThumbnailCacheEntity
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPreviewDto
 
 internal class RemoteImageCache(
     database: NextGalleryDatabase,
@@ -52,7 +53,7 @@ internal class RemoteImageCache(
     }
 
     suspend fun saveThumbnails(
-        previews: List<ThumbnailPreview>,
+        previews: List<MemoriesPreviewDto>,
         width: Int,
         height: Int,
         etagsByFileId: Map<Long, String?>,
@@ -79,7 +80,7 @@ internal class RemoteImageCache(
                 fileId = preview.fileId,
                 width = width,
                 height = height,
-                mimeType = preview.mimeType,
+                mimeType = preview.type,
                 cacheKey = storedFile.cacheKey,
                 relativePath = storedFile.relativePath,
                 cachedAtEpochMillis = now,

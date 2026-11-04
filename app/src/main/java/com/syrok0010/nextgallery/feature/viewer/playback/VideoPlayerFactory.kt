@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesVideoClient
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import java.io.InterruptedIOException
@@ -31,6 +32,7 @@ internal class VideoPlayerFactory(
                 session.credentials
             },
         ).build()
+    private val discovery = MemoriesVideoDiscovery(MemoriesVideoClient(transport, client))
 
     fun sources(asset: MediaAssetRef): VideoSources {
         val serverUrl = (sessionStore.session.value as? SessionUiState.SignedIn)
@@ -42,8 +44,7 @@ internal class VideoPlayerFactory(
     suspend fun qualities(
         original: RemoteVideoOriginal,
         clientId: String,
-    ): List<RemoteVideoQuality> =
-        MemoriesVideoDiscovery(transport, client).qualities(original, clientId)
+    ): List<RemoteVideoQuality> = discovery.qualities(original, clientId)
 
     fun mediaSourceFactory(context: Context) =
         DefaultMediaSourceFactory(

@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
@@ -97,10 +100,10 @@ class MemoriesAlbumWriterTest {
 
     @Test fun `addFile copies an uploaded DAV path without Memories lookup`() = runBlocking {
         Fixture { 201 to "" }.use { fixture ->
-            val source = fileUrl(fixture.origin, "anna", "/Photos/Поход 7.jpg")
+            val source = DavFilePath.of("anna", "/Photos/Поход 7.jpg")
             assertEquals(
                 AlbumCopyOutcome.Added,
-                fixture.writer.addFile(fixture.credentials, source, AlbumAddress("anna", "Лето")),
+                fixture.writer.addFile(source, AlbumAddress("anna", "Лето")),
             )
             val copy = fixture.requests.single()
             assertEquals("COPY", copy.method)
@@ -124,7 +127,7 @@ class MemoriesAlbumWriterTest {
             val album = AlbumAddress("anna", "Удалённый")
             assertEquals(
                 AlbumCopyOutcome.Failed,
-                fixture.writer.addFile(fixture.credentials, fileUrl(fixture.origin, "anna", "/Photos/a.jpg"), album),
+                fixture.writer.addFile(DavFilePath.of("anna", "/Photos/a.jpg"), album),
             )
             assertEquals(
                 AlbumAddResult(added = 0, alreadyPresent = 0, failed = 1),
@@ -162,14 +165,6 @@ class MemoriesAlbumWriterTest {
         assertNull(AlbumAddress.of(AlbumLocation.Remote("/name")))
     }
 
-    @Test fun `copy outcome treats conflict as already present`() {
-        assertEquals(AlbumCopyOutcome.Added, albumCopyOutcome(201))
-        assertEquals(AlbumCopyOutcome.Added, albumCopyOutcome(204))
-        assertEquals(AlbumCopyOutcome.AlreadyPresent, albumCopyOutcome(409))
-        assertEquals(AlbumCopyOutcome.Failed, albumCopyOutcome(412))
-        assertEquals(AlbumCopyOutcome.Failed, albumCopyOutcome(500))
-    }
-
     internal data class Recorded(
         val method: String,
         val target: String,
@@ -187,8 +182,11 @@ class MemoriesAlbumWriterTest {
         val origin = "http://127.0.0.1:${server.localPort}"
         /** The login name differs from the uid, as with an e-mail login; DAV paths use the uid. */
         val credentials = AccountCredentials(origin, "fixture", "password", userId = "anna")
-        val writerTransport = NextcloudTransport(Json { ignoreUnknownKeys = true })
-        val writer = MemoriesAlbumWriter(writerTransport)
+        private val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
+        val writer = MemoriesAlbumWriter(
+            PhotosAlbumsDavClient(transport) { credentials },
+            MemoriesApiClient(transport) { credentials },
+        )
 
         init {
             executor.execute {

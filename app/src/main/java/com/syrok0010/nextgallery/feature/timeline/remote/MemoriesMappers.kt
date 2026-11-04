@@ -3,6 +3,8 @@ package com.syrok0010.nextgallery.feature.timeline.remote
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.network.memories.MemoriesConfigDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull

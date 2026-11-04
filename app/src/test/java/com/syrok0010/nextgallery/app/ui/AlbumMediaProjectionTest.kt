@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.app.ui
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.albums.albumMediaProjection
-import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import org.junit.Assert.*
 import org.junit.Test

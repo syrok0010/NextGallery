@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -63,10 +64,11 @@ class MemoriesAlbumContentsTest {
                 }
             }
         } }
-        suspend fun load() = MemoriesAlbumContents(NextcloudTransport(Json { ignoreUnknownKeys = true }), InMemoryMediaIdentityRegistry()).load(
-            AlbumLocation.Remote("anna/Лето & море"),
-            AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture"),
-        ).toList()
+        private val credentials = AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture")
+        suspend fun load() = MemoriesAlbumContents(
+            MemoriesApiClient(NextcloudTransport(Json { ignoreUnknownKeys = true })) { credentials },
+            InMemoryMediaIdentityRegistry(),
+        ).load(AlbumLocation.Remote("anna/Лето & море")).toList()
         override fun close() { server.close(); executor.shutdownNow() }
     }
 }

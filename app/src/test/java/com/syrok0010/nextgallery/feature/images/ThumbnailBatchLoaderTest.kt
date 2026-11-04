@@ -14,12 +14,15 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -58,6 +61,37 @@ class ThumbnailBatchLoaderTest {
 
         assertEquals(listOf(listOf(1L, 2L)), loadedBatches.map { batch -> batch.map(ThumbnailKey::fileId) })
         assertTrue(results.all { it })
+    }
+
+    @Test
+    fun `ready key completes before the rest of its batch`() = runTest {
+        val credentials = credentials()
+        val first = thumbnailRequest(credentials, fileId = 1, etag = "etag-1")
+        val second = thumbnailRequest(credentials, fileId = 2, etag = "etag-2")
+        val releaseRest = CompletableDeferred<Unit>()
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)).also(loaderScopes::add)
+        val loader = ThumbnailBatchLoader(
+            loadBatch = { _, _ ->
+                flow {
+                    emit(first.key)
+                    releaseRest.await()
+                }
+            },
+            scope = scope,
+            batchSize = 2,
+        )
+        try {
+            val firstResult = async(start = CoroutineStart.UNDISPATCHED) { loader.ensureAvailable(first) }
+            val secondResult = async(start = CoroutineStart.UNDISPATCHED) { loader.ensureAvailable(second) }
+
+            assertTrue(withTimeout(500.milliseconds) { firstResult.await() })
+            assertTrue(secondResult.isActive)
+
+            releaseRest.complete(Unit)
+            assertFalse(secondResult.await())
+        } finally {
+            releaseRest.complete(Unit)
+        }
     }
 
     @Test
@@ -237,7 +271,7 @@ class ThumbnailBatchLoaderTest {
         var batchCalls = 0
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)).also(loaderScopes::add)
         val loader = ThumbnailBatchLoader(
-            loadBatch = { _, keys ->
+            loadBatch = whole { _, keys ->
                 batchCalls++
                 releaseBatch.await()
                 keys.toSet()
@@ -265,7 +299,7 @@ class ThumbnailBatchLoaderTest {
         val loadedIds = mutableListOf<Long>()
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)).also(loaderScopes::add)
         val loader = ThumbnailBatchLoader(
-            loadBatch = { _, keys ->
+            loadBatch = whole { _, keys ->
                 loadedIds += keys.map { it.fileId }
                 keys.toSet()
             },
@@ -339,13 +373,19 @@ class ThumbnailBatchLoaderTest {
         loadBatch: suspend (AccountCredentials, List<ThumbnailKey>) -> Set<ThumbnailKey>,
     ): ThumbnailBatchLoader {
         return ThumbnailBatchLoader(
-            loadBatch = loadBatch,
+            loadBatch = whole(loadBatch),
             scope = backgroundScope,
             batchWindowMillis = batchWindowMillis,
             batchSize = batchSize,
             maxConcurrentBatches = maxConcurrentBatches,
         )
     }
+
+    /** Adapts a loader that reports the whole batch at once. */
+    private fun whole(
+        loadBatch: suspend (AccountCredentials, List<ThumbnailKey>) -> Set<ThumbnailKey>,
+    ): (AccountCredentials, List<ThumbnailKey>) -> Flow<ThumbnailKey> =
+        { credentials, keys -> flow { loadBatch(credentials, keys).forEach { emit(it) } } }
 
     private fun credentials(): AccountCredentials {
         return AccountCredentials(

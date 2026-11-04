@@ -19,7 +19,7 @@ internal class AlbumUploadFollowUp(
 
     override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) {
         outcomes += try {
-            writer.addFile(credentials, file.url, album)
+            writer.addFile(file.path, album)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

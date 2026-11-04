@@ -281,7 +281,12 @@ UnifiedTimelineProjection -> published timeline
   `user_display` (fallback `user`) позволяет показать владельца.
 - `count` считается по distinct `memories.fileid`, то есть по индексированным
   Memories объектам, а не по гарантированному полному составу Photos album.
-  SQL-поля могут быть числовыми строками. Неизвестный счётчик не заменяется нулём.
+  Неизвестный счётчик не заменяется нулём. По `AlbumsQuery::getList` (Memories
+  `26a895fc`) сервер приводит к int только `album_id`, `created` и
+  `last_added_photo`. `count` и `cover` остаются сырыми SQL-значениями и могут
+  прийти числовыми строками, `cover` и `user_display` — `null`.
+- `/config.albums_enabled` и `show_hidden_albums` — PHP `bool`, в JSON это всегда
+  `true`/`false`.
 - Обложка — `cover` + `cover_etag`, fallback — `last_added_photo` +
   `last_added_photo_etag`. Сервер подставляет owner cover для shared album.
   Нулевой ID не запрашивается. Обложки используют существующие authenticated

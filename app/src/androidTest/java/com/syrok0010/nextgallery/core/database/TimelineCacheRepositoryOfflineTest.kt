@@ -12,10 +12,10 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPreviewDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.images.ThumbnailKey
-import com.syrok0010.nextgallery.feature.images.ThumbnailPreview
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
@@ -178,7 +178,7 @@ class TimelineCacheRepositoryOfflineTest {
                 ),
             )
             imageCache.saveThumbnails(
-                previews = listOf(ThumbnailPreview(FILE_ID, 0, "image/jpeg", byteArrayOf(1, 2, 3))),
+                previews = listOf(MemoriesPreviewDto(FILE_ID, "image/jpeg", byteArrayOf(1, 2, 3))),
                 width = THUMBNAIL_SIZE,
                 height = THUMBNAIL_SIZE,
                 etagsByFileId = mapOf(FILE_ID to remote.etag),

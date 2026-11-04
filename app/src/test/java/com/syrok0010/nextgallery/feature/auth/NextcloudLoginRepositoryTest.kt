@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.auth
 
+import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest
 import kotlinx.coroutines.runBlocking
@@ -37,7 +38,7 @@ class NextcloudLoginRepositoryTest {
         }
     }
 
-    private fun repository() = NextcloudLoginRepository(NextcloudTransport(Json { ignoreUnknownKeys = true }))
+    private fun repository() = NextcloudLoginRepository(NextcloudAuthClient(NextcloudTransport(Json { ignoreUnknownKeys = true })))
 
     private fun session(origin: String) = LoginSession("$origin/", "$origin/login", "$origin/poll", "token")
 

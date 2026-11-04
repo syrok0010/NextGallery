@@ -1,11 +1,13 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class AlbumCatalogTest {
+    private val json = Json { ignoreUnknownKeys = true }
+
     @Test fun `same names and matching covers do not merge containers`() {
         val local = localAlbumSummaries(
             sequenceOf(
@@ -17,10 +19,9 @@ class AlbumCatalogTest {
         )
         val remote =
             remoteAlbumSummary(
-                Json
-                    .parseToJsonElement(
-                        """{"album_id":1,"name":"Отпуск","count":"3","cover":"2","cover_etag":"v2","user":"anna"}""",
-                    ).jsonObject,
+                json.decodeFromString<MemoriesAlbumDto>(
+                    """{"album_id":1,"name":"Отпуск","count":"3","cover":"2","cover_etag":"v2","user":"anna"}""",
+                ),
             )
         val result = albumCatalog(listOf(remote, remote.copy(id = "remote:2")), local)
         assertEquals(5, result.size)
@@ -34,20 +35,18 @@ class AlbumCatalogTest {
     @Test fun `cover falls back to last added and unknown counts stay unknown`() {
         val result =
             remoteAlbumSummary(
-                Json
-                    .parseToJsonElement(
-                        """{"album_id":3,"name":"Empty","cover":0,"last_added_photo":"42","last_added_photo_etag":"v3","count":null,"user_display":"Анна"}""",
-                    ).jsonObject,
+                json.decodeFromString<MemoriesAlbumDto>(
+                    """{"album_id":3,"name":"Empty","cover":0,"last_added_photo":"42","last_added_photo_etag":"v3","count":null,"user_display":"Анна"}""",
+                ),
             )
         assertEquals(AlbumCover.Remote(42, "v3"), result.cover)
         assertNull(result.count)
         assertEquals("Анна", result.detail)
         assertNull(
             remoteAlbumSummary(
-                Json
-                    .parseToJsonElement(
-                        """{"album_id":4,"name":"Empty","last_added_photo":0,"count":0}""",
-                    ).jsonObject,
+                json.decodeFromString<MemoriesAlbumDto>(
+                    """{"album_id":4,"name":"Empty","last_added_photo":0,"count":0}""",
+                ),
             ).cover,
         )
     }

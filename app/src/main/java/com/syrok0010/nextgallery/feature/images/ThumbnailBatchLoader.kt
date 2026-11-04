@@ -8,12 +8,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 internal class ThumbnailBatchLoader(
-    private val loadBatch: suspend (AccountCredentials, List<ThumbnailKey>) -> Set<ThumbnailKey>,
+    /** Emits each key as soon as its thumbnail is available; absent keys are unavailable. */
+    private val loadBatch: (AccountCredentials, List<ThumbnailKey>) -> Flow<ThumbnailKey>,
     private val scope: CoroutineScope,
     private val batchWindowMillis: Long = DEFAULT_BATCH_WINDOW_MILLIS,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
@@ -68,9 +70,6 @@ internal class ThumbnailBatchLoader(
                             continue
                         }
 
-                        inFlight[command.request.key] = InFlightRequest(
-                            waiters = mutableListOf(command.result),
-                        )
                         val identity = BatchIdentity(command.request.key)
                         val batch = pending.getOrPut(identity) {
                             PendingBatch(
@@ -78,6 +77,10 @@ internal class ThumbnailBatchLoader(
                                 credentials = command.request.credentials,
                             )
                         }
+                        inFlight[command.request.key] = InFlightRequest(
+                            batchId = batch.id,
+                            waiters = mutableListOf(command.result),
+                        )
                         batch.keys += command.request.key
 
                         if (batch.keys.size >= batchSize) {
@@ -97,14 +100,12 @@ internal class ThumbnailBatchLoader(
                         }
                     }
 
-                    is Command.BatchCompleted -> {
-                        command.keys.forEach { key ->
-                            val request = inFlight.remove(key) ?: return@forEach
-                            val available = key in command.readyKeys
-                            request.waiters.forEach { result ->
-                                result.complete(available)
-                            }
-                        }
+                    is Command.KeyReady ->
+                        complete(inFlight, command.batchId, command.key, available = true)
+
+                    // Keys not reported ready by the end of their batch are unavailable.
+                    is Command.BatchCompleted -> command.keys.forEach { key ->
+                        complete(inFlight, command.batchId, key, available = false)
                     }
                 }
             }
@@ -142,22 +143,34 @@ internal class ThumbnailBatchLoader(
         if (keys.isEmpty()) return
 
         scope.launch {
-            val readyKeys = try {
+            try {
                 batchSemaphore.withPermit {
-                    loadBatch(batch.credentials, keys)
+                    loadBatch(batch.credentials, keys).collect { key ->
+                        mailbox.send(Command.KeyReady(batch.id, key))
+                    }
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {
-                emptySet()
+                // Keys delivered before the failure stay available; the rest complete as false.
             }
-            mailbox.send(
-                Command.BatchCompleted(
-                    keys = keys,
-                    readyKeys = readyKeys,
-                ),
-            )
+            mailbox.send(Command.BatchCompleted(batch.id, keys))
         }
+    }
+
+    /**
+     * A key may join a newer batch once an earlier one reported it ready, so completions only
+     * apply to the batch that owns the in-flight entry.
+     */
+    private fun complete(
+        inFlight: MutableMap<ThumbnailKey, InFlightRequest>,
+        batchId: Long,
+        key: ThumbnailKey,
+        available: Boolean,
+    ) {
+        val request = inFlight[key]?.takeIf { it.batchId == batchId } ?: return
+        inFlight.remove(key)
+        request.waiters.forEach { result -> result.complete(available) }
     }
 
     private sealed interface Command {
@@ -168,8 +181,9 @@ internal class ThumbnailBatchLoader(
 
         data class Flush(val identity: BatchIdentity, val batchId: Long) : Command
 
-        data class BatchCompleted(val keys: List<ThumbnailKey>, val readyKeys: Set<ThumbnailKey>) :
-            Command
+        data class KeyReady(val batchId: Long, val key: ThumbnailKey) : Command
+
+        data class BatchCompleted(val batchId: Long, val keys: List<ThumbnailKey>) : Command
     }
 
     private data class BatchIdentity(val accountScope: String, val width: Int, val height: Int) {
@@ -187,7 +201,10 @@ internal class ThumbnailBatchLoader(
         var flushJob: Job? = null,
     )
 
-    private class InFlightRequest(val waiters: MutableList<CompletableDeferred<Boolean>>)
+    private class InFlightRequest(
+        val batchId: Long,
+        val waiters: MutableList<CompletableDeferred<Boolean>>,
+    )
 
     private companion object {
         const val DEFAULT_BATCH_WINDOW_MILLIS = 60L
