@@ -23,6 +23,7 @@ URL-правила требовало искать вызовы по неско�
   HTTP-результат без решения о продуктовом результате;
 - transport, Basic Auth и нормализация origin остаются общими механизмами;
 - feature-срезы сохраняют mapping, orchestration, retry, кэш и UI-состояния;
+- сигнатуры методов содержат только параметры endpoint, без auth-деталей;
 - существующие cancellation и HTTP-контракты проверяются прежними JVM-тестами.
 
 ## Альтернативы
@@ -37,6 +38,19 @@ Memories JSON, binary preview и Photos DAV. Такой класс быстро 
 
 Это не меняет поведение, но сохраняет дублирование transport wiring и не даёт
 явной внутренней библиотеки для повторных endpoint-вызовов.
+
+### Credentials параметром каждого метода
+
+Так было в первой версии библиотеки. Каждый call site протаскивал
+`AccountCredentials`, хотя приложение однопользовательское и сессия одна. Сигнатуры
+смешивали endpoint-параметры с auth, а Login Flow принимал готовый `Authorization`
+header, то есть Basic Auth собирал вызывающий срез.
+
+### Экземпляр клиента или фабрика на аккаунт
+
+Это было бы оправдано при нескольких одновременных аккаунтах. Для single-user
+приложения это лишние сущности, и отменять операции при logout всё равно должны
+срезы.
 
 ### Отдельный Gradle-модуль сразу
 
@@ -54,6 +68,16 @@ Memories JSON, binary preview и Photos DAV. Такой класс быстро 
 - `dav.PhotosDavClient` — Photos/WebDAV `MKCOL`, `PROPFIND`, `COPY`, `PUT` и
   `HEAD` с нейтральным `DavResponse`.
 
+`MemoriesApiClient` и `PhotosDavClient` — singleton-ы. DI передаёт им provider
+текущих credentials (`SessionStore::requireCredentials`), а Koin внутри клиентов не
+используется. Каждый HTTP-вызов читает provider один раз: URL и `Authorization`
+одного запроса всегда относятся к одной сессии. Без активной сессии вызов падает
+с `IllegalStateException` до отправки запроса.
+
+`NextcloudAuthClient` работает до появления сессии. Server URL он получает из
+ввода пользователя, poll endpoint вместе с token — из ответа `startLogin`. Basic
+Auth для OCS current-user клиент строит сам из ответа poll.
+
 `NextcloudTransport` остаётся общим primitive для origin, auth headers, Retrofit и
 OkHttp. Клиенты не выполняют retry, не читают Room и не публикуют состояния. Они
 возвращают DTO, HTTP-коды и заголовки; feature-код по-прежнему решает, что означает
@@ -67,6 +91,13 @@ OkHttp. Клиенты не выполняют retry, не читают Room и 
   request construction;
 - `core/network` знает сетевой контракт Memories и Nextcloud, но не знает
   `MediaId`, альбомные исходы, кэш или `OperationStatus`;
+- порты срезов (`RemoteAlbumSource`, `RemoteTimelineSource`, `AlbumContentsSource`)
+  по-прежнему принимают `AccountCredentials`: срезы используют их для account scope
+  кэша и DAV-путей с `userId`. Значения совпадают с сессией, из которой читают
+  клиенты, пока приложение однопользовательское; при появлении нескольких аккаунтов
+  это решение нужно пересмотреть;
+- запрос, начатый после logout, не уходит со старыми credentials, а завершается
+  ошибкой; классифицировать её остаётся задачей среза;
 - пока сохраняется один Android Gradle project; compiler boundary остаётся
   `verifyFeatureBoundaries`.
 
