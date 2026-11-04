@@ -18,7 +18,7 @@
 - [ADR 0002: Граница источников и identity медиа](adr/0002-media-source-abstraction.md)
 - [ADR 0003: Навигация](adr/0003-navigation.md)
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
-- [ADR 0005: Network и загрузка изображений](adr/0005-network-and-images.md)
+- [ADR 0005: Network, endpoint-клиенты и загрузка изображений](adr/0005-network-and-images.md)
 - [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
 - [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
 - [ADR 0009: Типизированная session boundary](adr/0009-typed-ui-session-state.md)
@@ -30,4 +30,3 @@
 - [ADR 0014: Ручная загрузка из таймлайна](adr/0014-timeline-upload.md)
 - [ADR 0015: Добавление выбранных медиа в альбом](adr/0015-add-to-album.md)
 - [ADR 0017: Связь локальной и облачной копий после загрузки](adr/0017-link-uploaded-copies.md)
-- [ADR 0018: Внутренняя библиотека endpoint-клиентов Nextcloud и Memories](adr/0018-nextcloud-endpoint-clients.md)

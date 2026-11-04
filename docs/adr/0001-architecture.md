@@ -56,7 +56,7 @@ feature/viewer/         — UI, viewer sequence и transition policy
 feature/upload/         — UI, upload policy, queue и server adapter
 core/media/             — общий язык медиа и identity
 core/session/           — single-account lifecycle
-core/network/           — общие transport primitives
+core/network/           — transport и endpoint-клиенты Nextcloud/Memories
 core/database/          — database mechanism без feature policy
 ```
 
