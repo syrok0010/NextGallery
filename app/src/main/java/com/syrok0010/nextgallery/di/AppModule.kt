@@ -80,7 +80,7 @@ val appModule = module {
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
     single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
-    single { MemoriesFiles(get()) }
+    single { MemoriesFiles(get<MemoriesApiClient>()) }
     single { MemoriesFileDeleter(get(), get()) }
     single {
         MediaDeletionRepository(

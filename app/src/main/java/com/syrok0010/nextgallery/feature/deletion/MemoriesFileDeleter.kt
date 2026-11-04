@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.deletion
 
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DeleteFileResult
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
@@ -26,7 +25,7 @@ internal fun cloudDeleteSucceeded(code: Int): Boolean = code in 200..299 || code
  * Nextcloud trash bin app enabled, a DAV DELETE moves the file to the user's trash.
  */
 internal class MemoriesFileDeleter(
-    private val transport: NextcloudTransport,
+    private val dav: FilesDavClient,
     private val files: MemoriesFiles,
 ) {
     /** [onProcessed] runs once per file, whatever its outcome, for the progress shown in the app. */
@@ -43,7 +42,7 @@ internal class MemoriesFileDeleter(
                     async {
                         permits.withPermit {
                             val deleted = try {
-                                val file = files.file(credentials, fileId)
+                                val file = files.file(fileId)
                                 delete(
                                     credentials,
                                     DavFilePath.of(credentials.userId, file.path),
@@ -71,12 +70,11 @@ internal class MemoriesFileDeleter(
         credentials: AccountCredentials,
         file: DavFilePath,
         etag: String?,
-    ): Boolean {
-        return when (FilesDavClient(transport) { credentials }.deleteFile(file, etag)) {
+    ): Boolean =
+        when (dav.deleteFile(file, etag)) {
             DeleteFileResult.Deleted, DeleteFileResult.Missing -> true
             DeleteFileResult.Conflict -> false
         }
-    }
 
     private companion object {
         const val PARALLEL_DELETES = 4

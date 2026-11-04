@@ -92,7 +92,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     index,
-                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    MemoriesFileDeleter(fixture.dav, fixture.files),
                     { it.size },
                     scope,
                 ) {}
@@ -125,7 +125,7 @@ class MediaDeletionTest {
 
     @Test fun `deleter sends DAV DELETE to the uid path of each server file`() = runBlocking {
         Fixture(::server).use { fixture ->
-            val deleter = MemoriesFileDeleter(fixture.writerTransport, fixture.files)
+            val deleter = MemoriesFileDeleter(fixture.dav, fixture.files)
             assertEquals(
                 CloudDeleteResult(deleted = 2, failed = 2),
                 deleter.delete(fixture.credentials, listOf(1, 2, 3, 4, 1)),
@@ -155,7 +155,7 @@ class MediaDeletionTest {
         }.use { fixture ->
             assertEquals(
                 CloudDeleteResult(deleted = 0, failed = 1),
-                MemoriesFileDeleter(fixture.writerTransport, fixture.files).delete(fixture.credentials, listOf(1)),
+                MemoriesFileDeleter(fixture.dav, fixture.files).delete(fixture.credentials, listOf(1)),
             )
         }
     }
@@ -169,7 +169,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     sessions,
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    MemoriesFileDeleter(fixture.dav, fixture.files),
                     { it.size - 1 },
                     scope,
                 ) { refreshed.incrementAndGet() }
@@ -217,7 +217,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    MemoriesFileDeleter(fixture.dav, fixture.files),
                     { it.size },
                     scope,
                 ) {}
@@ -247,7 +247,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(null)),
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.writerTransport, fixture.files),
+                    MemoriesFileDeleter(fixture.dav, fixture.files),
                     { it.size },
                     scope,
                 ) {}
