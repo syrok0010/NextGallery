@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -92,7 +93,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     index,
-                    MemoriesFileDeleter(fixture.dav, fixture.files),
+                    MemoriesCloudTrash(fixture.dav, fixture.files),
                     { it.size },
                     scope,
                 ) {}
@@ -115,20 +116,12 @@ class MediaDeletionTest {
         }
     }
 
-    @Test fun `cloud delete counts 404 as deleted and isolates per-file failures`() {
-        assertEquals(true, cloudDeleteSucceeded(204))
-        assertEquals(true, cloudDeleteSucceeded(404))
-        assertEquals(false, cloudDeleteSucceeded(412))
-        assertEquals(false, cloudDeleteSucceeded(423))
-        assertEquals(false, cloudDeleteSucceeded(500))
-    }
-
     @Test fun `deleter sends DAV DELETE to the uid path of each server file`() = runBlocking {
         Fixture(::server).use { fixture ->
-            val deleter = MemoriesFileDeleter(fixture.dav, fixture.files)
+            val trash = MemoriesCloudTrash(fixture.dav, fixture.files)
             assertEquals(
-                CloudDeleteResult(deleted = 2, failed = 2),
-                deleter.delete(fixture.credentials, listOf(1, 2, 3, 4, 1)),
+                listOf(true, true, false, false),
+                listOf(1L, 2L, 3L, 4L).map { trash.trash(fixture.credentials, it) },
             )
             val deletes = fixture.requests.filter { it.method == "DELETE" }.map { it.decodedTarget }.sorted()
             assertEquals(
@@ -154,8 +147,8 @@ class MediaDeletionTest {
             }
         }.use { fixture ->
             assertEquals(
-                CloudDeleteResult(deleted = 0, failed = 1),
-                MemoriesFileDeleter(fixture.dav, fixture.files).delete(fixture.credentials, listOf(1)),
+                false,
+                MemoriesCloudTrash(fixture.dav, fixture.files).trash(fixture.credentials, 1),
             )
         }
     }
@@ -169,7 +162,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     sessions,
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.dav, fixture.files),
+                    CloudTrash { _, fileId -> fileId != 3L },
                     { it.size - 1 },
                     scope,
                 ) { refreshed.incrementAndGet() }
@@ -188,17 +181,17 @@ class MediaDeletionTest {
                         cloud = CloudDeleteResult(deleted = 2, failed = 1),
                         phoneFailed = 1,
                     ),
-                    repository.result.value,
+                    repository.state.value.unseen,
                 )
-                assertEquals("progress ends with the queue", null, repository.progress.value)
+                assertEquals("progress ends with the queue", null, repository.state.value.running)
                 repository.consume()
-                assertEquals(null, repository.result.value)
+                assertEquals(null, repository.state.value.unseen)
                 repository.delete(
                     DeletionTargets(emptyList(), listOf(1)),
                 )
                 assertEquals(
                     DeletionResult(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 1, failed = 0)),
-                    withTimeout(5_000) { repository.result.filterNotNull().first() },
+                    withTimeout(5_000) { repository.state.map { it.unseen }.filterNotNull().first() },
                 )
             } finally {
                 scope.cancel()
@@ -217,7 +210,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.dav, fixture.files),
+                    CloudTrash { _, fileId -> fileId != 3L },
                     { it.size },
                     scope,
                 ) {}
@@ -225,13 +218,13 @@ class MediaDeletionTest {
                 repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
                 assertEquals(
                     DeletionProgress(fileIds = setOf(1, 2, 3), total = 3, processed = 0),
-                    repository.progress.value,
+                    repository.state.value.running,
                 )
                 release.countDown()
-                withTimeout(5_000) { repository.progress.first { it == null } }
+                withTimeout(5_000) { repository.state.first { it.running == null } }
                 assertEquals(
                     DeletionResult(phoneTrashed = 1, cloud = CloudDeleteResult(deleted = 2, failed = 1)),
-                    repository.result.value,
+                    repository.state.value.unseen,
                 )
             } finally {
                 scope.cancel()
@@ -247,7 +240,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(null)),
                     MediaLibraryIndex(),
-                    MemoriesFileDeleter(fixture.dav, fixture.files),
+                    CloudTrash { _, _ -> error("no cloud request expected") },
                     { it.size },
                     scope,
                 ) {}
@@ -256,7 +249,7 @@ class MediaDeletionTest {
                 )
                 assertEquals(
                     DeletionResult(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),
-                    withTimeout(5_000) { repository.result.filterNotNull().first() },
+                    withTimeout(5_000) { repository.state.map { it.unseen }.filterNotNull().first() },
                 )
                 assertEquals(emptyList<String>(), fixture.requests.map { it.method })
             } finally {

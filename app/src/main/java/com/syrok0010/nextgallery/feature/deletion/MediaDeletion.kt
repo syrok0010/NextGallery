@@ -18,14 +18,21 @@ import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 
 /** Which copies of objects that exist both on the phone and in the cloud go to the trash. */
@@ -101,6 +108,8 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
  */
 internal data class DeletionProgress(val fileIds: Set<Long>, val total: Int, val processed: Int)
 
+internal data class CloudDeleteResult(val deleted: Int, val failed: Int)
+
 /** Results of deletions not shown yet; a later deletion adds to them. */
 internal data class DeletionResult(
     val phoneTrashed: Int,
@@ -120,6 +129,12 @@ internal data class DeletionResult(
         )
 }
 
+/** One atomic snapshot: a running deletion and an unshown result may coexist. */
+internal data class DeletionState(
+    val running: DeletionProgress? = null,
+    val unseen: DeletionResult? = null,
+)
+
 /**
  * Counts the URIs that MediaStore really marks as trashed: the system dialog answers RESULT_OK
  * even when single items fail to move.
@@ -135,18 +150,17 @@ internal fun interface PhoneTrashCheck {
 internal class MediaDeletionRepository(
     private val sessions: SessionStore,
     private val library: MediaLibraryIndex,
-    private val deleter: MemoriesFileDeleter,
+    private val cloud: CloudTrash,
     private val phoneTrash: PhoneTrashCheck,
     private val scope: CoroutineScope,
     private val onDeleted: () -> Unit,
 ) : OperationStatusSource {
-    private val mutableProgress = MutableStateFlow<DeletionProgress?>(null)
-    val progress = mutableProgress.asStateFlow()
-    private val mutableResult = MutableStateFlow<DeletionResult?>(null)
-    val result = mutableResult.asStateFlow()
-    override val operations = combine(progress, result, ::deletionOperationSnapshots)
+    private val mutableState = MutableStateFlow(DeletionState())
+    val state = mutableState.asStateFlow()
+    override val operations = state
+        .map(::deletionOperationSnapshots)
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
-    private var job: Job? = null
+    private val deletionMutex = Mutex()
 
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
     private var operationParent = SupervisorJob(scope.coroutineContext[Job])
@@ -160,9 +174,7 @@ internal class MediaDeletionRepository(
                 if (current == null || (owner != null && current != owner)) {
                     operationParent.cancel()
                     operationParent = SupervisorJob(scope.coroutineContext[Job])
-                    job = null
-                    mutableProgress.value = null
-                    mutableResult.value = null
+                    mutableState.value = DeletionState()
                 }
                 owner = current
             }
@@ -180,73 +192,66 @@ internal class MediaDeletionRepository(
 
     /** Requests run one after another; a new one never cancels a deletion already started. */
     fun delete(targets: DeletionTargets) {
-        val previous = job
         val fileIds = targets.fileIds
         if (fileIds.isNotEmpty()) {
-            mutableProgress.update { current ->
+            mutableState.update { state ->
                 DeletionProgress(
-                    fileIds = current?.fileIds.orEmpty() + fileIds,
-                    total = (current?.total ?: 0) + fileIds.size,
-                    processed = current?.processed ?: 0,
+                    fileIds = state.running?.fileIds.orEmpty() + fileIds,
+                    total = (state.running?.total ?: 0) + fileIds.size,
+                    processed = state.running?.processed ?: 0,
                 )
+                    .let { running -> state.copy(running = running) }
             }
         }
-        job = scope.launch(operationParent) {
-            previous?.join()
-            val phoneTrashed = if (targets.contentUris.isEmpty()) {
+        scope.launch(operationParent) {
+            deletionMutex.withLock {
+                val phoneTrashed = if (targets.contentUris.isEmpty()) {
                 0
-            } else {
-                try {
-                    phoneTrash.trashed(targets.contentUris)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    // The dialog was confirmed; an unreadable result is not reported as failure.
-                    targets.contentUris.size
-                }
-            }
-            val cloud = if (fileIds.isEmpty()) {
-                CloudDeleteResult(deleted = 0, failed = 0)
-            } else {
-                val credentials = credentials()
-                try {
-                    credentials?.let {
-                        deleter.delete(it, fileIds) {
-                            mutableProgress.update { current ->
-                                current?.copy(processed = current.processed + 1)
-                            }
-                        }
+                } else {
+                    try {
+                        phoneTrash.trashed(targets.contentUris)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // The dialog was confirmed; an unreadable result is not reported as failure.
+                        targets.contentUris.size
                     }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    null
-                } ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
+                }
+                val cloud = if (fileIds.isEmpty()) {
+                    CloudDeleteResult(deleted = 0, failed = 0)
+                } else {
+                    val credentials = credentials()
+                    credentials?.let { deleteCloud(it, fileIds) }
+                        ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
+                }
+                val done = DeletionResult(
+                    phoneTrashed = phoneTrashed,
+                    cloud = cloud,
+                    phoneFailed = targets.contentUris.size - phoneTrashed,
+                )
+                mutableState.update { state ->
+                    // The ids leave only now: the tiles stay marked until the result is in.
+                    state.copy(
+                        running = state.running
+                            ?.copy(fileIds = state.running.fileIds - fileIds.toSet())
+                            ?.takeIf { it.fileIds.isNotEmpty() },
+                        unseen = state.unseen?.plus(done) ?: done,
+                    )
+                }
+                onDeleted()
             }
-            val done = DeletionResult(
-                phoneTrashed = phoneTrashed,
-                cloud = cloud,
-                phoneFailed = targets.contentUris.size - phoneTrashed,
-            )
-            mutableResult.update { it?.plus(done) ?: done }
-            mutableProgress.update { current ->
-                // The ids leave only now: the tiles stay marked until the result is in.
-                current
-                    ?.copy(
-                        fileIds = current.fileIds - fileIds.toSet(),
-                    )?.takeIf { it.fileIds.isNotEmpty() }
-            }
-            onDeleted()
         }
     }
 
     /** Called once the UI has shown the result. */
     fun consume() {
-        mutableResult.value = null
+        mutableState.update { it.copy(unseen = null) }
     }
 
     override fun consumeSucceeded() {
-        if (result.value?.failed == false) consume()
+        mutableState.update { state ->
+            if (state.unseen?.failed == false) state.copy(unseen = null) else state
+        }
     }
 
     override fun consumeAll() {
@@ -255,13 +260,52 @@ internal class MediaDeletionRepository(
 
     private fun credentials(): AccountCredentials? =
         (sessions.session.value as? SessionUiState.SignedIn)?.credentials
+
+    private suspend fun deleteCloud(
+        credentials: AccountCredentials,
+        fileIds: List<Long>,
+    ): CloudDeleteResult {
+        val permits = Semaphore(PARALLEL_CLOUD_DELETES)
+        val outcomes = coroutineScope {
+            fileIds
+                .distinct()
+                .map { fileId ->
+                    async {
+                        permits.withPermit {
+                            val deleted = try {
+                                cloud.trash(credentials, fileId)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                false
+                            }
+                            mutableState.update { state ->
+                                state.copy(
+                                    running = state.running?.copy(
+                                        processed = state.running.processed + 1,
+                                    ),
+                                )
+                            }
+                            deleted
+                        }
+                    }
+                }.awaitAll()
+        }
+        return CloudDeleteResult(
+            deleted = outcomes.count { it },
+            failed = outcomes.count { !it },
+        )
+    }
+
+    private companion object {
+        const val PARALLEL_CLOUD_DELETES = 4
+    }
 }
 
 private fun deletionOperationSnapshots(
-    progress: DeletionProgress?,
-    result: DeletionResult?,
+    state: DeletionState,
 ): List<OperationStatusSnapshot> = buildList {
-    progress?.let {
+    state.running?.let {
         add(
             OperationStatusSnapshot(
                 kind = OperationKind.Delete,
@@ -278,7 +322,7 @@ private fun deletionOperationSnapshots(
             ),
         )
     }
-    result?.let {
+    state.unseen?.let {
         val lines = mediaDeletionMessage(it)
         if (lines.isNotEmpty()) {
             add(
