@@ -63,7 +63,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
-import org.koin.dsl.binds
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val appModule = module {
@@ -82,7 +82,7 @@ val appModule = module {
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
     single {
         AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
-    } binds arrayOf(OperationStatusSource::class)
+    } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single { MemoriesFileDeleter(get(), get()) }
     single {
@@ -95,17 +95,14 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
         }
-    } binds arrayOf(OperationStatusSource::class)
-    single<List<OperationStatusSource>> {
-        getAll<OperationStatusSource>()
-    }
+    } bind OperationStatusSource::class
     single {
         UploadQueue(get(), get(named("libraryScope"))) {
             listOf(
                 UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
             )
         }
-    } binds arrayOf(OperationStatusSource::class)
+    } bind OperationStatusSource::class
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }
