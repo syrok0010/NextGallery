@@ -100,9 +100,9 @@ val appModule = module {
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
         val local = get<AndroidAlbumContents>()
-        AlbumContentsSource { location, credentials ->
+        AlbumContentsSource { location, _ ->
             when (location) {
-                is AlbumLocation.Remote -> remote.load(location, credentials)
+                is AlbumLocation.Remote -> remote.load(location)
                 is AlbumLocation.Folder -> local.load(location)
             }
         }
@@ -127,8 +127,8 @@ val appModule = module {
 
     single { NextcloudTransport(get()) }
     single { NextcloudAuthClient(get()) }
-    single { MemoriesApiClient(get()) }
-    single { PhotosDavClient(get()) }
+    single { MemoriesApiClient(get(), get<SessionStore>()::requireCredentials) }
+    single { PhotosDavClient(get(), get<SessionStore>()::requireCredentials) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
     single { NextGalleryDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }
@@ -164,11 +164,7 @@ val appModule = module {
             changeObserver = get<AndroidMediaStoreChangeObserver>(),
         )
     }
-    single {
-        NextcloudLoginRepository(
-            get<com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient>(),
-        )
-    }
+    single { NextcloudLoginRepository(get<NextcloudAuthClient>()) }
     single { MemoriesMultipreviewClient(get<MemoriesApiClient>(), get()) }
     single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
     single { RemoteImageCache(get(), get()) }

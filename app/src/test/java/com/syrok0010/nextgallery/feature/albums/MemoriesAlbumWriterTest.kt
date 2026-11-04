@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
@@ -187,8 +189,11 @@ class MemoriesAlbumWriterTest {
         val origin = "http://127.0.0.1:${server.localPort}"
         /** The login name differs from the uid, as with an e-mail login; DAV paths use the uid. */
         val credentials = AccountCredentials(origin, "fixture", "password", userId = "anna")
-        val writerTransport = NextcloudTransport(Json { ignoreUnknownKeys = true })
-        val writer = MemoriesAlbumWriter(writerTransport)
+        private val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
+        val writer = MemoriesAlbumWriter(
+            PhotosDavClient(transport) { credentials },
+            MemoriesApiClient(transport) { credentials },
+        )
 
         init {
             executor.execute {

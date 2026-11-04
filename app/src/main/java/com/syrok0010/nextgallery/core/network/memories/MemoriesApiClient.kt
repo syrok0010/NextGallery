@@ -12,51 +12,43 @@ import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-/** Endpoint-level access to the authenticated Memories JSON and binary APIs. */
-class MemoriesApiClient(private val transport: NextcloudTransport) {
-    suspend fun describe(credentials: AccountCredentials): MemoriesDescribeDto =
-        api(credentials).describe()
+/**
+ * Endpoint-level access to the authenticated Memories JSON and binary APIs. Each request reads
+ * [credentials] once, so its URL and Authorization header belong to the same session.
+ */
+class MemoriesApiClient(
+    private val transport: NextcloudTransport,
+    private val credentials: () -> AccountCredentials,
+) {
+    suspend fun describe(): MemoriesDescribeDto = api().describe()
 
-    suspend fun config(credentials: AccountCredentials): MemoriesConfigDto =
-        api(credentials).config()
+    suspend fun config(): MemoriesConfigDto = api().config()
 
-    suspend fun albumConfig(credentials: AccountCredentials): JsonObject =
-        api(credentials).albumConfig()
+    suspend fun albumConfig(): JsonObject = api().albumConfig()
 
-    suspend fun days(credentials: AccountCredentials): List<MemoriesDayDto> =
-        api(credentials).days()
+    suspend fun days(): List<MemoriesDayDto> = api().days()
 
-    suspend fun dayDetails(credentials: AccountCredentials, ids: String): List<MemoriesPhotoDto> =
-        api(credentials).dayDetails(ids)
+    suspend fun dayDetails(ids: String): List<MemoriesPhotoDto> = api().dayDetails(ids)
 
-    suspend fun albumDays(credentials: AccountCredentials, album: String): List<MemoriesDayDto> =
-        api(credentials).albumDays(album)
+    suspend fun albumDays(album: String): List<MemoriesDayDto> = api().albumDays(album)
 
-    suspend fun albumPhotos(
-        credentials: AccountCredentials,
-        ids: String,
-        album: String,
-    ): List<MemoriesPhotoDto> = api(credentials).albumPhotos(ids, album)
+    suspend fun albumPhotos(ids: String, album: String): List<MemoriesPhotoDto> =
+        api().albumPhotos(ids, album)
 
-    suspend fun albums(credentials: AccountCredentials): List<JsonObject> =
-        api(credentials).albums()
+    suspend fun albums(): List<JsonObject> = api().albums()
 
-    suspend fun imageInfo(credentials: AccountCredentials, fileId: Long): MemoriesImageInfoDto =
-        api(credentials).imageInfo(fileId)
+    suspend fun imageInfo(fileId: Long): MemoriesImageInfoDto = api().imageInfo(fileId)
 
-    suspend fun multipreview(
-        credentials: AccountCredentials,
-        request: MemoriesMultipreviewRequest,
-    ): ByteArray {
-        val body = transportJson
-            .encodeToString(
-                request,
-            ).toRequestBody("application/json".toMediaType())
+    suspend fun multipreview(request: MemoriesMultipreviewRequest): ByteArray {
+        val account = credentials()
+        val body = transport.json
+            .encodeToString(request)
+            .toRequestBody("application/json".toMediaType())
         val httpRequest = transport
             .authenticatedRequestBuilder(
-                credentials,
+                account,
                 "${transport.normalizeBaseUrl(
-                    credentials.serverUrl,
+                    account.serverUrl,
                 )}apps/memories/api/image/multipreview",
                 accept = "application/octet-stream",
             ).post(body)
@@ -71,14 +63,14 @@ class MemoriesApiClient(private val transport: NextcloudTransport) {
         }
     }
 
-    private val transportJson get() = transport.json
-
-    private fun api(credentials: AccountCredentials): MemoriesApi =
-        transport
+    private fun api(): MemoriesApi {
+        val account = credentials()
+        return transport
             .retrofit(
-                transport.normalizeBaseUrl(credentials.serverUrl),
-                transport.authenticatedClient(credentials),
+                transport.normalizeBaseUrl(account.serverUrl),
+                transport.authenticatedClient(account),
             ).create(MemoriesApi::class.java)
+    }
 }
 
 private interface MemoriesApi {

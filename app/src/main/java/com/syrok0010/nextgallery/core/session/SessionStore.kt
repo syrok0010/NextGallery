@@ -18,4 +18,8 @@ class SessionStore(credentialsStore: CredentialsStore) {
     fun signOut() {
         _session.value = SessionUiState.SignedOut
     }
+
+    fun requireCredentials(): AccountCredentials =
+        (_session.value as? SessionUiState.SignedIn)?.credentials
+            ?: error("Authenticated session required")
 }

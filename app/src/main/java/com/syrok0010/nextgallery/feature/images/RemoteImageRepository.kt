@@ -45,7 +45,6 @@ internal class RemoteImageRepository(
         }
 
         val remotePreviews = multipreviewClient.loadThumbnails(
-            credentials = credentials,
             fileIds = missingFileIds,
             width = firstKey.width,
             height = firstKey.height,

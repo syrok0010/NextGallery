@@ -52,14 +52,9 @@ internal class MemoriesAlbumWriter(
     private val dav: PhotosDavClient,
     private val memories: MemoriesApiClient,
 ) {
-    internal constructor(transport: NextcloudTransport) : this(
-        PhotosDavClient(transport),
-        MemoriesApiClient(transport),
-    )
-
     suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
         val user = credentials.userId
-        dav.mkcol(credentials, AlbumPath(user, name)).let { response ->
+        dav.mkcol(AlbumPath(user, name)).let { response ->
             // DAV answers MKCOL on an existing collection with 405 Method Not Allowed.
             if (response.code == 405) throw AlbumAlreadyExistsException(name)
             if (!response.isSuccessful) {
@@ -84,9 +79,8 @@ internal class MemoriesAlbumWriter(
                     async {
                         permits.withPermit {
                             try {
-                                val info = memories.imageInfo(credentials, fileId)
+                                val info = memories.imageInfo(fileId)
                                 copy(
-                                    credentials,
                                     source = fileUrl(
                                         credentials.serverUrl,
                                         credentials.userId,
@@ -107,7 +101,7 @@ internal class MemoriesAlbumWriter(
                 }.awaitAll()
         }
         val present = outcomes.count { it == AlbumCopyOutcome.AlreadyPresent }
-        val confirmed = present == 0 || albumExists(credentials, album)
+        val confirmed = present == 0 || albumExists(album)
         return AlbumAddResult(
             added = outcomes.count { it == AlbumCopyOutcome.Added },
             alreadyPresent = if (confirmed) present else 0,
@@ -125,14 +119,13 @@ internal class MemoriesAlbumWriter(
         album: AlbumAddress,
     ): AlbumCopyOutcome {
         val outcome = copy(
-            credentials,
             source,
             albumUrl(credentials.serverUrl, album)
                 .newBuilder()
                 .addPathSegment(source.pathSegments.last())
                 .build(),
         )
-        return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(credentials, album)) {
+        return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(album)) {
             AlbumCopyOutcome.Failed
         } else {
             outcome
@@ -143,20 +136,17 @@ internal class MemoriesAlbumWriter(
      * Confirms a 409 against the album. A failed check must not discard the whole batch, so an
      * unconfirmed conflict counts as a failure for that file only.
      */
-    private suspend fun albumExists(credentials: AccountCredentials, album: AlbumAddress): Boolean =
+    private suspend fun albumExists(album: AlbumAddress): Boolean =
         try {
-            dav.propfind(credentials, AlbumPath(album.owner, album.name)).isSuccessful
+            dav.propfind(AlbumPath(album.owner, album.name)).isSuccessful
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             false
         }
 
-    private suspend fun copy(
-        credentials: AccountCredentials,
-        source: HttpUrl,
-        destination: HttpUrl,
-    ): AlbumCopyOutcome = albumCopyOutcome(dav.copy(credentials, source, destination).code)
+    private suspend fun copy(source: HttpUrl, destination: HttpUrl): AlbumCopyOutcome =
+        albumCopyOutcome(dav.copy(source, destination).code)
 
     private companion object {
         const val PARALLEL_COPIES = 4

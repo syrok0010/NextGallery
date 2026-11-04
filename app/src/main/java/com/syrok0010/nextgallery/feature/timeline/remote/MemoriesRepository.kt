@@ -5,7 +5,6 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
@@ -21,18 +20,12 @@ class MemoriesRepository(
     private val cacheRepository: TimelineCacheRepository,
     private val identityRegistry: MediaIdentityRegistry,
 ) : RemoteTimelineSource {
-    internal constructor(
-        transport: NextcloudTransport,
-        cacheRepository: TimelineCacheRepository,
-        identityRegistry: MediaIdentityRegistry,
-    ) : this(MemoriesApiClient(transport), cacheRepository, identityRegistry)
-
     override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? =
         bestEffort { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
 
     override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
-        val config = memories.config(credentials)
-        val dayDtos = memories.days(credentials)
+        val config = memories.config()
+        val dayDtos = memories.days()
         val days = dayDtos.map { day ->
             TimelineDay(
                 dayId = day.dayid,
@@ -70,7 +63,7 @@ class MemoriesRepository(
         }
 
         val photoDtos = memories
-            .dayDetails(credentials, dayIds.joinToString(","))
+            .dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
         val items = photoDtos.toIdentifiedMediaItems()
 

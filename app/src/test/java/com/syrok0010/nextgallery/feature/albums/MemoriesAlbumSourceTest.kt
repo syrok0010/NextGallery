@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import java.net.InetAddress
@@ -100,17 +101,15 @@ class MemoriesAlbumSourceTest {
                 }
             }
         }
+        private val credentials = AccountCredentials(
+            "http://127.0.0.1:${server.localPort}/nextcloud",
+            "fixture",
+            "password",
+            "fixture",
+        )
         suspend fun load() =
-            MemoriesAlbumSource(
-                NextcloudTransport(Json),
-            ).load(
-                AccountCredentials(
-                    "http://127.0.0.1:${server.localPort}/nextcloud",
-                    "fixture",
-                    "password",
-                    "fixture",
-                ),
-            )
+            MemoriesAlbumSource(MemoriesApiClient(NextcloudTransport(Json)) { credentials })
+                .load(credentials)
         override fun close() {
             server.close()
             executor.shutdownNow()

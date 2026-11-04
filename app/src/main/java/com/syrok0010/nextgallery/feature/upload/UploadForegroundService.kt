@@ -16,7 +16,6 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
@@ -189,12 +188,11 @@ class UploadForegroundService : Service() {
     ) {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
-        val config = memories.config(credentials)
+        val config = memories.config()
         val destination = config.timelinePath?.takeIf { it.isNotBlank() }
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
             val uploaded = put(
-                credentials = credentials,
                 url = uploadUrl(
                     credentials.serverUrl,
                     credentials.userId,
@@ -221,7 +219,6 @@ class UploadForegroundService : Service() {
      * upload only if sizes match, since the server keeps no hash to compare.
      */
     private suspend fun put(
-        credentials: AccountCredentials,
         url: HttpUrl,
         selection: UploadSelection,
         onProgress: (Int?) -> Unit,
@@ -238,7 +235,7 @@ class UploadForegroundService : Service() {
             },
             onProgress = onProgress,
         )
-        val response = dav.put(credentials, url, body, ifNoneMatch = "*")
+        val response = dav.put(url, body, ifNoneMatch = "*")
         val (existed, fileId) = response.let {
             if (!it.isSuccessful && it.code != 412) {
                 throw UploadException(
@@ -249,18 +246,14 @@ class UploadForegroundService : Service() {
             }
             (it.code == 412) to uploadedFileId(it.header("OC-FileId"))
         }
-        if (existed && !sameRemoteSize(credentials, url, length)) return null
+        if (existed && !sameRemoteSize(url, length)) return null
         return UploadedFile(selection, url, created = !existed, fileId.takeUnless { existed })
     }
 
-    private suspend fun sameRemoteSize(
-        credentials: AccountCredentials,
-        url: HttpUrl,
-        length: Long,
-    ): Boolean {
+    private suspend fun sameRemoteSize(url: HttpUrl, length: Long): Boolean {
         if (length < 0L) return false
         return runCatching {
-            dav.head(credentials, url).let { response ->
+            dav.head(url).let { response ->
                 response.isSuccessful && response.header("Content-Length")?.toLongOrNull() == length
             }
         }.getOrDefault(false)
