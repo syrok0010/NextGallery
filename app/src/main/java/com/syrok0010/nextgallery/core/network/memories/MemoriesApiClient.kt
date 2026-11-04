@@ -5,7 +5,6 @@ import com.syrok0010.nextgallery.core.network.dav.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.http.GET
@@ -24,8 +23,6 @@ class MemoriesApiClient(
 
     suspend fun config(): MemoriesConfigDto = api().config()
 
-    suspend fun albumConfig(): JsonObject = api().albumConfig()
-
     suspend fun days(): List<MemoriesDayDto> = api().days()
 
     suspend fun dayDetails(ids: String): List<MemoriesPhotoDto> = api().dayDetails(ids)
@@ -35,7 +32,7 @@ class MemoriesApiClient(
     suspend fun albumPhotos(ids: String, album: String): List<MemoriesPhotoDto> =
         api().albumPhotos(ids, album)
 
-    suspend fun albums(): List<JsonObject> = api().albums()
+    suspend fun albums(): List<MemoriesAlbumDto> = api().albums()
 
     suspend fun imageInfo(fileId: Long): MemoriesImageInfoDto = api().imageInfo(fileId)
 
@@ -80,9 +77,6 @@ private interface MemoriesApi {
     @GET("apps/memories/api/config")
     suspend fun config(): MemoriesConfigDto
 
-    @GET("apps/memories/api/config")
-    suspend fun albumConfig(): JsonObject
-
     @GET("apps/memories/api/days")
     suspend fun days(): List<MemoriesDayDto>
 
@@ -99,7 +93,7 @@ private interface MemoriesApi {
     ): List<MemoriesPhotoDto>
 
     @GET("apps/memories/api/clusters/albums")
-    suspend fun albums(): List<JsonObject>
+    suspend fun albums(): List<MemoriesAlbumDto>
 
     @GET("apps/memories/api/image/info/{id}")
     suspend fun imageInfo(@Path("id") fileId: Long): MemoriesImageInfoDto

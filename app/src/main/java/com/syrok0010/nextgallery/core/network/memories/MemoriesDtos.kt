@@ -44,6 +44,25 @@ data class MemoriesConfigDto(
     @SerialName("album_list_sort") val albumListSort: Int? = null,
 )
 
+/**
+ * Row of `clusters/albums`. Memories casts `album_id` and `last_added_photo` to int, but `count`
+ * and `cover` are raw SQL values and may arrive as numeric strings; kotlinx decodes those into
+ * numbers. `cover` and `user_display` may be null.
+ */
+@Serializable
+data class MemoriesAlbumDto(
+    @SerialName("album_id") val albumId: Long,
+    val name: String,
+    val user: String? = null,
+    @SerialName("user_display") val userDisplay: String? = null,
+    @SerialName("cluster_id") val clusterId: String? = null,
+    val count: Long? = null,
+    val cover: Long? = null,
+    @SerialName("cover_etag") val coverEtag: String? = null,
+    @SerialName("last_added_photo") val lastAddedPhoto: Long? = null,
+    @SerialName("last_added_photo_etag") val lastAddedPhotoEtag: String? = null,
+)
+
 @Serializable
 data class MemoriesDayDto(
     val dayid: Int,

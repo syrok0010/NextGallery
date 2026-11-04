@@ -19,7 +19,7 @@ class MemoriesAlbumSourceTest {
     @Test fun `authenticated list supports numeric strings and respects server hidden setting`() =
         runBlocking {
             Fixture(
-                """{"albums_enabled":true,"show_hidden_albums":false}""",
+                """{"version":"7.6.1","albums_enabled":true,"show_hidden_albums":false,"timeline_path":"/Photos"}""",
                 """[{"album_id":1,"name":"Отпуск","count":"7","user_display":"Анна"},{"album_id":2,"name":".hidden","count":0}]""",
             ).use { fixture ->
                 val result = fixture.load()
@@ -47,7 +47,7 @@ class MemoriesAlbumSourceTest {
 
     @Test fun `disabled feature does not request album list`() =
         runBlocking {
-            Fixture("""{"albums_enabled":0}""", "[]").use {
+            Fixture("""{"version":"7.6.1","albums_enabled":false}""", "[]").use {
                 assertFalse(it.load().supported)
                 assertEquals(1, it.requests.size)
             }
@@ -55,7 +55,7 @@ class MemoriesAlbumSourceTest {
 
     @Test fun `http failure is not a successful empty catalog`() =
         runBlocking {
-            Fixture("""{"albums_enabled":1}""", "[]", 503).use {
+            Fixture("""{"version":"7.6.1","albums_enabled":true}""", "[]", 503).use {
                 try {
                     it.load()
                     fail("Expected an HTTP error")
@@ -108,8 +108,15 @@ class MemoriesAlbumSourceTest {
             "fixture",
         )
         suspend fun load() =
-            MemoriesAlbumSource(MemoriesApiClient(NextcloudTransport(Json)) { credentials })
-                .load(credentials)
+            MemoriesAlbumSource(
+                MemoriesApiClient(
+                    NextcloudTransport(
+                        Json {
+                            ignoreUnknownKeys = true
+                        },
+                    ),
+                ) { credentials },
+            ).load(credentials)
         override fun close() {
             server.close()
             executor.shutdownNow()
