@@ -65,20 +65,14 @@ class MemoriesMultipreviewHttpTest {
                         MemoriesApiClient(
                             NextcloudTransport(Json { ignoreUnknownKeys = true }),
                         ) { credentials }
-                    val request = MemoriesMultipreviewRequest(
-                        listOf(
-                            1L,
-                            2L,
-                        ).map { MemoriesMultipreviewFileRequest(it, 256, 256, "1", it.toInt()) },
-                    )
-
-                    val received = mutableListOf<Int>()
-                    client.multipreview(request).collect { preview ->
-                        received += preview.reqid
+                    // Blocks carry reqid 1 and 2; the client maps them back to these file ids.
+                    val received = mutableListOf<Long>()
+                    client.multipreview(listOf(11L, 22L), 256, 256).collect { preview ->
+                        received += preview.fileId
                         firstReceived.countDown()
                     }
 
-                    assertEquals(listOf(1, 2), received)
+                    assertEquals(listOf(11L, 22L), received)
                     assertTrue(seenBeforeSecond.get())
                 } finally {
                     firstReceived.countDown()
@@ -109,10 +103,7 @@ class MemoriesMultipreviewHttpTest {
                         )
                     val client = MemoriesApiClient(NextcloudTransport(Json)) { credentials }
                     val error = runCatching {
-                        client
-                            .multipreview(
-                                MemoriesMultipreviewRequest(emptyList()),
-                            ).toList()
+                        client.multipreview(listOf(1L), 256, 256).toList()
                     }.exceptionOrNull()
                     assertTrue(error is IllegalStateException && "503" in error.message.orEmpty())
                 } finally {

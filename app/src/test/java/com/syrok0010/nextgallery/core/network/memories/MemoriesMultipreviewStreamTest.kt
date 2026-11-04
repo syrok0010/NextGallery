@@ -21,31 +21,31 @@ class MemoriesMultipreviewStreamTest {
             .write(previewBlock(reqid = 7, type = "image/jpeg", image = firstImage))
             .write(previewBlock(reqid = 8, type = "image/png", image = secondImage))
 
-        val first = readMemoriesPreview(source, json)!!
+        val first = readMultipreviewBlock(source, json)!!
         assertEquals(7, first.reqid)
         assertEquals("image/jpeg", first.type)
         assertArrayEquals(firstImage, first.bytes)
-        val second = readMemoriesPreview(source, json)!!
+        val second = readMultipreviewBlock(source, json)!!
         assertEquals(8, second.reqid)
         assertEquals("image/png", second.type)
         assertArrayEquals(secondImage, second.bytes)
-        assertNull(readMemoriesPreview(source, json))
+        assertNull(readMultipreviewBlock(source, json))
     }
 
     @Test
     fun `empty response has no previews`() {
-        assertNull(readMemoriesPreview(Buffer(), json))
+        assertNull(readMultipreviewBlock(Buffer(), json))
     }
 
     @Test(expected = EOFException::class)
     fun `reject truncated header`() {
-        readMemoriesPreview(Buffer().write(byteArrayOf(10, 1, 2)), json)
+        readMultipreviewBlock(Buffer().write(byteArrayOf(10, 1, 2)), json)
     }
 
     @Test(expected = EOFException::class)
     fun `reject truncated image`() {
         val block = previewBlock(reqid = 7, type = "image/jpeg", image = byteArrayOf(1, 2, 3))
-        readMemoriesPreview(Buffer().write(block.copyOf(block.size - 1)), json)
+        readMultipreviewBlock(Buffer().write(block.copyOf(block.size - 1)), json)
     }
 
     private fun previewBlock(reqid: Int, type: String, image: ByteArray): ByteArray {

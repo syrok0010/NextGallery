@@ -106,15 +106,3 @@ data class MemoriesVideoConfigDto(
     val version: String,
     @SerialName("vod_disable") val vodDisable: Boolean = false,
 )
-
-@Serializable
-data class MemoriesMultipreviewRequest(val files: List<MemoriesMultipreviewFileRequest>)
-
-@Serializable
-data class MemoriesMultipreviewFileRequest(
-    val fileid: Long,
-    val x: Int,
-    val y: Int,
-    val a: String,
-    val reqid: Int,
-)

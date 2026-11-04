@@ -5,6 +5,7 @@ import com.syrok0010.nextgallery.core.network.dav.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
@@ -39,11 +40,19 @@ class MemoriesApiClient(
     suspend fun imageInfo(fileId: Long): MemoriesImageInfoDto = api().imageInfo(fileId)
 
     /**
-     * Streams previews in server order as they arrive. Unavailable previews are absent, not
-     * errors. A block read blocks the IO thread, so cancellation takes effect between blocks.
+     * Streams previews of [fileIds] at [width]×[height], aspect ratio kept, in server order as
+     * they arrive. Files without a preview are absent, not errors. A block read blocks the IO
+     * thread, so cancellation takes effect between blocks.
      */
-    fun multipreview(request: MemoriesMultipreviewRequest): Flow<MemoriesPreviewDto> =
-        flow {
+    fun multipreview(fileIds: List<Long>, width: Int, height: Int): Flow<MemoriesPreviewDto> {
+        val files = fileIds.distinct()
+        if (files.isEmpty()) return emptyFlow()
+        val request = MultipreviewRequest(
+            files.mapIndexed { index, fileId ->
+                MultipreviewFileRequest(fileId, width, height, a = "1", reqid = index + 1)
+            },
+        )
+        return flow {
             val account = credentials()
             val body = transport.json
                 .encodeToString(request)
@@ -63,10 +72,13 @@ class MemoriesApiClient(
                 }
                 val source = checkNotNull(response.body).source()
                 while (true) {
-                    emit(readMemoriesPreview(source, transport.json) ?: break)
+                    val block = readMultipreviewBlock(source, transport.json) ?: break
+                    val fileId = files.getOrNull(block.reqid - 1) ?: continue
+                    emit(MemoriesPreviewDto(fileId, block.type, block.bytes))
                 }
             }
         }.flowOn(Dispatchers.IO)
+    }
 
     private fun api(): MemoriesApi {
         val account = credentials()

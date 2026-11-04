@@ -1,12 +1,13 @@
 package com.syrok0010.nextgallery.feature.images
 
 import com.syrok0010.nextgallery.core.network.bestEffort
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 internal class RemoteImageRepository(
-    private val multipreviewClient: MemoriesMultipreviewClient,
+    private val memories: MemoriesApiClient,
     private val cacheRepository: RemoteImageCache,
 ) {
     /**
@@ -48,12 +49,9 @@ internal class RemoteImageRepository(
             val missingFileIds = distinctFileIds.filterNot { it in cachedFileIds }
             if (missingFileIds.isEmpty()) return@flow
 
-            multipreviewClient
-                .loadThumbnails(
-                    fileIds = missingFileIds,
-                    width = firstKey.width,
-                    height = firstKey.height,
-                ).collect { preview ->
+            memories
+                .multipreview(missingFileIds, firstKey.width, firstKey.height)
+                .collect { preview ->
                     val stored = bestEffort {
                         cacheRepository.saveThumbnails(
                             previews = listOf(preview),
