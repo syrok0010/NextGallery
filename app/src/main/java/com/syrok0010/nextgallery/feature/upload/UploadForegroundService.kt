@@ -13,8 +13,10 @@ import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
+import com.syrok0010.nextgallery.core.network.dav.CreateFileResult
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
@@ -32,8 +34,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
@@ -43,7 +43,7 @@ import org.koin.android.ext.android.inject
  */
 class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
-    private val dav: PhotosDavClient by inject()
+    private val dav: FilesDavClient by inject()
     private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -193,12 +193,8 @@ class UploadForegroundService : Service() {
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
             val uploaded = put(
-                url = uploadUrl(
-                    credentials.serverUrl,
-                    credentials.userId,
-                    destination,
-                    selection.displayName,
-                ),
+                // DAV paths use the Nextcloud uid, not the login name.
+                path = DavFilePath.of(credentials.userId, destination, selection.displayName),
                 selection = selection,
                 onProgress = { percent -> onProgress(index, percent) },
             )
@@ -219,7 +215,7 @@ class UploadForegroundService : Service() {
      * upload only if sizes match, since the server keeps no hash to compare.
      */
     private suspend fun put(
-        url: HttpUrl,
+        path: DavFilePath,
         selection: UploadSelection,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
@@ -235,28 +231,24 @@ class UploadForegroundService : Service() {
             },
             onProgress = onProgress,
         )
-        val response = dav.put(url, body, ifNoneMatch = "*")
-        val (existed, fileId) = response.let {
-            if (!it.isSuccessful && it.code != 412) {
-                throw UploadException(
-                    R.string.upload_error_http,
-                    it.code,
-                    selection.displayName,
-                )
-            }
-            (it.code == 412) to uploadedFileId(it.header("OC-FileId"))
+        val result = try {
+            dav.createFile(path, body)
+        } catch (error: DavHttpException) {
+            throw UploadException(R.string.upload_error_http, error.code, selection.displayName)
         }
-        if (existed && !sameRemoteSize(url, length)) return null
-        return UploadedFile(selection, url, created = !existed, fileId.takeUnless { existed })
+        return when (result) {
+            is CreateFileResult.Created ->
+                UploadedFile(selection, path, created = true, fileId = result.fileId)
+
+            CreateFileResult.AlreadyExists ->
+                UploadedFile(selection, path, created = false)
+                    .takeIf { sameRemoteSize(path, length) }
+        }
     }
 
-    private suspend fun sameRemoteSize(url: HttpUrl, length: Long): Boolean {
+    private suspend fun sameRemoteSize(path: DavFilePath, length: Long): Boolean {
         if (length < 0L) return false
-        return runCatching {
-            dav.head(url).let { response ->
-                response.isSuccessful && response.header("Content-Length")?.toLongOrNull() == length
-            }
-        }.getOrDefault(false)
+        return runCatching { dav.size(path) == length }.getOrDefault(false)
     }
 
     private fun notification(
@@ -336,17 +328,3 @@ private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
     } catch (_: Exception) {
         fallback
     }
-
-/** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
-internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =
-    NextcloudTransport
-        .normalizeServerOrigin(serverUrl)
-        .toHttpUrl()
-        .newBuilder()
-        .addPathSegment("remote.php")
-        .addPathSegment("dav")
-        .addPathSegment("files")
-        .addPathSegment(user)
-        .apply { directory.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }
-        .addPathSegment(name)
-        .build()

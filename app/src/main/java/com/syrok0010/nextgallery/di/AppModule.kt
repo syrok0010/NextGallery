@@ -10,7 +10,8 @@ import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
-import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
+import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
@@ -73,7 +74,7 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
-    single { MemoriesAlbumWriter(get<PhotosDavClient>(), get<MemoriesApiClient>()) }
+    single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
     single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
     single {
         UploadQueue(get(), get(named("libraryScope"))) {
@@ -128,7 +129,8 @@ val appModule = module {
     single { NextcloudTransport(get()) }
     single { NextcloudAuthClient(get()) }
     single { MemoriesApiClient(get(), get<SessionStore>()::requireCredentials) }
-    single { PhotosDavClient(get(), get<SessionStore>()::requireCredentials) }
+    single { PhotosAlbumsDavClient(get(), get<SessionStore>()::requireCredentials) }
+    single { FilesDavClient(get(), get<SessionStore>()::requireCredentials) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
     single { NextGalleryDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }

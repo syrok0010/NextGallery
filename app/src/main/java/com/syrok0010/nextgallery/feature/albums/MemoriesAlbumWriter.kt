@@ -1,9 +1,11 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.AddToAlbumResult
 import com.syrok0010.nextgallery.core.network.dav.AlbumPath
-import com.syrok0010.nextgallery.core.network.dav.PhotosDavClient
-import com.syrok0010.nextgallery.core.network.dav.davFileUrl
+import com.syrok0010.nextgallery.core.network.dav.CreateAlbumResult
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
@@ -13,8 +15,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** Owner and collection name of a Photos album addressed by Memories `cluster_id`. */
 internal data class AlbumAddress(val owner: String, val name: String) {
@@ -31,37 +31,17 @@ internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val 
 
 internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
-/**
- * Photos albums deduplicate by file id and answer a repeated COPY with 409 Conflict. DAV also
- * answers 409 when the album itself is missing, so callers confirm the album on conflicts.
- */
-internal fun albumCopyOutcome(code: Int): AlbumCopyOutcome =
-    when (code) {
-        in 200..299 -> AlbumCopyOutcome.Added
-        409 -> AlbumCopyOutcome.AlreadyPresent
-        else -> AlbumCopyOutcome.Failed
-    }
-
 internal class AlbumAlreadyExistsException(name: String) : IOException("Album $name already exists")
 
-/**
- * Writes Photos albums through Nextcloud DAV, the contract Memories Web uses: Memories API
- * itself has no album write endpoint.
- */
+/** Writes Photos albums through Nextcloud DAV; album contents are looked up via Memories. */
 internal class MemoriesAlbumWriter(
-    private val dav: PhotosDavClient,
+    private val dav: PhotosAlbumsDavClient,
     private val memories: MemoriesApiClient,
 ) {
     suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
         val user = credentials.userId
-        dav.mkcol(AlbumPath(user, name)).let { response ->
-            // DAV answers MKCOL on an existing collection with 405 Method Not Allowed.
-            if (response.code == 405) throw AlbumAlreadyExistsException(name)
-            if (!response.isSuccessful) {
-                throw IOException(
-                    "HTTP ${response.code} creating album",
-                )
-            }
+        if (dav.createAlbum(AlbumPath(user, name)) == CreateAlbumResult.AlreadyExists) {
+            throw AlbumAlreadyExistsException(name)
         }
         return AlbumLocation.Remote("$user/$name")
     }
@@ -80,17 +60,7 @@ internal class MemoriesAlbumWriter(
                         permits.withPermit {
                             try {
                                 val info = memories.imageInfo(fileId)
-                                copy(
-                                    source = fileUrl(
-                                        credentials.serverUrl,
-                                        credentials.userId,
-                                        info.filename,
-                                    ),
-                                    destination = albumUrl(credentials.serverUrl, album)
-                                        .newBuilder()
-                                        .addPathSegment(info.basename)
-                                        .build(),
-                                )
+                                copy(DavFilePath.of(credentials.userId, info.filename), album)
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (_: Exception) {
@@ -112,19 +82,9 @@ internal class MemoriesAlbumWriter(
         )
     }
 
-    /** Adds a file by its DAV URL; works before Memories has indexed a fresh upload. */
-    suspend fun addFile(
-        credentials: AccountCredentials,
-        source: HttpUrl,
-        album: AlbumAddress,
-    ): AlbumCopyOutcome {
-        val outcome = copy(
-            source,
-            albumUrl(credentials.serverUrl, album)
-                .newBuilder()
-                .addPathSegment(source.pathSegments.last())
-                .build(),
-        )
+    /** Adds a file by its DAV path; works before Memories has indexed a fresh upload. */
+    suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome {
+        val outcome = copy(file, album)
         return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(album)) {
             AlbumCopyOutcome.Failed
         } else {
@@ -138,37 +98,28 @@ internal class MemoriesAlbumWriter(
      */
     private suspend fun albumExists(album: AlbumAddress): Boolean =
         try {
-            dav.propfind(AlbumPath(album.owner, album.name)).isSuccessful
+            dav.albumExists(AlbumPath(album.owner, album.name))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             false
         }
 
-    private suspend fun copy(source: HttpUrl, destination: HttpUrl): AlbumCopyOutcome =
-        albumCopyOutcome(dav.copy(source, destination).code)
+    /**
+     * Photos albums deduplicate by file id and answer a repeated COPY with a conflict. DAV also
+     * answers so when the album itself is missing, so callers confirm the album on conflicts.
+     */
+    private suspend fun copy(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome =
+        try {
+            when (dav.addFile(AlbumPath(album.owner, album.name), file)) {
+                AddToAlbumResult.Added -> AlbumCopyOutcome.Added
+                AddToAlbumResult.Conflict -> AlbumCopyOutcome.AlreadyPresent
+            }
+        } catch (_: DavHttpException) {
+            AlbumCopyOutcome.Failed
+        }
 
     private companion object {
         const val PARALLEL_COPIES = 4
     }
 }
-
-internal fun albumUrl(serverUrl: String, album: AlbumAddress): HttpUrl =
-    davRoot(serverUrl)
-        .addPathSegment("photos")
-        .addPathSegment(album.owner)
-        .addPathSegment("albums")
-        .addPathSegment(album.name)
-        .build()
-
-/** [path] is relative to the user's files root as reported by Memories image info. */
-internal fun fileUrl(serverUrl: String, user: String, path: String): HttpUrl =
-    davFileUrl(serverUrl, user, path)
-
-private fun davRoot(serverUrl: String): HttpUrl.Builder =
-    NextcloudTransport
-        .normalizeServerOrigin(serverUrl)
-        .toHttpUrl()
-        .newBuilder()
-        .addPathSegment("remote.php")
-        .addPathSegment("dav")
