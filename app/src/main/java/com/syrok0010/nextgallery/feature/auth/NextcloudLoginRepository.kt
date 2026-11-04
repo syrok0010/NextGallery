@@ -1,16 +1,14 @@
 package com.syrok0010.nextgallery.feature.auth
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.auth.LoginFlowPollDto
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import okhttp3.Credentials
 import retrofit2.HttpException
 
 class NextcloudLoginRepository(private val auth: NextcloudAuthClient) : LoginGateway {
-    internal constructor(transport: NextcloudTransport) : this(NextcloudAuthClient(transport))
-
     override suspend fun startLogin(serverUrl: String): LoginSession {
         val normalizedServerUrl = NextcloudTransport.normalizeServerOrigin(serverUrl) + "/"
         val response = auth.startLogin(normalizedServerUrl)
@@ -25,7 +23,9 @@ class NextcloudLoginRepository(private val auth: NextcloudAuthClient) : LoginGat
 
     override suspend fun pollLogin(session: LoginSession): LoginPollResult {
         val response = try {
-            auth.pollLogin(session.serverUrl, session.pollEndpoint, session.pollToken)
+            auth.pollLogin(
+                LoginFlowPollDto(token = session.pollToken, endpoint = session.pollEndpoint),
+            )
         } catch (error: HttpException) {
             return if (error.code() == 404) {
                 LoginPollResult.Pending
@@ -41,11 +41,7 @@ class NextcloudLoginRepository(private val auth: NextcloudAuthClient) : LoginGat
         }
         val serverUrl = NextcloudTransport.normalizeServerOrigin(response.server) + "/"
         val userId = try {
-            auth
-                .currentUser(
-                    serverUrl,
-                    Credentials.basic(response.loginName, response.appPassword),
-                ).id
+            auth.currentUser(response).id
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

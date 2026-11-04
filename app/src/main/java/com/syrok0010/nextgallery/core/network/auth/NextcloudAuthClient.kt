@@ -3,6 +3,8 @@ package com.syrok0010.nextgallery.core.network.auth
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import okhttp3.Credentials
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -15,14 +17,15 @@ import retrofit2.http.Url
 class NextcloudAuthClient(private val transport: NextcloudTransport) {
     suspend fun startLogin(serverUrl: String): LoginFlowInitDto = api(serverUrl).startLogin()
 
-    suspend fun pollLogin(
-        serverUrl: String,
-        endpoint: String,
-        token: String,
-    ): LoginFlowCredentialsDto = api(serverUrl).pollLogin(endpoint, token)
+    /** Polls the absolute endpoint from [startLogin]; it may differ from the entered server URL. */
+    suspend fun pollLogin(poll: LoginFlowPollDto): LoginFlowCredentialsDto =
+        api(checkNotNull(poll.endpoint.toHttpUrl().resolve("/")).toString())
+            .pollLogin(poll.endpoint, poll.token)
 
-    suspend fun currentUser(serverUrl: String, authorization: String): NextcloudUserDto =
-        userApi(serverUrl).currentUser(authorization).ocs.data
+    suspend fun currentUser(login: LoginFlowCredentialsDto): NextcloudUserDto =
+        userApi(login.server)
+            .currentUser(Credentials.basic(login.loginName, login.appPassword))
+            .ocs.data
 
     private fun api(serverUrl: String): NextcloudAuthApi =
         transport
