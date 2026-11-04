@@ -52,6 +52,12 @@ header, то есть Basic Auth собирал вызывающий срез.
 приложения это лишние сущности, и отменять операции при logout всё равно должны
 срезы.
 
+### DAV-клиент с методами-глаголами
+
+Первая версия выставляла `mkcol`, `propfind`, `copy`, `put`, `head` и сырой
+`DavResponse`. Из-за этого срезы собирали DAV URL сами и разбирали коды и заголовки
+протокола. К тому же PUT и HEAD обращаются не к Photos, а к файлам пользователя.
+
 ### Отдельный Gradle-модуль сразу
 
 Модуль усилил бы сборочную изоляцию, но сейчас не отделяет Android runtime и DI
@@ -65,10 +71,26 @@ header, то есть Basic Auth собирал вызывающий срез.
 - `auth.NextcloudAuthClient` — Login Flow v2 и OCS current-user;
 - `memories.MemoriesApiClient` и `MemoriesVideoClient` — Memories JSON, binary
   multipreview и video manifest/config endpoint'ы;
-- `dav.PhotosDavClient` — Photos/WebDAV `MKCOL`, `PROPFIND`, `COPY`, `PUT` и
-  `HEAD` с нейтральным `DavResponse`.
+- `dav.PhotosAlbumsDavClient` — альбомы Photos в `remote.php/dav/photos`:
+  создание, проверка существования, добавление файла;
+- `dav.FilesDavClient` — файлы пользователя в `remote.php/dav/files`: создание без
+  перезаписи и размер.
 
-`MemoriesApiClient` и `PhotosDavClient` — singleton-ы. DI передаёт им provider
+Методы называются по операциям endpoint, а не по HTTP-глаголам. Клиент сам строит
+URL из `DavFilePath`/`AlbumPath` и переводит протокольные статусы в результат
+операции: 405 на MKCOL — `AlreadyExists`, 412 на PUT с `If-None-Match: *` —
+`AlreadyExists`, `OC-FileId` — id созданного файла. Статус, для которого у операции
+нет результата, — `DavHttpException(code)`. 409 на COPY в альбом остаётся
+неоднозначным `Conflict`: Photos отвечает так и на повторный файл, и на
+отсутствующий альбом, и различать их — дело среза.
+
+Multipreview клиент разбирает сам и отдаёт `Flow<MemoriesPreviewDto>`, читая блоки
+из тела ответа по мере прихода. Memories пишет ответ потоково
+(`ImageController::multipreview`), поэтому срез сохраняет и отдаёт каждую миниатюру
+сразу, не дожидаясь остальной пачки. Чтение блока блокирует IO-поток, поэтому
+отмена срабатывает между блоками.
+
+`MemoriesApiClient`, `PhotosAlbumsDavClient` и `FilesDavClient` — singleton-ы. DI передаёт им provider
 текущих credentials (`SessionStore::requireCredentials`), а Koin внутри клиентов не
 используется. Каждый HTTP-вызов читает provider один раз: URL и `Authorization`
 одного запроса всегда относятся к одной сессии. Без активной сессии вызов падает
@@ -80,8 +102,9 @@ Auth для OCS current-user клиент строит сам из ответа 
 
 `NextcloudTransport` остаётся общим primitive для origin, auth headers, Retrofit и
 OkHttp. Клиенты не выполняют retry, не читают Room и не публикуют состояния. Они
-возвращают DTO, HTTP-коды и заголовки; feature-код по-прежнему решает, что означает
-409, 412, отсутствие preview, ошибка кэша или неуспешный follow-up.
+возвращают DTO и результаты операций; feature-код решает, что существующий файл того
+же размера считается загруженным, как подтвердить конфликт в альбоме, что означают
+отсутствие preview, ошибка кэша или неуспешный follow-up.
 
 ## Последствия
 
