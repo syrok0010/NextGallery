@@ -56,6 +56,8 @@ import com.syrok0010.nextgallery.feature.collection.MediaTileActivity
 import com.syrok0010.nextgallery.feature.collection.MediaTileOperation
 import com.syrok0010.nextgallery.feature.collection.icon
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import org.koin.compose.koinInject
 
 /** A running operation or a result the user has not seen yet. */
@@ -75,7 +77,7 @@ internal data class OperationEntry(
  */
 internal class OperationStatus(
     private val sources: List<OperationStatusSource>,
-    private val snapshots: List<State<List<OperationStatusSnapshot>>>,
+    private val snapshots: State<List<OperationStatusSnapshot>>,
 ) {
     /** Reads snapshot state: a tile recomposes only when its own activity changes. */
     fun tileActivity(item: MediaItem): MediaTileActivity? {
@@ -124,7 +126,7 @@ internal class OperationStatus(
         sources.forEach(OperationStatusSource::consumeAll)
     }
 
-    private fun currentSnapshots() = snapshots.flatMap { it.value }
+    private fun currentSnapshots() = snapshots.value
 }
 
 private val OperationKind.priority: Int
@@ -145,7 +147,16 @@ private fun OperationKind.toTileOperation(): MediaTileOperation =
 internal fun rememberOperationStatus(
     sources: List<OperationStatusSource> = koinInject(),
 ): OperationStatus {
-    val snapshots = sources.map { it.operations.collectAsStateWithLifecycle() }
+    val snapshotFlow = remember(sources) {
+        if (sources.isEmpty()) {
+            flowOf(emptyList())
+        } else {
+            combine(sources.map(OperationStatusSource::operations)) { snapshots ->
+                snapshots.flatMap { it }
+            }
+        }
+    }
+    val snapshots = snapshotFlow.collectAsStateWithLifecycle(emptyList())
     return remember(sources) { OperationStatus(sources, snapshots) }
 }
 
