@@ -1,17 +1,11 @@
 package com.syrok0010.nextgallery.feature.viewer.playback
 
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.memories.MemoriesVideoClient
 import java.io.IOException
-import okhttp3.OkHttpClient
 import retrofit2.HttpException
 
-internal class MemoriesVideoDiscovery(
-    private val transport: NextcloudTransport,
-    private val client: OkHttpClient,
-) {
-    private val memories = MemoriesVideoClient(transport, client)
-
+/** [memories] must not follow redirects: Memories answers 303 when no transcoding is needed. */
+internal class MemoriesVideoDiscovery(private val memories: MemoriesVideoClient) {
     suspend fun qualities(
         original: RemoteVideoOriginal,
         clientId: String,
