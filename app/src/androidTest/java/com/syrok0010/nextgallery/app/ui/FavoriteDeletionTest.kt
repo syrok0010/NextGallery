@@ -17,7 +17,7 @@ import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesPhotoDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
