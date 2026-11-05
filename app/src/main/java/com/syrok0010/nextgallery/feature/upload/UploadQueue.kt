@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
 import com.syrok0010.nextgallery.core.operation.OperationMediaReference
@@ -96,7 +96,11 @@ internal class UploadQueue(
 
     /** Queues current phone copies for [mediaIds], returning the number actually queued. */
     fun submit(mediaIds: Collection<MediaId>, followUps: List<UploadFollowUp> = emptyList()): Int {
-        val files = mediaIds.distinct().mapNotNull { id -> library.state.value[id]?.let(::uploadSelection) }
+        val files = mediaIds.distinct().mapNotNull { id ->
+            library.state.value[id]?.let(
+                ::uploadSelection,
+            )
+        }
         if (files.isEmpty()) return 0
         val complete = UploadBatch(files, commonFollowUps() + followUps)
         mutableState.update { state ->
