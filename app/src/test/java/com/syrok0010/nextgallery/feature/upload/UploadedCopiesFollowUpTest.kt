@@ -6,11 +6,8 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
-<<<<<<< HEAD
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.url
-=======
->>>>>>> 2ac922c6 (feat(upload): persist manual queue and recover on app reopen)
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -152,48 +149,6 @@ class UploadedCopiesFollowUpTest {
             assertEquals(0, refreshes)
         }
 
-<<<<<<< HEAD
-    @Test
-    fun `follow-up links a created file and refreshes the library after the batch`() =
-        runBlocking {
-            val localId = resolveLocal()
-            followUp.uploaded(CREDENTIALS, uploadedFile(fileId = FILE_ID))
-            assertEquals(0, refreshes)
-            assertEquals(emptyList<UiText>(), followUp.finished(emptyList()))
-
-            assertEquals(localId, resolveRemote())
-            assertEquals(1, refreshes)
-        }
-
-    @Test
-    fun `follow-up leaves a file that already existed unlinked`() =
-        runBlocking {
-            val localId = resolveLocal()
-            followUp.uploaded(CREDENTIALS, uploadedFile(fileId = null))
-            followUp.finished(emptyList())
-
-            assertNotEquals(localId, resolveRemote())
-            assertEquals("the file is on the server either way", 1, refreshes)
-        }
-
-    @Test
-    fun `follow-up without files on the server leaves the library alone`() =
-        runBlocking {
-            followUp.finished(listOf(SELECTION))
-
-            assertEquals(0, refreshes)
-        }
-
-    private fun uploadedFile(fileId: Long?) =
-        UploadedFile(
-            selection = SELECTION,
-            url = DavFilePath.of("test", "/Photos/a.jpg").url(CREDENTIALS.serverUrl),
-            created = fileId != null,
-            fileId = fileId,
-        )
-
-=======
->>>>>>> 2ac922c6 (feat(upload): persist manual queue and recover on app reopen)
     private suspend fun resolveLocal(
         contentUri: String = CONTENT_URI,
         auid: String = LOCAL_AUID,
