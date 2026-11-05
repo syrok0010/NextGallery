@@ -13,6 +13,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaBatch
@@ -317,8 +318,9 @@ class VanishedSourceAliasesTest {
         val id = saveLinkedRemote()
         CloudResponses().use { server ->
             val onlineCredentials = credentials.copy(serverUrl = server.origin)
+            val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
             val repository = MemoriesRepository(
-                NextcloudTransport(Json { ignoreUnknownKeys = true }), cloudCache, registry,
+                MemoriesApiClient(transport) { onlineCredentials }, cloudCache, registry,
             )
 
             val partial = repository.loadInitialTimeline(onlineCredentials)
