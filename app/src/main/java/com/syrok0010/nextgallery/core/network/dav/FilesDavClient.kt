@@ -6,8 +6,8 @@ import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.RequestBody
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
@@ -78,7 +78,9 @@ class FilesDavClient(
                             isExpandEntityReferences = false
                         }.newDocumentBuilder()
                     builder.setEntityResolver { _, _ -> InputSource(StringReader("")) }
-                    val document = response.body?.byteStream()?.use(builder::parse) ?: return@use null
+                    val document = response.body?.byteStream()?.use(
+                        builder::parse,
+                    ) ?: return@use null
                     if (document.doctype != null) return@use null
                     val properties = document.getElementsByTagNameNS(DAV_NAMESPACE, "propstat")
                     (0 until properties.length).firstNotNullOfOrNull { index ->
@@ -102,7 +104,8 @@ class FilesDavClient(
                         if (
                             status?.trim()?.split(Regex("\\s+"))?.getOrNull(1) == "200" &&
                             remoteSize == expectedSize &&
-                            fileId != null && fileId > 0L
+                            fileId != null &&
+                            fileId > 0L
                         ) {
                             fileId
                         } else {
