@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.feature.favorites
 
 import com.syrok0010.nextgallery.core.media.*
+import com.syrok0010.nextgallery.core.network.memories.MemoriesDayDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.*
 import com.syrok0010.nextgallery.feature.timeline.remote.*

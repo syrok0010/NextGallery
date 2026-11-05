@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
@@ -17,7 +18,6 @@ import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
