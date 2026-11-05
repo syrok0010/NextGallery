@@ -2,11 +2,11 @@ package com.syrok0010.nextgallery.feature.favorites
 
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesDayDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
-import com.syrok0010.nextgallery.core.network.memories.MemoriesDayDto
-import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import java.io.IOException
 import retrofit2.http.GET

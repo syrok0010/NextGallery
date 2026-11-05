@@ -35,7 +35,6 @@ import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
-import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
@@ -52,8 +51,8 @@ import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
@@ -262,11 +261,24 @@ val appModule = module {
     single { MemoriesFavoritesSource(get(), get(), get(), get()) }
     single {
         CloudFavorites(
-            get(), get(),
+            get(),
+            get(),
             { credentials -> get<MemoriesFavoritesSource>().load(credentials) },
-            get(), get(named("libraryScope")),
-            write = { credentials, id, value -> get<MemoriesFavoriteWriter>().set(credentials, id, value) },
-            persist = { item -> get<TimelineCacheRepository>().saveDayDetails(listOf(item), emptySet()) },
+            get(),
+            get(named("libraryScope")),
+            write = { credentials, id, value ->
+                get<MemoriesFavoriteWriter>().set(
+                    credentials,
+                    id,
+                    value,
+                )
+            },
+            persist = { item ->
+                get<TimelineCacheRepository>().saveDayDetails(
+                    listOf(item),
+                    emptySet(),
+                )
+            },
         )
     }
     single { RemoteImageCache(get(), get()) }
