@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -77,7 +78,6 @@ class MemoriesAlbumContentsTest {
         val metadata = CloudFavoriteMetadata(SessionStore(object : CredentialsStore {
             override fun load() = credentials
             override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
         }))
         val persisted = mutableMapOf<Long, MediaItem>()
         fun persist(items: List<MediaItem>) { items.forEach { persisted[requireNotNull(it.remoteFileId)] = it } }
@@ -101,7 +101,7 @@ class MemoriesAlbumContentsTest {
                 }
             }
         } }
-        suspend fun load() = MemoriesAlbumContents(NextcloudTransport(Json { ignoreUnknownKeys = true }), InMemoryMediaIdentityRegistry(), metadata, ::persist).load(
+        suspend fun load() = MemoriesAlbumContents(MemoriesApiClient(NextcloudTransport(Json { ignoreUnknownKeys = true })) { credentials }, InMemoryMediaIdentityRegistry(), metadata, ::persist).load(
             AlbumLocation.Remote("anna/Лето & море"),
             credentials,
         ).toList()

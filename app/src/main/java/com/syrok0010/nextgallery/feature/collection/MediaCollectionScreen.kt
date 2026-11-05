@@ -86,7 +86,7 @@ internal fun MediaCollectionScreen(
             initialMediaId = viewerId,
             sequence = sequence,
             actions = { item ->
-                androidx.compose.foundation.layout.Row {
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     viewerAccessory(item, true)
                     ViewerSelectionActions(viewerActions, item)
                 }

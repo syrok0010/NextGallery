@@ -85,19 +85,6 @@ internal class CloudFavoriteMetadata(private val sessions: SessionStore) {
             (requireNotNull(item.remoteFileId) to FavoriteValue(++revision, favorite))
     }
 
-    // Only a read begun before the write needs protection from whole-day invalidation. A newer
-    // authoritative index must be allowed to evict metadata, including a deleted day's last photo.
-    fun fileIdsNewerThan(read: FavoriteRead): Set<Long> {
-        ensureCurrent(read)
-        return mutableValues.value.filterValues { it.revision > read.revision }.keys
-    }
-
-    suspend fun clear(persist: suspend () -> Unit) =
-        mutex.withLock {
-            persist()
-            mutableValues.value = emptyMap()
-        }
-
     private fun ensureCurrent(read: FavoriteRead) {
         if (!isCurrent(read)) throw CancellationException("Expired cloud metadata session")
     }
