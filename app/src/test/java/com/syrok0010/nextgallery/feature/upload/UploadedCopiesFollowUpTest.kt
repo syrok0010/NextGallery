@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.url
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -171,7 +172,7 @@ class UploadedCopiesFollowUpTest {
     private fun uploadedFile(fileId: Long?) =
         UploadedFile(
             selection = SELECTION,
-            path = DavFilePath.of("test", "/Photos/a.jpg"),
+            url = DavFilePath.of("test", "/Photos/a.jpg").url(CREDENTIALS.serverUrl),
             created = fileId != null,
             fileId = fileId,
         )
