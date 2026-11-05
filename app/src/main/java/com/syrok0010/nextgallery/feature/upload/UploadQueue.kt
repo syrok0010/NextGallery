@@ -1,6 +1,11 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -64,7 +69,7 @@ internal class UploadQueue(
     private val refreshLibrary: () -> Unit,
     private val processId: String = uploadProcessId,
     private val prepareAlbum: suspend (AccountCredentials, UploadIntent) -> UploadIntent = { _, intent -> intent },
-) {
+) : OperationStatusSource {
     private val commands = Mutex()
     private val ready = CompletableDeferred<Unit>()
     private var available = false
@@ -88,6 +93,7 @@ internal class UploadQueue(
     val result = mutableResult.asStateFlow()
     private val mutableError = MutableStateFlow(false)
     val storageError = mutableError.asStateFlow()
+    override val operations = combine(activity, result) { current, summary -> uploadOperationSnapshots(current, summary) }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
         scope.launch {
@@ -152,6 +158,10 @@ internal class UploadQueue(
     fun cancel(item: UploadItem) = command { token -> journal.cancel(token, setOf(item.id)) }
     fun clearFinished() = command { token -> journal.clearFinished(token) }
     fun consumeResult() = command { token -> journal.seen(token) }
+
+    override fun consumeSucceeded() { if (result.value?.let { it.failures.isEmpty() && it.uploaded >= it.files && it.attention == 0 } == true) consumeResult() }
+
+    override fun consumeAll() = consumeResult()
 
     private fun command(action: suspend (String) -> Unit) {
         scope.launch {
@@ -404,6 +414,21 @@ internal class UploadQueue(
         )
     }
 
+}
+
+private fun uploadOperationSnapshots(activity: UploadActivity?, result: UploadResult?): List<OperationStatusSnapshot> = buildList {
+    if (activity != null) {
+        val progress = if (activity.total == 0) null else (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
+        val media = buildList {
+            activity.current?.let { add(OperationMediaActivity(OperationMediaReference.LocalUri(it), activity.percent?.div(100f))) }
+            activity.pending.asSequence().filterNot { it == activity.current }.mapTo(this) { OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f) }
+        }
+        add(OperationStatusSnapshot(OperationKind.Upload, com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_progress, (activity.processed + 1).coerceAtMost(activity.total), activity.total), running = true, progress = progress, media = media))
+    }
+    if (result != null) {
+        val failed = result.failures.isNotEmpty() || result.uploaded < result.files || result.attention > 0
+        add(OperationStatusSnapshot(OperationKind.Upload, com.syrok0010.nextgallery.core.ui.uiText(if (failed) R.string.upload_stopped else R.string.upload_done, if (failed) result.failures.joinToString(", ") else result.uploaded, result.files), failed = failed))
+    }
 }
 
 private val uploadProcessId = UUID.randomUUID().toString()
