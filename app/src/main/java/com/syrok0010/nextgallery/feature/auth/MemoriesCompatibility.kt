@@ -25,4 +25,3 @@ internal fun memoriesCompatibility(version: String?): MemoriesCompatibility {
         MemoriesCompatibility.TooOld(value)
     }
 }
-
