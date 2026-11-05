@@ -33,8 +33,8 @@ import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
-import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
 import com.syrok0010.nextgallery.feature.deletion.CloudTrash
+import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
@@ -124,6 +124,7 @@ val appModule = module {
             remoteSource = get<MemoriesRepository>(),
             localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
+            refreshCloudTrash = get<CloudTrashAvailability>()::refresh,
         )
     }
     viewModel { AlbumsViewModel(get()) }

@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.deletion
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.await
+import com.syrok0010.nextgallery.core.network.dav.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
