@@ -5,7 +5,7 @@ import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.feature.collection.ViewerSequenceController
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
-import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesPhotoDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
