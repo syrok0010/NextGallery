@@ -64,7 +64,7 @@ internal fun PhotosScreen(
     val shownSlots = remember(favoritesOnly, state.snapshot, favoriteState.items) {
         if (favoritesOnly) favoriteState.items.toMediaSlots() else state.snapshot?.slots.orEmpty()
     }
-    val operations = rememberOperationStatus(uploads, additions, deletions)
+    val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current

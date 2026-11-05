@@ -35,10 +35,12 @@ import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
+import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
@@ -46,13 +48,12 @@ import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
 import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter
 import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoritesSource
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
-import com.syrok0010.nextgallery.feature.images.MemoriesMultipreviewClient
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
@@ -74,7 +75,6 @@ import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -85,11 +85,11 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
-@OptIn(FlowPreview::class)
 val appModule = module {
-    single<RemoteAlbumSource> { MemoriesAlbumSource(get()) }
+    single<RemoteAlbumSource> { MemoriesAlbumSource(get<MemoriesApiClient>()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     single {
@@ -173,9 +173,7 @@ val appModule = module {
     viewModel { AlbumsViewModel(get()) }
     single {
         val cache = get<TimelineCacheRepository>()
-        MemoriesAlbumContents(get(), get(), get()) { items ->
-            cache.updateCachedFavorites(items)
-        }
+        MemoriesAlbumContents(get<MemoriesApiClient>(), get(), get(), cache::updateCachedFavorites)
     }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
@@ -261,40 +259,14 @@ val appModule = module {
     single { MemoriesRepository(get<MemoriesApiClient>(), get(), get(), get()) }
     single { CloudFavoriteMetadata(get()) }
     single { MemoriesFavoriteWriter(get()) }
-    single {
-        MemoriesFavoritesSource(
-            get(),
-            get(),
-            get(),
-            get(),
-        )
-    }
+    single { MemoriesFavoritesSource(get(), get(), get(), get()) }
     single {
         CloudFavorites(
-            get(),
-            get(),
-            { credentials ->
-                get<MemoriesFavoritesSource>()
-                    .load(
-                        credentials,
-                    )
-            },
-            get(),
-            get(named("libraryScope")),
-            write = { credentials, id, value ->
-                get<MemoriesFavoriteWriter>()
-                    .set(
-                        credentials,
-                        id,
-                        value,
-                    )
-            },
-            persist = { item ->
-                get<TimelineCacheRepository>().saveDayDetails(
-                    listOf(item),
-                    emptySet(),
-                )
-            },
+            get(), get(),
+            { credentials -> get<MemoriesFavoritesSource>().load(credentials) },
+            get(), get(named("libraryScope")),
+            write = { credentials, id, value -> get<MemoriesFavoriteWriter>().set(credentials, id, value) },
+            persist = { item -> get<TimelineCacheRepository>().saveDayDetails(listOf(item), emptySet()) },
         )
     }
     single { RemoteImageCache(get(), get()) }
@@ -302,7 +274,7 @@ val appModule = module {
     single {
         val images = get<RemoteImageRepository>()
         ThumbnailBatchLoader(
-            loadBatch = { credentials, keys -> images.ensureThumbnails(credentials, keys).toSet() },
+            loadBatch = images::ensureThumbnails,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
