@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.uiText
@@ -19,7 +20,8 @@ internal class AlbumUploadFollowUp(
 
     override suspend fun uploaded(credentials: AccountCredentials, file: UploadedFile) {
         outcomes += try {
-            writer.addFile(file.path, album)
+            val segments = file.url.pathSegments.dropWhile { it != credentials.userId }.drop(1)
+            writer.addFile(DavFilePath(credentials.userId, segments), album)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

@@ -15,13 +15,12 @@ import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.fileUrl
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
-import com.syrok0010.nextgallery.feature.timeline.remote.memoriesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +44,7 @@ import org.koin.android.ext.android.inject
 class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
     private val transport: NextcloudTransport by inject()
+    private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val notificationManager: NotificationManager by lazy {
@@ -212,7 +212,7 @@ class UploadForegroundService : Service() {
                     ).also { credentials = it }
                 val directory = destination ?: (
                     timelinePaths(
-                        transport.memoriesApi(account).config().timelinePath,
+                        memories.config().timelinePath,
                     ).firstOrNull()
                         ?: throw UploadException(R.string.upload_error_timeline)
                     ).also { destination = it }
@@ -379,7 +379,3 @@ private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
     } catch (_: Exception) {
         fallback
     }
-
-/** DAV URL of an upload in the user's files; [user] is the Nextcloud uid, not the login name. */
-internal fun uploadUrl(serverUrl: String, user: String, directory: String, name: String): HttpUrl =
-    fileUrl(serverUrl, user, directory).newBuilder().addPathSegment(name).build()
