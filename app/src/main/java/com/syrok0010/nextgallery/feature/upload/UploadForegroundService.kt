@@ -253,6 +253,7 @@ class UploadForegroundService : Service() {
             CreateFileResult.AlreadyExists ->
                 UploadedFile(selection, path, created = false)
                     .takeIf { sameRemoteSize(path, length) }
+                    ?.let { it.copy(fileId = dav.fileIdIfSizeMatches(path, length)) }
         }
     }
 
