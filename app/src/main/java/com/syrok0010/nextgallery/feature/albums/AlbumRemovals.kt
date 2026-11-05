@@ -1,7 +1,8 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.await
+import com.syrok0010.nextgallery.core.network.dav.await
+import com.syrok0010.nextgallery.core.network.dav.davRoot
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -71,6 +72,14 @@ internal class MemoriesAlbumRemover(private val transport: NextcloudTransport) {
         const val PROPERTIES = """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>"""
     }
 }
+
+private fun albumUrl(serverUrl: String, address: AlbumAddress): HttpUrl =
+    davRoot(serverUrl)
+        .addPathSegment("photos")
+        .addPathSegment(address.owner)
+        .addPathSegment("albums")
+        .addPathSegment(address.name)
+        .build()
 
 /** Accept only exact immediate children of this album on this server, even for hostile DAV XML. */
 internal fun albumMemberUrls(root: HttpUrl, xml: String): Map<Long, HttpUrl> {
