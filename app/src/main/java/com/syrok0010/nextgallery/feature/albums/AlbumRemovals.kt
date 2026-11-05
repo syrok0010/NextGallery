@@ -73,7 +73,7 @@ internal class MemoriesAlbumRemover(private val transport: NextcloudTransport) {
     }
 }
 
-private fun albumUrl(serverUrl: String, address: AlbumAddress): HttpUrl =
+internal fun albumUrl(serverUrl: String, address: AlbumAddress): HttpUrl =
     davRoot(serverUrl)
         .addPathSegment("photos")
         .addPathSegment(address.owner)
