@@ -40,8 +40,8 @@ class NextcloudLoginRepositoryTest {
 
     @Test fun `describe uses authenticated request and distinguishes unavailable from errors`() = runBlocking {
         val cases = listOf(
-            Triple(200, """{"version":"10.1.0","uid":"test"}""", MemoriesCompatibility.Supported),
-            Triple(200, """{"version":"8.1.0"}""", MemoriesCompatibility.TooOld("8.1.0")),
+            Triple(200, """{"version":"10.1.0","baseUrl":"/","loginFlowUrl":"/","uid":"test"}""", MemoriesCompatibility.Supported),
+            Triple(200, """{"version":"8.1.0","baseUrl":"/","loginFlowUrl":"/"}""", MemoriesCompatibility.TooOld("8.1.0")),
             Triple(200, "{}", MemoriesCompatibility.UnknownVersion),
             Triple(200, "<html>Login</html>", MemoriesCompatibility.UnknownVersion),
             Triple(404, "", MemoriesCompatibility.Unavailable),
