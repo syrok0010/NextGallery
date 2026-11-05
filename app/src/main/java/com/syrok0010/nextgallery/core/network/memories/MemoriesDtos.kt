@@ -99,7 +99,11 @@ data class MemoriesPhotoDto(
 }
 
 @Serializable
-data class MemoriesImageInfoDto(val filename: String, val basename: String)
+data class MemoriesImageInfoDto(
+    val filename: String,
+    val basename: String,
+    val etag: String? = null,
+)
 
 @Serializable
 data class MemoriesVideoConfigDto(

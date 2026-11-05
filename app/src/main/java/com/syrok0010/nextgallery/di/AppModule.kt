@@ -13,6 +13,7 @@ import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -31,6 +32,10 @@ import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
+import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
+import com.syrok0010.nextgallery.feature.deletion.CloudTrash
+import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
+import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
@@ -45,6 +50,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepos
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
@@ -58,6 +64,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val appModule = module {
@@ -74,14 +81,29 @@ val appModule = module {
         )
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
-    single { AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope"))) }
+    single {
+        AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
+    } bind OperationStatusSource::class
+    single { MemoriesFiles(get<MemoriesApiClient>()) }
+    single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
+    single {
+        MediaDeletionRepository(
+            get(),
+            get(),
+            get(),
+            AndroidPhoneTrash(androidContext().contentResolver),
+            get(named("libraryScope")),
+        ) {
+            get<MediaLibraryCoordinator>().refresh()
+        }
+    } bind OperationStatusSource::class
     single {
         UploadQueue(get(), get(named("libraryScope"))) {
             listOf(
                 UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
             )
         }
-    }
+    } bind OperationStatusSource::class
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }

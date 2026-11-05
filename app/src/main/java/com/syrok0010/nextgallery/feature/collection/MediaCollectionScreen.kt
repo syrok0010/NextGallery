@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +53,10 @@ internal fun MediaCollectionScreen(
     onUpload: (List<MediaItem>, onStarted: () -> Unit) -> Unit = { _, onStarted -> onStarted() },
     /** Hands over the selection snapshot; [onDone] ends selection mode once the action starts. */
     onAddToAlbum: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
+    /** Same contract as [onAddToAlbum]; [onDone] runs only once the deletion is confirmed. */
+    onDelete: ((List<MediaItem>, onDone: () -> Unit) -> Unit)? = null,
+    /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
+    tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
@@ -91,6 +96,7 @@ internal fun MediaCollectionScreen(
                     registerTimelineTile = transition::registerTimelineTile,
                     onSelect = { transition.open(it.mediaId) },
                     selection = selection.takeIf { selectionEnabled },
+                    tileActivity = tileActivity,
                     gridState = gridState,
                 )
             }
@@ -101,6 +107,9 @@ internal fun MediaCollectionScreen(
                 uploadRequested = uploadRequested,
                 onCancel = cancelSelection,
                 onAddToAlbum = onAddToAlbum?.let { action ->
+                    { action(selectedItems, cancelSelection) }
+                },
+                onDelete = onDelete?.let { action ->
                     { action(selectedItems, cancelSelection) }
                 },
                 onUpload = {
@@ -128,6 +137,7 @@ private fun BoxScope.SelectionActionBar(
     uploadRequested: Boolean,
     onCancel: () -> Unit,
     onAddToAlbum: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
     onUpload: () -> Unit,
 ) {
     Surface(
@@ -158,6 +168,16 @@ private fun BoxScope.SelectionActionBar(
                     .semantics { contentDescription = selectedLabel },
             )
             Spacer(Modifier.width(4.dp))
+            if (onDelete != null) {
+                IconButton(onClick = onDelete, enabled = selectedCount > 0 && !uploadRequested) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = stringResource(
+                            com.syrok0010.nextgallery.R.string.delete_action,
+                        ),
+                    )
+                }
+            }
             if (onAddToAlbum != null) {
                 // Icon-only keeps the bar on one line next to the primary upload action.
                 FilledTonalIconButton(

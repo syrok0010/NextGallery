@@ -155,4 +155,44 @@
         <item quantity="many">%1$d не загружены: имя занято другим файлом</item>
         <item quantity="other">%1$d не загружены: имя занято другим файлом</item>
     </plurals>
+    <string name="delete_action">Удалить</string>
+    <plurals name="delete_title">
+        <item quantity="one">Удалить %1$d объект?</item>
+        <item quantity="few">Удалить %1$d объекта?</item>
+        <item quantity="many">Удалить %1$d объектов?</item>
+        <item quantity="other">Удалить %1$d объектов?</item>
+    </plurals>
+    <string name="delete_phone_only">Только на телефоне: %1$d</string>
+    <string name="delete_cloud_only">Только в облаке: %1$d</string>
+    <string name="delete_merged">На телефоне и в облаке: %1$d. Откуда удалить их?</string>
+    <string name="delete_scope_everywhere">Везде</string>
+    <string name="delete_scope_phone">Только с телефона</string>
+    <string name="delete_scope_cloud">Только из облака</string>
+    <string name="delete_trash_note">Копии с телефона попадут в корзину Android, копии из облака — в корзину Nextcloud.</string>
+    <string name="delete_confirm">Удалить</string>
+    <string name="delete_phone_failed">Не удалось переместить файлы телефона в корзину</string>
+    <string name="delete_progress">Удаление из облака: %1$d из %2$d</string>
+    <string name="delete_done">Удаление завершено</string>
+    <string name="delete_done_with_errors">Удалено не всё</string>
+    <string name="delete_done_phone">В корзине телефона: %1$d</string>
+    <string name="delete_done_phone_failed">Не удалось переместить в корзину телефона: %1$d</string>
+    <string name="delete_phone_limit">За один раз можно удалить с телефона не больше %1$d объектов</string>
+    <string name="delete_done_cloud">В корзине Nextcloud: %1$d</string>
+    <string name="delete_done_failed">Не удалось удалить из облака: %1$d</string>
+    <plurals name="operations_running">
+        <item quantity="one">Идёт %1$d операция</item>
+        <item quantity="few">Идут %1$d операции</item>
+        <item quantity="many">Идут %1$d операций</item>
+        <item quantity="other">Идут %1$d операции</item>
+    </plurals>
+    <plurals name="operations_done">
+        <item quantity="one">Завершена %1$d операция</item>
+        <item quantity="few">Завершены %1$d операции</item>
+        <item quantity="many">Завершено %1$d операций</item>
+        <item quantity="other">Завершено %1$d операции</item>
+    </plurals>
+    <string name="media_activity_upload">Загружается</string>
+    <string name="media_activity_album">Добавляется в альбом</string>
+    <string name="media_activity_delete">Удаляется</string>
+    <string name="media_activity_progress">%1$s, %2$d%%</string>
 </resources>

@@ -45,11 +45,26 @@ class FilesDavClient(
         }
     }
 
+    /** Moves a file to the Nextcloud trash, pinning the path to the looked-up ETag when present. */
+    suspend fun deleteFile(file: DavFilePath, etag: String? = null): DeleteFileResult {
+        val headers = etag?.let { mapOf("If-Match" to "\"$it\"") }.orEmpty()
+        val response = transport.dav(credentials(), DELETE, headers) { file.url(it) }
+        return when {
+            response.isSuccessful -> DeleteFileResult.Deleted
+            response.code == 404 -> DeleteFileResult.Missing
+            response.code == 412 -> DeleteFileResult.Conflict
+            else -> response.unexpected(DELETE)
+        }
+    }
+
     private companion object {
         const val PUT = "PUT"
         const val HEAD = "HEAD"
+        const val DELETE = "DELETE"
     }
 }
+
+enum class DeleteFileResult { Deleted, Missing, Conflict }
 
 /**
  * File id from the `OC-FileId` response header: the id zero-padded to eight digits, followed by

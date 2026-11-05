@@ -2,6 +2,11 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -16,7 +21,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 internal sealed interface AlbumTarget {
@@ -49,7 +57,8 @@ internal enum class AlbumAdditionFailure { AlbumExists, Network, NotWritable }
 internal sealed interface AlbumAdditionState {
     data object Idle : AlbumAdditionState
 
-    data class Running(val albumName: String, val count: Int) : AlbumAdditionState
+    /** [fileIds] are the server copies being copied into the album. */
+    data class Running(val albumName: String, val fileIds: Set<Long>) : AlbumAdditionState
 
     data class Done(val albumName: String, val result: AlbumAddResult, val localUploads: Int) :
         AlbumAdditionState
@@ -74,9 +83,12 @@ internal class AlbumAdditions(
     private val catalog: AlbumCatalogRepository,
     private val uploads: UploadQueue,
     private val scope: CoroutineScope,
-) {
+) : OperationStatusSource {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     val state = mutableState.asStateFlow()
+    override val operations = state
+        .map(::albumOperationSnapshots)
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private var job: Job? = null
 
     init {
@@ -104,7 +116,7 @@ internal class AlbumAdditions(
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
-        mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.size)
+        mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
         job = scope.launch {
             mutableState.value = try {
                 val location = when (target) {
@@ -147,11 +159,38 @@ internal class AlbumAdditions(
         }
     }
 
+    override fun consumeSucceeded() {
+        if ((state.value as? AlbumAdditionState.Done)?.result?.failed == 0) consume()
+    }
+
+    override fun consumeAll() {
+        consume()
+    }
+
     private fun credentials(): AccountCredentials? =
         (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
-/** Message parts joined by the snackbar; zero counters stay silent. */
+private fun albumOperationSnapshots(state: AlbumAdditionState): List<OperationStatusSnapshot> {
+    val lines = albumAdditionMessage(state) ?: return emptyList()
+    val running = state as? AlbumAdditionState.Running
+    val failed = state is AlbumAdditionState.Failed ||
+        (state as? AlbumAdditionState.Done)?.result?.failed?.let { it > 0 } == true
+    return listOf(
+        OperationStatusSnapshot(
+            kind = OperationKind.AddToAlbum,
+            title = lines.first(),
+            details = lines.drop(1),
+            running = running != null,
+            failed = failed,
+            media = running?.fileIds.orEmpty().map {
+                OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
+            },
+        ),
+    )
+}
+
+/** Message parts of the status line; zero counters stay silent. */
 internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
     when (state) {
         AlbumAdditionState.Idle -> null

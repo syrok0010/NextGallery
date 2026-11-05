@@ -25,6 +25,7 @@ internal fun MediaGrid(
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
     selection: MediaSelection? = null,
+    tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     LazyVerticalGrid(
@@ -55,6 +56,7 @@ internal fun MediaGrid(
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
                     selection = selection,
+                    tileActivity = tileActivity,
                     requestFactory = requestFactory,
                 )
             }
