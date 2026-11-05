@@ -173,10 +173,16 @@ internal class UploadQueue(
         } catch (_: RuntimeException) {
             // Includes dataSync quota, service type and permission failures from Android.
             var files = 0
-            while (true) {
-                val batch = next() ?: break
-                files += batch.files.size
-                batchFinished(batch)
+            val refused = buildList {
+                while (true) {
+                    val batch = next() ?: break
+                    files += batch.files.size
+                    add(batch)
+                }
+            }
+            refused.forEach(::batchFinished)
+            scope.launch {
+                refused.forEach { finishUploadBatch(it) }
             }
             if (files > 0) passFinished(UploadResult(0, files, failures = listOf(failureReason)))
             return false
