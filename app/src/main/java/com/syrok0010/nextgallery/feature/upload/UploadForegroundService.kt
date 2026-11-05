@@ -194,7 +194,7 @@ class UploadForegroundService : Service() {
         val credentials = credentialsStore.load()
             ?: throw UploadException(R.string.upload_error_session)
         val config = memories.config()
-        val destination = config.timelinePath?.takeIf { it.isNotBlank() }
+        val destination = timelinePaths(config.timelinePath).firstOrNull()
             ?: throw UploadException(R.string.upload_error_timeline)
         batch.files.forEachIndexed { index, selection ->
             val uploaded = put(
@@ -241,7 +241,11 @@ class UploadForegroundService : Service() {
         return try {
             placeUpload(dav, path, selection, body, openLocal)
         } catch (error: DavHttpException) {
-            throw UploadException(R.string.upload_error_http, error.code, selection.displayName)
+            val reason = when (error.code) {
+                404, 409 -> R.string.upload_error_directory
+                else -> R.string.upload_error_http
+            }
+            throw UploadException(reason, error.code, selection.displayName)
         }
     }
 
