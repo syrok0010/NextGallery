@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.url
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
@@ -84,7 +85,11 @@ class AlbumUploadFollowUpTest {
     private fun selection(name: String) = UploadSelection("content://media/$name", name, "image/jpeg")
 
     private fun uploaded(fixture: MemoriesAlbumWriterTest.Fixture, name: String) =
-        UploadedFile(selection(name), DavFilePath.of("anna", "/Photos/$name"), created = true)
+        UploadedFile(
+            selection(name),
+            DavFilePath.of("anna", "/Photos/$name").url(fixture.credentials.serverUrl),
+            created = true,
+        )
 
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials
