@@ -206,7 +206,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         }
     }
     suspend fun clearFinished(owner: String) = db.withTransaction {
-        dao.jobs(owner).groupBy { it.batchId }.values.filter { batch -> batch.none { it.unfinished } }.flatten().forEach { dao.update(it.copy(hidden = true)) }
+        // Per file: the screen lists files, not batches, so a finished file leaves even while its batch runs.
+        dao.jobs(owner).filterNot { it.unfinished }.forEach { dao.update(it.copy(hidden = true)) }
     }
     suspend fun seen(owner: String) = db.withTransaction {
         dao.jobs(owner).filter { it.hasResult && !it.seen }.forEach { dao.update(it.copy(seen = true)) }

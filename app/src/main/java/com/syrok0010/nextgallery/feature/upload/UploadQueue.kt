@@ -1,6 +1,11 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -63,13 +68,13 @@ internal class UploadQueue(
     private val album: suspend (AccountCredentials, UploadIntent, UploadedFile) -> Boolean,
     private val refreshLibrary: () -> Unit,
     private val processId: String = uploadProcessId,
-) {
+) : OperationStatusSource {
     private val commands = Mutex()
     private val ready = CompletableDeferred<Unit>()
     private var available = false
     private var owner: String? = null
     private var records = emptyList<UploadJob>()
-    private val items = mutableMapOf<String, UploadItem>()
+    private val itemCache = mutableMapOf<String, UploadItem>()
     private val batchCache = mutableMapOf<String, UploadBatch>()
     private val released = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val started = ArrayDeque<UploadBatch>()
@@ -77,20 +82,27 @@ internal class UploadQueue(
     val waiting = mutableWaiting.asStateFlow()
     private val mutableBatches = MutableStateFlow<List<UploadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
+    private val mutableItems = MutableStateFlow<List<UploadItem>>(emptyList())
+
+    /** Visible files of all batches in submission order; cleared files leave the list. */
+    val items = mutableItems.asStateFlow()
     private val mutableActivity = MutableStateFlow<UploadActivity?>(null)
     val activity = mutableActivity.asStateFlow()
     private val mutableResult = MutableStateFlow<UploadResult?>(null)
     val result = mutableResult.asStateFlow()
     private val mutableError = MutableStateFlow(false)
     val storageError = mutableError.asStateFlow()
+    override val operations = combine(activity, result) { current, summary ->
+        uploadOperationSnapshots(current, summary)
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
         scope.launch {
             sessions.session.collectLatest { session ->
                 val token = (session as? SessionUiState.SignedIn)?.credentials?.uploadOwner
                 commands.withLock {
-                    items.values.forEach(UploadItem::stopCall)
-                    items.clear(); batchCache.clear(); released.clear(); started.clear()
+                    itemCache.values.forEach(UploadItem::stopCall)
+                    itemCache.clear(); batchCache.clear(); released.clear(); started.clear()
                     owner = token
                     available = false
                     try {
@@ -145,6 +157,14 @@ internal class UploadQueue(
     fun clearFinished() = command { token -> journal.clearFinished(token) }
     fun consumeResult() = command { token -> journal.seen(token) }
 
+    override fun consumeSucceeded() {
+        if (result.value?.let { it.failures.isEmpty() && it.uploaded >= it.files && it.attention == 0 } == true) {
+            consumeResult()
+        }
+    }
+
+    override fun consumeAll() = consumeResult()
+
     private fun command(action: suspend (String) -> Unit) {
         scope.launch {
             ready.await()
@@ -154,7 +174,7 @@ internal class UploadQueue(
                     action(token)
                     val rows = journal.jobs(token).filterNot { it.hidden }
                     // Durable commit precedes best-effort socket cancellation.
-                    rows.filter { it.state == "Cancelled" }.forEach { items[it.id]?.stopCall() }
+                    rows.filter { it.state == "Cancelled" }.forEach { itemCache[it.id]?.stopCall() }
                     project(rows)
                 } catch (cancelled: CancellationException) { throw cancelled
                 } catch (_: Exception) { mutableError.value = true }
@@ -169,7 +189,7 @@ internal class UploadQueue(
             val token = credentials()?.uploadOwner ?: return@withLock false
             try {
                 if (!available || !journal.revokeIfFinished(token)) return@withLock false
-                items.values.forEach(UploadItem::stopCall)
+                itemCache.values.forEach(UploadItem::stopCall)
                 try { clearSession() } catch (error: Exception) {
                     // A failed secure-store clear keeps the signed-in owner usable for retry.
                     journal.activate(token)
@@ -315,7 +335,7 @@ internal class UploadQueue(
             synchronized(this@UploadQueue) {
                 started.removeAll { it.id in batches }
                 released.removeAll(batches)
-                records.filter { it.batchId in batches }.forEach { items[it.id]?.stopCall() }
+                records.filter { it.batchId in batches }.forEach { itemCache[it.id]?.stopCall() }
             }
             if (current(account)) project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
         }
@@ -335,7 +355,7 @@ internal class UploadQueue(
     @Synchronized private fun project(rows: List<UploadJob>) {
         records = rows
         rows.forEach { row ->
-            val item = items.getOrPut(row.id) { UploadItem(row.selection, row.id) }
+            val item = itemCache.getOrPut(row.id) { UploadItem(row.selection, row.id) }
             val attention = row.hasAttention
             val phase = when (row.state) {
                 "Pending", "Uncertain" -> UploadPhase.Waiting
@@ -352,9 +372,10 @@ internal class UploadQueue(
                 albumAdded = if (row.albumStep == "Done") row.intents.firstOrNull { it.kind == "album" }?.target else null, httpStatus = row.httpStatus))
         }
         val batches = rows.groupBy { it.batchId }.map { (id, jobs) ->
-            batchCache.getOrPut(id) { UploadBatch(jobs.map { it.selection }, id = id, items = jobs.map { items.getValue(it.id) }) }
+            batchCache.getOrPut(id) { UploadBatch(jobs.map { it.selection }, id = id, items = jobs.map { itemCache.getValue(it.id) }) }
         }
         mutableBatches.value = batches
+        mutableItems.value = rows.map { itemCache.getValue(it.id) }
         mutableWaiting.value = batches.filter { batch -> batch.id !in released && rows.any { it.batchId == batch.id && it.runnable } }
         val activePasses = rows.filter { it.runnable || it.executor != null }.map { it.passId }.toSet()
         val passRows = rows.filter { it.passId in activePasses }
@@ -376,6 +397,49 @@ internal class UploadQueue(
         )
     }
 
+}
+
+private fun uploadOperationSnapshots(
+    activity: UploadActivity?,
+    result: UploadResult?,
+): List<OperationStatusSnapshot> = buildList {
+    if (activity != null) {
+        val progress = if (activity.total == 0) null else
+            (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
+        val media = buildList {
+            activity.current?.let { add(OperationMediaActivity(OperationMediaReference.LocalUri(it), activity.percent?.div(100f))) }
+            activity.pending.asSequence().filterNot { it == activity.current }.mapTo(this) {
+                OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
+            }
+        }
+        add(OperationStatusSnapshot(
+            kind = OperationKind.Upload,
+            title = com.syrok0010.nextgallery.core.ui.uiText(
+                R.string.upload_progress,
+                (activity.processed + 1).coerceAtMost(activity.total),
+                activity.total,
+            ),
+            running = true,
+            progress = progress,
+            media = media,
+        ))
+    }
+    if (result != null) {
+        val failed = result.failures.isNotEmpty() || result.uploaded < result.files || result.attention > 0
+        add(OperationStatusSnapshot(
+            kind = OperationKind.Upload,
+            title = if (result.failures.isEmpty() && result.attention == 0) {
+                com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_done, result.uploaded, result.files)
+            } else {
+                com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_stopped, result.failures.joinToString(", "))
+            },
+            details = buildList {
+                if (result.failures.isNotEmpty()) add(com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_count, result.uploaded, result.files))
+                addAll(result.details)
+            },
+            failed = failed,
+        ))
+    }
 }
 
 private val uploadProcessId = UUID.randomUUID().toString()

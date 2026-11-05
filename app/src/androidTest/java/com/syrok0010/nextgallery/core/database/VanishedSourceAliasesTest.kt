@@ -321,6 +321,11 @@ class VanishedSourceAliasesTest {
             val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
             val repository = MemoriesRepository(
                 MemoriesApiClient(transport) { onlineCredentials }, cloudCache, registry,
+                MemoriesApiClient(
+                    NextcloudTransport(Json { ignoreUnknownKeys = true }),
+                ) { onlineCredentials },
+                cloudCache,
+                registry,
             )
 
             val partial = repository.loadInitialTimeline(onlineCredentials)
