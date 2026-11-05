@@ -54,14 +54,13 @@ internal fun PhotosScreen(
     val shownSlots = remember(favoritesOnly, state.snapshot, favoriteState.items) {
         if (favoritesOnly) favoriteState.items.toMediaSlots() else state.snapshot?.slots.orEmpty()
     }
-    val operations = rememberOperationStatus(uploads, additions, deletions)
+    val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     val selection = rememberMediaSelection()
     LaunchedEffect(favoritesOnly, favoriteState.departed) { if (favoritesOnly) selection.remove(favoriteState.departed) }
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
-    val completedDeletions by deletions.removedMediaIds.collectAsStateWithLifecycle()
     val mediaActions = listOf(
         SelectionAction(
             icon = rememberVectorPainter(Icons.Default.Delete),
@@ -110,7 +109,7 @@ internal fun PhotosScreen(
                 )
             }
         },
-        completedDeletions = completedDeletions + if (favoritesOnly) favoriteState.departed else emptySet(),
+        completedDeletions = if (favoritesOnly) favoriteState.departed else emptySet(),
         selectionActions = mediaActions +
             listOf(
                 SelectionAction(

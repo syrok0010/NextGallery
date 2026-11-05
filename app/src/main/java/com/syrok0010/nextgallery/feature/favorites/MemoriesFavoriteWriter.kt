@@ -1,8 +1,9 @@
 package com.syrok0010.nextgallery.feature.favorites
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.await
-import com.syrok0010.nextgallery.core.network.fileUrl
+import com.syrok0010.nextgallery.core.network.dav.await
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.url
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import java.io.StringReader
@@ -49,7 +50,7 @@ internal class MemoriesFavoriteWriter(private val transport: NextcloudTransport)
         val segments = info.filename.removePrefix("/").split('/')
         require(segments.all { it.isNotEmpty() && it != "." && it != ".." && '\\' !in it && '\u0000' !in it })
         require(segments.last() == info.basename && info.etag.isNotBlank())
-        val url = fileUrl(credentials.serverUrl, credentials.userId, info.filename)
+        val url = DavFilePath.of(credentials.userId, info.filename).url(credentials.serverUrl)
         // Verify the id at the exact DAV path immediately before writing. ETag also guards path replacement.
         val find = transport.authenticatedRequestBuilder(credentials, url.toString(), "application/xml")
             .method("PROPFIND", """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>""".xmlBody())

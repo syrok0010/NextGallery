@@ -6,7 +6,8 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
@@ -16,7 +17,7 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 
 internal class MemoriesRepository(
-    private val transport: NextcloudTransport,
+    private val memories: MemoriesApiClient,
     private val cacheRepository: TimelineCacheRepository,
     private val identityRegistry: MediaIdentityRegistry,
     private val favorites: CloudFavoriteMetadata,
@@ -26,9 +27,8 @@ internal class MemoriesRepository(
 
     override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
         val read = favorites.begin(credentials)
-        val api = transport.memoriesApi(credentials)
-        val config = api.config()
-        val dayDtos = api.days()
+        val config = memories.config()
+        val dayDtos = memories.days()
         val days = dayDtos.map { day ->
             TimelineDay(
                 dayId = day.dayid,
@@ -75,8 +75,7 @@ internal class MemoriesRepository(
         }
 
         val read = favorites.begin(credentials)
-        val api = transport.memoriesApi(credentials)
-        val photoDtos = api
+        val photoDtos = memories
             .dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
         if (!favorites.isCurrent(read)) throw kotlinx.coroutines.CancellationException()
