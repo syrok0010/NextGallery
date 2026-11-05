@@ -210,7 +210,10 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     MediaLibraryIndex(),
-                    CloudTrash { _, fileId -> fileId != 3L },
+                    CloudTrash { _, fileId ->
+                        release.await()
+                        fileId != 3L
+                    },
                     { it.size },
                     scope,
                 ) {}
