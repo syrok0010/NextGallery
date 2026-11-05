@@ -30,6 +30,7 @@ import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @Composable
@@ -48,6 +49,7 @@ internal fun PhotosScreen(
     val state by timeline.state.collectAsStateWithLifecycle()
     val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
+    val scope = rememberCoroutineScope()
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     // Asked on every dialog, so the answer is fresh when the user decides.
@@ -84,8 +86,10 @@ internal fun PhotosScreen(
         ),
     ) { items, onDone ->
         // The app root starts the batch and asks for the notification permission.
-        uploads.submit(items.map { it.mediaId })
-        onDone()
+        scope.launch {
+            uploads.submit(items.map { it.mediaId })
+            onDone()
+        }
     }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),

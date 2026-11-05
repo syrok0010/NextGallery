@@ -114,7 +114,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     uploading,
                     key = { it.item.id },
-                ) { UploadingRow(it) }
+                ) { UploadingRow(it) { queue.cancel(it.item) } }
             }
             if (waiting.isNotEmpty()) {
                 item(key = "waiting") {
@@ -127,7 +127,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     waiting,
                     key = { it.item.id },
-                ) { UploadRow(it) }
+                ) { UploadRow(it) { queue.cancel(it.item) } }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
@@ -140,14 +140,14 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     done,
                     key = { it.item.id },
-                ) { UploadRow(it) }
+                ) { UploadRow(it) { queue.cancel(it.item) } }
             }
         }
     }
 }
 
 private val UploadPhase.problem: Boolean
-    get() = this == UploadPhase.Failed || this == UploadPhase.NameConflict
+    get() = this == UploadPhase.Failed || this == UploadPhase.NeedsAttention || this == UploadPhase.NameConflict
 
 @Composable
 private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
@@ -179,7 +179,7 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
 }
 
 @Composable
-private fun UploadingRow(entry: UploadEntry) {
+private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
     val percent = entry.state.percent
     val size = entry.item.selection.local.sizeBytes
     Row(
@@ -219,15 +219,16 @@ private fun UploadingRow(entry: UploadEntry) {
                 )
             }
         }
-        CancelButton(entry.item)
+        CancelButton(onCancel)
     }
 }
 
 @Composable
-private fun UploadRow(entry: UploadEntry) {
+private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
     val phase = entry.state.phase
     val problem = when (phase) {
-        UploadPhase.Failed -> stringResource(R.string.uploads_failed, entry.state.failure.orEmpty())
+        UploadPhase.Failed, UploadPhase.NeedsAttention ->
+            stringResource(R.string.uploads_failed, entry.state.failure.orEmpty())
         UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
         else -> null
     }
@@ -257,7 +258,7 @@ private fun UploadRow(entry: UploadEntry) {
             }
         }
         SizeText(fileSize(entry.item.selection.local.sizeBytes))
-        if (phase.terminal) StatusIcon(entry.state) else CancelButton(entry.item)
+        if (phase.terminal) StatusIcon(entry.state) else CancelButton(onCancel)
     }
 }
 
@@ -286,7 +287,7 @@ private fun StatusIcon(state: UploadItemState) {
                 stringResource(R.string.uploads_conflict),
             )
 
-        UploadPhase.Failed -> Triple(
+        UploadPhase.Failed, UploadPhase.NeedsAttention -> Triple(
             painterResource(R.drawable.ic_error),
             colors.error,
             stringResource(R.string.uploads_failed, state.failure.orEmpty()),
@@ -305,8 +306,8 @@ private fun StatusIcon(state: UploadItemState) {
 }
 
 @Composable
-private fun CancelButton(item: UploadItem) {
-    IconButton(onClick = item::cancel, modifier = Modifier.size(40.dp)) {
+private fun CancelButton(onCancel: () -> Unit) {
+    IconButton(onClick = onCancel, modifier = Modifier.size(40.dp)) {
         Icon(
             Icons.Filled.Close,
             stringResource(R.string.uploads_cancel_file),
