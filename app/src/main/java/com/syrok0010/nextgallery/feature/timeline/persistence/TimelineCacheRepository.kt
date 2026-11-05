@@ -41,11 +41,7 @@ class TimelineCacheRepository(
             )
         }
 
-    suspend fun saveTimelineSnapshot(
-        credentials: AccountCredentials,
-        snapshot: TimelineSnapshot,
-        preservedFileIds: Set<Long> = emptySet(),
-    ) {
+    suspend fun saveTimelineSnapshot(credentials: AccountCredentials, snapshot: TimelineSnapshot) {
         val normalizedServerUrl = credentials.normalizedServerUrl()
         val newCounts = snapshot.days.associate { it.dayId to it.count }
         val now = System.currentTimeMillis()

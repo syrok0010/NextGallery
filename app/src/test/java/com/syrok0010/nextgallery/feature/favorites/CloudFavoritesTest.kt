@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.feature.favorites
 
 import com.syrok0010.nextgallery.core.media.*
+import com.syrok0010.nextgallery.core.network.memories.MemoriesDayDto
+import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.*
 import com.syrok0010.nextgallery.feature.timeline.remote.*
@@ -17,7 +19,6 @@ internal class CloudFavoritesTest {
     private fun sessions() = SessionStore(object : CredentialsStore {
         override fun load() = credentials
         override fun save(credentials: AccountCredentials) = Unit
-        override fun clear() = Unit
     })
     private fun item(id: Long = 1, favorite: Boolean = false) = MediaItem(
         MediaId("media-$id"), 10, "photo.jpg", "image/jpeg", 10, 10, "etag", null, null, null, null,
@@ -137,8 +138,8 @@ internal class CloudFavoritesTest {
         val favorites = CloudFavorites(sessions, metadata, { emptyList() }, MediaLibraryIndex(), backgroundScope,
             write = { _, _, _ -> }, persist = { disk = it })
         runCurrent()
-        assertFalse(favorites.set(item().copy(assetRef = MediaAssetRef.LocalContent("content://local/1", 1))))
-        assertTrue(favorites.set(item().copy(assetRef = MediaAssetRef.LocalFirst(MediaAssetRef.LocalContent("content://local/1", 1), MediaAssetRef.MemoriesFile(1)))))
+        assertFalse(favorites.set(item().copy(assetRef = MediaAssetRef.LocalContent("content://local/1", 1, 1))))
+        assertTrue(favorites.set(item().copy(assetRef = MediaAssetRef.LocalFirst(MediaAssetRef.LocalContent("content://local/1", 1, 1), MediaAssetRef.MemoriesFile(1)))))
         runCurrent()
         assertTrue(requireNotNull(disk).isFavorite)
         assertTrue(disk?.assetRef is MediaAssetRef.MemoriesFile)
@@ -150,7 +151,7 @@ internal class CloudFavoritesTest {
     }
 
     @Test fun `merged projection follows cloud and excludes local-only regardless of local flag`() = runTest {
-        val local = item().copy(assetRef = MediaAssetRef.LocalContent("content://local/1", 1), isFavorite = true)
+        val local = item().copy(assetRef = MediaAssetRef.LocalContent("content://local/1", 1, 1), isFavorite = true)
         val merged = projectMediaLibrary(listOf(local), listOf(item(favorite = false)))
         assertFalse(merged.items.single().isFavorite)
         assertTrue(merged.items.single().hasLocalCopy)
@@ -177,17 +178,16 @@ internal class CloudFavoritesTest {
         assertFalse(requested.any { "23" in it.split(',') })
     }
 
-    @Test fun `active favorite filter advances to neighbor then closes empty sequence`() {
+    @Test fun `active favorite filter releases removed photos and becomes empty`() {
         val controller = com.syrok0010.nextgallery.feature.collection.ViewerSequenceController()
         val first = item(1, true)
         val second = item(2, true)
         controller.updateSlots(listOf(first, second).toMediaSlots(), first.mediaId)
-        controller.updateSlots(listOf(second).toMediaSlots(), first.mediaId, setOf(first.mediaId))
-        assertEquals(second.mediaId, controller.state.replacementMediaId)
-        assertFalse(first.mediaId in controller.state.sequence)
-        controller.updateSlots(emptyList(), second.mediaId, setOf(first.mediaId, second.mediaId))
-        assertTrue(controller.state.sequence.items.isEmpty())
-        assertNull(controller.state.replacementMediaId)
+        val remaining = controller.updateSlots(listOf(second).toMediaSlots(), first.mediaId, setOf(first.mediaId))
+        assertEquals(listOf(second), remaining.items)
+        assertFalse(first.mediaId in remaining)
+        val empty = controller.updateSlots(emptyList(), second.mediaId, setOf(first.mediaId, second.mediaId))
+        assertTrue(empty.items.isEmpty())
     }
 
     @Test fun `complete query membership does not turn off favorite on album file outside timeline`() = runTest {

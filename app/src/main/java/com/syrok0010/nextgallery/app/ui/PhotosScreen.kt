@@ -172,7 +172,6 @@ internal fun PhotosScreen(
             onOpenUploads,
             viewerVisible = viewerVisible,
             operations = operations,
-            statusVisible = albumRequest == null && deleteRequest == null && !delete.awaitingConfirmation,
             onRefresh = { if (favoritesOnly) favorites.refresh() },
         ) {
             Column {

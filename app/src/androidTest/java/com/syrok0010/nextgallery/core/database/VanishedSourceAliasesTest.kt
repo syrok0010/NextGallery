@@ -317,6 +317,12 @@ class VanishedSourceAliasesTest {
             val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
             val repository = MemoriesRepository(
                 MemoriesApiClient(transport) { onlineCredentials }, cloudCache, registry,
+                com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata(
+                    com.syrok0010.nextgallery.core.session.SessionStore(object : com.syrok0010.nextgallery.core.session.CredentialsStore {
+                        override fun load() = onlineCredentials
+                        override fun save(credentials: AccountCredentials) = Unit
+                    }),
+                ),
             )
 
             val partial = repository.loadInitialTimeline(onlineCredentials)

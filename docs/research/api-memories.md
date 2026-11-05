@@ -436,4 +436,4 @@ reconciliation. Переименование или перенос папки м
   статус его `propstat` и href. Чтение `image/info` даёт owneruid, fileid,
   filename и etag; точный DAV path дополнительно проверяется по `oc:fileid`.
 
-Границы первой реализации и варианты модели — [ADR 0019](../adr/0019-cloud-favorites.md).
+Границы первой реализации и варианты модели — [ADR 0022](../adr/0022-cloud-favorites.md).

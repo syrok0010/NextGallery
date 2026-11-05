@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.favorites
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.dav.await
+import com.syrok0010.nextgallery.core.network.dav.awaitUse
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.url
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -55,7 +55,7 @@ internal class MemoriesFavoriteWriter(private val transport: NextcloudTransport)
         val find = transport.authenticatedRequestBuilder(credentials, url.toString(), "application/xml")
             .method("PROPFIND", """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>""".xmlBody())
             .header("Depth", "0").build()
-        client.newCall(find).await().use {
+        client.newCall(find).awaitUse {
             if (it.code != 207 || davProperty(it.body.string(), url, "fileid") != fileId.toString()) {
                 throw IOException("Cloud file identity could not be verified")
             }
@@ -63,7 +63,7 @@ internal class MemoriesFavoriteWriter(private val transport: NextcloudTransport)
         val body = """<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>${if (favorite) 1 else 0}</oc:favorite></d:prop></d:set></d:propertyupdate>"""
         val request = transport.authenticatedRequestBuilder(credentials, url.toString(), "application/xml")
             .method("PROPPATCH", body.xmlBody()).header("If-Match", "\"${info.etag.trim('"')}\"").build()
-        client.newCall(request).await().use {
+        client.newCall(request).awaitUse {
             if (it.code != 207 || davProperty(it.body.string(), url, "favorite") == null) {
                 throw IOException("Cloud favorite was not confirmed (HTTP ${it.code})")
             }

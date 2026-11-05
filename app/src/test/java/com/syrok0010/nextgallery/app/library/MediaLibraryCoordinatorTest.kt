@@ -63,6 +63,7 @@ class MediaLibraryCoordinatorTest {
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
         ),
         permissions = permissions,
+        favorites = com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata(sessions),
     )
     private val publications = CopyOnWriteArrayList<LibraryPublication>()
 

@@ -97,7 +97,6 @@ class TimelineCacheRepositoryOfflineTest {
         val sessions = com.syrok0010.nextgallery.core.session.SessionStore(object : com.syrok0010.nextgallery.core.session.CredentialsStore {
             override fun load() = credentials
             override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
         })
         val favorites = com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata(sessions)
         favorites.confirm(favorites.begin(credentials), item, true) { repository.saveDayDetails(listOf(it), emptySet()) }
@@ -106,7 +105,7 @@ class TimelineCacheRepositoryOfflineTest {
         favorites.ingest(fresh, emptyList()) {
             repository.saveTimelineSnapshot(credentials, TimelineSnapshotAssembler.assemble(
                 config = memoriesConfig(), days = emptyList(),
-            ), preservedFileIds = favorites.fileIdsNewerThan(fresh))
+            ))
         }
         database.close()
         database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
@@ -130,7 +129,6 @@ class TimelineCacheRepositoryOfflineTest {
         val sessions = com.syrok0010.nextgallery.core.session.SessionStore(object : com.syrok0010.nextgallery.core.session.CredentialsStore {
             override fun load() = credentials
             override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
         })
         val favorites = com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata(sessions)
         val read = favorites.begin(credentials)
@@ -140,18 +138,19 @@ class TimelineCacheRepositoryOfflineTest {
         favorites.ingest(read, emptyList()) {
             repository.saveTimelineSnapshot(credentials, TimelineSnapshotAssembler.assemble(
                 config = memoriesConfig(), days = listOf(TimelineDay(item.dayId, 2)),
-            ), preservedFileIds = favorites.fileIdsNewerThan(read))
+            ))
         }
         database.close()
         database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
         identityRegistry = RoomMediaIdentityRegistry(database) { MediaId("unused") }
         repository = TimelineCacheRepository(database, thumbnailFileStore, identityRegistry)
-        val restored = requireNotNull(repository.loadTimelineSnapshot(credentials)).items.single()
-        org.junit.Assert.assertTrue(restored.isFavorite)
-        assertEquals(item.mediaId, restored.mediaId)
+        val restored = database.memoriesTimelineDao().mediaItems().single()
+        org.junit.Assert.assertTrue(restored.media.isFavorite)
+        assertEquals(item.mediaId.value, restored.mediaId)
+        org.junit.Assert.assertTrue(requireNotNull(repository.loadTimelineSnapshot(credentials)).items.isEmpty())
         // A later authoritative item read can remove a star made in another client from warm cache.
-        repository.saveDayDetails(listOf(restored.copy(isFavorite = false)), emptySet())
-        assertFalse(requireNotNull(repository.loadTimelineSnapshot(credentials)).items.single().isFavorite)
+        repository.saveDayDetails(listOf(item.copy(isFavorite = false)), emptySet())
+        assertFalse(database.memoriesTimelineDao().mediaItems().single().media.isFavorite)
     }
 
     @Test
