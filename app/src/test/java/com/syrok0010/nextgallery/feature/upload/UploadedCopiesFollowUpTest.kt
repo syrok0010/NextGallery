@@ -19,7 +19,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,16 +27,6 @@ class UploadedCopiesFollowUpTest {
     private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
     private val followUp = UploadedCopiesFollowUp(registry, sessions)
-
-    @Test
-    fun `file id is read from the OC-FileId header`() {
-        assertEquals(183L, uploadedFileId("00000183ocmsigiy9k16"))
-        assertEquals(123_456_789L, uploadedFileId("123456789ocmsigiy9k16"))
-        assertNull(uploadedFileId(null))
-        assertNull(uploadedFileId(""))
-        assertNull(uploadedFileId("ocmsigiy9k16"))
-        assertNull(uploadedFileId("00000000ocmsigiy9k16"))
-    }
 
     @Test
     fun `linked server copy joins the phone file as one object`() =

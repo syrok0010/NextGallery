@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import androidx.annotation.StringRes
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
@@ -40,8 +41,8 @@ internal class UploadBatch(
 
 /**
  * [selection] is on the server at [url]: uploaded now ([created]) or already there with the same
- * size. A different file under the same name never reaches follow-ups. [fileId] is the server file
- * id, when returned by DAV. For an existing file, equal sizes are accepted as the same file.
+ * bytes. [url] may be a neighbour name when the original one holds a different file. [fileId] is
+ * the server file id when DAV returned it.
  */
 internal data class UploadedFile(
     val selection: UploadSelection,
@@ -49,3 +50,6 @@ internal data class UploadedFile(
     val created: Boolean,
     val fileId: Long? = null,
 )
+
+/** A failure the user can act on; [reason] is a string resource formatted with [args]. */
+internal class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
