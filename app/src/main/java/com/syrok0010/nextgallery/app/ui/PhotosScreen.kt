@@ -63,7 +63,6 @@ internal fun PhotosScreen(
         },
         onViewerVisibilityChanged = onViewerVisibilityChanged,
         onSelectionModeChanged = onSelectionModeChanged,
-        selectionEnabled = true,
         selection = selection,
         selectionActions = listOf(
             SelectionAction(
@@ -71,9 +70,7 @@ internal fun PhotosScreen(
                 label = stringResource(R.string.delete_action),
                 isDestructive = true,
             ) { items, _ ->
-                deletions.prepare(items.map { it.mediaId })?.let { preparation ->
-                    deleteRequest = preparation
-                }
+                deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
             },
             SelectionAction(
                 icon = painterResource(R.drawable.ic_albums),
