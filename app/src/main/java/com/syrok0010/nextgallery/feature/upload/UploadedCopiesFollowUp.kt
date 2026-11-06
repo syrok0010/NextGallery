@@ -49,10 +49,3 @@ internal class UploadedCopiesFollowUp(
         return emptyList()
     }
 }
-
-/** File id from the `OC-FileId` response header. */
-internal fun uploadedFileId(header: String?): Long? =
-    header
-        ?.takeWhile(Char::isDigit)
-        ?.toLongOrNull()
-        ?.takeIf { it > 0L }

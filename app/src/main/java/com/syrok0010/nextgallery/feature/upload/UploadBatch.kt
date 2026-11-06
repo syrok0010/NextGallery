@@ -3,10 +3,10 @@ package com.syrok0010.nextgallery.feature.upload
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
 import java.util.concurrent.atomic.AtomicLong
-import okhttp3.HttpUrl
 
 /** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
 internal data class UploadSelection(
@@ -49,7 +49,7 @@ internal class UploadBatch(
  */
 internal data class UploadedFile(
     val selection: UploadSelection,
-    val url: HttpUrl,
+    val path: DavFilePath,
     val created: Boolean,
     val fileId: Long? = null,
 )
