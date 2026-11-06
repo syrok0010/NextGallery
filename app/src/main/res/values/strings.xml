@@ -3,6 +3,7 @@
     <string name="action_back">Назад</string>
     <string name="action_cancel_login">Отменить вход</string>
     <string name="action_logout">Выйти</string>
+    <string name="logout_wait_for_operations">Дождитесь завершения операций</string>
     <string name="action_allow_local_media">Продолжить</string>
     <string name="action_not_now">Не сейчас</string>
     <string name="action_open_browser">Открыть браузер</string>
