@@ -1,5 +1,8 @@
 # Тестирование
 
+Для интеграционных проверок с живым Nextcloud/Memories используй
+[тестовый сервер](test-nextcloud.md).
+
 Устройство выбирай по [android-development.md](android-development.md).
 JVM-тесты запускаются из корня checkout: `./gradlew :app:testAutomationUnitTest`.
 
@@ -10,6 +13,10 @@ Instrumentation запускай на хосте устройства из check
 ```bash
 ANDROID_SERIAL=<serial> ./gradlew :app:connectedAutomationAndroidTest
 ```
+
+После прогона Gradle удаляет `.automation` с устройства вместе с сессией. Ручные
+проверки на эмуляторе делай в debug-варианте (`installDebug`): он тоже ходит на
+стенд, и прогоны тестов его не затрагивают.
 
 > **Данные телефона:** нельзя трогать данные `com.syrok0010.nextgallery` на телефоне
 > пользователя: очищать данные, удалять приложение или выполнять действия,

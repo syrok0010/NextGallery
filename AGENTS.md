@@ -30,3 +30,7 @@
 ### Тесты
 
 Для JVM-тестов и instrumentation используй `docs/agents/testing.md`.
+
+### Тестовый Nextcloud
+
+Для интеграционных проверок Nextcloud/Memories, тестовых медиа, скриншотов для PR и управления стендом читай `docs/agents/test-nextcloud.md`.
