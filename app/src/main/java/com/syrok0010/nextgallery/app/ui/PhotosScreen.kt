@@ -18,10 +18,11 @@ import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
 import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
-import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
+import com.syrok0010.nextgallery.feature.deletion.CloudTrashStatus
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
+import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
@@ -37,14 +38,18 @@ internal fun PhotosScreen(
     additions: AlbumAdditions = koinInject(),
     uploads: UploadQueue = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
-    cloudTrash: CloudTrashAvailability = koinInject(),
+    trashBin: NextcloudTrashBin = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val operations = rememberOperationStatus()
-    val cloudTrashAvailable by cloudTrash.available.collectAsStateWithLifecycle()
     val tileActivity = remember(operations) { operations::tileActivity }
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
+    // Asked on every dialog, so the answer is fresh when the user decides.
+    val cloudTrash by produceState(CloudTrashStatus.Checking, deleteRequest) {
+        value = CloudTrashStatus.Checking
+        if (deleteRequest?.plan?.hasCloudCopies == true) value = trashBin.status()
+    }
     val selection = rememberMediaSelection()
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
     MediaCollectionScreen(
@@ -101,11 +106,11 @@ internal fun PhotosScreen(
     deleteRequest?.let { preparation ->
         DeleteSelectionDialog(
             plan = preparation.plan,
-            cloudTrashAvailable = cloudTrashAvailable,
+            cloudTrash = cloudTrash,
             onDismiss = { deleteRequest = null },
             onConfirm = { scope ->
                 deleteRequest = null
-                delete(preparation.confirm(scope))
+                delete(preparation.confirm(scope, cloudAllowed = cloudTrash.allowsCloud))
             },
         )
     }

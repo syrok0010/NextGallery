@@ -45,6 +45,14 @@ internal data class DeletionTargets(val contentUris: List<String>, val fileIds: 
 /** How many selected objects have only a phone copy, only a cloud copy, or both. */
 internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val merged: Int) {
     val total: Int get() = phoneOnly + cloudOnly + merged
+
+    val hasCloudCopies: Boolean get() = cloudOnly + merged > 0
+
+    fun touchesPhone(scope: DeletionScope): Boolean =
+        phoneOnly > 0 || (merged > 0 && scope != DeletionScope.CloudOnly)
+
+    fun touchesCloud(scope: DeletionScope): Boolean =
+        cloudOnly > 0 || (merged > 0 && scope != DeletionScope.PhoneOnly)
 }
 
 /**
@@ -58,14 +66,19 @@ internal class DeletionPreparation private constructor(
 ) {
     val plan = DeletionPlan(phoneOnly.size, cloudOnly.size, merged.size)
 
-    fun confirm(scope: DeletionScope): DeletionTargets =
+    /** Without [cloudAllowed] cloud copies stay untouched whatever the [scope]. */
+    fun confirm(scope: DeletionScope, cloudAllowed: Boolean): DeletionTargets =
         DeletionTargets(
             contentUris = phoneOnly +
                 if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.contentUri },
-            fileIds = (
-                cloudOnly +
-                    if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
-                ).distinct(),
+            fileIds = if (!cloudAllowed) {
+                emptyList()
+            } else {
+                (
+                    cloudOnly +
+                        if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
+                    ).distinct()
+            },
         )
 
     private class MergedCopies(val contentUri: String, val fileId: Long)

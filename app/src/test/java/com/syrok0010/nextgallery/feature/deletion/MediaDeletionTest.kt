@@ -44,7 +44,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            preparation.confirm(DeletionScope.Everywhere),
+            preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
         )
         assertEquals(
             DeletionTargets(
@@ -55,7 +55,7 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10),
             ),
-            preparation.confirm(DeletionScope.PhoneOnly),
+            preparation.confirm(DeletionScope.PhoneOnly, cloudAllowed = true),
         )
         assertEquals(
             DeletionTargets(
@@ -65,7 +65,19 @@ class MediaDeletionTest {
                 ),
                 fileIds = listOf(10, 20),
             ),
-            preparation.confirm(DeletionScope.CloudOnly),
+            preparation.confirm(DeletionScope.CloudOnly, cloudAllowed = true),
+        )
+        // Without an answer about the server trash the cloud stays untouched.
+        assertEquals(
+            DeletionTargets(
+                contentUris = listOf(
+                    "content://media/external/images/media/1",
+                    "content://media/external/video/media/3",
+                    "content://media/external/images/media/2",
+                ),
+                fileIds = emptyList(),
+            ),
+            preparation.confirm(DeletionScope.Everywhere, cloudAllowed = false),
         )
     }
 
@@ -107,7 +119,7 @@ class MediaDeletionTest {
                         contentUris = listOf("content://media/external/images/media/2"),
                         fileIds = listOf(20),
                     ),
-                    preparation?.confirm(DeletionScope.Everywhere),
+                    preparation?.confirm(DeletionScope.Everywhere, cloudAllowed = true),
                 )
                 assertEquals(null, repository.prepare(listOf(MediaId("both"))))
             } finally {

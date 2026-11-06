@@ -7,15 +7,20 @@ import kotlinx.serialization.Serializable
 import retrofit2.http.GET
 
 /** Endpoint-level access to the authenticated OCS capabilities of a Nextcloud server. */
-class NextcloudCapabilitiesClient(private val transport: NextcloudTransport) {
-    suspend fun capabilities(credentials: AccountCredentials): NextcloudCapabilitiesDto =
-        transport
+class NextcloudCapabilitiesClient(
+    private val transport: NextcloudTransport,
+    private val credentials: () -> AccountCredentials,
+) {
+    suspend fun capabilities(): NextcloudCapabilitiesDto {
+        val account = credentials()
+        return transport
             .retrofit(
-                transport.normalizeBaseUrl(credentials.serverUrl),
-                transport.authenticatedClient(credentials),
+                transport.normalizeBaseUrl(account.serverUrl),
+                transport.authenticatedClient(account),
             ).create(NextcloudCapabilitiesApi::class.java)
             .capabilities()
             .ocs.data.capabilities
+    }
 }
 
 private interface NextcloudCapabilitiesApi {
