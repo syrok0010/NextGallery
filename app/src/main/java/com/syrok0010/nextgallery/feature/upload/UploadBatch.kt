@@ -34,9 +34,9 @@ internal class UploadBatch(
 )
 
 /**
- * [selection] is on the server at [url]: uploaded now ([created]) or already there with the same
- * size. A different file under the same name never reaches follow-ups. [fileId] is the server file
- * id, known only for a created file: an existing one may be another photo of the same size.
+ * [selection] is on the server at [path]: uploaded now ([created]) or already there with the same
+ * bytes. [path] may be a neighbour name when the original one holds a different file. [fileId] is
+ * the server file id when DAV returned it.
  */
 internal data class UploadedFile(
     val selection: UploadSelection,

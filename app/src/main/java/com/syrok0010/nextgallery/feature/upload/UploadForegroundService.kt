@@ -13,7 +13,6 @@ import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.network.dav.CreateFileResult
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
@@ -220,10 +219,7 @@ class UploadForegroundService : Service() {
         }
     }
 
-    /**
-     * Returns null when the name is taken by a different file: an existing file counts as this
-     * upload only if sizes match, since the server keeps no hash to compare.
-     */
+    /** Returns null when no free name is left for a file that differs from the taken ones. */
     private suspend fun put(
         path: DavFilePath,
         selection: UploadSelection,
@@ -232,34 +228,21 @@ class UploadForegroundService : Service() {
         val uri = Uri.parse(selection.contentUri)
         val length = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
+        val openLocal = {
+            contentResolver.openInputStream(uri)
+                ?: throw UploadException(R.string.upload_error_open, selection.displayName)
+        }
         val body = UploadRequestBody(
             length = length,
             mediaType = selection.mimeType?.toMediaTypeOrNull(),
-            openStream = {
-                contentResolver.openInputStream(uri)
-                    ?: throw UploadException(R.string.upload_error_open, selection.displayName)
-            },
+            openStream = openLocal,
             onProgress = onProgress,
         )
-        val result = try {
-            dav.createFile(path, body)
+        return try {
+            placeUpload(dav, path, selection, body, openLocal)
         } catch (error: DavHttpException) {
             throw UploadException(R.string.upload_error_http, error.code, selection.displayName)
         }
-        return when (result) {
-            is CreateFileResult.Created ->
-                UploadedFile(selection, path, created = true, fileId = result.fileId)
-
-            CreateFileResult.AlreadyExists ->
-                UploadedFile(selection, path, created = false)
-                    .takeIf { sameRemoteSize(path, length) }
-                    ?.let { it.copy(fileId = dav.fileIdIfSizeMatches(path, length)) }
-        }
-    }
-
-    private suspend fun sameRemoteSize(path: DavFilePath, length: Long): Boolean {
-        if (length < 0L) return false
-        return runCatching { dav.size(path) == length }.getOrDefault(false)
     }
 
     private fun notification(
