@@ -7,10 +7,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -38,11 +35,7 @@ internal fun MediaCollectionScreen(
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
     val selection = rememberMediaSelection()
-    var selectionLocked by remember { mutableStateOf(false) }
-    val cancelSelection = {
-        selection.clear()
-        selectionLocked = false
-    }
+    val cancelSelection = { selection.clear() }
     val selectedItems = remember(slots, selection.selectedIds) {
         slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
     }
@@ -56,7 +49,7 @@ internal fun MediaCollectionScreen(
             onSelectionModeChanged(false)
         }
     }
-    BackHandler(enabled = selection.active && !selectionLocked, onBack = cancelSelection)
+    BackHandler(enabled = selection.active, onBack = cancelSelection)
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -77,13 +70,9 @@ internal fun MediaCollectionScreen(
         if (viewerId == null && selectionEnabled && selection.active) {
             SelectionActionBar(
                 selectedCount = selectedItems.size,
-                selectionLocked = selectionLocked,
                 onCancel = cancelSelection,
                 actions = selectionActions,
-                onPerform = { action ->
-                    selectionLocked = action.blocksSelectionUntilDone
-                    action.perform(selectedItems, cancelSelection)
-                },
+                onPerform = { it.perform(selectedItems, cancelSelection) },
             )
         }
         if (viewerId != null) MediaDetailScreen(

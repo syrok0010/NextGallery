@@ -17,14 +17,13 @@ import com.syrok0010.nextgallery.R
 @Composable
 internal fun BoxScope.SelectionActionBar(
     selectedCount: Int,
-    selectionLocked: Boolean,
     onCancel: () -> Unit,
     actions: List<SelectionAction>,
     onPerform: (SelectionAction) -> Unit,
 ) {
     val placement = placeSelectionActions(actions)
     var menuExpanded by remember { mutableStateOf(false) }
-    val enabled = selectedCount > 0 && !selectionLocked
+    val enabled = selectedCount > 0
     Surface(
         modifier = Modifier
             .align(Alignment.BottomCenter)
@@ -39,7 +38,7 @@ internal fun BoxScope.SelectionActionBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconButton(onClick = onCancel, enabled = !selectionLocked) {
+            IconButton(onClick = onCancel) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = stringResource(R.string.selection_cancel),

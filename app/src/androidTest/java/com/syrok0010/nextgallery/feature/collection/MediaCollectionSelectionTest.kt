@@ -38,18 +38,7 @@ class MediaCollectionSelectionTest {
         rule.onNodeWithContentDescription("Отменить выбор").assertDoesNotExist()
     }
 
-    @Test fun blockingHandoffDisablesCancellationUntilDone() {
-        var done: (() -> Unit)? = null
-        show(blocks = true) { _, onDone -> done = onDone }
-        rule.onNodeWithContentDescription("first.jpg").performTouchInput { longClick() }
-        rule.onNodeWithText("Действие").performClick()
-        rule.onNodeWithText("Действие").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("Отменить выбор").assertIsNotEnabled()
-        rule.runOnIdle { done!!() }
-        rule.onNodeWithContentDescription("Отменить выбор").assertDoesNotExist()
-    }
-
-    private fun show(blocks: Boolean = false, perform: (List<MediaItem>, () -> Unit) -> Unit) {
+    private fun show(perform: (List<MediaItem>, () -> Unit) -> Unit) {
         rule.setContent {
             NextGalleryTheme {
                 MediaCollectionScreen(
@@ -63,7 +52,6 @@ class MediaCollectionSelectionTest {
                             ColorPainter(Color.Black),
                             "Действие",
                             isPrimary = true,
-                            blocksSelectionUntilDone = blocks,
                             perform = perform,
                         ),
                     ),
