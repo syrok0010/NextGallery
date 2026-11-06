@@ -17,6 +17,9 @@ import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
@@ -36,8 +39,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 import retrofit2.HttpException
@@ -219,7 +220,9 @@ class UploadForegroundService : Service() {
         var destination: String? = null
         queue.runBatch(batch) { account, item, claim ->
             val selection = item.selection
-            val url = claim.destination ?: run {
+            // The original name in the chosen folder; neighbour names are derived from it again
+            // after a restart, so an earlier copy under one of them is found by its bytes.
+            val pinned = claim.destination ?: run {
                 val directory = destination ?: (
                     timelinePaths(
                         memories.config().timelinePath,
@@ -237,7 +240,9 @@ class UploadForegroundService : Service() {
                     proposed,
                 ) ?: throw java.io.IOException("Upload no longer claimed")
             }
-            put(account, url.toHttpUrl(), item) { percent ->
+            val path = uploadPath(account, pinned)
+                ?: throw java.io.IOException("Pinned destination outside the account")
+            put(account, path, item) { percent ->
                 if (item.progress(percent)) {
                     queue.uploading(selection.contentUri, percent)
                     onProgress(batch.items.indexOf(item), percent)
@@ -246,13 +251,10 @@ class UploadForegroundService : Service() {
         }
     }
 
-    /**
-     * Returns null when the name is taken by a different file: an existing file counts as this
-     * upload only if sizes match, since the server keeps no hash to compare.
-     */
-    private fun put(
-        credentials: AccountCredentials,
-        url: HttpUrl,
+    /** Returns null when no free name is left for a file that differs from the taken ones. */
+    private suspend fun put(
+        account: AccountCredentials,
+        path: DavFilePath,
         item: UploadItem,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
@@ -263,16 +265,27 @@ class UploadForegroundService : Service() {
             contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
+        val openLocal = {
+            val stream = readSource(name) { contentResolver.openInputStream(uri) }
+            stream ?: throw SourceUnavailable(name)
+        }
         val body = UploadRequestBody(
             length = length,
             mediaType = selection.mimeType?.toMediaTypeOrNull(),
-            openStream = {
-                val stream = readSource(name) { contentResolver.openInputStream(uri) }
-                stream ?: throw SourceUnavailable(name)
-            },
+            openStream = openLocal,
             onProgress = onProgress,
         )
-        return uploadFile(transport, credentials, url, selection, body, item::execute)
+        // Signed by the job's account, not whichever session is current by now.
+        val dav = FilesDavClient(transport) { account }
+        return try {
+            item.run { placeUpload(dav, account.serverUrl, path, selection, body, openLocal) }
+        } catch (error: DavHttpException) {
+            val reason = when (error.code) {
+                404, 409 -> R.string.upload_error_directory
+                else -> R.string.upload_error_http
+            }
+            throw UploadException(reason, error.code, selection.displayName)
+        }
     }
 
     private fun notification(

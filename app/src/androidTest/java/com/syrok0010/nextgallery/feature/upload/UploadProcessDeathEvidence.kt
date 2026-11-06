@@ -7,12 +7,12 @@ import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.media.*
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.io.File
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -65,15 +65,18 @@ class UploadProcessDeathEvidence {
         check(queue.submit(ids.map { it.mediaId }, requestId = "durable156-process-kill") is EnqueueResult.Accepted)
         val rows = journal.jobs(credentials.uploadOwner)
         journal.cancel(credentials.uploadOwner, setOf(rows[0].id))
-        val transport = NextcloudTransport(Json)
+        val dav = FilesDavClient(NextcloudTransport(Json)) { credentials }
         for (index in 1..2) {
             val job = journal.claim(rows[index].id, credentials.uploadOwner, "fixture-before-process-kill")!!
             val file = job.selection
-            val url = journal.destination(job, "http://test.syrok/remote.php/dav/files/test/Photos/${file.displayName}")!!.destination!!.toHttpUrl()
+            val url = journal.destination(job, "http://test.syrok/remote.php/dav/files/test/Photos/${file.displayName}")!!.destination!!
             val body = UploadRequestBody(file.stamp!!.size, "image/jpeg".toMediaType(),
                 { context.contentResolver.openInputStream(android.net.Uri.parse(file.contentUri))!! }, {})
-            val uploaded = withContext(Dispatchers.IO) { uploadFile(transport, credentials, url, file, body) }!!
-            if (index == 1) check(journal.accept(job, UploadReceipt(url.toString(), uploaded.created, uploaded.fileId)) != null)
+            val opener = { context.contentResolver.openInputStream(android.net.Uri.parse(file.contentUri))!! }
+            val uploaded = withContext(Dispatchers.IO) {
+                placeUpload(dav, credentials.serverUrl, uploadPath(credentials, url)!!, file, body, opener)
+            }!!
+            if (index == 1) check(journal.accept(job, UploadReceipt(uploaded.url.toString(), uploaded.created, uploaded.fileId)) != null)
             // index 2 deliberately dies after server response and before local receipt.
         }
         Log.i("DurableUploadEvidence", "READY cancelled + accepted receipt + uncertain server PUT + pending; kill this automation process with SIGKILL")
