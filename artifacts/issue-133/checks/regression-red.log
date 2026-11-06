@@ -1,0 +1,62 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+
+> Configure project :app
+WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
+The current default is 'true'.
+
+> Task :core:media:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:media:compileKotlin UP-TO-DATE
+> Task :core:media:compileJava NO-SOURCE
+> Task :core:media:processResources NO-SOURCE
+> Task :core:media:classes UP-TO-DATE
+> Task :core:media:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preAutomationBuild UP-TO-DATE
+> Task :app:generateAutomationResources UP-TO-DATE
+> Task :app:packageAutomationResources UP-TO-DATE
+> Task :app:processAutomationNavigationResources UP-TO-DATE
+> Task :app:parseAutomationLocalResources UP-TO-DATE
+> Task :app:generateAutomationRFile UP-TO-DATE
+> Task :app:kspAutomationKotlin UP-TO-DATE
+> Task :app:compileAutomationKotlin UP-TO-DATE
+> Task :app:javaPreCompileAutomation UP-TO-DATE
+> Task :app:compileAutomationJavaWithJavac NO-SOURCE
+> Task :app:checkAutomationAarMetadata UP-TO-DATE
+> Task :app:mapAutomationSourceSetPaths UP-TO-DATE
+> Task :app:compileAutomationNavigationResources UP-TO-DATE
+> Task :app:mergeAutomationResources UP-TO-DATE
+> Task :app:createAutomationCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksAutomation UP-TO-DATE
+> Task :app:processAutomationMainManifest UP-TO-DATE
+> Task :app:processAutomationManifest UP-TO-DATE
+> Task :app:processAutomationManifestForPackage UP-TO-DATE
+> Task :app:processAutomationResources UP-TO-DATE
+> Task :app:bundleAutomationClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleAutomationClassesToCompileJar UP-TO-DATE
+> Task :app:kspAutomationUnitTestKotlin
+> Task :app:preAutomationUnitTestBuild UP-TO-DATE
+> Task :app:compileAutomationUnitTestKotlin
+> Task :app:javaPreCompileAutomationUnitTest UP-TO-DATE
+> Task :app:compileAutomationUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processAutomationJavaRes UP-TO-DATE
+> Task :app:processAutomationUnitTestJavaRes UP-TO-DATE
+
+> Task :app:testAutomationUnitTest FAILED
+
+UploadedCopiesFollowUpTest > folder upload links the exact volume bytes to the aggregate local identity FAILED
+    java.lang.AssertionError at UploadedCopiesFollowUpTest.kt:60
+
+14 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testAutomationUnitTest'.
+> There were failing tests. See the report at: file:///home/syrok/.t3/worktrees/nextgallery/t3-50836b3a/app/build/reports/tests/testAutomationUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 23s
+28 actionable tasks: 3 executed, 25 up-to-date

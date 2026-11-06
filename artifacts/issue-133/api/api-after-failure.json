@@ -1,0 +1,99 @@
+{
+  "files": [
+    {
+      "fileId": 314,
+      "HEAD": 200,
+      "intimeline": true,
+      "albums": [
+        "test/ng133-ui-1793523508-2"
+      ]
+    },
+    {
+      "fileId": 315,
+      "HEAD": 200,
+      "intimeline": true,
+      "albums": [
+        "test/ng133-ui-1793523508-2"
+      ]
+    },
+    {
+      "fileId": 316,
+      "HEAD": 200,
+      "intimeline": true,
+      "albums": [
+        "test/ng133-ui-1793523508-2"
+      ]
+    },
+    {
+      "fileId": 317,
+      "HEAD": 200,
+      "intimeline": true,
+      "albums": []
+    },
+    {
+      "fileId": 318,
+      "HEAD": 200,
+      "intimeline": true,
+      "albums": [
+        "test/ng133-ui-1793523508-2"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "method": "HEAD",
+      "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-A.jpg",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "apps/memories/api/image/info/314?clusters=albums",
+      "status": 200
+    },
+    {
+      "method": "HEAD",
+      "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-B.jpg",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "apps/memories/api/image/info/315?clusters=albums",
+      "status": 200
+    },
+    {
+      "method": "HEAD",
+      "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-C.jpg",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "apps/memories/api/image/info/316?clusters=albums",
+      "status": 200
+    },
+    {
+      "method": "HEAD",
+      "path": "remote.php/dav/files/test/Photos/ng133-ui-local-D.jpg",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "apps/memories/api/image/info/317?clusters=albums",
+      "status": 200
+    },
+    {
+      "method": "HEAD",
+      "path": "remote.php/dav/files/test/Photos/ng133-ui-local-E.jpg",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "apps/memories/api/image/info/318?clusters=albums",
+      "status": 200
+    },
+    {
+      "method": "PROPFIND",
+      "path": "remote.php/dav/photos/test/albums/ng133-ui-1793523508-1",
+      "status": 404
+    }
+  ]
+}

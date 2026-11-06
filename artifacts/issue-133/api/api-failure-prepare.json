@@ -1,0 +1,12 @@
+[
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-A.jpg",
+    "status": 201
+  },
+  {
+    "method": "COPY",
+    "path": "remote.php/dav/files/test/Photos/ng133-ui-1793523508/ng133-ui-1793523508-B.jpg",
+    "status": 201
+  }
+]

@@ -136,6 +136,12 @@ internal fun DeleteSelectionDialog(
                     stringResource(R.string.delete_trash_note),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (plan.cloudOnly + plan.merged > 0) {
+                    Text(
+                        stringResource(R.string.delete_album_note),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
