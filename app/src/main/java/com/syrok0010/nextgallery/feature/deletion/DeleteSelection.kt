@@ -36,6 +36,13 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import kotlinx.serialization.json.Json
 
+internal class DeleteAction(
+    val awaitingConfirmation: Boolean,
+    private val perform: (DeletionTargets) -> Unit,
+) : (DeletionTargets) -> Unit {
+    override fun invoke(targets: DeletionTargets) = perform(targets)
+}
+
 /**
  * Sends phone copies to the system trash first: its dialog is the user's final confirmation, so
  * the cloud half starts only after RESULT_OK. A cancelled dialog deletes nothing anywhere.
@@ -44,7 +51,7 @@ import kotlinx.serialization.json.Json
 internal fun rememberDeleteAction(
     onConfirmed: (DeletionTargets) -> Unit,
     onStarted: () -> Unit,
-): (DeletionTargets) -> Unit {
+): DeleteAction {
     val context = LocalContext.current
     val confirm by rememberUpdatedState(onConfirmed)
     val started by rememberUpdatedState(onStarted)
@@ -60,7 +67,7 @@ internal fun rememberDeleteAction(
             started()
         }
     }
-    return { targets ->
+    return DeleteAction(awaitingConfirmation = pendingPayload != null) { targets ->
         when {
             pendingPayload != null -> Unit
 
