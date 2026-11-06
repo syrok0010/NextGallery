@@ -1,13 +1,14 @@
 package com.syrok0010.nextgallery.feature.timeline.remote
 
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
-import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
+import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
@@ -15,15 +16,17 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 
-class MemoriesRepository(
+internal class MemoriesRepository(
     private val memories: MemoriesApiClient,
     private val cacheRepository: TimelineCacheRepository,
     private val identityRegistry: MediaIdentityRegistry,
+    private val favorites: CloudFavoriteMetadata,
 ) : RemoteTimelineSource {
     override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? =
         bestEffort { cacheRepository.loadTimelineSnapshot(credentials) }.getOrNull()
 
     override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
+        val read = favorites.begin(credentials)
         val config = memories.config()
         val dayDtos = memories.days()
         val days = dayDtos.map { day ->
@@ -35,6 +38,7 @@ class MemoriesRepository(
         val preloadedPhotoDtos = dayDtos
             .flatMap { it.detail }
             .distinctBy { it.fileid }
+        if (!favorites.isCurrent(read)) throw kotlinx.coroutines.CancellationException()
         val preloadedItems = preloadedPhotoDtos.toIdentifiedMediaItems()
         val loadedDayIds = dayDtos
             .filter { it.count == 0 || it.detail.isNotEmpty() }
@@ -47,11 +51,19 @@ class MemoriesRepository(
             loadedDayIds = loadedDayIds,
         )
 
-        bestEffort { cacheRepository.saveTimelineSnapshot(credentials, snapshot) }
+        val corrected = favorites.ingest(read, snapshot.items) { items ->
+            val byId = items.associateBy { it.remoteFileId }
+            cacheRepository.saveTimelineSnapshot(credentials, snapshot.copy(slots = snapshot.slots.map { slot ->
+                slot.copy(mediaItem = slot.mediaItem?.let { old -> byId.getValue(old.remoteFileId) })
+            }), preservedFileIds = favorites.fileIdsNewerThan(read))
+        }
+        val byId = corrected.associateBy { it.remoteFileId }
         // The online index is authoritative here. Re-reading the materialized
         // cache would intentionally drop index-only remote slots before the UI
         // gets a chance to render the complete online timeline.
-        return snapshot
+        return snapshot.copy(slots = snapshot.slots.map { slot ->
+            slot.copy(mediaItem = slot.mediaItem?.let { byId.getValue(it.remoteFileId) })
+        })
     }
 
     override suspend fun loadTimelineDays(
@@ -62,22 +74,23 @@ class MemoriesRepository(
             return emptyList()
         }
 
+        val read = favorites.begin(credentials)
         val photoDtos = memories
             .dayDetails(dayIds.joinToString(","))
             .distinctBy { it.fileid }
+        if (!favorites.isCurrent(read)) throw kotlinx.coroutines.CancellationException()
         val items = photoDtos.toIdentifiedMediaItems()
 
-        bestEffort {
-            cacheRepository.saveDayDetails(items, dayIds.toSet())
+        return favorites.ingest(read, items) { corrected ->
+            cacheRepository.saveDayDetails(corrected, dayIds.toSet())
         }
-        return items
     }
 
     suspend fun clearCache() {
-        bestEffort { cacheRepository.clear() }
+        bestEffort { favorites.clear { cacheRepository.clear() } }
     }
 
-    private suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> {
+    internal suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> {
         val candidates = map { photo ->
             mediaIdentityCandidate(
                 source = photo.sourceIdentity(),

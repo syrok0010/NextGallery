@@ -22,11 +22,13 @@ import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
@@ -36,11 +38,15 @@ import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
 import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
+import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoritesSource
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
@@ -81,6 +87,14 @@ val appModule = module {
         )
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
+    single { MemoriesAlbumRemover(get()) }
+    single {
+        AlbumRemovals(
+            get(),
+            get(),
+            get(named("libraryScope")),
+        ) { get<AlbumCatalogRepository>().refresh() }
+    }
     single {
         AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
     } bind OperationStatusSource::class
@@ -95,6 +109,9 @@ val appModule = module {
             get(named("libraryScope")),
         ) {
             get<MediaLibraryCoordinator>().refresh()
+            get<AlbumCatalogRepository>().refresh()
+            val favorites = get<CloudFavorites>()
+            if (favorites.state.value.loaded) favorites.refresh()
         }
     } bind OperationStatusSource::class
     single {
@@ -114,17 +131,21 @@ val appModule = module {
             remoteSource = get<MemoriesRepository>(),
             localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
+            favorites = get(),
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get<MemoriesApiClient>(), get()) }
+    single {
+        val cache = get<TimelineCacheRepository>()
+        MemoriesAlbumContents(get<MemoriesApiClient>(), get(), get(), cache::updateCachedFavorites)
+    }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
         val local = get<AndroidAlbumContents>()
-        AlbumContentsSource { location, _ ->
+        AlbumContentsSource { location, credentials ->
             when (location) {
-                is AlbumLocation.Remote -> remote.load(location)
+                is AlbumLocation.Remote -> remote.load(location, credentials)
                 is AlbumLocation.Folder -> local.load(location)
             }
         }
@@ -136,6 +157,7 @@ val appModule = module {
             get<MediaLibraryIndex>(),
             get<LocalMediaPermissionCoordinator>().mode,
             location,
+            favorites = get(),
         )
     }
 
@@ -188,7 +210,32 @@ val appModule = module {
         )
     }
     single { NextcloudLoginRepository(get<NextcloudAuthClient>()) }
-    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
+    single { CloudFavoriteMetadata(get()) }
+    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get(), get()) }
+    single { MemoriesFavoriteWriter(get()) }
+    single { MemoriesFavoritesSource(get(), get(), get(), get()) }
+    single {
+        CloudFavorites(
+            get(),
+            get(),
+            { credentials -> get<MemoriesFavoritesSource>().load(credentials) },
+            get(),
+            get(named("libraryScope")),
+            write = { credentials, id, value ->
+                get<MemoriesFavoriteWriter>().set(
+                    credentials,
+                    id,
+                    value,
+                )
+            },
+            persist = { item ->
+                get<TimelineCacheRepository>().saveDayDetails(
+                    listOf(item),
+                    emptySet(),
+                )
+            },
+        )
+    }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {

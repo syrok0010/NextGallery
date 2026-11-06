@@ -3,7 +3,9 @@ package com.syrok0010.nextgallery.app.library
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.favoriteProjection
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
@@ -24,6 +26,7 @@ internal class MediaLibraryCoordinator(
     private val remoteSource: RemoteTimelineSource,
     private val localMedia: LocalMediaSource,
     private val permissions: StateFlow<LocalMediaPermissionMode?>,
+    private val favorites: CloudFavoriteMetadata,
 ) {
     private val running = Mutex()
     private var remoteIndexer: TimelineWorkflow? = null
@@ -47,12 +50,16 @@ internal class MediaLibraryCoordinator(
                                     reconcileRequests = localRefresh,
                                     access = permissions,
                                 ),
-                            ) { remoteState, localState ->
-                                remoteState to localState.items
-                            }.collect { (remoteState, localItems) ->
+                                favorites.values,
+                            ) { remoteState, localState, values ->
+                                Triple(remoteState, localState.items, values)
+                            }.collect { (remoteState, localItems, values) ->
                                 val library = projectMediaLibrary(
                                     localItems = localItems,
-                                    remoteItems = remoteState.snapshot?.items.orEmpty(),
+                                    remoteItems = favoriteProjection(
+                                        remoteState.snapshot?.items.orEmpty(),
+                                        values,
+                                    ),
                                 )
                                 index.publish(library.items)
                                 publish(LibraryPublication(remoteState, library))

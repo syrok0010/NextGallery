@@ -29,6 +29,8 @@ internal fun MediaCollectionScreen(
     selection: MediaSelection? = null,
     selectionActions: List<SelectionAction> = emptyList(),
     viewerActions: List<SelectionAction> = emptyList(),
+    viewerAccessory: @Composable (MediaItem, Boolean) -> Unit = { _, _ -> },
+    viewerItemNote: @Composable (MediaItem) -> Unit = {},
     viewerStatus: @Composable (visible: Boolean) -> Unit = {},
     completedDeletions: Set<MediaId> = emptySet(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
@@ -96,9 +98,13 @@ internal fun MediaCollectionScreen(
             sequence = sequence,
             replacementMediaId = viewer.replacementMediaId,
             actions = { item ->
-                ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null)
+                androidx.compose.foundation.layout.Row {
+                    viewerAccessory(item, viewer.loadingRange == null)
+                    ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null)
+                }
             },
             status = viewerStatus,
+            itemNote = viewerItemNote,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
             onCurrentItemChange = { item ->

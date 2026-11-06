@@ -37,7 +37,11 @@ class TimelineCacheRepository(
         )
     }
 
-    suspend fun saveTimelineSnapshot(credentials: AccountCredentials, snapshot: TimelineSnapshot) {
+    suspend fun saveTimelineSnapshot(
+        credentials: AccountCredentials,
+        snapshot: TimelineSnapshot,
+        preservedFileIds: Set<Long> = emptySet(),
+    ) {
         val normalizedServerUrl = credentials.normalizedServerUrl()
         val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
         val newCounts = snapshot.days.associate { it.dayId to it.count }
@@ -59,7 +63,7 @@ class TimelineCacheRepository(
 
             if (invalidatedDayIds.isNotEmpty()) {
                 timelineDao.deleteLoadedDays(invalidatedDayIds)
-                timelineDao.deleteMediaItemsForDays(invalidatedDayIds)
+                timelineDao.deleteMediaItemsForDaysExcept(invalidatedDayIds, preservedFileIds)
             }
 
             if (staleThumbnailRows.isNotEmpty()) {
@@ -81,6 +85,15 @@ class TimelineCacheRepository(
                 timelineDao.upsertLoadedDays(
                     loadedDayIds.map { LoadedDayEntity(dayId = it, loadedAtEpochMillis = now) },
                 )
+            }
+        }
+    }
+
+    // Album reads refresh known flags without adding out-of-timeline membership to warm start.
+    suspend fun updateCachedFavorites(items: List<MediaItem>) {
+        database.withTransaction {
+            items.forEach { item ->
+                item.remoteFileId?.let { timelineDao.updateFavorite(it, item.isFavorite) }
             }
         }
     }

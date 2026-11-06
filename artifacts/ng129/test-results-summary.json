@@ -1,0 +1,424 @@
+{
+  "appJvm": {
+    "tests": 287,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "suites": [
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.AlbumMediaProjectionTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.NextGalleryAppRouteTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.OperationStatusTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.SessionStoreTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.ViewerTimelineBridgeTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.app.ui.ViewerTransitionCoordinatorTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.core.database.TimelineCacheMappersTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.core.network.BestEffortTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.core.network.NextcloudTransportTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.core.session.JsonCredentialsStoreTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumAdditionTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepositoryTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumCatalogTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModelTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumRemovalsTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUpTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.LiveAlbumRemovalContractTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContentsTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemoverTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSourceTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.auth.LoginViewModelTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepositoryTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.collection.MediaSelectionTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.collection.SelectionActionPlacementTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.deletion.MediaDeletionTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.favorites.CloudFavoritesTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriterTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoaderTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.images.ThumbnailKeyTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.library.local.CanonicalTimelineTimeTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.library.local.LocalMediaMetadataEnrichmentTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionPolicyTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.library.local.LocalMediaSourceTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.library.local.MemoriesMediaIdentityTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.TimelineGridItemsTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.TimelineScrollAnchorControllerTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.TimelineWorkflowTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.remote.MemoriesDtoMappingTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.remote.MemoriesMultipreviewParserTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.remote.TimelineSnapshotAssemblerTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.timeline.remote.UnifiedTimelineProjectionTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.upload.UploadQueueTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.upload.UploadRequestBodyTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUpTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.FallbackVideoFramesTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.VideoFilmstripItemStateTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.VideoFilmstripLoaderTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.VideoFilmstripProjectionTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.VideoPlaybackSessionTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.VideoQualityTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.ViewerSurfaceTransformTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.playback.AuthenticatedVideoSourceTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.syrok0010.nextgallery.feature.viewer.playback.VodClientIdTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "coreMedia": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": [
+      {
+        "name": "com.syrok0010.nextgallery.core.media.MediaContractTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "instrumentation": {
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "cases": [
+      {
+        "class": "com.syrok0010.nextgallery.core.database.TimelineCacheRepositoryOfflineTest",
+        "name": "confirmedFavoriteSurvivesStaleRefreshInvalidationAndDatabaseReopen"
+      },
+      {
+        "class": "com.syrok0010.nextgallery.feature.favorites.FavoriteDavContractTest",
+        "name": "emptyFavoritePropertyInSuccessfulPropstatConfirmsOnAndroid"
+      },
+      {
+        "class": "com.syrok0010.nextgallery.feature.favorites.FavoriteDavContractTest",
+        "name": "writeFromMainDispatcherReadsDelayedResponseBodyOffMainThread"
+      }
+    ]
+  },
+  "apkRevision": "480e2fd5e5305e6f0555390361a8c173dbf397c4"
+}
