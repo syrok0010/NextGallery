@@ -10,6 +10,7 @@ import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
+import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
@@ -88,6 +89,7 @@ val appModule = module {
     } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
+    single { NextcloudCapabilitiesClient(get()) }
     single { NextcloudTrashBin(get()) }
     single {
         CloudTrashAvailability(

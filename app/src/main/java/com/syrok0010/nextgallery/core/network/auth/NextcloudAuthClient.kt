@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.core.network.auth
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.OcsResponseDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.Credentials
@@ -70,12 +71,6 @@ data class LoginFlowCredentialsDto(
     @SerialName("loginName") val loginName: String,
     @SerialName("appPassword") val appPassword: String,
 )
-
-@Serializable
-data class OcsResponseDto<T>(val ocs: OcsBodyDto<T>)
-
-@Serializable
-data class OcsBodyDto<T>(val data: T)
 
 @Serializable
 data class NextcloudUserDto(val id: String)
