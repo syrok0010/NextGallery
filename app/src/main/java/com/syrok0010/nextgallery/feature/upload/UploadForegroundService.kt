@@ -10,11 +10,14 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
@@ -33,7 +36,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
 
@@ -43,7 +45,7 @@ import org.koin.android.ext.android.inject
  */
 class UploadForegroundService : Service() {
     private val credentialsStore: CredentialsStore by inject()
-    private val transport: NextcloudTransport by inject()
+    private val dav: FilesDavClient by inject()
     private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -218,13 +220,8 @@ class UploadForegroundService : Service() {
                     ).also { destination = it }
                 val selection = item.selection
                 put(
-                    credentials = account,
-                    url = uploadUrl(
-                        account.serverUrl,
-                        account.userId,
-                        directory,
-                        selection.displayName,
-                    ),
+                    // DAV paths use the Nextcloud uid, not the login name.
+                    path = DavFilePath.of(account.userId, directory, selection.displayName),
                     item = item,
                     onProgress = { percent ->
                         if (item.progress(percent)) {
@@ -244,13 +241,9 @@ class UploadForegroundService : Service() {
         )
     }
 
-    /**
-     * Returns null when the name is taken by a different file: an existing file counts as this
-     * upload only if sizes match, since the server keeps no hash to compare.
-     */
-    private fun put(
-        credentials: AccountCredentials,
-        url: HttpUrl,
+    /** Returns null when no free name is left for a file that differs from the taken ones. */
+    private suspend fun put(
+        path: DavFilePath,
         item: UploadItem,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
@@ -268,7 +261,15 @@ class UploadForegroundService : Service() {
             openStream = openLocal,
             onProgress = onProgress,
         )
-        return uploadFile(transport, credentials, url, selection, body, item::execute)
+        return try {
+            item.run { placeUpload(dav, path, selection, body, openLocal) }
+        } catch (error: DavHttpException) {
+            val reason = when (error.code) {
+                404, 409 -> R.string.upload_error_directory
+                else -> R.string.upload_error_http
+            }
+            throw UploadException(reason, error.code, selection.displayName)
+        }
     }
 
     private fun notification(
@@ -350,6 +351,8 @@ class UploadForegroundService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+
+    private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 
     companion object {
         const val ACTION_UPLOADS = "com.syrok0010.nextgallery.UPLOADS"

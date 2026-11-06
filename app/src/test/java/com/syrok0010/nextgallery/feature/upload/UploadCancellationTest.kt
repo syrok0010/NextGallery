@@ -2,6 +2,8 @@ package com.syrok0010.nextgallery.feature.upload
 
 import com.sun.net.httpserver.HttpServer
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -9,7 +11,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.*
 import org.junit.Test
@@ -72,21 +73,27 @@ class UploadCancellationTest {
         server.createContext("/") { exchange ->
             exchange.use {
                 it.requestBody.readBytes()
-                entered.countDown()
-                release.await(5, TimeUnit.SECONDS)
-                runCatching { it.sendResponseHeaders(201, -1) }
+                if (it.requestMethod == "PROPFIND") {
+                    it.sendResponseHeaders(404, -1)
+                } else {
+                    entered.countDown()
+                    release.await(5, TimeUnit.SECONDS)
+                    runCatching { it.sendResponseHeaders(201, -1) }
+                }
             }
         }
         server.start()
         try {
             val batch = batch(2)
             val accepted = mutableListOf<String>()
-            val url = "http://127.0.0.1:${server.address.port}/photo".toHttpUrl()
-            val transport = NextcloudTransport(Json)
-            val credentials = AccountCredentials(url.toString(), "test", "test", "test")
+            val dav = dav(server)
             val worker = async(Dispatchers.IO) {
                 runUploadFiles(batch, transfer = { item ->
-                    if (item === batch.items[0]) uploadFile(transport, credentials, url, item.selection, "bytes".toRequestBody(), item::execute) else uploaded(item)
+                    if (item === batch.items[0]) {
+                        item.run { placeUpload(dav, PATH, item.selection, "bytes".toRequestBody()) { "bytes".byteInputStream() } }
+                    } else {
+                        uploaded(item)
+                    }
                 }, accepted = { accepted += it.selection.displayName }, failureReason = { "network" }, processed = {})
             }
             assertTrue(entered.await(5, TimeUnit.SECONDS))
@@ -100,12 +107,13 @@ class UploadCancellationTest {
         }
     }
 
-    @Test fun `cancellation before call registration prevents HTTP request`() {
+    @Test fun `cancellation before the work starts prevents any request`() = runBlocking {
         val item = batch(1).items.single()
         item.cancel()
-        val call = okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url("http://127.0.0.1:1/").build())
-        assertThrows(IOException::class.java) { item.execute(call) }
-        assertTrue(call.isCanceled())
+        var started = false
+        val error = runCatching { item.run { started = true } }.exceptionOrNull()
+        assertTrue(error is IOException)
+        assertFalse(started)
         assertFalse(item.complete(UploadPhase.Uploaded))
         assertEquals(UploadPhase.Cancelled, item.state.value.phase)
     }
@@ -162,12 +170,13 @@ class UploadCancellationTest {
         server.start()
         try {
             val item = batch(1).items.single()
-            val call = okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url("http://127.0.0.1:${server.address.port}/").build())
-            val reader = async(Dispatchers.IO) { runCatching { item.execute(call).use { it.body!!.bytes() } } }
+            val dav = dav(server)
+            val reader = async(Dispatchers.IO) {
+                runCatching { item.run { dav.readFile(PATH, etag = null) { it.readBytes() } } }
+            }
             assertTrue(bodyStarted.await(5, TimeUnit.SECONDS))
             item.cancel()
-            assertTrue(withTimeout(2_000) { reader.await() }.isFailure)
-            assertTrue(call.isCanceled())
+            assertTrue(withTimeout(2_000) { reader.await() }.exceptionOrNull() is IOException)
             assertEquals(UploadPhase.Cancelled, item.state.value.phase)
         } finally {
             release.countDown()
@@ -176,6 +185,14 @@ class UploadCancellationTest {
     }
 
     private fun batch(size: Int) = UploadBatch((0 until size).map { UploadSelection("content://media/$it", "$it.jpg", "image/jpeg") })
-    private fun uploaded(item: UploadItem) = UploadedFile(item.selection, "http://cloud/photo".toHttpUrl(), true)
+    private fun uploaded(item: UploadItem) = UploadedFile(item.selection, PATH, true)
+    private fun dav(server: HttpServer): FilesDavClient {
+        val credentials = AccountCredentials("http://127.0.0.1:${server.address.port}", "test", "test", "test")
+        return FilesDavClient(NextcloudTransport(Json)) { credentials }
+    }
     private fun phases(batch: UploadBatch) = batch.items.map { it.state.value.phase }
+
+    private companion object {
+        val PATH = DavFilePath.of("test", "/Photos", "photo.jpg")
+    }
 }
