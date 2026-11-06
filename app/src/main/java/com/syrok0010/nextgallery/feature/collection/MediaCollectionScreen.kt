@@ -23,8 +23,8 @@ internal fun MediaCollectionScreen(
     onViewerRange: (IntRange) -> Unit = {},
     onViewerVisibilityChanged: (Boolean) -> Unit = {},
     onSelectionModeChanged: (Boolean) -> Unit = {},
-    selectionEnabled: Boolean = false,
-    selection: MediaSelection = rememberMediaSelection(),
+    /** Owned by the caller so its actions can clear it; null disables selection mode. */
+    selection: MediaSelection? = null,
     selectionActions: List<SelectionAction> = emptyList(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
@@ -35,13 +35,10 @@ internal fun MediaCollectionScreen(
     val sequence = rememberViewerSequence(slots, transition.viewerMediaId)
     val index = remember(slots) { ViewerMediaIndex(slots) }
     val viewerId = transition.viewerMediaId?.takeIf { it in sequence }
-    val cancelSelection = { selection.clear() }
-    val selectedItems = remember(slots, selection.selectedIds) {
-        slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
-    }
+    val selectionActive = selection?.active == true
     SideEffect {
         onViewerVisibilityChanged(viewerId != null)
-        onSelectionModeChanged(selection.active)
+        onSelectionModeChanged(selectionActive)
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -49,7 +46,7 @@ internal fun MediaCollectionScreen(
             onSelectionModeChanged(false)
         }
     }
-    BackHandler(enabled = selection.active, onBack = cancelSelection)
+    BackHandler(enabled = selectionActive) { selection?.clear() }
     Box(Modifier.fillMaxSize()) {
         scaffold(viewerId != null) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { transition.onAppBoundsChanged(it.boundsInRoot()) }) {
@@ -61,18 +58,21 @@ internal fun MediaCollectionScreen(
                     onMediaRevealed = transition::onTimelineMediaRevealed,
                     registerTimelineTile = transition::registerTimelineTile,
                     onSelect = { transition.open(it.mediaId) },
-                    selection = selection.takeIf { selectionEnabled },
+                    selection = selection,
                     tileActivity = tileActivity,
                     gridState = gridState,
                 )
             }
         }
-        if (viewerId == null && selectionEnabled && selection.active) {
+        if (viewerId == null && selection != null && selection.active) {
+            val selectedItems = remember(slots, selection.selectedIds) {
+                slots.mapNotNull { it.mediaItem }.filter { selection.isSelected(it.mediaId) }
+            }
             SelectionActionBar(
                 selectedCount = selectedItems.size,
-                onCancel = cancelSelection,
+                onCancel = selection::clear,
                 actions = selectionActions,
-                onPerform = { it.perform(selectedItems, cancelSelection) },
+                onPerform = { it.perform(selectedItems, selection::clear) },
             )
         }
         if (viewerId != null) MediaDetailScreen(

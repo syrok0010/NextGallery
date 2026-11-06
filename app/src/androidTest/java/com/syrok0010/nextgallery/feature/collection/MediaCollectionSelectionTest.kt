@@ -46,7 +46,7 @@ class MediaCollectionSelectionTest {
                         MediaSlot(MediaSlotKey(item.dayId, index), item.dayId, index, item)
                     },
                     emptyContent = {},
-                    selectionEnabled = true,
+                    selection = rememberMediaSelection(),
                     selectionActions = listOf(
                         SelectionAction(
                             ColorPainter(Color.Black),
