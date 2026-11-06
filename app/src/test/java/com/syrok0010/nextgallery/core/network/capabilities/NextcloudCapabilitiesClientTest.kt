@@ -30,10 +30,11 @@ class NextcloudCapabilitiesClientTest {
         runBlocking {
             var status = 200
             Fixture { status to capabilities }.use { fixture ->
-                val client = NextcloudCapabilitiesClient(fixture.writerTransport)
+                val client =
+                    NextcloudCapabilitiesClient(fixture.writerTransport) { fixture.credentials }
                 assertEquals(
                     NextcloudCapabilitiesDto(FilesCapabilitiesDto(undelete = true)),
-                    client.capabilities(fixture.credentials),
+                    client.capabilities(),
                 )
                 val request = fixture.requests.single()
                 assertEquals("GET", request.method)
@@ -45,7 +46,7 @@ class NextcloudCapabilitiesClientTest {
                 )
                 status = 503
                 val failure = assertThrows(HttpException::class.java) {
-                    runBlocking { client.capabilities(fixture.credentials) }
+                    runBlocking { client.capabilities() }
                 }
                 assertEquals(503, failure.code())
             }
@@ -55,7 +56,7 @@ class NextcloudCapabilitiesClientTest {
         runBlocking {
             DelayedBody(capabilities).use { fixture ->
                 Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { caller ->
-                    val result = async(caller) { fixture.source.capabilities(fixture.credentials) }
+                    val result = async(caller) { fixture.source.capabilities() }
                     try {
                         withTimeout(5_000) { fixture.bodyReadStarted.await() }
                         // A second task must run while the capabilities body is still withheld.
@@ -77,7 +78,7 @@ class NextcloudCapabilitiesClientTest {
     @Test fun `cancelling while reading delayed body cancels HTTP call promptly`() =
         runBlocking {
             DelayedBody(capabilities).use { fixture ->
-                val result = async { fixture.source.capabilities(fixture.credentials) }
+                val result = async { fixture.source.capabilities() }
                 try {
                     withTimeout(5_000) { fixture.bodyReadStarted.await() }
                     result.cancel()
@@ -115,12 +116,12 @@ class NextcloudCapabilitiesClientTest {
                 }
             })
             .build()
+        val credentials =
+            AccountCredentials("http://127.0.0.1:${server.localPort}/", "test", "password", "test")
         val source =
             NextcloudCapabilitiesClient(
                 NextcloudTransport(Json { ignoreUnknownKeys = true }, client),
-            )
-        val credentials =
-            AccountCredentials("http://127.0.0.1:${server.localPort}/", "test", "password", "test")
+            ) { credentials }
 
         init {
             worker.submit {

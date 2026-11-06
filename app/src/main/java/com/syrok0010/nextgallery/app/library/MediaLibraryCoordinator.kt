@@ -24,7 +24,6 @@ internal class MediaLibraryCoordinator(
     private val remoteSource: RemoteTimelineSource,
     private val localMedia: LocalMediaSource,
     private val permissions: StateFlow<LocalMediaPermissionMode?>,
-    private val refreshCloudTrash: () -> Unit,
 ) {
     private val running = Mutex()
     private var remoteIndexer: TimelineWorkflow? = null
@@ -73,7 +72,6 @@ internal class MediaLibraryCoordinator(
     }
 
     fun refresh() {
-        refreshCloudTrash()
         remoteIndexer?.refresh()
         localRefresh.tryEmit(Unit)
     }

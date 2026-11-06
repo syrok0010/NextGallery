@@ -35,7 +35,6 @@ import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
 import com.syrok0010.nextgallery.feature.deletion.CloudTrash
-import com.syrok0010.nextgallery.feature.deletion.CloudTrashAvailability
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
@@ -89,15 +88,7 @@ val appModule = module {
     } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
-    single { NextcloudCapabilitiesClient(get()) }
     single { NextcloudTrashBin(get()) }
-    single {
-        CloudTrashAvailability(
-            get(),
-            get(named("libraryScope")),
-            get<NextcloudTrashBin>()::available,
-        )
-    }
     single {
         MediaDeletionRepository(
             get(),
@@ -126,7 +117,6 @@ val appModule = module {
             remoteSource = get<MemoriesRepository>(),
             localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
-            refreshCloudTrash = get<CloudTrashAvailability>()::refresh,
         )
     }
     viewModel { AlbumsViewModel(get()) }
@@ -165,6 +155,7 @@ val appModule = module {
     single { MemoriesApiClient(get(), get<SessionStore>()::requireCredentials) }
     single { PhotosAlbumsDavClient(get(), get<SessionStore>()::requireCredentials) }
     single { FilesDavClient(get(), get<SessionStore>()::requireCredentials) }
+    single { NextcloudCapabilitiesClient(get(), get<SessionStore>()::requireCredentials) }
     single<CredentialsStore> { KeystoreCredentialsStore(androidContext(), get()) }
     single { NextGalleryDatabase.create(androidContext()) }
     single { ThumbnailFileStore(androidContext()) }
