@@ -66,23 +66,15 @@ class SelectionActionBarTest {
         rule.onNodeWithContentDescription("Отменить выбор").assertIsEnabled()
     }
 
-    @Test fun handoffDisablesActionsAndCancellation() {
-        show(listOf(action("В альбом"), action("Загрузить", true)), locked = true)
-        rule.onNodeWithContentDescription("В альбом").assertIsNotEnabled()
-        rule.onNodeWithText("Загрузить").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("Отменить выбор").assertIsNotEnabled()
-    }
-
     private fun show(
         actions: List<SelectionAction>,
         count: Int = 2,
-        locked: Boolean = false,
         onPerform: (SelectionAction) -> Unit = {},
     ) {
         rule.setContent {
             NextGalleryTheme {
                 Box(Modifier.fillMaxWidth()) {
-                    SelectionActionBar(count, locked, {}, actions, onPerform)
+                    SelectionActionBar(count, {}, actions, onPerform)
                 }
             }
         }

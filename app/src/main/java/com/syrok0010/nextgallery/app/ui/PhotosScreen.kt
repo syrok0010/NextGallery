@@ -80,7 +80,6 @@ internal fun PhotosScreen(
                 icon = painterResource(R.drawable.ic_cloud),
                 label = stringResource(R.string.upload_action),
                 isPrimary = true,
-                blocksSelectionUntilDone = true,
             ) { items, onDone ->
                 // The app root starts the batch and asks for the notification permission.
                 uploads.submit(UploadBatch(uploadSelections(items)))

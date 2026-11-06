@@ -6,14 +6,12 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 /**
  * A caller-owned action over a selection snapshot. Calling [perform]'s onDone clears selection;
  * dismissing a confirmation or rejecting a request must leave it untouched.
- * [blocksSelectionUntilDone] prevents other actions and cancellation while handing off immediate work.
  */
 internal class SelectionAction(
     val icon: Painter,
     val label: String,
     val isPrimary: Boolean = false,
     val isDestructive: Boolean = false,
-    val blocksSelectionUntilDone: Boolean = false,
     val perform: (items: List<MediaItem>, onDone: () -> Unit) -> Unit,
 )
 
