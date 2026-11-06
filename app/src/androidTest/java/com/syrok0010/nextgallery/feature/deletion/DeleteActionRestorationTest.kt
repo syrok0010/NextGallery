@@ -76,7 +76,7 @@ class DeleteActionRestorationTest {
                 CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                     val currentSelection = rememberMediaSelection()
                     val action = rememberDeleteAction(confirmed::add, currentSelection::clear)
-                    val operations = rememberOperationStatus()
+                    val operations = rememberOperationStatus(sources = listOf(uploads))
                     OperationStatusPill(operations, visible = !action.awaitingConfirmation)
                     SideEffect {
                         selection = currentSelection
