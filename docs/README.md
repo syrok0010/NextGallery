@@ -11,6 +11,7 @@
 
 - [Nextcloud API](research/api-nextcloud.md) - авторизация, WebDAV, capabilities и fallback-роль Nextcloud.
 - [Memories API](research/api-memories.md) - найденные endpoint'ы, модель данных и риски использования Memories как основного фотодоменного API.
+- [Устойчивая очередь загрузок](research/durable-upload-queue.md) - предложение durable-журнала, роли WorkManager/UIDT и план вертикальных реализаций; решение ещё не принято.
 
 ## ADR
 
