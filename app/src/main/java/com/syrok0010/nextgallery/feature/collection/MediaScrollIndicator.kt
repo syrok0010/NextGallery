@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
@@ -30,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -139,8 +139,9 @@ private fun TimelineScrollTooltip(
             R.string.timeline_scroll_date_with_year_pattern
         },
     )
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    val locale = LocalConfiguration.current.locales[0]
+    val formatter = remember(pattern, locale) {
+        DateTimeFormatter.ofPattern(pattern, locale)
     }
     val label = remember(date, formatter) {
         date.format(formatter)
