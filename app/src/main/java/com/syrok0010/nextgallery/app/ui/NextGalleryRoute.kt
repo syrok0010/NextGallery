@@ -1,8 +1,10 @@
 package com.syrok0010.nextgallery.app.ui
 
+import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
+import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
@@ -42,6 +44,13 @@ internal sealed interface NextGalleryRoute : NavKey {
                 }
         }
 }
+
+/** The screen an [AppLinks] link opens; null for a link this version does not know. */
+internal fun linkRoute(link: Uri): NextGalleryRoute? =
+    when (link) {
+        AppLinks.Uploads -> NextGalleryRoute.Uploads
+        else -> null
+    }
 
 internal fun topLevelRouteFromContentKey(contentKey: Any): NextGalleryRoute? =
     when (contentKey) {

@@ -35,6 +35,7 @@ import org.koin.compose.koinInject
 @Composable
 internal fun PhotosScreen(
     onLogout: () -> Unit,
+    onOpenUploads: () -> Unit,
     onViewerVisibilityChanged: (Boolean) -> Unit,
     onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
@@ -108,7 +109,12 @@ internal fun PhotosScreen(
         viewerActions = listOf(albumAction, uploadAction, deleteAction),
         viewerStatus = { visible ->
             if (operations.active) {
-                OperationStatusPill(operations, visible = visible, fillWidth = false)
+                OperationStatusPill(
+                    operations,
+                    visible = visible,
+                    onOpenUploads = onOpenUploads,
+                    fillWidth = false,
+                )
             }
         },
         deletedMediaIds = deletedMediaIds,
@@ -117,6 +123,7 @@ internal fun PhotosScreen(
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
             onLogout,
+            onOpenUploads,
             viewerVisible = viewerVisible,
             operations = operations,
         ) {

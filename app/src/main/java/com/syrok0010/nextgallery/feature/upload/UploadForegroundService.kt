@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
+import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
@@ -365,8 +366,7 @@ class UploadForegroundService : Service() {
         PendingIntent.getActivity(
             this,
             128,
-            Intent(this, MainActivity::class.java)
-                .setAction(ACTION_UPLOADS)
+            Intent(Intent.ACTION_VIEW, AppLinks.Uploads, this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -391,7 +391,6 @@ class UploadForegroundService : Service() {
 
     companion object {
         private const val TAG = "UploadService"
-        const val ACTION_UPLOADS = "com.syrok0010.nextgallery.UPLOADS"
         private const val CHANNEL_ID = "cloud-upload"
         private const val FOREGROUND_NOTIFICATION_ID = 42
         private const val RESULT_NOTIFICATION_ID = 43

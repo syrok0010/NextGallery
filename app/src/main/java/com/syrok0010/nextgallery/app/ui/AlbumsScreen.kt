@@ -12,13 +12,14 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 internal fun AlbumsScreen(
     onLogout: () -> Unit,
+    onOpenUploads: () -> Unit,
     onOpen: (AlbumSummary) -> Unit,
     viewModel: AlbumsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
     var filter by rememberSaveable { mutableStateOf<AlbumOrigin?>(null) }
-    LibraryScreenScaffold(TopLevelDestination.Albums, onLogout) {
+    LibraryScreenScaffold(TopLevelDestination.Albums, onLogout, onOpenUploads) {
         AlbumsPanel(state, listState, filter, { filter = it }, viewModel::refresh, onOpen)
     }
 }
