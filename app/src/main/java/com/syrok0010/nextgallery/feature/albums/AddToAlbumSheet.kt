@@ -123,7 +123,7 @@ internal fun AddToAlbumSheet(
                         )
                     },
                     enabled = !busy,
-                    onClick = { onPick(AlbumTarget.Existing(location, album.name)) },
+                    onClick = { onPick(AlbumTarget.Existing(location, album.name, album.id.removePrefix("remote:").toLongOrNull())) },
                 ) {
                     AlbumCoverImage(album)
                 }

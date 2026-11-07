@@ -146,6 +146,24 @@ class DurableUploadJournalTest {
             )
         }
 
+    @Test fun stopAfterStepCommitReleasesFinishedClaimWithoutChangingAcceptedResults() =
+        runBlocking {
+            journal.enqueue(owner, "finish-before-stop", listOf(file), listOf(UploadIntent("link")))
+            val queued = journal.jobs(owner).single()
+            val accepted = journal.accept(journal.claim(queued.id, owner, "process-1")!!, receipt)!!
+            val running = journal.beginStep(accepted, "link")!!
+            journal.finishStep(running, "link", UploadStepResult("Done", fileId = 42))!!
+            journal.interrupt(owner, setOf(queued.batchId), "process-1")
+            val stopped = journal.jobs(owner).single()
+            assertNull(
+                "A finished step claim must not keep queue activity alive after stop",
+                stopped.executor,
+            )
+            assertEquals(receipt, stopped.receipt)
+            assertEquals("Done", stopped.linkStep)
+            assertFalse(stopped.unfinished)
+        }
+
     @Test fun newSessionCannotAcceptOldResultEvenForSameServerUid() =
         runBlocking {
             val claim = journal.claim(enqueue().id, owner, "process-1")!!

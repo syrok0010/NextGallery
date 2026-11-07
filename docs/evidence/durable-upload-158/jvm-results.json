@@ -1,0 +1,14 @@
+{
+  "app/build/test-results/testAutomationUnitTest": {
+    "tests": 270,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "core/media/build/test-results/test": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

@@ -1,0 +1,77 @@
+[
+  {
+    "method": "GET",
+    "url": "http://test.syrok/remote.php/dav/files/test/Photos/durable158-attention.jpg",
+    "status": 200,
+    "length": 833
+  },
+  {
+    "method": "DELETE",
+    "url": "http://test.syrok/remote.php/dav/files/test/Photos/durable158-attention.jpg",
+    "status": 204
+  },
+  {
+    "method": "PUT",
+    "url": "http://test.syrok/remote.php/dav/files/test/Photos/durable158-attention.jpg",
+    "status": 201,
+    "OC-FileId": "00000345ocmsigiy9k16"
+  },
+  {
+    "method": "GET",
+    "url": "http://test.syrok/apps/memories/api/clusters/albums",
+    "status": 200,
+    "albums": [
+      {
+        "album_id": 43,
+        "name": "durable158-attention",
+        "user": "test",
+        "created": 1793544348,
+        "location": "",
+        "last_added_photo": -1,
+        "count": 0,
+        "update_id": null,
+        "shared": false,
+        "cover": null,
+        "last_added_photo_etag": null,
+        "cover_etag": null,
+        "cluster_id": "test/durable158-attention",
+        "user_display": "NextGallery Test",
+        "cluster_type": "albums"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "url": "http://test.syrok/remote.php/dav/photos/test/albums/durable158-attention",
+    "status": 204
+  },
+  {
+    "method": "MKCOL",
+    "url": "http://test.syrok/remote.php/dav/photos/test/albums/durable158-attention",
+    "status": 201
+  },
+  {
+    "method": "GET",
+    "url": "http://test.syrok/apps/memories/api/clusters/albums",
+    "status": 200,
+    "albums": [
+      {
+        "album_id": 44,
+        "name": "durable158-attention",
+        "user": "test",
+        "created": 1793544464,
+        "location": "",
+        "last_added_photo": -1,
+        "count": 0,
+        "update_id": null,
+        "shared": false,
+        "cover": null,
+        "last_added_photo_etag": null,
+        "cover_etag": null,
+        "cluster_id": "test/durable158-attention",
+        "user_display": "NextGallery Test",
+        "cluster_type": "albums"
+      }
+    ]
+  }
+]

@@ -28,6 +28,7 @@ import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
+import com.syrok0010.nextgallery.feature.albums.DurableAlbumStep
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
@@ -129,14 +130,15 @@ val appModule = module {
             link = { account, identity, fileId ->
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
-            album = { account, intent, file ->
-                val success =
-                    writer.addFile(file.path, AlbumAddress(intent.owner, intent.target)) ==
-                        AlbumCopyOutcome.Added
-                catalog.refresh()
-                success
+            album = { account, intent, file, mode, current ->
+                DurableAlbumStep(writer).run(account, intent, file, mode, current)
             },
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
+            prepareAlbum = { account, intent ->
+                DurableAlbumStep(
+                    writer,
+                ).snapshot(account, intent)
+            },
         )
     }
     single<OperationStatusSource> { get<UploadQueue>() }

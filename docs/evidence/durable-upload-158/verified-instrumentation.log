@@ -1,0 +1,10 @@
+
+com.syrok0010.nextgallery.feature.upload.QueuedUploadsTest:.....
+com.syrok0010.nextgallery.feature.upload.UploadsRetryUiTest:..
+com.syrok0010.nextgallery.feature.upload.DurableUploadJournalTest:........
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest:.......................
+com.syrok0010.nextgallery.feature.upload.UploadJournalMigrationTest:.
+
+Time: 11.348
+
+OK (39 tests)

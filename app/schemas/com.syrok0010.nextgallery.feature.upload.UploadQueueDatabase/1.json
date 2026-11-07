@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "ea36aaf732d7a7b10efb22c589bbefeb",
+    "identityHash": "988a61746024b709d1cc59dc33145d49",
     "entities": [
       {
         "tableName": "upload_jobs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `batchId` TEXT NOT NULL, `owner` TEXT NOT NULL, `requestId` TEXT NOT NULL, `position` INTEGER NOT NULL, `selectionJson` TEXT NOT NULL, `intentsJson` TEXT NOT NULL, `state` TEXT NOT NULL, `destinationJson` TEXT, `receiptJson` TEXT, `linkStep` TEXT NOT NULL, `albumStep` TEXT NOT NULL, `problem` TEXT, `httpStatus` INTEGER, `passId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `executor` TEXT, `attempts` INTEGER NOT NULL, `policyVersion` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `seen` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `batchId` TEXT NOT NULL, `owner` TEXT NOT NULL, `requestId` TEXT NOT NULL, `position` INTEGER NOT NULL, `selectionJson` TEXT NOT NULL, `intentsJson` TEXT NOT NULL, `state` TEXT NOT NULL, `destinationJson` TEXT, `receiptJson` TEXT, `linkStep` TEXT NOT NULL, `albumStep` TEXT NOT NULL, `problem` TEXT, `httpStatus` INTEGER, `passId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `executor` TEXT, `attempts` INTEGER NOT NULL, `policyVersion` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `seen` INTEGER NOT NULL, `linkResultJson` TEXT, `albumResultJson` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -128,6 +128,16 @@
             "columnName": "seen",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "linkResultJson",
+            "columnName": "linkResultJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumResultJson",
+            "columnName": "albumResultJson",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -176,7 +186,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ea36aaf732d7a7b10efb22c589bbefeb')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '988a61746024b709d1cc59dc33145d49')"
     ]
   }
 }
