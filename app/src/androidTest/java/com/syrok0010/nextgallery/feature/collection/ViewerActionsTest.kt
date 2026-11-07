@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -40,7 +41,7 @@ class ViewerActionsTest {
             } else {
                 rule.onNodeWithTag("filmstrip_tile_$index").performClick()
             }
-            rule.onNodeWithContentDescription("В альбом").performClick()
+            rule.onNodeWithText("В альбом").performClick()
             rule.runOnIdle { assertEquals(listOf(item), received) }
         }
     }
@@ -49,7 +50,7 @@ class ViewerActionsTest {
         show()
         openAndRemove(middle)
         rule.onNodeWithText(last.displayName).assertIsDisplayed()
-        rule.onNodeWithContentDescription("В альбом").performClick()
+        rule.onNodeWithText("В альбом").performClick()
         rule.runOnIdle { assertEquals(listOf(last), received) }
     }
 
@@ -64,7 +65,7 @@ class ViewerActionsTest {
         show()
         openAndRemove(middle)
         rule.waitUntil { !visible.value }
-        rule.onNodeWithContentDescription("В альбом").assertDoesNotExist()
+        rule.onNodeWithText("В альбом").assertDoesNotExist()
     }
 
     @Test fun removingOneCopyKeepsCurrentIdentityAndUpdatedActions() {
@@ -73,7 +74,7 @@ class ViewerActionsTest {
         val surviving = last.copy(assetRef = MediaAssetRef.MemoriesFile(3))
         rule.runOnIdle { items.value = listOf(first, middle, surviving) }
         rule.onNodeWithText(last.displayName).assertIsDisplayed()
-        rule.onNodeWithContentDescription("В альбом").performClick()
+        rule.onNodeWithText("В альбом").performClick()
         rule.runOnIdle { assertEquals(listOf(surviving), received) }
     }
 
@@ -88,8 +89,37 @@ class ViewerActionsTest {
         show(actionsEnabled = false)
         rule.onNodeWithContentDescription(middle.displayName).performClick()
         rule.onNodeWithText(middle.displayName).assertIsDisplayed()
-        rule.onNodeWithContentDescription("В альбом").assertDoesNotExist()
-        rule.onNodeWithContentDescription("Удалить").assertDoesNotExist()
+        rule.onNodeWithText("В альбом").assertDoesNotExist()
+        rule.onNodeWithText("Удалить").assertDoesNotExist()
+    }
+
+    @Test fun uploadShowsDisabledDoneStateForObjectsWithCloudCopy() {
+        show()
+        rule.onNodeWithContentDescription(first.displayName).performClick()
+        rule.onNodeWithText("В облако").assertIsEnabled().performClick()
+        rule.runOnIdle { assertEquals(listOf(first), received) }
+        rule.onNodeWithTag("filmstrip_tile_1").performClick()
+        rule.onNodeWithText("В облако").assertDoesNotExist()
+        rule.onNodeWithText("В облаке").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Есть в облаке").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Есть на телефоне").assertDoesNotExist()
+    }
+
+    @Test fun swipeUpOpensDetailsAndSwipeDownClosesThem() {
+        show()
+        rule.onNodeWithContentDescription(last.displayName).performClick()
+        rule.onNodeWithText("Сведения").assertDoesNotExist()
+        // From the middle of the screen: the photo, not the chrome over its edges.
+        rule.onRoot().performTouchInput {
+            swipe(center, center.copy(y = center.y - height / 3f), durationMillis = 250)
+        }
+        rule.onNodeWithText("Сведения").assertIsDisplayed()
+        rule.onNodeWithText("На телефоне").assertIsDisplayed()
+        rule.onNodeWithTag("viewer_details").performTouchInput {
+            swipe(center, center.copy(y = center.y + height), durationMillis = 250)
+        }
+        rule.waitUntil { rule.onAllNodesWithText("Сведения").fetchSemanticsNodes().isEmpty() }
+        rule.runOnIdle { assertEquals(true, visible.value) }
     }
 
     @Test fun deletionWaitsForNeighborInsteadOfJumpingToAnotherLoadedDay() {
@@ -103,14 +133,14 @@ class ViewerActionsTest {
             items.value = listOf(otherDay, last)
         }
         rule.onNodeWithText(middle.displayName).assertIsDisplayed()
-        rule.onNodeWithContentDescription("Удалить").assertIsNotEnabled()
+        rule.onNodeWithText("Удалить").assertIsNotEnabled()
         rule.runOnIdle {
             assertEquals(true, visible.value)
             assertEquals(true, requests.any { 1 in it })
             unloaded.value = emptySet()
         }
         rule.onNodeWithText(last.displayName).assertIsDisplayed()
-        rule.onNodeWithContentDescription("В альбом").performClick()
+        rule.onNodeWithText("В альбом").performClick()
         rule.runOnIdle { assertEquals(listOf(last), received) }
     }
 
@@ -133,7 +163,7 @@ class ViewerActionsTest {
 
     private fun openAndRemove(item: MediaItem) {
         rule.onNodeWithContentDescription(item.displayName).performClick()
-        rule.onNodeWithContentDescription("Удалить").performClick()
+        rule.onNodeWithText("Удалить").performClick()
         rule.runOnIdle {
             assertEquals(listOf(item), received)
             // Index publication and completion can arrive in either order.
@@ -173,6 +203,11 @@ class ViewerActionsTest {
                             received = selected
                             done()
                         },
+                        SelectionAction(
+                            ColorPainter(Color.White),
+                            "В облако",
+                            done = SelectionActionDone(ColorPainter(Color.White), "В облаке") { it.hasRemoteCopy },
+                        ) { selected, _ -> received = selected },
                     )
                 } else {
                     emptyList()

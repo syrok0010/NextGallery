@@ -95,8 +95,10 @@ internal fun MediaCollectionScreen(
             initialMediaId = viewerId,
             sequence = sequence,
             replacementMediaId = viewer.replacementMediaId,
-            actions = { item ->
-                ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null)
+            actions = if (viewerActions.isEmpty()) {
+                null
+            } else {
+                { item -> ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null) }
             },
             status = viewerStatus,
             tileBoundsForMediaId = transition::timelineTileBounds,

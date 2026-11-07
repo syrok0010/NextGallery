@@ -16,11 +16,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun VideoPlaybackChrome(controller: VideoPlaybackController, controlsVisible: Boolean) {
+internal fun VideoPlaybackChrome(
+    controller: VideoPlaybackController,
+    controlsVisible: Boolean,
+    /** Height of the chrome under the filmstrip, such as the viewer's action row. */
+    bottomInset: Dp = 0.dp,
+) {
     val playbackState = controller.state
     val dispatch = controller::dispatch
     val density = LocalDensity.current
@@ -62,7 +68,7 @@ internal fun VideoPlaybackChrome(controller: VideoPlaybackController, controlsVi
             modifier = Modifier.align(Alignment.BottomCenter)
                 .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(bottom = if (playbackState.isFullscreen) 8.dp else FilmstripRowHeight + 8.dp),
+                .padding(bottom = if (playbackState.isFullscreen) 8.dp else FilmstripRowHeight + bottomInset + 8.dp),
         )
     }
 }
