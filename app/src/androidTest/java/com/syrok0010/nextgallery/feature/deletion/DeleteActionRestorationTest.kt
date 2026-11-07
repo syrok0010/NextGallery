@@ -27,6 +27,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.upload.UploadResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,7 @@ class DeleteActionRestorationTest {
             override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
             override fun save(credentials: AccountCredentials) = Unit
             override fun clear() = Unit
-        }), scope)
+        }), MediaLibraryIndex(), scope)
         try {
             val registry = TrashRegistry()
             val owner = object : ActivityResultRegistryOwner {
