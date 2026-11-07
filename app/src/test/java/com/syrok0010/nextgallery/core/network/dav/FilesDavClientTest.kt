@@ -79,12 +79,64 @@ class FilesDavClientTest {
         assertEquals(DavFileProperties(size = null, fileId = null, etag = null), properties)
     }
 
+    @Test fun `properties read a Nextcloud body with a declaration and a missing property`() {
+        // Nextcloud 34 answer for a folder: getcontentlength comes back empty under 404.
+        val properties = fileProperties(
+            (
+                "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" " +
+                    "xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" " +
+                    "xmlns:nc=\"http://nextcloud.org/ns\"><d:response>" +
+                    "<d:href>/remote.php/dav/files/test/Photos/</d:href><d:propstat><d:prop>" +
+                    "<d:getetag>&quot;6aee17d638e4e&quot;</d:getetag><oc:fileid>87</oc:fileid>" +
+                    "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat>" +
+                    "<d:prop><d:getcontentlength/></d:prop>" +
+                    "<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>" +
+                    "</d:multistatus>"
+                ).byteInputStream(),
+        )
+        assertEquals(
+            DavFileProperties(size = null, fileId = 87, etag = "6aee17d638e4e"),
+            properties,
+        )
+    }
+
     @Test fun `properties refuse a document type declaration`() {
         val error = runCatching {
             fileProperties(
                 "<!DOCTYPE d [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><d:multistatus xmlns:d=\"DAV:\"/>"
                     .byteInputStream(),
             )
+        }.exceptionOrNull()
+        assertTrue(error is IOException)
+    }
+
+    @Test fun `propfind body names the three properties in their namespaces`() {
+        val body = encodeDav(PropFind())
+        val document = javax.xml.parsers.DocumentBuilderFactory
+            .newInstance()
+            .apply { isNamespaceAware = true }
+            .newDocumentBuilder()
+            .parse(body.byteInputStream())
+        val root = document.documentElement
+        assertEquals("DAV:" to "propfind", root.namespaceURI to root.localName)
+        val prop = root.getElementsByTagNameNS("DAV:", "prop").item(0)
+        val names = (0 until prop.childNodes.length)
+            .map { prop.childNodes.item(it) }
+            .filter { it.nodeType == org.w3c.dom.Node.ELEMENT_NODE }
+            .map { it.namespaceURI to it.localName }
+        assertEquals(
+            listOf(
+                "DAV:" to "getcontentlength",
+                "DAV:" to "getetag",
+                "http://owncloud.org/ns" to "fileid",
+            ),
+            names,
+        )
+    }
+
+    @Test fun `malformed properties fail as an IO error`() {
+        val error = runCatching {
+            fileProperties("<d:multistatus xmlns:d=\"DAV:\"><d:response>".byteInputStream())
         }.exceptionOrNull()
         assertTrue(error is IOException)
     }
