@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 
 @Dao
 interface LocalMediaDao {
@@ -12,13 +13,13 @@ interface LocalMediaDao {
         SELECT media.*, identifier.mediaId
         FROM local_media_projection AS media
         INNER JOIN media_identifiers AS identifier
-            ON identifier.kind = :identifierKind
-            AND identifier.value = media.contentUri
+            ON identifier.source = :source
+            AND identifier.sourceKey = media.contentUri
         ORDER BY media.takenAtEpochSeconds DESC, identifier.mediaId DESC
         """,
     )
     suspend fun projection(
-        identifierKind: MediaIdentifierKind = MediaIdentifierKind.LocalContent,
+        source: MediaSourceKind = MediaSourceKind.Local,
     ): List<IdentifiedLocalMedia>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

@@ -214,7 +214,7 @@ class RoomMediaIdentityRegistryTest {
         assertEquals(false, registry.link(existing = local, linked = remote, isCurrent = { false }))
         assertEquals(
             emptyList<MediaIdentifierEntity>(),
-            database.mediaIdentityDao().identifiers(MediaIdentifierKind.MemoriesFile, listOf(FILE_ID.toString())),
+            database.mediaIdentityDao().identifiers(MediaSourceKind.Memories, listOf(FILE_ID.toString())),
         )
     }
 

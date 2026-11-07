@@ -43,15 +43,15 @@ class RoomMediaIdentityRegistry(
         candidates: List<MediaIdentityCandidate>,
     ): KnownIdentities {
         val sourceMediaIds = candidates
-            .groupBy { it.source.identifierKind() }
-            .flatMap { (kind, sourceCandidates) ->
+            .groupBy { it.source.source }
+            .flatMap { (source, sourceCandidates) ->
                 sourceCandidates
                     .map { it.source.sourceKey }
                     .distinct()
                     .chunked(
                         QUERY_CHUNK_SIZE,
                     ).flatMap { keys ->
-                        dao.identifiers(kind, keys)
+                        dao.identifiers(source, keys)
                     }
             }.associate { entity -> entity.toSourceIdentity() to MediaId(entity.mediaId) }
         // A copy in this batch is matched by the aliases it reports now, not by its stored ones.
@@ -75,7 +75,7 @@ class RoomMediaIdentityRegistry(
             .chunked(QUERY_CHUNK_SIZE)
             .flatMap { mediaIds -> dao.identifiersForMediaIds(mediaIds) }
         val localMediaIds = aliasedCopies
-            .filter { it.kind == MediaIdentifierKind.LocalContent }
+            .filter { it.source == MediaSourceKind.Local }
             .mapTo(mutableSetOf()) { MediaId(it.mediaId) }
         val mediaSources = aliasedCopies
             .groupBy({ MediaId(it.mediaId) }, { it.toSourceIdentity() })
@@ -105,8 +105,8 @@ class RoomMediaIdentityRegistry(
             reconciliation.resolution.mediaIds.map { (source, mediaId) ->
                 val aliases = aliasesBySource[source].orEmpty()
                 MediaIdentifierEntity(
-                    kind = source.identifierKind(),
-                    value = source.sourceKey,
+                    source = source.source,
+                    sourceKey = source.sourceKey,
                     mediaId = mediaId.value,
                     auid = aliases.valueOf(MediaAliasKind.Auid),
                     buid = aliases.valueOf(MediaAliasKind.Buid),
@@ -127,7 +127,7 @@ class RoomMediaIdentityRegistry(
 
     override suspend fun removeSource(source: MediaSourceKind) {
         database.withTransaction {
-            dao.deleteIdentifiers(source.identifierKind())
+            dao.deleteIdentifiers(source)
             dao.deleteConflicts(source)
         }
     }
@@ -140,14 +140,13 @@ class RoomMediaIdentityRegistry(
         database.withTransaction {
             if (!isCurrent()) return@withTransaction false
             val mediaId = dao
-                .identifiers(existing.identifierKind(), listOf(existing.sourceKey))
+                .identifiers(existing.source, listOf(existing.sourceKey))
                 .singleOrNull()
                 ?.mediaId
                 ?: return@withTransaction false
-            val linkedKind = linked.identifierKind()
             val previousEntity = dao
                 .identifiers(
-                    linkedKind,
+                    linked.source,
                     listOf(linked.sourceKey),
                 ).singleOrNull()
             val previous = previousEntity?.mediaId
@@ -160,7 +159,7 @@ class RoomMediaIdentityRegistry(
             // server copy that is already attached to the local object.
             val existingLinkedCopies = dao
                 .identifiersForMediaIds(listOf(mediaId))
-                .filter { it.kind == linkedKind }
+                .filter { it.source == linked.source }
             if (existingLinkedCopies.isNotEmpty()) {
                 return@withTransaction false
             }
@@ -169,7 +168,7 @@ class RoomMediaIdentityRegistry(
                 val previousSources = dao.identifiersForMediaIds(listOf(previous))
                 // An unlinked server object may have been indexed between PUT and this follow-up.
                 // Merge that object, but never take a link away from another local object.
-                if (previousSources.any { it.kind != linkedKind || it.value != linked.sourceKey }) {
+                if (previousSources.any { it.toSourceIdentity() != linked }) {
                     return@withTransaction false
                 }
                 dao.reassignMediaId(previous, mediaId)
@@ -179,7 +178,7 @@ class RoomMediaIdentityRegistry(
             dao.upsertIdentifiers(
                 listOf(
                     previousEntity?.copy(mediaId = mediaId)
-                        ?: MediaIdentifierEntity(linkedKind, linked.sourceKey, mediaId),
+                        ?: MediaIdentifierEntity(linked.source, linked.sourceKey, mediaId),
                 ),
             )
             true
@@ -219,14 +218,6 @@ class RoomMediaIdentityRegistry(
     }
 }
 
-private fun MediaSourceIdentity.identifierKind(): MediaIdentifierKind = source.identifierKind()
-
-private fun MediaSourceKind.identifierKind(): MediaIdentifierKind =
-    when (this) {
-        MediaSourceKind.Memories -> MediaIdentifierKind.MemoriesFile
-        MediaSourceKind.Local -> MediaIdentifierKind.LocalContent
-    }
-
 private suspend fun MediaIdentityDao.identifiersByAlias(
     kind: MediaAliasKind,
     values: Collection<String>,
@@ -245,11 +236,4 @@ private fun MediaIdentifierEntity.alias(kind: MediaAliasKind): String? =
 private fun Set<MediaAlias>.valueOf(kind: MediaAliasKind): String? =
     firstOrNull { it.kind == kind }?.value
 
-private fun MediaIdentifierEntity.toSourceIdentity(): MediaSourceIdentity =
-    MediaSourceIdentity(
-        source = when (kind) {
-            MediaIdentifierKind.MemoriesFile -> MediaSourceKind.Memories
-            MediaIdentifierKind.LocalContent -> MediaSourceKind.Local
-        },
-        sourceKey = value,
-    )
+private fun MediaIdentifierEntity.toSourceIdentity() = MediaSourceIdentity(source, sourceKey)

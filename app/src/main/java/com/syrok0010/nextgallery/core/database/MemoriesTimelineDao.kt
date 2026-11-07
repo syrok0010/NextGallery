@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 
 @Dao
 interface MemoriesTimelineDao {
@@ -21,13 +22,13 @@ interface MemoriesTimelineDao {
         SELECT media.*, identifier.mediaId
         FROM memories_media AS media
         INNER JOIN media_identifiers AS identifier
-            ON identifier.kind = :identifierKind
-            AND identifier.value = CAST(media.fileId AS TEXT)
+            ON identifier.source = :source
+            AND identifier.sourceKey = CAST(media.fileId AS TEXT)
         ORDER BY media.takenAtEpochSeconds DESC, media.fileId DESC
         """,
     )
     suspend fun mediaItems(
-        identifierKind: MediaIdentifierKind = MediaIdentifierKind.MemoriesFile,
+        source: MediaSourceKind = MediaSourceKind.Memories,
     ): List<IdentifiedMemoriesMedia>
 
     @Query("SELECT dayId FROM memories_loaded_days")
