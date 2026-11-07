@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
@@ -37,20 +36,10 @@ internal fun MediaCollectionScreen(
 ) {
     val transition = rememberViewerTransitionCoordinator()
     val gridState = rememberLazyGridState()
-    val viewer = rememberViewerSequenceState(slots, transition.viewerMediaId, completedDeletions)
-    val sequence = viewer.sequence
+    val sequence = rememberViewerSequence(slots, transition.viewerMediaId, completedDeletions)
     val index = remember(slots) { ViewerMediaIndex(slots) }
-    val viewerId = transition.viewerMediaId?.let { current ->
-        current.takeIf { it in sequence } ?: viewer.replacementMediaId
-    }
-    LaunchedEffect(viewer.loadingRange) {
-        viewer.loadingRange?.let(onViewerRange)
-    }
-    LaunchedEffect(viewerId) {
-        if (viewerId == null) {
-            transition.viewerMediaId?.let { transition.close(it, false) }
-        }
-    }
+    // A deleted current object leaves the sequence; the open pager reports what took its place.
+    val viewerId = transition.viewerMediaId?.takeIf { it in sequence || it in completedDeletions }
     val selectionActive = selection?.active == true
     SideEffect {
         onViewerVisibilityChanged(viewerId != null)
@@ -94,15 +83,15 @@ internal fun MediaCollectionScreen(
         if (viewerId != null) MediaDetailScreen(
             initialMediaId = viewerId,
             sequence = sequence,
-            replacementMediaId = viewer.replacementMediaId,
             actions = if (viewerActions.isEmpty()) {
                 null
             } else {
-                { item -> ViewerSelectionActions(viewerActions, item, enabled = viewer.loadingRange == null) }
+                { item -> ViewerSelectionActions(viewerActions, item) }
             },
             status = viewerStatus,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
+            onEmpty = { transition.close(viewerId, false) },
             onCurrentItemChange = { item ->
                 index.prefetchRange(item.mediaId)?.let { onViewerRange(it) }
                 transition.onCurrentItemChanged(item.mediaId, index.slotIndex(item.mediaId) != null)
