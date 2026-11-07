@@ -1,0 +1,135 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+
+> Configure project :app
+WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
+The current default is 'true'.
+
+> Task :spotlessKotlin
+Format was not able to resolve all violations which (theoretically) can be autocorrected in file /home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/main/java/com/syrok0010/nextgallery/feature/upload/UploadQueue.kt in 3 consecutive runs of format.
+Format was not able to resolve all violations which (theoretically) can be autocorrected in file /home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/main/java/com/syrok0010/nextgallery/feature/upload/UploadQueue.kt in 3 consecutive runs of format.
+
+> Task :spotlessKotlinCheck
+> Task :spotlessKotlinGradle UP-TO-DATE
+> Task :spotlessKotlinGradleCheck UP-TO-DATE
+> Task :spotlessCheck
+> Task :app:verifyFeatureBoundaries
+> Task :core:media:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:media:compileKotlin UP-TO-DATE
+> Task :core:media:compileJava NO-SOURCE
+> Task :core:media:processResources NO-SOURCE
+> Task :core:media:classes UP-TO-DATE
+> Task :core:media:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preAutomationBuild UP-TO-DATE
+> Task :app:generateAutomationResources UP-TO-DATE
+> Task :app:packageAutomationResources UP-TO-DATE
+> Task :app:processAutomationNavigationResources UP-TO-DATE
+> Task :app:parseAutomationLocalResources UP-TO-DATE
+> Task :app:generateAutomationRFile UP-TO-DATE
+> Task :app:kspAutomationKotlin
+
+> Task :app:compileAutomationKotlin
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/main/java/com/syrok0010/nextgallery/feature/upload/UploadFile.kt:128:32 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+
+> Task :app:javaPreCompileAutomation UP-TO-DATE
+> Task :app:compileAutomationJavaWithJavac NO-SOURCE
+> Task :app:checkAutomationAarMetadata UP-TO-DATE
+> Task :app:mapAutomationSourceSetPaths UP-TO-DATE
+> Task :app:compileAutomationNavigationResources UP-TO-DATE
+> Task :app:mergeAutomationResources UP-TO-DATE
+> Task :app:createAutomationCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksAutomation UP-TO-DATE
+> Task :app:processAutomationMainManifest UP-TO-DATE
+> Task :app:processAutomationManifest UP-TO-DATE
+> Task :app:processAutomationManifestForPackage UP-TO-DATE
+> Task :app:processAutomationResources UP-TO-DATE
+> Task :app:bundleAutomationClassesToRuntimeJar
+> Task :app:bundleAutomationClassesToCompileJar
+> Task :app:kspAutomationUnitTestKotlin
+> Task :app:preAutomationUnitTestBuild UP-TO-DATE
+> Task :app:compileAutomationUnitTestKotlin
+> Task :app:javaPreCompileAutomationUnitTest UP-TO-DATE
+> Task :app:compileAutomationUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processAutomationJavaRes UP-TO-DATE
+> Task :app:processAutomationUnitTestJavaRes UP-TO-DATE
+> Task :app:testAutomationUnitTest
+> Task :core:media:compileTestKotlin UP-TO-DATE
+> Task :core:media:compileTestJava NO-SOURCE
+> Task :core:media:processTestResources NO-SOURCE
+> Task :core:media:testClasses UP-TO-DATE
+> Task :core:media:test UP-TO-DATE
+> Task :app:mergeAutomationNativeDebugMetadata NO-SOURCE
+> Task :app:generateAutomationAssets UP-TO-DATE
+> Task :app:mergeAutomationAssets UP-TO-DATE
+> Task :app:compressAutomationAssets UP-TO-DATE
+> Task :app:generateAutomationGlobalSynthetics UP-TO-DATE
+> Task :app:mergeAutomationJavaResource UP-TO-DATE
+> Task :app:checkAutomationDuplicateClasses UP-TO-DATE
+> Task :app:desugarAutomationFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexAutomation UP-TO-DATE
+> Task :app:mergeLibDexAutomation UP-TO-DATE
+> Task :app:dexBuilderAutomation
+> Task :app:mergeProjectDexAutomation
+> Task :app:mergeAutomationJniLibFolders UP-TO-DATE
+> Task :app:mergeAutomationNativeLibs UP-TO-DATE
+> Task :app:stripAutomationDebugSymbols UP-TO-DATE
+> Task :app:validateSigningAutomation UP-TO-DATE
+> Task :app:writeAutomationAppMetadata UP-TO-DATE
+> Task :app:writeAutomationSigningConfigVersions UP-TO-DATE
+> Task :app:packageAutomation
+> Task :app:createAutomationApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleAutomation
+> Task :app:preAutomationAndroidTestBuild SKIPPED
+> Task :app:generateAutomationAndroidTestResources UP-TO-DATE
+> Task :app:packageAutomationAndroidTestResources UP-TO-DATE
+> Task :app:processAutomationAndroidTestNavigationResources UP-TO-DATE
+> Task :app:parseAutomationAndroidTestLocalResources UP-TO-DATE
+> Task :app:generateAutomationAndroidTestRFile UP-TO-DATE
+> Task :app:kspAutomationAndroidTestKotlin
+
+> Task :app:compileAutomationAndroidTestKotlin
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/androidTest/java/com/syrok0010/nextgallery/core/ui/MediaAssetImageTest.kt:31:23 'fun createComposeRule(effectContext: CoroutineContext = ...): ComposeContentTestRule' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/FilmstripTest.kt:29:23 'fun createComposeRule(effectContext: CoroutineContext = ...): ComposeContentTestRule' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/MediaDetailScreenTest.kt:40:16 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/VideoPlaybackIntegrationTest.kt:62:26 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+w: file:///home/syrok/.t3/worktrees/nextgallery/t3-20d3b69a/app/src/androidTest/java/com/syrok0010/nextgallery/feature/viewer/ViewerMotionStateTest.kt:28:16 'fun <reified A : ComponentActivity> createAndroidComposeRule(effectContext: CoroutineContext = ...): AndroidComposeTestRule<ActivityScenarioRule<A>, A>' is deprecated. Use `androidx.compose.ui.test.junit4.v2.createAndroidComposeRule` instead. The v2 APIs use StandardTestDispatcher instead of UnconfinedTestDispatcher, which aligns with standard coroutine behavior by queuing tasks rather than executing them immediately. Tests relying on immediate execution may require explicit synchronization. Please refer to the migration guide for more details.
+
+> Task :app:javaPreCompileAutomationAndroidTest UP-TO-DATE
+> Task :app:compileAutomationAndroidTestJavaWithJavac NO-SOURCE
+> Task :app:generateAutomationAndroidTestAssets UP-TO-DATE
+> Task :app:mergeAutomationAndroidTestAssets UP-TO-DATE
+> Task :app:compressAutomationAndroidTestAssets UP-TO-DATE
+> Task :app:generateAutomationAndroidTestGlobalSynthetics UP-TO-DATE
+> Task :app:processAutomationAndroidTestJavaRes UP-TO-DATE
+> Task :app:mergeAutomationAndroidTestJavaResource UP-TO-DATE
+> Task :app:checkAutomationAndroidTestDuplicateClasses UP-TO-DATE
+> Task :app:desugarAutomationAndroidTestFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexAutomationAndroidTest UP-TO-DATE
+> Task :app:mergeLibDexAutomationAndroidTest UP-TO-DATE
+> Task :app:checkAutomationAndroidTestAarMetadata UP-TO-DATE
+> Task :app:mapAutomationAndroidTestSourceSetPaths UP-TO-DATE
+> Task :app:compileAutomationAndroidTestNavigationResources UP-TO-DATE
+> Task :app:mergeAutomationAndroidTestResources UP-TO-DATE
+> Task :app:processAutomationAndroidTestManifest UP-TO-DATE
+> Task :app:processAutomationAndroidTestResources UP-TO-DATE
+> Task :app:dexBuilderAutomationAndroidTest
+> Task :app:mergeProjectDexAutomationAndroidTest
+> Task :app:mergeAutomationAndroidTestJniLibFolders UP-TO-DATE
+> Task :app:mergeAutomationAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripAutomationAndroidTestDebugSymbols NO-SOURCE
+> Task :app:validateSigningAutomationAndroidTest UP-TO-DATE
+> Task :app:writeAutomationAndroidTestSigningConfigVersions UP-TO-DATE
+> Task :app:packageAutomationAndroidTest
+> Task :app:createAutomationAndroidTestApkListingFileRedirect UP-TO-DATE
+Starting 29 tests on nextgallery-api36-dev(AVD) - 16
+Finished 29 tests on nextgallery-api36-dev(AVD) - 16
+> Task :app:connectedAutomationAndroidTest
+
+BUILD SUCCESSFUL in 1m 16s
+84 actionable tasks: 19 executed, 65 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html

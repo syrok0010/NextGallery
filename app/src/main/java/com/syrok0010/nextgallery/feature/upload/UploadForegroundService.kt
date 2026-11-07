@@ -11,18 +11,17 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
 import android.util.Log
-import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.MainActivity
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
@@ -46,11 +45,10 @@ import retrofit2.HttpException
 
 /**
  * Uploads batches from [UploadQueue] and runs their follow-ups. It knows nothing about why a file
- * is uploaded: everything after the upload belongs to [UploadFollowUp].
+ * is uploaded: the journal decides which persisted steps remain after transfer.
  */
 class UploadForegroundService : Service() {
-    private val credentialsStore: CredentialsStore by inject()
-    private val dav: FilesDavClient by inject()
+    private val transport: NextcloudTransport by inject()
     private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -99,26 +97,21 @@ class UploadForegroundService : Service() {
      */
     private suspend fun drainQueue() {
         val pass = UploadPass()
-        while (true) {
-            val batch = queue.next() ?: break
-            runBatch(batch, pass)
+        try {
+            while (true) {
+                val batch = queue.next() ?: break
+                runBatch(batch, pass)
+            }
+        } catch (error: Exception) {
+            // Also covers a stop during the notification delay between two batches.
+            queue.stopExecutor()
+            throw error
         }
         // No suspension from the empty check to here, so no start can slip in between.
         if (pass.files > 0) {
             notificationManager.notify(
                 RESULT_NOTIFICATION_ID,
                 resultNotification(pass),
-            )
-            queue.passFinished(
-                UploadResult(
-                    uploaded = pass.uploaded,
-                    files = pass.files,
-                    failures = pass.failures.distinct(),
-                    details = pass.detailLines(),
-                    existing = pass.existing,
-                    cancelled = pass.cancelled,
-                    conflicts = pass.nameTaken,
-                ),
             )
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -167,8 +160,12 @@ class UploadForegroundService : Service() {
         pass.cancelled += states.count { it.phase == UploadPhase.Cancelled }
         pass.nameTaken += states.count { it.phase == UploadPhase.NameConflict }
         pass.failures += states.mapNotNull { it.failure }.distinct()
-        queue.batchFinished(batch)
-        pass.details += finishUploadBatch(batch)
+        if (states.any {
+                it.attention || it.pendingAction
+            }
+        ) {
+            pass.failures += getString(R.string.uploads_attention)
+        }
         // Leaves room for the result after the last progress update.
         delay(500L)
     }
@@ -220,46 +217,35 @@ class UploadForegroundService : Service() {
         batch: UploadBatch,
         onProgress: (index: Int, percent: Int?) -> Unit,
     ) {
-        var credentials: AccountCredentials? = null
         var destination: String? = null
-        runUploadFiles(
-            batch = batch,
-            transfer = { item ->
-                val account = credentials ?: (
-                    credentialsStore.load()
-                        ?: throw UploadException(R.string.upload_error_session)
-                    ).also { credentials = it }
+        queue.runBatch(batch) { account, item, claim ->
+            val selection = item.selection
+            // The original name in the chosen folder; neighbour names are derived from it again
+            // after a restart, so an earlier copy under one of them is found by its bytes.
+            val pinned = claim.destination ?: run {
                 val directory = destination ?: (
                     timelinePaths(
                         memories.config().timelinePath,
                     ).firstOrNull()
                         ?: throw UploadException(R.string.upload_error_timeline)
                     ).also { destination = it }
-                val selection = item.selection
-                put(
-                    // DAV paths use the Nextcloud uid, not the login name.
-                    path = DavFilePath.of(account.userId, directory, selection.displayName),
-                    item = item,
-                    onProgress = { percent ->
-                        if (item.progress(percent)) {
-                            queue.uploading(selection.contentUri, percent)
-                            onProgress(batch.items.indexOf(item), percent)
-                        }
-                    },
-                )
-            },
-            accepted = { uploaded ->
-                batch.followUps.forEach { followUp ->
-                    guarded(Unit) { followUp.uploaded(checkNotNull(credentials), uploaded) }
+                val proposed = DavFilePath.of(account.userId, directory, selection.displayName)
+                queue.pinDestination(claim, proposed.segments)
+                    ?: throw java.io.IOException("Upload no longer claimed")
+            }
+            val path = DavFilePath(account.userId, pinned)
+            put(account, path, item) { percent ->
+                if (item.progress(percent)) {
+                    queue.uploading(selection.contentUri, percent)
+                    onProgress(batch.items.indexOf(item), percent)
                 }
-            },
-            failureReason = ::failureReason,
-            processed = { queue.processed(it.contentUri) },
-        )
+            }
+        }
     }
 
     /** Returns null when no free name is left for a file that differs from the taken ones. */
     private suspend fun put(
+        account: AccountCredentials,
         path: DavFilePath,
         item: UploadItem,
         onProgress: (Int?) -> Unit,
@@ -281,6 +267,8 @@ class UploadForegroundService : Service() {
             openStream = openLocal,
             onProgress = onProgress,
         )
+        // Signed by the job's account, not whichever session is current by now.
+        val dav = FilesDavClient(transport) { account }
         return try {
             item.run { placeUpload(dav, path, selection, body, openLocal) }
         } catch (error: DavHttpException) {
@@ -315,6 +303,12 @@ class UploadForegroundService : Service() {
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        serviceScope.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -371,8 +365,6 @@ class UploadForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
-
     /**
      * The local file can no longer be read. An [IOException], so OkHttp passes it out of the
      * request body unchanged instead of rethrowing it on its dispatcher thread.
@@ -407,13 +399,3 @@ class UploadForegroundService : Service() {
         }
     }
 }
-
-/** A failing follow-up must not stop the upload or the other follow-ups. */
-private suspend fun <T> guarded(fallback: T, block: suspend () -> T): T =
-    try {
-        block()
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
-        fallback
-    }

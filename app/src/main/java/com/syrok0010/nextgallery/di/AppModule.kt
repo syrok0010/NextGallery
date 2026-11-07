@@ -19,9 +19,11 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
+import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
@@ -54,7 +56,10 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
+import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
+import com.syrok0010.nextgallery.feature.upload.UploadSource
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
@@ -83,10 +88,17 @@ val appModule = module {
         )
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
-    single {
-        AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
-    } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
+    single {
+        val uploads: UploadQueue = get()
+        AlbumAdditions(
+            get(),
+            get(),
+            get(),
+            { ids, intents -> uploads.submit(ids, intents) },
+            get(named("libraryScope")),
+        )
+    } bind OperationStatusSource::class
     single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
     single { NextcloudTrashBin(get()) }
     single {
@@ -100,13 +112,34 @@ val appModule = module {
             get<MediaLibraryCoordinator>().refresh()
         }
     } bind OperationStatusSource::class
+    single { UploadQueueDatabase.open(androidContext()) }
+    single { UploadJournal(get()) }
+    single { UploadSource(androidContext().contentResolver) }
     single {
-        UploadQueue(get(), get(), get(named("libraryScope"))) {
-            listOf(
-                UploadedCopiesFollowUp(get(), get()) { get<MediaLibraryCoordinator>().refresh() },
-            )
-        }
-    } bind OperationStatusSource::class
+        val identities: MediaIdentityRegistry = get()
+        val sessions: SessionStore = get()
+        val writer: MemoriesAlbumWriter = get()
+        val catalog: AlbumCatalogRepository = get()
+        UploadQueue(
+            get(),
+            get(),
+            get(named("libraryScope")),
+            get(),
+            get<UploadSource>()::snapshot,
+            link = { account, identity, fileId ->
+                UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
+            },
+            album = { account, intent, file ->
+                val success =
+                    writer.addFile(file.path, AlbumAddress(intent.owner, intent.target)) ==
+                        AlbumCopyOutcome.Added
+                catalog.refresh()
+                success
+            },
+            refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
+        )
+    }
+    single<OperationStatusSource> { get<UploadQueue>() }
     single { MediaLibraryIndex() }
     single { LibraryPublicationStore() }
     single { TimelineProjectionStore(get(), get(named("libraryScope"))) }

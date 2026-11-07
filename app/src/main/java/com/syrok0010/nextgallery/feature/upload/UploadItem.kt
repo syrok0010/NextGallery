@@ -1,8 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import com.syrok0010.nextgallery.core.ui.UiText
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -20,6 +18,7 @@ internal enum class UploadPhase {
     Existing,
     NameConflict,
     Failed,
+    NeedsAttention,
     Cancelled,
     ;
 
@@ -30,14 +29,30 @@ internal data class UploadItemState(
     val phase: UploadPhase = UploadPhase.Waiting,
     val percent: Int? = null,
     val failure: String? = null,
+    val pendingAction: Boolean = false,
+    val attention: Boolean = false,
+    val actionSuppressed: Boolean = false,
+    val albumAdded: String? = null,
+    val httpStatus: Int? = null,
 )
 
 /** Serializes cancellation with response acceptance and with the start of the file's DAV work. */
-internal class UploadItem(val selection: UploadSelection) {
-    val id = nextItemId.incrementAndGet()
+internal class UploadItem(
+    val selection: UploadSelection,
+    val id: String = java.util.UUID.randomUUID().toString(),
+) {
     private val mutableState = MutableStateFlow(UploadItemState())
     val state = mutableState.asStateFlow()
     private var work: Job? = null
+
+    fun restore(state: UploadItemState) {
+        mutableState.value = state
+    }
+
+    /** Aborts the running DAV work without deciding the file's outcome. */
+    fun stopCall() {
+        synchronized(this) { work?.cancel() }
+    }
 
     @Synchronized fun cancel() {
         if (state.value.phase.terminal) return
@@ -80,61 +95,4 @@ internal class UploadItem(val selection: UploadSelection) {
                 throw IOException("Upload cancelled", cancelled)
             }
         }
-}
-
-private val nextItemId = AtomicLong()
-
-/** Keeps per-file outcomes even when a later file fails. Cancelled files never reach follow-ups. */
-internal suspend fun runUploadFiles(
-    batch: UploadBatch,
-    transfer: suspend (UploadItem) -> UploadedFile?,
-    accepted: suspend (UploadedFile) -> Unit,
-    failureReason: (Exception) -> String,
-    processed: (UploadSelection) -> Unit,
-) {
-    var failure: String? = null
-    for (item in batch.items) {
-        try {
-            if (!item.state.value.phase.terminal) {
-                if (failure != null) {
-                    item.complete(UploadPhase.Failed, failure)
-                } else {
-                    try {
-                        val uploaded = transfer(item)
-                        val phase = when {
-                            uploaded == null -> UploadPhase.NameConflict
-                            uploaded.created -> UploadPhase.Uploaded
-                            else -> UploadPhase.Existing
-                        }
-                        if (item.complete(phase) && uploaded != null) accepted(uploaded)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        // A cancelled socket is not a batch failure; later files can still run.
-                        val reason = failureReason(error)
-                        if (item.complete(UploadPhase.Failed, reason)) failure = reason
-                    }
-                }
-            }
-        } finally {
-            processed(item.selection)
-        }
-    }
-}
-
-/** Always resolves batch follow-ups, including a batch whose every file was cancelled. */
-internal suspend fun finishUploadBatch(batch: UploadBatch): List<UiText> {
-    val missed = batch.items
-        .filter {
-            it.state.value.phase !in setOf(UploadPhase.Uploaded, UploadPhase.Existing)
-        }.map { it.selection }
-    return batch.followUps.flatMap { followUp ->
-        try {
-            followUp.finished(missed)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
 }

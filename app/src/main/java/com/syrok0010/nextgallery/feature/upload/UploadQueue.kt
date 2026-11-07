@@ -1,26 +1,23 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
 import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.getAndUpdate
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import java.util.UUID
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Upload work shown in the app next to the system notification. [pending] holds content URIs
@@ -44,6 +41,7 @@ internal data class UploadResult(
     val existing: Int = 0,
     val cancelled: Int = 0,
     val conflicts: Int = 0,
+    val attention: Int = 0,
 ) {
     operator fun plus(other: UploadResult) =
         UploadResult(
@@ -54,290 +52,395 @@ internal data class UploadResult(
             existing + other.existing,
             cancelled + other.cancelled,
             conflicts + other.conflicts,
+            attention + other.attention,
         )
 }
 
-/** The complete in-memory queue snapshot; derived flows keep the service interface small. */
-internal data class UploadQueueState(
-    val waiting: List<UploadBatch> = emptyList(),
-    val released: List<UploadBatch> = emptyList(),
-    val activity: UploadActivity? = null,
-    val result: UploadResult? = null,
-)
 
-/**
- * Upload batches between the caller and the upload service. A batch [waiting] here is started by
- * [QueuedUploads] once a screen is visible: a foreground service may only start from a visible app,
- * and the notification permission dialog needs one too. Batches live in memory only, like the
- * upload itself, and never cross accounts. Every batch also gets the follow-ups from
- * [commonFollowUps]: work any upload needs, whoever asked for it.
- */
+/** UI and foreground executor cross this protocol; Room owns cancellation and receipt acceptance. */
 internal class UploadQueue(
-    sessions: SessionStore,
+    private val sessions: SessionStore,
     private val library: MediaLibraryIndex,
     private val scope: CoroutineScope,
-    private val commonFollowUps: () -> List<UploadFollowUp> = { emptyList() },
+    private val journal: UploadJournal,
+    private val snapshot: (UploadSelection) -> SourceStamp,
+    private val link: suspend (AccountCredentials, String, Long) -> Boolean,
+    private val album: suspend (AccountCredentials, UploadIntent, UploadedFile) -> Boolean,
+    private val refreshLibrary: () -> Unit,
+    private val processId: String = uploadProcessId,
 ) : OperationStatusSource {
-    private val mutableState = MutableStateFlow(UploadQueueState())
-    private val state = mutableState.asStateFlow()
+    private val commands = Mutex()
+    private val ready = CompletableDeferred<Unit>()
+    private var available = false
+    private var owner: String? = null
+    private var records = emptyList<UploadJob>()
+    private val itemCache = mutableMapOf<String, UploadItem>()
+    private val batchCache = mutableMapOf<String, UploadBatch>()
+    private val released = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val started = ArrayDeque<UploadBatch>()
+    private val mutableWaiting = MutableStateFlow<List<UploadBatch>>(emptyList())
+    val waiting = mutableWaiting.asStateFlow()
+    private val mutableBatches = MutableStateFlow<List<UploadBatch>>(emptyList())
+    val batches = mutableBatches.asStateFlow()
     private val mutableItems = MutableStateFlow<List<UploadItem>>(emptyList())
 
-    /** Files of all batches in submission order, kept after they finish until [clearFinished]. */
+    /** Visible files of all batches in submission order; cleared files leave the list. */
     val items = mutableItems.asStateFlow()
-    val waiting = state.map { it.waiting }.stateIn(scope, SharingStarted.Eagerly, emptyList())
-    val activity = state.map { it.activity }.stateIn(scope, SharingStarted.Eagerly, null)
-    val result = state.map { it.result }.stateIn(scope, SharingStarted.Eagerly, null)
-    override val operations = state
-        .map { uploadOperationSnapshots(it.activity, it.result) }
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
-
-    fun cancelAll() = items.value.forEach(UploadItem::cancel)
-
-    fun clearFinished() {
-        mutableItems.update { items -> items.filterNot { it.state.value.phase.terminal } }
-    }
+    private val mutableActivity = MutableStateFlow<UploadActivity?>(null)
+    val activity = mutableActivity.asStateFlow()
+    private val mutableResult = MutableStateFlow<UploadResult?>(null)
+    val result = mutableResult.asStateFlow()
+    private val mutableError = MutableStateFlow(false)
+    val storageError = mutableError.asStateFlow()
+    override val operations = combine(activity, result) { current, summary ->
+        uploadOperationSnapshots(current, summary)
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
         scope.launch {
-            var owner: AccountCredentials? = null
-            sessions.session.collect { session ->
-                val current = (session as? SessionUiState.SignedIn)?.credentials
-                if (current == null || (owner != null && current != owner)) {
-                    cancelAll()
-                    mutableItems.value = emptyList()
-                    mutableState.value = UploadQueueState()
+            sessions.session.collectLatest { session ->
+                val token = (session as? SessionUiState.SignedIn)?.credentials?.uploadOwner
+                commands.withLock {
+                    itemCache.values.forEach(UploadItem::stopCall)
+                    itemCache.clear(); batchCache.clear(); released.clear(); started.clear()
+                    owner = token
+                    available = false
+                    try {
+                        journal.activate(token)
+                        if (token != null) journal.recover(token, processId)
+                        available = true
+                        project(if (token != null) journal.jobs(token).filterNot { it.hidden } else emptyList())
+                        mutableError.value = false
+                    } catch (_: Exception) {
+                        currentCoroutineContext().ensureActive()
+                        available = false
+                        mutableError.value = true
+                        project(emptyList())
+                    } finally { ready.complete(Unit) }
                 }
-                owner = current
-            }
-        }
-    }
-
-    /** Queues current phone copies for [mediaIds], returning the number actually queued. */
-    fun submit(mediaIds: Collection<MediaId>, followUps: List<UploadFollowUp> = emptyList()): Int {
-        val files = mediaIds.distinct().mapNotNull { id ->
-            library.state.value[id]?.let(
-                ::uploadSelection,
-            )
-        }
-        if (files.isEmpty()) return 0
-        val complete = UploadBatch(files, commonFollowUps() + followUps)
-        mutableItems.update { it + complete.items }
-        mutableState.update { state ->
-            state.copy(
-                waiting = state.waiting + complete,
-                activity = state.activity.let { current ->
-                    UploadActivity(
-                        pending = current?.pending.orEmpty() + files.map { it.contentUri },
-                        total = (current?.total ?: 0) + files.size,
-                        processed = current?.processed ?: 0,
-                        current = current?.current,
-                        percent = current?.percent,
-                    )
-                },
-            )
-        }
-        return files.size
-    }
-
-    /** Hands all waiting batches to the service and returns them; one service start takes them all. */
-    fun release(): List<UploadBatch> {
-        val previous = mutableState.getAndUpdate { state ->
-            state.copy(waiting = emptyList(), released = state.released + state.waiting)
-        }
-        return previous.waiting
-    }
-
-    /**
-     * Takes back [batches] the service has not taken, after the system refused to start it. They
-     * wait again ahead of batches submitted since.
-     */
-    fun restore(batches: List<UploadBatch>) {
-        mutableState.update { state ->
-            val released = state.released.toMutableList()
-            val back = batches.filter(released::remove)
-            if (back.isEmpty()) {
-                state
-            } else {
-                state.copy(waiting = back + state.waiting, released = released)
-            }
-        }
-    }
-
-    /**
-     * Enters foreground before any batch is taken. A refusal ends only released work with a
-     * visible result instead of leaving an active queue or immediately retrying the same start.
-     */
-    fun enterForeground(failureReason: String, startForeground: () -> Unit): Boolean {
-        try {
-            startForeground()
-        } catch (_: RuntimeException) {
-            // Includes dataSync quota, service type and permission failures from Android.
-            var files = 0
-            val refused = buildList {
-                while (true) {
-                    val batch = next() ?: break
-                    files += batch.files.size
-                    add(batch)
+                if (token != null && available) {
+                    journal.observe(token).catch { mutableError.value = true }.collect {
+                        commands.withLock { if (owner == token) project(journal.jobs(token).filterNot { it.hidden }) }
+                    }
                 }
             }
-            refused.forEach(::batchFinished)
-            scope.launch {
-                refused.forEach { finishUploadBatch(it) }
-            }
-            if (files > 0) passFinished(UploadResult(0, files, failures = listOf(failureReason)))
-            return false
-        }
-        return true
-    }
-
-    /** Called by the service until it returns null. */
-    fun next(): UploadBatch? {
-        val previous = mutableState.getAndUpdate { state ->
-            state.copy(released = state.released.drop(1))
-        }
-        return previous.released.firstOrNull()
-    }
-
-    /** Files in batches released to the service but not taken yet, for the overall progress. */
-    fun releasedFiles(): Int = state.value.released.sumOf { it.files.size }
-
-    /** Called by the service while [contentUri] is sent; null [percent] means unknown length. */
-    fun uploading(contentUri: String, percent: Int?) {
-        mutableState.update { state ->
-            state.copy(activity = state.activity?.copy(current = contentUri, percent = percent))
         }
     }
 
-    /** Called by the service once [contentUri] is on the server or skipped. */
-    fun processed(contentUri: String) {
-        processed(listOf(contentUri))
-    }
-
-    /** Called by the service after [batch]: files it did not get to after an error are done too. */
-    fun batchFinished(batch: UploadBatch) {
-        processed(batch.files.map { it.contentUri })
-    }
-
-    private fun processed(contentUris: List<String>) {
-        mutableState.update { state ->
-            val current = state.activity ?: return@update state
-            val done = contentUris.filter { it in current.pending }.toSet()
-            state.copy(
-                activity = current.copy(
-                    pending = current.pending - done,
-                    processed = current.processed + done.size,
-                    current = null,
-                    percent = null,
-                ),
-            )
+    /** Rejection leaves selection intact. Caller retains requestId when retrying an uncertain reply. */
+    suspend fun submit(mediaIds: Collection<MediaId>, intents: List<UploadIntent> = emptyList(), requestId: String = UUID.randomUUID().toString()): EnqueueResult {
+        ready.await()
+        return commands.withLock {
+            val account = credentials() ?: return@withLock EnqueueResult.Rejected
+            if (!available || owner != account.uploadOwner) return@withLock EnqueueResult.Rejected
+            try {
+                journal.prior(account.uploadOwner, requestId)?.let { return@withLock it }
+                val index = library.state.value
+                val files = mediaIds.distinct().mapNotNull { id -> index[id]?.let(::uploadSelection) }
+                if (files.isEmpty()) return@withLock EnqueueResult.NothingToUpload
+                // Missing sources remain durable attention entries; never silently change the selection.
+                val snapshots = withContext(Dispatchers.IO) {
+                    files.map { file -> file.copy(stamp = try { snapshot(file) } catch (_: Exception) { null }) }
+                }
+                if (credentials()?.uploadOwner != account.uploadOwner) return@withLock EnqueueResult.Rejected
+                val result = journal.enqueue(account.uploadOwner, requestId, snapshots, listOf(UploadIntent("link")) + intents)
+                project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
+                mutableError.value = result == EnqueueResult.Rejected
+                result
+            } catch (_: Exception) { currentCoroutineContext().ensureActive(); mutableError.value = true; EnqueueResult.Rejected }
         }
     }
 
-    /**
-     * Called by the service when it has run out of batches. The upload stays active until here,
-     * through the follow-ups of the last batch, and the result comes before it ends: the app never
-     * sees a moment with neither.
-     */
-    fun passFinished(result: UploadResult) {
-        mutableState.update { state ->
-            state.copy(
-                result = state.result?.plus(result) ?: result,
-                activity = state.activity?.takeIf { it.pending.isNotEmpty() },
-            )
-        }
-    }
-
-    /** Called once the app has shown the result. */
-    fun consumeResult() {
-        mutableState.update { it.copy(result = null) }
-    }
+    fun cancelAll() = command { token -> journal.cancel(token) }
+    fun cancel(batch: UploadBatch) = command { token -> journal.cancel(token, batch.items.map { it.id }.toSet()) }
+    fun cancel(item: UploadItem) = command { token -> journal.cancel(token, setOf(item.id)) }
+    fun clearFinished() = command { token -> journal.clearFinished(token) }
+    fun consumeResult() = command { token -> journal.seen(token) }
 
     override fun consumeSucceeded() {
-        if (result.value?.let {
-                it.failures.isEmpty() && it.uploaded >= it.files
-            } == true
-        ) {
+        if (result.value?.let { it.failures.isEmpty() && it.uploaded >= it.files && it.attention == 0 } == true) {
             consumeResult()
         }
     }
 
-    override fun consumeAll() {
-        consumeResult()
+    override fun consumeAll() = consumeResult()
+
+    private fun command(action: suspend (String) -> Unit) {
+        scope.launch {
+            ready.await()
+            commands.withLock {
+                val token = credentials()?.uploadOwner ?: return@withLock
+                try {
+                    action(token)
+                    val rows = journal.jobs(token).filterNot { it.hidden }
+                    // Durable commit precedes best-effort socket cancellation.
+                    rows.filter { it.state == "Cancelled" }.forEach { itemCache[it.id]?.stopCall() }
+                    project(rows)
+                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (_: Exception) { mutableError.value = true }
+            }
+        }
     }
+
+    /** Blocks enqueue while checking the durable predicate and revoking the login lifetime. */
+    suspend fun logout(clearSession: () -> Unit): Boolean {
+        ready.await()
+        return commands.withLock {
+            val token = credentials()?.uploadOwner ?: return@withLock false
+            try {
+                if (!available || !journal.revokeIfFinished(token)) return@withLock false
+                itemCache.values.forEach(UploadItem::stopCall)
+                try { clearSession() } catch (error: Exception) {
+                    // A failed secure-store clear keeps the signed-in owner usable for retry.
+                    journal.activate(token)
+                    throw error
+                }
+                true
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { mutableError.value = true; false }
+        }
+    }
+
+    @Synchronized fun release(): List<UploadBatch> {
+        val result = mutableWaiting.value
+        mutableWaiting.value = emptyList()
+        result.forEach { released += it.id; started.addLast(it) }
+        return result
+    }
+    @Synchronized fun restore(batches: List<UploadBatch>) {
+        batches.forEach { if (started.remove(it)) released.remove(it.id) }
+        project(records)
+    }
+    @Synchronized fun next(): UploadBatch? = if (started.isEmpty()) null else started.removeFirst()
+    @Synchronized fun releasedFiles() = started.sumOf { it.files.size }
+
+    fun enterForeground(failureReason: String, startForeground: () -> Unit): Boolean {
+        try { startForeground(); return true } catch (_: RuntimeException) {
+            val refused = generateSequence { next() }.toList()
+            command { token ->
+                refused.flatMap { it.items }.forEach { item ->
+                    val claim = journal.claim(item.id, token, processId)
+                    if (claim != null) {
+                        if (claim.receiptJson == null) journal.problem(claim, UploadProblem.Foreground)
+                        else {
+                            if (claim.linkStep == "Pending") journal.step(claim, "link", StepState.Attention)
+                            if (claim.albumStep == "Pending") journal.step(claim, "album", StepState.Attention)
+                            journal.release(claim)
+                        }
+                    }
+                }
+                refused.forEach { released.remove(it.id) }
+            }
+            return false
+        }
+    }
+
+    /** Existing executor supplies conditional transfer; journal selects transfer vs receipt replay. */
+    suspend fun runBatch(batch: UploadBatch, transfer: suspend (AccountCredentials, UploadItem, UploadJob) -> UploadedFile?) {
+        val account = credentials() ?: return
+        try {
+            runClaimedBatch(account, batch, transfer)
+        } catch (cancelled: CancellationException) {
+            stopExecutor(account, batch)
+            throw cancelled
+        }
+    }
+
+    private suspend fun runClaimedBatch(account: AccountCredentials, batch: UploadBatch, transfer: suspend (AccountCredentials, UploadItem, UploadJob) -> UploadedFile?) {
+        var changed = false
+        for (item in batch.items) {
+            val id = item.id
+            var claim = journal.claim(id, account.uploadOwner, processId) ?: continue
+            try {
+                if (!current(account)) continue
+                val intents = try { claim.intents } catch (_: Exception) { emptyList() }
+                if (intents.isEmpty() || intents.any { it.version != 1 || it.kind !in setOf("link", "album") }) {
+                    if (claim.receiptJson == null) journal.problem(claim, UploadProblem.Format)
+                    else {
+                        journal.step(claim, "link", StepState.Attention)
+                        journal.step(claim, "album", StepState.Attention)
+                    }
+                    continue
+                }
+                if (claim.receiptJson == null) {
+                    if (!validSource(item.selection)) { journal.problem(claim, UploadProblem.Source); continue }
+                    val uploaded = try { transfer(account, item, claim) } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (error: Exception) {
+                        val problem = when ((error as? UploadException)?.reason) {
+                            R.string.upload_error_directory -> UploadProblem.Directory
+                            R.string.upload_error_http -> UploadProblem.Http
+                            else -> UploadProblem.Transfer
+                        }
+                        journal.problem(claim, problem, httpStatus = (error as? UploadException)?.args?.firstOrNull() as? Int)
+                        continue
+                    }
+                    if (uploaded == null) { journal.problem(claim, UploadProblem.Transfer, conflict = true); continue }
+                    // Source may change while streaming. Do not accept/link different observed bytes.
+                    if (!validSource(item.selection)) { journal.problem(claim, UploadProblem.Source); continue }
+                    if (!current(account)) continue
+                    claim = journal.accept(claim, UploadReceipt(uploaded.path.segments, uploaded.created, uploaded.fileId)) ?: continue
+                }
+                val receipt = claim.receipt ?: continue
+                if (receipt.version != 1) {
+                    journal.step(claim, "link", StepState.Attention)
+                    journal.step(claim, "album", StepState.Attention)
+                    continue
+                }
+                if (claim.linkStep == "Pending" && current(account)) {
+                    journal.step(claim, "link", StepState.Running) ?: continue
+                    val linked = receipt.fileId?.let { link(account, item.selection.identityUri, it) } == true
+                    claim = journal.step(claim, "link", if (linked) StepState.Done else StepState.Attention) ?: continue
+                }
+                if (claim.albumStep == "Pending" && current(account)) {
+                    claim = journal.step(claim, "album", StepState.Running) ?: continue
+                    val intent = intents.singleOrNull { it.kind == "album" }
+                    val success = intent != null && album(account, intent, UploadedFile(item.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId))
+                    journal.step(claim, "album", if (success) StepState.Done else StepState.Attention)
+                }
+                changed = true
+            } catch (cancelled: CancellationException) {
+                item.stopCall()
+                throw cancelled
+            } catch (_: Exception) {
+                if (claim.receiptJson == null) journal.problem(claim, UploadProblem.Transfer)
+                else {
+                    if (claim.linkStep in setOf("Pending", "Running")) journal.step(claim, "link", StepState.Attention)
+                    if (claim.albumStep in setOf("Pending", "Running")) journal.step(claim, "album", StepState.Attention)
+                }
+            } finally {
+                // On abrupt death this block does not run; startup fences its persisted claim.
+                if (claim.receiptJson != null) changed = true
+                if (currentCoroutineContext().isActive) journal.release(claim)
+                commands.withLock { if (current(account)) project(journal.jobs(account.uploadOwner).filterNot { it.hidden }) }
+            }
+        }
+        if (changed && current(account)) refreshLibrary()
+        commands.withLock {
+            released.remove(batch.id)
+            if (current(account)) project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
+        }
+    }
+
+    /** Graceful stop fences the whole handed-off pass; Attention prevents an immediate start loop. */
+    suspend fun stopExecutor() {
+        val account = credentials() ?: return
+        stopExecutor(account, null)
+    }
+
+    private suspend fun stopExecutor(account: AccountCredentials, currentBatch: UploadBatch?) = withContext(NonCancellable) {
+        commands.withLock {
+            if (owner != account.uploadOwner || !current(account)) return@withLock
+            val batches = synchronized(this@UploadQueue) { released.toSet() + listOfNotNull(currentBatch?.id) }
+            journal.interrupt(account.uploadOwner, batches, processId)
+            synchronized(this@UploadQueue) {
+                started.removeAll { it.id in batches }
+                released.removeAll(batches)
+                records.filter { it.batchId in batches }.forEach { itemCache[it.id]?.stopCall() }
+            }
+            if (current(account)) project(journal.jobs(account.uploadOwner).filterNot { it.hidden })
+        }
+    }
+
+    suspend fun pinDestination(claim: UploadJob, path: List<String>): List<String>? =
+        journal.destination(claim, path)?.destination
+    private fun current(account: AccountCredentials) = credentials()?.uploadOwner == account.uploadOwner
+    private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
+    private suspend fun validSource(file: UploadSelection): Boolean = withContext(Dispatchers.IO) {
+        file.stamp != null && try { snapshot(file) == file.stamp } catch (_: Exception) { false }
+    }
+
+    fun uploading(contentUri: String, percent: Int?) {
+        mutableActivity.update { it?.copy(current = uploadedLocalIdentityUri(contentUri), percent = percent) }
+    }
+
+    @Synchronized private fun project(rows: List<UploadJob>) {
+        records = rows
+        rows.forEach { row ->
+            val item = itemCache.getOrPut(row.id) { UploadItem(row.selection, row.id) }
+            val attention = row.hasAttention
+            val phase = when (row.state) {
+                "Pending", "Uncertain" -> UploadPhase.Waiting
+                "Running" -> UploadPhase.Uploading
+                "Accepted" -> if (row.receipt?.created == true) UploadPhase.Uploaded else UploadPhase.Existing
+                "Conflict" -> UploadPhase.NameConflict
+                "Cancelled" -> UploadPhase.Cancelled
+                else -> UploadPhase.NeedsAttention
+            }
+            val old = item.state.value
+            item.restore(UploadItemState(phase, if (phase == UploadPhase.Uploading) old.percent else null,
+                failure = row.problem, pendingAction = row.receiptJson != null && row.unfinished, attention = attention,
+                actionSuppressed = row.linkStep == "Suppressed" || row.albumStep == "Suppressed",
+                albumAdded = if (row.albumStep == "Done") row.intents.firstOrNull { it.kind == "album" }?.target else null, httpStatus = row.httpStatus))
+        }
+        val batches = rows.groupBy { it.batchId }.map { (id, jobs) ->
+            batchCache.getOrPut(id) { UploadBatch(jobs.map { it.selection }, id = id, items = jobs.map { itemCache.getValue(it.id) }) }
+        }
+        mutableBatches.value = batches
+        mutableItems.value = rows.map { itemCache.getValue(it.id) }
+        mutableWaiting.value = batches.filter { batch -> batch.id !in released && rows.any { it.batchId == batch.id && it.runnable } }
+        val activePasses = rows.filter { it.runnable || it.executor != null }.map { it.passId }.toSet()
+        val passRows = rows.filter { it.passId in activePasses }
+        val runnable = passRows.filter { it.runnable || it.executor != null }
+        val progress = mutableActivity.value
+        val current = progress?.current?.takeIf { uri ->
+            runnable.any { it.state == "Running" && it.executor != null && it.selection.identityUri == uri }
+        }
+        mutableActivity.value = if (runnable.isEmpty()) null else UploadActivity(
+            pending = runnable.map { it.selection.identityUri }.toSet(), total = passRows.size,
+            processed = passRows.size - runnable.size, current = current,
+            percent = progress?.percent?.takeIf { current != null },
+        )
+        val summaries = rows.filter { !it.seen && it.hasResult }
+        mutableResult.value = if (summaries.isEmpty()) null else UploadResult(
+            uploaded = summaries.count { it.receiptJson != null }, files = summaries.size,
+            attention = summaries.count { it.hasAttention },
+            existing = summaries.count { it.receipt?.created == false }, cancelled = summaries.count { it.state == "Cancelled" }, conflicts = summaries.count { it.state == "Conflict" },
+        )
+    }
+
 }
 
 private fun uploadOperationSnapshots(
     activity: UploadActivity?,
     result: UploadResult?,
-): List<OperationStatusSnapshot> =
-    buildList {
-        if (activity != null) {
-            val progress = if (activity.total == 0) {
-                null
-            } else {
-                (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
+): List<OperationStatusSnapshot> = buildList {
+    if (activity != null) {
+        val progress = if (activity.total == 0) null else
+            (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
+        val media = buildList {
+            activity.current?.let { add(OperationMediaActivity(OperationMediaReference.LocalUri(it), activity.percent?.div(100f))) }
+            activity.pending.asSequence().filterNot { it == activity.current }.mapTo(this) {
+                OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
             }
-            val media = buildList {
-                activity.current?.let {
-                    add(
-                        OperationMediaActivity(
-                            OperationMediaReference.LocalUri(it),
-                            activity.percent?.div(100f),
-                        ),
-                    )
-                }
-                activity.pending
-                    .asSequence()
-                    .filterNot { it == activity.current }
-                    .mapTo(this) {
-                        OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
-                    }
-            }
-            add(
-                OperationStatusSnapshot(
-                    kind = OperationKind.Upload,
-                    title = com.syrok0010.nextgallery.core.ui.uiText(
-                        R.string.upload_progress,
-                        (activity.processed + 1).coerceAtMost(activity.total),
-                        activity.total,
-                    ),
-                    running = true,
-                    progress = progress,
-                    media = media,
-                ),
-            )
         }
-        if (result != null) {
-            val failed = result.failures.isNotEmpty() || result.uploaded < result.files
-            add(
-                OperationStatusSnapshot(
-                    kind = OperationKind.Upload,
-                    title = if (result.failures.isEmpty()) {
-                        com.syrok0010.nextgallery.core.ui.uiText(
-                            R.string.upload_done,
-                            result.uploaded,
-                            result.files,
-                        )
-                    } else {
-                        com.syrok0010.nextgallery.core.ui.uiText(
-                            R.string.upload_stopped,
-                            result.failures.joinToString(", "),
-                        )
-                    },
-                    details = buildList {
-                        if (result.failures.isNotEmpty()) {
-                            add(
-                                com.syrok0010.nextgallery.core.ui.uiText(
-                                    R.string.upload_count,
-                                    result.uploaded,
-                                    result.files,
-                                ),
-                            )
-                        }
-                        addAll(result.details)
-                    },
-                    failed = failed,
-                ),
-            )
-        }
+        add(OperationStatusSnapshot(
+            kind = OperationKind.Upload,
+            title = com.syrok0010.nextgallery.core.ui.uiText(
+                R.string.upload_progress,
+                (activity.processed + 1).coerceAtMost(activity.total),
+                activity.total,
+            ),
+            running = true,
+            progress = progress,
+            media = media,
+        ))
     }
+    if (result != null) {
+        val failed = result.failures.isNotEmpty() || result.uploaded < result.files || result.attention > 0
+        add(OperationStatusSnapshot(
+            kind = OperationKind.Upload,
+            title = if (result.failures.isEmpty() && result.attention == 0) {
+                com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_done, result.uploaded, result.files)
+            } else {
+                com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_stopped, result.failures.joinToString(", "))
+            },
+            details = buildList {
+                if (result.failures.isNotEmpty()) add(com.syrok0010.nextgallery.core.ui.uiText(R.string.upload_count, result.uploaded, result.files))
+                addAll(result.details)
+            },
+            failed = failed,
+        ))
+    }
+}
+
+private val uploadProcessId = UUID.randomUUID().toString()

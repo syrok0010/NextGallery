@@ -1,0 +1,4 @@
+com.syrok0010.nextgallery.feature.upload.UploadQueueRuntimeTest > rejectedJournalDoesNotConsumeSelectionOrPublishAcceptedBatch[nextgallery-api36-dev(AVD) - 16] FAILED 
+kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelled}@1f521b
+Finished 21 tests on nextgallery-api36-dev(AVD) - 16
+kotlinx.coroutines.JobCancellationException: kotlinx.coroutines.JobCancellationException: Job was cancelled; job=SupervisorJobImpl{Cancelled}@1f521b
