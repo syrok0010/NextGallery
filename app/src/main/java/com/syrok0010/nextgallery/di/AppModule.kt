@@ -82,7 +82,7 @@ val appModule = module {
             get(named("libraryScope")),
         )
     }
-    single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<MemoriesApiClient>()) }
+    single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
     single {
         AlbumAdditions(get(), get(), get(), get(), get(named("libraryScope")))
     } bind OperationStatusSource::class

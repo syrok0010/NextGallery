@@ -132,7 +132,7 @@ internal class AlbumAdditions(
                     )
                     AlbumAdditionState.Done(
                         target.name,
-                        writer.add(credentials, address, request.fileIds),
+                        writer.add(address, request.fileIds),
                         queued,
                     )
                 }

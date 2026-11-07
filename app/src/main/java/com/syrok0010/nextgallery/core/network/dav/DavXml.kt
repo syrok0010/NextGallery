@@ -13,7 +13,7 @@ import nl.adaptivity.xmlutil.serialization.XmlSerialName
 
 /*
  * WebDAV bodies as serializable models. Only the elements read or sent here are declared: unknown
- * ones (`href`, other properties) are skipped. Values stay strings, because a `propstat` with a
+ * ones (other properties, `responsedescription`) are skipped. Values stay strings, because a `propstat` with a
  * non-200 status lists the requested properties as empty elements.
  */
 
@@ -40,13 +40,77 @@ internal data class RequestedFileProps(
 @Serializable
 internal data object Requested
 
+/** `SEARCH` body finding the file with a given `oc:fileid` anywhere under [From.scope]. */
+@Serializable
+@XmlSerialName("searchrequest", DAV, "d")
+internal data class SearchRequest(@XmlElement val search: BasicSearch) {
+    companion object {
+        /** Nextcloud takes the scope as a raw DAV path, so the uid is not percent-encoded. */
+        fun fileId(user: String, fileId: Long) =
+            SearchRequest(
+                BasicSearch(
+                    from = From(Scope("/files/$user")),
+                    where = Where(FileIdEquals(literal = fileId.toString())),
+                ),
+            )
+    }
+}
+
+@Serializable
+@XmlSerialName("basicsearch", DAV, "d")
+internal data class BasicSearch(
+    @XmlElement val select: Select = Select(),
+    @XmlElement val from: From,
+    @XmlElement val where: Where,
+)
+
+@Serializable
+@XmlSerialName("select", DAV, "d")
+internal data class Select(@XmlElement val prop: FileIdProp = FileIdProp())
+
+@Serializable
+@XmlSerialName("prop", DAV, "d")
+internal data class FileIdProp(
+    @XmlElement @XmlSerialName("fileid", OWNCLOUD, "oc")
+    val fileId: Requested = Requested,
+)
+
+@Serializable
+@XmlSerialName("from", DAV, "d")
+internal data class From(@XmlElement val scope: Scope)
+
+@Serializable
+@XmlSerialName("scope", DAV, "d")
+internal data class Scope(
+    @XmlElement @XmlSerialName("href", DAV, "d")
+    val href: String,
+    @XmlElement @XmlSerialName("depth", DAV, "d")
+    val depth: String = "infinity",
+)
+
+@Serializable
+@XmlSerialName("where", DAV, "d")
+internal data class Where(@XmlElement val eq: FileIdEquals)
+
+@Serializable
+@XmlSerialName("eq", DAV, "d")
+internal data class FileIdEquals(
+    @XmlElement val prop: FileIdProp = FileIdProp(),
+    @XmlElement @XmlSerialName("literal", DAV, "d")
+    val literal: String,
+)
+
 @Serializable
 @XmlSerialName("multistatus", DAV, "d")
 internal data class Multistatus(@XmlElement val responses: List<MultistatusResponse> = emptyList())
 
 @Serializable
 @XmlSerialName("response", DAV, "d")
-internal data class MultistatusResponse(@XmlElement val propstats: List<PropStat> = emptyList())
+internal data class MultistatusResponse(
+    @XmlElement @XmlSerialName("href", DAV, "d")
+    val href: String = "",
+    @XmlElement val propstats: List<PropStat> = emptyList(),
+)
 
 @Serializable
 @XmlSerialName("propstat", DAV, "d")
@@ -78,6 +142,9 @@ private val davXml = XML {
 }
 
 internal fun encodeDav(body: PropFind): String = davXml.encodeToString(PropFind.serializer(), body)
+
+internal fun encodeDav(body: SearchRequest): String =
+    davXml.encodeToString(SearchRequest.serializer(), body)
 
 /** Fails with [IOException] on a malformed body or one that declares a DOCTYPE. */
 internal fun decodeMultistatus(body: InputStream): Multistatus =

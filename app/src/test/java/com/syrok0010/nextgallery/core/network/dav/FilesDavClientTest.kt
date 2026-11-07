@@ -151,6 +151,73 @@ class FilesDavClientTest {
         assertTrue(error is IOException)
     }
 
+    @Test fun `find searches the user's files by id and decodes the found path`() =
+        runBlocking {
+            var code = 207
+            DavFixtureServer {
+                DavResponseStub(
+                    code,
+                    body = searchResult(295, "Photos/Camera/a%2Fb.jpg"),
+                )
+            }.use { fixture ->
+                assertEquals(file, fixture.client.findFile(295))
+                val request = fixture.requests.single()
+                assertEquals("SEARCH" to "/remote.php/dav/", request.method to request.target)
+                val body = request.body.decodeToString()
+                assertTrue(body.contains("<d:href>/files/anna</d:href>"))
+                assertTrue(body.contains("<d:depth>infinity</d:depth>"))
+                assertTrue(body.contains("<d:literal>295</d:literal>"))
+                code = 403
+                val error = runCatching { fixture.client.findFile(295) }.exceptionOrNull()
+                assertEquals(403, (error as DavHttpException).code)
+            }
+        }
+
+    @Test fun `find resolves hrefs of a server under a subpath`() =
+        runBlocking {
+            DavFixtureServer {
+                DavResponseStub(
+                    207,
+                    body = searchResult(295, "Photos/a.jpg", root = "/cloud/remote.php/dav"),
+                )
+            }.use { fixture ->
+                val client = FilesDavClient(NextcloudTransport(Json)) {
+                    fixture.credentials.copy(serverUrl = fixture.credentials.serverUrl + "/cloud/")
+                }
+                assertEquals(DavFilePath.of("anna", "/Photos/a.jpg"), client.findFile(295))
+                assertEquals("/cloud/remote.php/dav/", fixture.requests.single().target)
+            }
+        }
+
+    @Test fun `find is null without a match under the user's files`() =
+        runBlocking {
+            val bodies = listOf(
+                """<d:multistatus xmlns:d="DAV:"/>""",
+                searchResult(296, "Photos/a.jpg"),
+                searchResult(295, "Photos/a.jpg", root = "/remote.php/dav/trashbin"),
+                searchResult(295, ""),
+            )
+            for (body in bodies) {
+                DavFixtureServer { DavResponseStub(207, body = body) }.use { fixture ->
+                    assertNull(body, fixture.client.findFile(295))
+                }
+            }
+        }
+
+    @Test fun `search body is a namespaced basic search`() {
+        val document = javax.xml.parsers.DocumentBuilderFactory
+            .newInstance()
+            .apply { isNamespaceAware = true }
+            .newDocumentBuilder()
+            .parse(encodeDav(SearchRequest.fileId("anna", 295)).byteInputStream())
+        val root = document.documentElement
+        assertEquals("DAV:" to "searchrequest", root.namespaceURI to root.localName)
+        val ids = document.getElementsByTagNameNS("http://owncloud.org/ns", "fileid")
+        // Selected and compared.
+        assertEquals(2, ids.length)
+        assertEquals("295", document.getElementsByTagNameNS("DAV:", "literal").item(0).textContent)
+    }
+
     @Test fun `read is pinned to the etag and reports a replaced file`() =
         runBlocking {
             var code = 200
@@ -222,6 +289,19 @@ class FilesDavClientTest {
     }
 
     private companion object {
+        fun searchResult(fileId: Long, path: String, root: String = "/remote.php/dav") =
+            """
+            <d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+              <d:response>
+                <d:href>$root/files/anna/$path</d:href>
+                <d:propstat>
+                  <d:prop><oc:fileid>$fileId</oc:fileid></d:prop>
+                  <d:status>HTTP/1.1 200 OK</d:status>
+                </d:propstat>
+              </d:response>
+            </d:multistatus>
+            """.trimIndent()
+
         val MULTISTATUS =
             """
             <d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
