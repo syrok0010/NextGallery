@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
@@ -24,6 +25,8 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.core.ui.pluralText
+import java.io.FileNotFoundException
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.koin.android.ext.android.inject
+import retrofit2.HttpException
 
 /**
  * Uploads batches from [UploadQueue] and runs their follow-ups. It knows nothing about why a file
@@ -194,10 +198,22 @@ class UploadForegroundService : Service() {
             .build()
     }
 
-    private fun failureReason(error: Throwable): String =
-        (error as? UploadException)?.let { getString(it.reason, *it.args) }
-            ?: error.localizedMessage
-            ?: getString(R.string.upload_error_network)
+    /** The user sees the kind of failure; the raw message only goes to the log. */
+    private fun failureReason(error: Throwable): String {
+        Log.w(TAG, "Upload failed", error)
+        return when (error) {
+            is UploadException -> getString(error.reason, *error.args)
+
+            is SourceUnavailable -> getString(R.string.upload_error_open, error.name)
+
+            is HttpException -> getString(R.string.upload_error_memories, error.code())
+
+            // Timeouts, dropped connections and DNS failures carry OkHttp's English messages.
+            is IOException -> getString(R.string.upload_error_network)
+
+            else -> getString(R.string.upload_error_unexpected)
+        }
+    }
 
     private suspend fun upload(
         batch: UploadBatch,
@@ -249,11 +265,14 @@ class UploadForegroundService : Service() {
     ): UploadedFile? {
         val selection = item.selection
         val uri = Uri.parse(selection.contentUri)
-        val length = contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        val name = selection.displayName
+        val length = readSource(name) {
+            contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+        } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
         val openLocal = {
-            contentResolver.openInputStream(uri)
-                ?: throw UploadException(R.string.upload_error_open, selection.displayName)
+            val stream = readSource(name) { contentResolver.openInputStream(uri) }
+            stream ?: throw SourceUnavailable(name)
         }
         val body = UploadRequestBody(
             length = length,
@@ -354,7 +373,24 @@ class UploadForegroundService : Service() {
 
     private class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
 
+    /**
+     * The local file can no longer be read. An [IOException], so OkHttp passes it out of the
+     * request body unchanged instead of rethrowing it on its dispatcher thread.
+     */
+    private class SourceUnavailable(val name: String, cause: Throwable? = null) : IOException(cause)
+
+    /** Turns a file that vanished or lost its permission into [SourceUnavailable]. */
+    private inline fun <T> readSource(name: String, open: () -> T): T =
+        try {
+            open()
+        } catch (error: FileNotFoundException) {
+            throw SourceUnavailable(name, error)
+        } catch (error: SecurityException) {
+            throw SourceUnavailable(name, error)
+        }
+
     companion object {
+        private const val TAG = "UploadService"
         const val ACTION_UPLOADS = "com.syrok0010.nextgallery.UPLOADS"
         private const val CHANNEL_ID = "cloud-upload"
         private const val FOREGROUND_NOTIFICATION_ID = 42
