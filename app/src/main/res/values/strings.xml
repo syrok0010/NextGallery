@@ -146,6 +146,8 @@
     <string name="upload_done">Загрузка завершена: %1$d из %2$d</string>
     <string name="upload_stopped">Загрузка остановлена: %1$s</string>
     <string name="upload_error_network">ошибка сети</string>
+    <string name="upload_error_memories">Memories ответил HTTP %1$d</string>
+    <string name="upload_error_unexpected">непредвиденная ошибка</string>
     <string name="upload_error_session">сессия Nextcloud больше недоступна</string>
     <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>
     <string name="upload_error_open">не удалось открыть %1$s</string>
