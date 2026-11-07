@@ -171,6 +171,8 @@ internal fun OperationStatusPill(
     status: OperationStatus,
     visible: Boolean,
     modifier: Modifier = Modifier,
+    /** The viewer keeps the pill as wide as its text, so it covers less of the photo. */
+    fillWidth: Boolean = true,
 ) {
     val entries = status.entries()
     var expanded by remember { mutableStateOf(false) }
@@ -198,7 +200,7 @@ internal fun OperationStatusPill(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier
-                .fillMaxWidth()
+                .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
                 .height(36.dp)
                 .onSizeChanged { pillWidth = with(density) { it.width.toDp() } }
                 .testTag("operation_status"),
@@ -214,7 +216,7 @@ internal fun OperationStatusPill(
             shape = RoundedCornerShape(16.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier.width(pillWidth),
+            modifier = Modifier.width(maxOf(pillWidth, StatusListMinWidth)),
         ) {
             Column(
                 Modifier
@@ -335,3 +337,5 @@ private fun OperationRow(entry: OperationEntry) {
 }
 
 private const val RESULT_MILLIS = 6_000L
+
+private val StatusListMinWidth = 280.dp

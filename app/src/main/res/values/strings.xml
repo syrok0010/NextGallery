@@ -48,6 +48,18 @@
     <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
     <string name="timeline_scroll_date_with_year_pattern">d MMMM yyyy</string>
     <string name="viewer_position">%1$d / %2$d</string>
+    <string name="viewer_in_cloud">В облаке</string>
+    <string name="viewer_copy_phone">Есть на телефоне</string>
+    <string name="viewer_copy_cloud">Есть в облаке</string>
+    <string name="viewer_details">Сведения</string>
+    <string name="viewer_details_on_phone">На телефоне</string>
+    <string name="viewer_details_in_cloud">В облаке</string>
+    <string name="viewer_details_not_in_cloud">Ещё не в облаке</string>
+    <string name="viewer_details_cloud_only">Нет на телефоне</string>
+    <string name="viewer_details_resolution">%1$d × %2$d</string>
+    <string name="viewer_details_date_pattern">d MMMM yyyy</string>
+    <string name="viewer_details_time_pattern">HH:mm</string>
+    <string name="viewer_details_weekday_pattern">EEEE</string>
     <string name="value_unknown">unknown</string>
     <string name="value_unknown_short">?</string>
     <string name="error_save_credentials">Не удалось сохранить подключение. Попробуйте войти заново.</string>
@@ -139,7 +151,7 @@
     <string name="selection_more_actions">Ещё действия</string>
     <string name="selection_cancel">Отменить выбор</string>
     <string name="selection_count">Выбрано: %1$d</string>
-    <string name="upload_action">Загрузить</string>
+    <string name="upload_action">В облако</string>
     <string name="upload_channel">Загрузка в облако</string>
     <string name="upload_preparing">Подготовка загрузки</string>
     <string name="upload_progress">Загрузка: %1$d из %2$d</string>

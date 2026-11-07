@@ -1,6 +1,11 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -9,12 +14,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -34,7 +44,8 @@ internal fun MediaDetailScreen(
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
     replacementMediaId: MediaId? = null,
-    actions: @Composable (MediaItem) -> Unit = {},
+    /** Labeled actions for the current object; null hides the action row. */
+    actions: (@Composable (MediaItem) -> Unit)? = null,
     status: @Composable (visible: Boolean) -> Unit = {},
 ) {
     val items = sequence.items
@@ -60,6 +71,14 @@ internal fun MediaDetailScreen(
         backEnabled = !videoFullscreen,
     )
     ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
+    val details = rememberViewerDetailsState()
+    // Registered after the viewer's own handler, so back closes the sheet before the viewer.
+    BackHandler(enabled = details.isOpen) { details.close() }
+    val density = LocalDensity.current
+    val defaultHeaderBottom = with(density) { WindowInsets.statusBars.getTop(this) + 64.dp.toPx() }
+    var headerBottom by remember { mutableFloatStateOf(defaultHeaderBottom) }
+    val photoMarginPx = with(density) { 16.dp.toPx() }
+    val detailsFlingPx = with(density) { ViewerDetailsFlingVelocity.toPx() }
 
     SideEffect(pagerState.currentPage, items) {
         val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect
@@ -81,7 +100,27 @@ internal fun MediaDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .viewerDismissGestures(motion, currentItem?.mediaId, activePageState.canDragDown && !videoFullscreen),
+                .viewerDismissGestures(
+                    motion,
+                    currentItem?.mediaId,
+                    activePageState.canDragDown && !videoFullscreen,
+                    details,
+                ).graphicsLayer {
+                    val progress = details.progress
+                    if (progress == 0f || currentItem == null) return@graphicsLayer
+                    val target = viewerDetailsPhotoTarget(
+                        containerWidth = size.width,
+                        containerHeight = size.height,
+                        headerBottom = headerBottom,
+                        sheetHeight = details.sheetHeightPx,
+                        item = currentItem,
+                        marginPx = photoMarginPx,
+                    )
+                    translationY = progress * target.translationY
+                    val scale = 1f + progress.coerceAtMost(1f) * (target.scale - 1f)
+                    scaleX = scale
+                    scaleY = scale
+                },
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -100,7 +139,9 @@ internal fun MediaDetailScreen(
                     },
                     trackSurfaceBounds = item.mediaId == currentItem?.mediaId && motion.trackSurfaceBounds,
                     playbackController = playback.current?.takeIf { it.mediaId == item.mediaId },
-                    onToggleChrome = { chromeVisible = !chromeVisible },
+                    onToggleChrome = {
+                        if (details.engaged) details.close() else chromeVisible = !chromeVisible
+                    },
                     onActivePageStateChange = { state ->
                         if (item.mediaId == currentItem?.mediaId) {
                             activePageState = state
@@ -120,8 +161,10 @@ internal fun MediaDetailScreen(
                 item = currentItem,
                 visible = chromeVisible,
                 playback = playback.current,
-                actions = { actions(currentItem) },
+                actions = actions?.let { { it(currentItem) } },
                 status = status,
+                detailsProgress = { details.progress },
+                onHeaderBottomChange = { headerBottom = it },
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(
@@ -129,9 +172,23 @@ internal fun MediaDetailScreen(
                         currentPage = pagerState.currentPage,
                         playback = playback.current ?: FilmstripPlayback.None,
                         onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
+                        // The action row under the filmstrip takes the navigation bar instead.
+                        modifier = if (actions != null) {
+                            Modifier.consumeWindowInsets(WindowInsets.navigationBars)
+                        } else {
+                            Modifier
+                        },
                     )
                 },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (currentItem != null && !videoFullscreen) {
+            ViewerDetailsSheet(
+                item = currentItem,
+                state = details,
+                flingThresholdPx = detailsFlingPx,
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }

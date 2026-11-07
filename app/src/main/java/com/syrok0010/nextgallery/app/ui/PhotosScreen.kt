@@ -11,12 +11,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
+import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
+import com.syrok0010.nextgallery.feature.collection.SelectionActionDone
 import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
 import com.syrok0010.nextgallery.feature.deletion.CloudTrashStatus
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
@@ -52,6 +54,34 @@ internal fun PhotosScreen(
     }
     val selection = rememberMediaSelection()
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
+    val completedDeletions by deletions.removedMediaIds.collectAsStateWithLifecycle()
+    // A confirmation on screen holds the result, so it cannot expire unseen behind the dialog.
+    val confirming = albumRequest != null || deleteRequest != null || delete.awaitingConfirmation
+    val deleteAction = SelectionAction(
+        icon = rememberVectorPainter(Icons.Default.Delete),
+        label = stringResource(R.string.delete_action),
+        isDestructive = true,
+    ) { items, _ ->
+        deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
+    }
+    val albumAction = SelectionAction(
+        icon = painterResource(R.drawable.ic_albums),
+        label = stringResource(R.string.album_add_action),
+    ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone }
+    val uploadAction = SelectionAction(
+        icon = painterResource(R.drawable.ic_cloud_upload),
+        label = stringResource(R.string.upload_action),
+        isPrimary = true,
+        done = SelectionActionDone(
+            icon = painterResource(R.drawable.ic_cloud_done),
+            label = stringResource(R.string.viewer_in_cloud),
+            appliesTo = { it.hasRemoteCopy },
+        ),
+    ) { items, onDone ->
+        // The app root starts the batch and asks for the notification permission.
+        uploads.submit(items.map { it.mediaId })
+        onDone()
+    }
     MediaCollectionScreen(
         slots = state.snapshot?.slots.orEmpty(),
         emptyContent = { Text(stringResource(R.string.timeline_empty)) },
@@ -70,34 +100,21 @@ internal fun PhotosScreen(
         onViewerVisibilityChanged = onViewerVisibilityChanged,
         onSelectionModeChanged = onSelectionModeChanged,
         selection = selection,
-        selectionActions = listOf(
-            SelectionAction(
-                icon = rememberVectorPainter(Icons.Default.Delete),
-                label = stringResource(R.string.delete_action),
-                isDestructive = true,
-            ) { items, _ ->
-                deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
-            },
-            SelectionAction(
-                icon = painterResource(R.drawable.ic_albums),
-                label = stringResource(R.string.album_add_action),
-            ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
-            SelectionAction(
-                icon = painterResource(R.drawable.ic_cloud),
-                label = stringResource(R.string.upload_action),
-                isPrimary = true,
-            ) { items, onDone ->
-                // The app root starts the batch and asks for the notification permission.
-                uploads.submit(items.map { it.mediaId })
-                onDone()
-            },
-        ),
+        selectionActions = listOf(deleteAction, albumAction, uploadAction),
+        viewerActions = listOf(albumAction, uploadAction, deleteAction),
+        viewerStatus = { visible ->
+            if (operations.active) {
+                OperationStatusPill(operations, visible = visible && !confirming, fillWidth = false)
+            }
+        },
+        completedDeletions = completedDeletions,
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
             onLogout,
             viewerVisible = viewerVisible,
+            statusVisible = !confirming,
             operations = operations,
         ) {
             content()

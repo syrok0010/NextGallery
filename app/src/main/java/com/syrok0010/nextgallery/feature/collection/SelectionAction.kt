@@ -12,7 +12,16 @@ internal class SelectionAction(
     val label: String,
     val isPrimary: Boolean = false,
     val isDestructive: Boolean = false,
+    /** The viewer shows this disabled instead when the action has nothing left to do. */
+    val done: SelectionActionDone? = null,
     val perform: (items: List<MediaItem>, onDone: () -> Unit) -> Unit,
+)
+
+/** For upload: an object that already has a cloud copy shows a disabled "in the cloud". */
+internal class SelectionActionDone(
+    val icon: Painter,
+    val label: String,
+    val appliesTo: (MediaItem) -> Boolean,
 )
 
 internal data class SelectionActionPlacement(

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.core.media.MediaId
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -264,33 +265,60 @@ internal fun Modifier.viewerDismissGestures(
     motion: ViewerMotionState,
     mediaId: MediaId?,
     canDrag: Boolean,
+    details: ViewerDetailsState? = null,
 ): Modifier {
     val thresholdPx = with(LocalDensity.current) { ViewerDismissThreshold.toPx() }
     val flingVelocityPx = with(LocalDensity.current) { ViewerDismissFlingVelocity.toPx() }
+    val detailsFlingPx = with(LocalDensity.current) { ViewerDetailsFlingVelocity.toPx() }
     val velocityTracker = remember { VelocityTracker() }
 
-    return pointerInput(motion, mediaId, canDrag, thresholdPx, flingVelocityPx) {
+    return pointerInput(motion, mediaId, canDrag, details, thresholdPx, flingVelocityPx) {
+        // Decided by the first movement: up, or any vertical drag while the sheet is out, moves
+        // the details sheet; down on a closed sheet dismisses the viewer as before.
+        var draggingDetails: Boolean? = null
         detectDragGestures(
             onDragStart = {
                 velocityTracker.resetTracking()
+                draggingDetails = null
             },
             onDragCancel = {
                 velocityTracker.resetTracking()
-                motion.cancelDrag()
+                if (draggingDetails == true) {
+                    details?.settle(
+                        0f,
+                        detailsFlingPx,
+                    )
+                } else {
+                    motion.cancelDrag()
+                }
             },
             onDragEnd = {
                 val velocity = velocityTracker.calculateVelocity()
                 velocityTracker.resetTracking()
-                motion.endDrag(
-                    canClose = mediaId != null,
-                    thresholdPx = thresholdPx,
-                    flingVelocityPx = flingVelocityPx,
-                    velocity = velocity,
-                )
+                if (draggingDetails == true) {
+                    details?.settle(velocity.y, detailsFlingPx)
+                } else {
+                    motion.endDrag(
+                        canClose = mediaId != null,
+                        thresholdPx = thresholdPx,
+                        flingVelocityPx = flingVelocityPx,
+                        velocity = velocity,
+                    )
+                }
             },
         ) { change, amount ->
             velocityTracker.addPosition(change.uptimeMillis, change.position)
-            if (canDrag && motion.dragBy(amount)) change.consume()
+            if (!canDrag) return@detectDragGestures
+            val toDetails = draggingDetails ?: (
+                details != null &&
+                    (details.engaged || (amount.y < 0f && abs(amount.y) > abs(amount.x)))
+                ).also { draggingDetails = it }
+            if (toDetails) {
+                details?.dragBy(amount.y)
+                change.consume()
+            } else if (motion.dragBy(amount)) {
+                change.consume()
+            }
         }
     }
 }
@@ -307,3 +335,4 @@ private const val ViewerBackgroundExitDurationMillis = 90
 private const val ViewerEnterDurationMillis = 220
 private val ViewerDismissThreshold = 112.dp
 private val ViewerDismissFlingVelocity = 800.dp
+internal val ViewerDetailsFlingVelocity = 400.dp
