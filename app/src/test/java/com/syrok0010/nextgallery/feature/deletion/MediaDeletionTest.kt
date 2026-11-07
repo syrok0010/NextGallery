@@ -43,7 +43,6 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = listOf(10, 20),
-                removedMediaIds = listOf("phone", "video", "cloud", "both"),
             ),
             preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
         )
@@ -55,8 +54,6 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = listOf(10),
-                // The object with both copies keeps its cloud copy and stays in the library.
-                removedMediaIds = listOf("phone", "video", "cloud"),
             ),
             preparation.confirm(DeletionScope.PhoneOnly, cloudAllowed = true),
         )
@@ -67,7 +64,6 @@ class MediaDeletionTest {
                     "content://media/external/video/media/3",
                 ),
                 fileIds = listOf(10, 20),
-                removedMediaIds = listOf("phone", "video", "cloud"),
             ),
             preparation.confirm(DeletionScope.CloudOnly, cloudAllowed = true),
         )
@@ -80,7 +76,6 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = emptyList(),
-                removedMediaIds = listOf("phone", "video"),
             ),
             preparation.confirm(DeletionScope.Everywhere, cloudAllowed = false),
         )
@@ -123,7 +118,6 @@ class MediaDeletionTest {
                     DeletionTargets(
                         contentUris = listOf("content://media/external/images/media/2"),
                         fileIds = listOf(20),
-                        removedMediaIds = listOf("both"),
                     ),
                     preparation?.confirm(DeletionScope.Everywhere, cloudAllowed = true),
                 )
@@ -186,11 +180,11 @@ class MediaDeletionTest {
                 ) { refreshed.incrementAndGet() }
                 val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
                 repository.delete(
-                    DeletionTargets(phone, listOf(1, 3), listOf("failed")),
+                    DeletionTargets(phone, listOf(1, 3)),
                 )
                 // Queued behind the first; its result adds to the one not shown yet.
                 repository.delete(
-                    DeletionTargets(emptyList(), listOf(2), listOf("gone")),
+                    DeletionTargets(emptyList(), listOf(2)),
                 )
                 withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
                 assertEquals(
@@ -202,10 +196,8 @@ class MediaDeletionTest {
                     repository.state.value.unseen,
                 )
                 assertEquals("progress ends with the queue", null, repository.state.value.running)
-                assertEquals("only a fully successful request removes", setOf(MediaId("gone")), repository.removedMediaIds.value)
                 repository.consume()
                 assertEquals(null, repository.state.value.unseen)
-                assertEquals("consuming the status keeps the removal", setOf(MediaId("gone")), repository.removedMediaIds.value)
                 repository.delete(
                     DeletionTargets(emptyList(), listOf(1)),
                 )
