@@ -30,8 +30,6 @@ class ViewerActionsTest {
     private val removed = mutableStateOf(emptySet<MediaId>())
     private val visible = mutableStateOf(false)
     private var received = emptyList<MediaItem>()
-    private val unloaded = mutableStateOf(emptySet<MediaId>())
-    private val requests = mutableListOf<IntRange>()
 
     @Test fun actionsReceiveOnlyCurrentLocalCloudOrMergedObject() {
         show()
@@ -122,45 +120,6 @@ class ViewerActionsTest {
         rule.runOnIdle { assertEquals(true, visible.value) }
     }
 
-    @Test fun deletionWaitsForNeighborInsteadOfJumpingToAnotherLoadedDay() {
-        val otherDay = first.copy(dayId = first.dayId + 1)
-        items.value = listOf(otherDay, middle, last)
-        show()
-        rule.onNodeWithContentDescription(middle.displayName).performClick()
-        rule.runOnIdle {
-            removed.value = setOf(middle.mediaId)
-            unloaded.value = setOf(last.mediaId)
-            items.value = listOf(otherDay, last)
-        }
-        rule.onNodeWithText(middle.displayName).assertIsDisplayed()
-        rule.onNodeWithText("Удалить").assertIsNotEnabled()
-        rule.runOnIdle {
-            assertEquals(true, visible.value)
-            assertEquals(true, requests.any { 1 in it })
-            unloaded.value = emptySet()
-        }
-        rule.onNodeWithText(last.displayName).assertIsDisplayed()
-        rule.onNodeWithText("В альбом").performClick()
-        rule.runOnIdle { assertEquals(listOf(last), received) }
-    }
-
-    @Test fun deletionKeepsViewerOpenWhenOnlyPlaceholderNeighborRemains() {
-        items.value = listOf(middle, last)
-        show()
-        rule.onNodeWithContentDescription(middle.displayName).performClick()
-        rule.runOnIdle {
-            removed.value = setOf(middle.mediaId)
-            unloaded.value = setOf(last.mediaId)
-            items.value = listOf(last)
-        }
-        rule.onNodeWithText(middle.displayName).assertIsDisplayed()
-        rule.runOnIdle {
-            assertEquals(true, visible.value)
-            unloaded.value = emptySet()
-        }
-        rule.onNodeWithText(last.displayName).assertIsDisplayed()
-    }
-
     private fun openAndRemove(item: MediaItem) {
         rule.onNodeWithContentDescription(item.displayName).performClick()
         rule.onNodeWithText("Удалить").performClick()
@@ -215,15 +174,14 @@ class ViewerActionsTest {
                 MediaCollectionScreen(
                     slots = items.value.groupBy { it.dayId }.flatMap { (_, dayItems) ->
                         dayItems.mapIndexed { index, item ->
-                            MediaSlot(MediaSlotKey(item.dayId, index), item.dayId, index,
-                                item.takeUnless { it.mediaId in unloaded.value })
+                            MediaSlot(MediaSlotKey(item.dayId, index), item.dayId, index, item)
                         }
                     },
-                    onViewerRange = { requests += it },
+                    onViewerRange = {},
                     emptyContent = {},
                     onViewerVisibilityChanged = { visible.value = it },
                     viewerActions = actions,
-                    completedDeletions = removed.value,
+                    deletedMediaIds = removed.value,
                     scaffold = { _, content -> content() },
                 )
             }

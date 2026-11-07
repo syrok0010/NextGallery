@@ -54,7 +54,9 @@ internal fun MediaDetailScreen(
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    val currentItem = items.getOrNull(pagerState.currentPage)
+    // Right after the last page is removed the pager still points past the end for a frame.
+    val currentPage = pagerState.currentPage.coerceAtMost(items.lastIndex)
+    val currentItem = items.getOrNull(currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
     val videoFullscreen = playback.current?.state?.isFullscreen == true
     LaunchedEffect(videoFullscreen) { chromeVisible = true }
@@ -76,10 +78,9 @@ internal fun MediaDetailScreen(
     val defaultHeaderBottom = with(density) { WindowInsets.statusBars.getTop(this) + 64.dp.toPx() }
     var headerBottom by remember { mutableFloatStateOf(defaultHeaderBottom) }
     val photoMarginPx = with(density) { 16.dp.toPx() }
-    val detailsFlingPx = with(density) { ViewerDetailsFlingVelocity.toPx() }
 
-    SideEffect(pagerState.currentPage, items) {
-        val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect onEmpty()
+    SideEffect(currentPage, items) {
+        val item = items.getOrNull(currentPage) ?: return@SideEffect onEmpty()
         onCurrentItemChange(item)
 
     }
@@ -183,7 +184,6 @@ internal fun MediaDetailScreen(
             ViewerDetailsSheet(
                 item = currentItem,
                 state = details,
-                flingThresholdPx = detailsFlingPx,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }

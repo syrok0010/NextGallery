@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -11,6 +12,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
@@ -54,14 +56,16 @@ internal fun PhotosScreen(
     }
     val selection = rememberMediaSelection()
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
-    val completedDeletions by deletions.removedMediaIds.collectAsStateWithLifecycle()
-    // A confirmation on screen holds the result, so it cannot expire unseen behind the dialog.
-    val confirming = albumRequest != null || deleteRequest != null || delete.awaitingConfirmation
+    // The last objects the user asked to delete: the viewer stops holding its current object once
+    // it leaves the library. One that keeps a copy stays in the library, so it is never released.
+    var deletedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val deletedMediaIds = remember(deletedIds) { deletedIds.mapTo(HashSet(), ::MediaId) }
     val deleteAction = SelectionAction(
         icon = rememberVectorPainter(Icons.Default.Delete),
         label = stringResource(R.string.delete_action),
         isDestructive = true,
     ) { items, _ ->
+        deletedIds = items.map { it.mediaId.value }
         deletions.prepare(items.map { it.mediaId })?.let { deleteRequest = it }
     }
     val albumAction = SelectionAction(
@@ -104,17 +108,16 @@ internal fun PhotosScreen(
         viewerActions = listOf(albumAction, uploadAction, deleteAction),
         viewerStatus = { visible ->
             if (operations.active) {
-                OperationStatusPill(operations, visible = visible && !confirming, fillWidth = false)
+                OperationStatusPill(operations, visible = visible, fillWidth = false)
             }
         },
-        completedDeletions = completedDeletions,
+        deletedMediaIds = deletedMediaIds,
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Photos,
             onLogout,
             viewerVisible = viewerVisible,
-            statusVisible = !confirming,
             operations = operations,
         ) {
             content()

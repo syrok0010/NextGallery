@@ -12,11 +12,11 @@ internal class ViewerSequenceController {
     private var liveSequence = ViewerSequence.Empty
     private var displayedSequence = ViewerSequence.Empty
 
-    /** A [completedDeletions] object is no longer held: the pager shows what took its place. */
+    /** A deleted current object is not held once it leaves the library: the pager shows what took its place. */
     fun updateSlots(
         slots: List<MediaSlot>,
         currentMediaId: MediaId?,
-        completedDeletions: Set<MediaId> = emptySet(),
+        deletedMediaIds: Set<MediaId> = emptySet(),
     ): ViewerSequence {
         if (slots !== sourceSlots) {
             sourceSlots = slots
@@ -26,7 +26,7 @@ internal class ViewerSequenceController {
         displayedSequence = reconcileCurrentMedia(
             live = liveSequence,
             previous = displayedSequence,
-            currentMediaId = currentMediaId?.takeUnless { it in completedDeletions },
+            currentMediaId = currentMediaId?.takeUnless { it in deletedMediaIds },
         )
         return displayedSequence
     }
@@ -36,11 +36,11 @@ internal class ViewerSequenceController {
 internal fun rememberViewerSequence(
     slots: List<MediaSlot>,
     currentMediaId: MediaId?,
-    completedDeletions: Set<MediaId> = emptySet(),
+    deletedMediaIds: Set<MediaId> = emptySet(),
 ): ViewerSequence {
     val controller = remember { ViewerSequenceController() }
-    return remember(slots, currentMediaId, completedDeletions) {
-        controller.updateSlots(slots, currentMediaId, completedDeletions)
+    return remember(slots, currentMediaId, deletedMediaIds) {
+        controller.updateSlots(slots, currentMediaId, deletedMediaIds)
     }
 }
 

@@ -1,12 +1,14 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -55,62 +56,46 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * The details sheet pulled up from under the photo. [progress] is 0 when closed and 1 when open;
- * a drag past either end stretches with resistance instead of stopping hard.
+ * The details sheet pulled up from under the photo. [progress] is 0 when closed and 1 when open.
+ * The sheet drags itself; a swipe on the photo feeds the same state through [dragBy] and [settle].
  */
 @Stable
 internal class ViewerDetailsState(private val scope: CoroutineScope) {
-    private val raw = Animatable(0f)
+    /** Offset is the sheet's translation: its height when closed, 0 when open. */
+    val anchors = AnchoredDraggableState(initialValue = false)
     var sheetHeightPx by mutableFloatStateOf(0f)
-
-    /** The last settled target: back and taps on the photo close an open sheet first. */
-    var isOpen by mutableStateOf(false)
         private set
 
     val progress: Float
-        get() = raw.value.let {
-            when {
-                it > 1f -> 1f + (it - 1f) * OVERSCROLL_RESISTANCE
-                it < 0f -> it * OVERSCROLL_RESISTANCE
-                else -> it
-            }
-        }
+        get() = if (sheetHeightPx > 0f && !anchors.offset.isNaN()) 1f - anchors.offset / sheetHeightPx else 0f
 
-    val engaged: Boolean get() = isOpen || raw.value != 0f
+    /** Back and taps on the photo close a sheet that is open or on its way there. */
+    val isOpen: Boolean get() = anchors.targetValue
+
+    val engaged: Boolean get() = isOpen || progress > 0f
+
+    fun onSheetHeight(heightPx: Float) {
+        sheetHeightPx = heightPx
+        anchors.updateAnchors(DraggableAnchors { false at heightPx; true at 0f })
+    }
 
     fun dragBy(deltaPx: Float) {
-        if (sheetHeightPx <= 0f) return
-        val next = (raw.value - deltaPx / sheetHeightPx).coerceIn(
-            -OVERSCROLL_LIMIT,
-            1f + OVERSCROLL_LIMIT,
-        )
-        scope.launch { raw.snapTo(next) }
+        anchors.dispatchRawDelta(deltaPx)
     }
 
     /** [velocityPx] is the vertical drag velocity: negative flings up and opens. */
     fun settle(velocityPx: Float, flingThresholdPx: Float) {
-        val open = if (abs(velocityPx) > flingThresholdPx) velocityPx < 0f else raw.value > 0.5f
-        animateTo(open, if (sheetHeightPx > 0f) -velocityPx / sheetHeightPx else 0f)
-    }
-
-    fun close() = animateTo(false, 0f)
-
-    private fun animateTo(open: Boolean, velocity: Float) {
-        isOpen = open
         scope.launch {
-            raw.animateTo(
-                targetValue = if (open) 1f else 0f,
-                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
-                initialVelocity = velocity,
-            )
+            if (abs(velocityPx) > flingThresholdPx) anchors.animateTo(velocityPx < 0f, SheetSpring) else anchors.settle(SheetSpring)
         }
     }
 
-    private companion object {
-        const val OVERSCROLL_RESISTANCE = 0.15f
-        const val OVERSCROLL_LIMIT = 0.6f
+    fun close() {
+        scope.launch { anchors.animateTo(false, SheetSpring) }
     }
 }
+
+private val SheetSpring = spring<Float>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
 
 @Composable
 internal fun rememberViewerDetailsState(): ViewerDetailsState {
@@ -147,23 +132,21 @@ internal fun viewerDetailsPhotoTarget(
 internal fun ViewerDetailsSheet(
     item: MediaItem,
     state: ViewerDetailsState,
-    flingThresholdPx: Float,
     modifier: Modifier = Modifier,
 ) {
-    val drag = rememberDraggableState { state.dragBy(it) }
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .onSizeChanged { state.sheetHeightPx = it.height.toFloat() }
+            .onSizeChanged { state.onSheetHeight(it.height.toFloat()) }
             .graphicsLayer {
                 translationY = (1f - state.progress) * size.height
                 alpha = if (state.progress > 0f) 1f else 0f
             }.background(SheetColor, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .draggable(
-                state = drag,
+            .anchoredDraggable(
+                state = state.anchors,
                 orientation = Orientation.Vertical,
                 enabled = state.engaged,
-                onDragStopped = { velocity -> state.settle(velocity, flingThresholdPx) },
+                flingBehavior = AnchoredDraggableDefaults.flingBehavior(state.anchors, animationSpec = SheetSpring),
             ).windowInsetsPadding(WindowInsets.navigationBars)
             .padding(bottom = 16.dp)
             .testTag(ViewerDetailsTestTag)

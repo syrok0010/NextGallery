@@ -29,17 +29,17 @@ internal fun MediaCollectionScreen(
     selectionActions: List<SelectionAction> = emptyList(),
     viewerActions: List<SelectionAction> = emptyList(),
     viewerStatus: @Composable (visible: Boolean) -> Unit = {},
-    completedDeletions: Set<MediaId> = emptySet(),
+    deletedMediaIds: Set<MediaId> = emptySet(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     scaffold: @Composable (viewerVisible: Boolean, content: @Composable () -> Unit) -> Unit,
 ) {
     val transition = rememberViewerTransitionCoordinator()
     val gridState = rememberLazyGridState()
-    val sequence = rememberViewerSequence(slots, transition.viewerMediaId, completedDeletions)
+    val sequence = rememberViewerSequence(slots, transition.viewerMediaId, deletedMediaIds)
     val index = remember(slots) { ViewerMediaIndex(slots) }
     // A deleted current object leaves the sequence; the open pager reports what took its place.
-    val viewerId = transition.viewerMediaId?.takeIf { it in sequence || it in completedDeletions }
+    val viewerId = transition.viewerMediaId?.takeIf { it in sequence || it in deletedMediaIds }
     val selectionActive = selection?.active == true
     SideEffect {
         onViewerVisibilityChanged(viewerId != null)
