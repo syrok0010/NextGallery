@@ -80,8 +80,10 @@ internal class UploadQueue(
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow(UploadQueueState())
     private val state = mutableState.asStateFlow()
-    private val mutableBatches = MutableStateFlow<List<UploadBatch>>(emptyList())
-    val batches = mutableBatches.asStateFlow()
+    private val mutableItems = MutableStateFlow<List<UploadItem>>(emptyList())
+
+    /** Files of all batches in submission order, kept after they finish until [clearFinished]. */
+    val items = mutableItems.asStateFlow()
     val waiting = state.map { it.waiting }.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activity = state.map { it.activity }.stateIn(scope, SharingStarted.Eagerly, null)
     val result = state.map { it.result }.stateIn(scope, SharingStarted.Eagerly, null)
@@ -89,12 +91,10 @@ internal class UploadQueue(
         .map { uploadOperationSnapshots(it.activity, it.result) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    fun cancelAll() = batches.value.forEach(UploadBatch::cancel)
+    fun cancelAll() = items.value.forEach(UploadItem::cancel)
 
     fun clearFinished() {
-        mutableBatches.update { batches ->
-            batches.filter { batch -> batch.items.any { !it.state.value.phase.terminal } }
-        }
+        mutableItems.update { items -> items.filterNot { it.state.value.phase.terminal } }
     }
 
     init {
@@ -104,7 +104,7 @@ internal class UploadQueue(
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 if (current == null || (owner != null && current != owner)) {
                     cancelAll()
-                    mutableBatches.value = emptyList()
+                    mutableItems.value = emptyList()
                     mutableState.value = UploadQueueState()
                 }
                 owner = current
@@ -121,7 +121,7 @@ internal class UploadQueue(
         }
         if (files.isEmpty()) return 0
         val complete = UploadBatch(files, commonFollowUps() + followUps)
-        mutableBatches.update { it + complete }
+        mutableItems.update { it + complete.items }
         mutableState.update { state ->
             state.copy(
                 waiting = state.waiting + complete,
