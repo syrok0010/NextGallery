@@ -11,7 +11,6 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
@@ -131,16 +130,9 @@ val appModule = module {
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
             album = { account, intent, file ->
-                val segments = file.url.pathSegments
-                val filesIndex = segments.indexOf("files")
-                val source = if (filesIndex >= 0 && filesIndex + 2 < segments.size) {
-                    DavFilePath(account.userId, segments.drop(filesIndex + 2))
-                } else {
-                    null
-                }
-                val success = source != null &&
-                    writer.addFile(source, AlbumAddress(intent.owner, intent.target)) ==
-                    AlbumCopyOutcome.Added
+                val success =
+                    writer.addFile(file.path, AlbumAddress(intent.owner, intent.target)) ==
+                        AlbumCopyOutcome.Added
                 catalog.refresh()
                 success
             },
