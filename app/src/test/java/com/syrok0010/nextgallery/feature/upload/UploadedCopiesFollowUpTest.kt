@@ -7,7 +7,6 @@ import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
-import com.syrok0010.nextgallery.core.network.dav.url
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -15,7 +14,6 @@ import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlinx.coroutines.runBlocking
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

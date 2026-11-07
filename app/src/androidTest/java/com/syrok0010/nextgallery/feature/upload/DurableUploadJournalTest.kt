@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import kotlinx.coroutines.runBlocking
 import org.junit.*
 import org.junit.Assert.*
@@ -21,7 +21,7 @@ class DurableUploadJournalTest {
             stamp = SourceStamp(123, 1, 2),
         )
     private val receipt =
-        UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/slice1.jpg", true, 42)
+        UploadReceipt(listOf("Photos", "slice1.jpg"), true, 42)
 
     @Before fun open() =
         runBlocking {
@@ -89,17 +89,17 @@ class DurableUploadJournalTest {
     @Test fun interruptedPutKeepsDestinationAndFencesTheOldExecutor() =
         runBlocking {
             val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            journal.destination(claim, receipt.url)
+            journal.destination(claim, receipt.path)
             assertNull(journal.claim(claim.id, owner, "other-runner"))
             reopen()
             val uncertain = journal.jobs(owner).single()
             assertEquals("Uncertain", uncertain.state)
-            assertEquals(receipt.url, uncertain.destination)
+            assertEquals(receipt.path, uncertain.destination)
             assertNull(journal.accept(claim, receipt))
             val resumed = journal.claim(claim.id, owner, "process-2")!!
             assertEquals(
-                receipt.url,
-                journal.destination(resumed, "http://wrong/new/path")!!.destination,
+                receipt.path,
+                journal.destination(resumed, listOf("wrong", "new", "path"))!!.destination,
             )
             assertNotNull(journal.accept(resumed, receipt.copy(created = false)))
         }

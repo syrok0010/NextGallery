@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.sun.net.httpserver.HttpServer
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
@@ -55,7 +55,6 @@ class UploadCancellationTest {
                         item.run {
                             placeUpload(
                                 dav,
-                                serverUrl(server),
                                 PATH,
                                 item.selection,
                                 "bytes".toRequestBody(),
@@ -124,7 +123,14 @@ class UploadCancellationTest {
             }
         }
 
-    private fun item() = UploadItem(UploadSelection(MediaAssetRef.LocalContent("content://media/1", 1, 1), "photo.jpg", "image/jpeg"))
+    private fun item() =
+        UploadItem(
+            UploadSelection(
+                MediaAssetRef.LocalContent("content://media/1", 1, 1),
+                "photo.jpg",
+                "image/jpeg",
+            ),
+        )
     private fun serverUrl(server: HttpServer) = "http://127.0.0.1:${server.address.port}"
     private fun dav(server: HttpServer): FilesDavClient {
         val credentials = AccountCredentials(serverUrl(server), "test", "test", "test")

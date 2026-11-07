@@ -5,7 +5,6 @@ import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavFileProperties
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.ReadFileResult
-import com.syrok0010.nextgallery.core.network.dav.url
 import java.io.InputStream
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -14,7 +13,7 @@ import okio.buffer
 import okio.source
 
 /**
- * Puts [selection] at [path] on [serverUrl] or, while that name holds a different file, at the first free
+ * Puts [selection] at [path] or, while that name holds a different file, at the first free
  * neighbour `name (2).ext`, the way the Nextcloud server names copies. A file already at a name
  * counts as this upload only when its bytes equal the phone file: then its id links both copies
  * (ADR 0017). Returns null when every name up to [MAX_NAMES] holds a different file.
@@ -24,7 +23,6 @@ import okio.source
  */
 internal suspend fun placeUpload(
     dav: FilesDavClient,
-    serverUrl: String,
     path: DavFilePath,
     selection: UploadSelection,
     body: RequestBody,
@@ -44,12 +42,7 @@ internal suspend fun placeUpload(
         val outcome = if (existing == null) {
             when (val created = dav.createFile(candidate, body)) {
                 is CreateFileResult.Created ->
-                    return UploadedFile(
-                        selection,
-                        candidate.url(serverUrl),
-                        created = true,
-                        created.fileId,
-                    )
+                    return UploadedFile(selection, candidate, created = true, created.fileId)
 
                 // Taken between the check and PUT.
                 CreateFileResult.AlreadyExists -> Existing.Changed
@@ -59,12 +52,7 @@ internal suspend fun placeUpload(
         }
         when (outcome) {
             is Existing.Same ->
-                return UploadedFile(
-                    selection,
-                    candidate.url(serverUrl),
-                    created = false,
-                    outcome.fileId,
-                )
+                return UploadedFile(selection, candidate, created = false, outcome.fileId)
 
             Existing.Different -> index++
 

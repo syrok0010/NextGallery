@@ -5,7 +5,6 @@ import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavFixtureServer
 import com.syrok0010.nextgallery.core.network.dav.DavRequest
 import com.syrok0010.nextgallery.core.network.dav.DavResponseStub
-import com.syrok0010.nextgallery.core.network.dav.url
 import java.net.URLDecoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -23,10 +22,7 @@ class UploadPlacementTest {
             Cloud().use { cloud ->
                 val uploaded = cloud.place()
 
-                assertEquals(
-                    UploadedFile(SELECTION, cloud.url(path), created = true, fileId = 1),
-                    uploaded,
-                )
+                assertEquals(UploadedFile(SELECTION, path, created = true, fileId = 1), uploaded)
                 assertEquals(listOf("PROPFIND a.jpg", "PUT a.jpg"), cloud.calls())
                 assertArrayEquals(phone, cloud.files.getValue("a.jpg").bytes)
             }
@@ -39,10 +35,7 @@ class UploadPlacementTest {
 
                 val uploaded = cloud.place()
 
-                assertEquals(
-                    UploadedFile(SELECTION, cloud.url(path), created = false, fileId = 295),
-                    uploaded,
-                )
+                assertEquals(UploadedFile(SELECTION, path, created = false, fileId = 295), uploaded)
                 assertEquals(listOf("PROPFIND a.jpg", "GET a.jpg"), cloud.calls())
             }
         }
@@ -54,7 +47,7 @@ class UploadPlacementTest {
 
                 val uploaded = cloud.place()
 
-                assertEquals(cloud.neighbour("a (2).jpg"), uploaded?.url)
+                assertEquals(neighbour("a (2).jpg"), uploaded?.path)
                 assertTrue(uploaded!!.created)
                 assertEquals(
                     listOf("PROPFIND a.jpg", "PROPFIND a (2).jpg", "PUT a (2).jpg"),
@@ -71,7 +64,7 @@ class UploadPlacementTest {
 
                 val uploaded = cloud.place()
 
-                assertEquals(cloud.neighbour("a (2).jpg"), uploaded?.url)
+                assertEquals(neighbour("a (2).jpg"), uploaded?.path)
                 assertEquals(
                     listOf("PROPFIND a.jpg", "GET a.jpg", "PROPFIND a (2).jpg", "PUT a (2).jpg"),
                     cloud.calls(),
@@ -88,12 +81,7 @@ class UploadPlacementTest {
                 val uploaded = cloud.place()
 
                 assertEquals(
-                    UploadedFile(
-                        SELECTION,
-                        cloud.neighbour("a (2).jpg"),
-                        created = false,
-                        fileId = 8,
-                    ),
+                    UploadedFile(SELECTION, neighbour("a (2).jpg"), created = false, fileId = 8),
                     uploaded,
                 )
                 assertFalse(cloud.calls().any { it.startsWith("PUT") })
@@ -113,10 +101,7 @@ class UploadPlacementTest {
 
                 val uploaded = cloud.place()
 
-                assertEquals(
-                    UploadedFile(SELECTION, cloud.url(path), created = false, fileId = 9),
-                    uploaded,
-                )
+                assertEquals(UploadedFile(SELECTION, path, created = false, fileId = 9), uploaded)
                 assertEquals(
                     listOf("PROPFIND a.jpg", "GET a.jpg", "PROPFIND a.jpg", "GET a.jpg"),
                     cloud.calls(),
@@ -133,10 +118,7 @@ class UploadPlacementTest {
 
                 val uploaded = cloud.place()
 
-                assertEquals(
-                    UploadedFile(SELECTION, cloud.url(path), created = false, fileId = 11),
-                    uploaded,
-                )
+                assertEquals(UploadedFile(SELECTION, path, created = false, fileId = 11), uploaded)
                 assertEquals(
                     listOf("PROPFIND a.jpg", "PUT a.jpg", "PROPFIND a.jpg", "GET a.jpg"),
                     cloud.calls(),
@@ -181,14 +163,11 @@ class UploadPlacementTest {
             assertTrue(sameBytes(ByteArray(0).inputStream(), ByteArray(0).inputStream()))
         }
 
-    private fun Cloud.neighbour(name: String) = url(DavFilePath.of("anna", "/Photos", name))
-
-    private fun Cloud.url(file: DavFilePath) = file.url(server.credentials.serverUrl)
+    private fun neighbour(name: String) = DavFilePath.of("anna", "/Photos", name)
 
     private suspend fun Cloud.place(): UploadedFile? =
         placeUpload(
             dav = server.client,
-            serverUrl = server.credentials.serverUrl,
             path = path,
             selection = SELECTION,
             body = phone.toRequestBody(),

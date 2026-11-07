@@ -23,7 +23,13 @@ internal data class UploadIntent(val kind: String, val version: Int = 1, val own
 internal data class SourceStamp(val size: Long, val modified: Long?, val generation: Long?)
 
 @Serializable
-internal data class UploadReceipt(val url: String, val created: Boolean, val fileId: Long?, val version: Int = 1)
+internal data class UploadReceipt(
+    /** `DavFilePath.segments` in the files root of the queue owner. */
+    val path: List<String>,
+    val created: Boolean,
+    val fileId: Long?,
+    val version: Int = 1,
+)
 
 internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
 internal enum class StepState { None, Pending, Running, Done, Attention, Suppressed }
@@ -42,7 +48,7 @@ internal data class UploadJob(
     val selectionJson: String,
     val intentsJson: String,
     val state: String = TransferState.Pending.name,
-    val destination: String? = null,
+    val destinationJson: String? = null,
     val receiptJson: String? = null,
     val linkStep: String = StepState.None.name,
     val albumStep: String = StepState.None.name,
@@ -60,6 +66,9 @@ internal data class UploadJob(
     val selection get() = uploadJson.decodeFromString<UploadSelection>(selectionJson)
     val intents get() = uploadJson.decodeFromString<List<UploadIntent>>(intentsJson)
     val receipt get() = receiptJson?.let { uploadJson.decodeFromString<UploadReceipt>(it) }
+
+    /** Pinned original name as `DavFilePath.segments` in the files root of the queue owner. */
+    val destination get() = destinationJson?.let { uploadJson.decodeFromString<List<String>>(it) }
     val unfinished get() = state in setOf("Pending", "Running", "Uncertain", "Attention") ||
         linkStep in unfinishedSteps || albumStep in unfinishedSteps
     val runnable get() = state in setOf("Pending", "Uncertain") ||
@@ -167,8 +176,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         change(old)?.also { dao.update(it) }
     }
 
-    suspend fun destination(claim: UploadJob, url: String): UploadJob? =
-        mutate(claim) { it.copy(destination = it.destination ?: url) }
+    suspend fun destination(claim: UploadJob, path: List<String>): UploadJob? =
+        mutate(claim) { it.copy(destinationJson = it.destinationJson ?: uploadJson.encodeToString(path)) }
 
     suspend fun accept(claim: UploadJob, receipt: UploadReceipt): UploadJob? = mutate(claim) {
         if (it.receiptJson != null || it.state != "Running") null else it.copy(state = "Accepted", receiptJson = uploadJson.encodeToString(receipt),
