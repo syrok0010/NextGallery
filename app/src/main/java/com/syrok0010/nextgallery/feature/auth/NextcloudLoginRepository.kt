@@ -17,14 +17,10 @@ class NextcloudLoginRepository(
         try {
             MemoriesApiClient(transport) { credentials }
                 .describe()
-                .let { memoriesCompatibility(it.version) }
+                ?.let { memoriesCompatibility(it.version) }
+                ?: MemoriesCompatibility.Unavailable
         } catch (error: CancellationException) {
             throw error
-        } catch (error: retrofit2.HttpException) {
-            when (error.code()) {
-                404, 410 -> MemoriesCompatibility.Unavailable
-                else -> MemoriesCompatibility.CheckFailed
-            }
         } catch (_: IOException) {
             MemoriesCompatibility.NetworkError
         } catch (_: kotlinx.serialization.SerializationException) {

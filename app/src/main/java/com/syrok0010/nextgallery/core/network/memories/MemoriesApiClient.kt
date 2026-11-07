@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.coroutines.executeAsync
+import retrofit2.HttpException
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -22,7 +23,13 @@ class MemoriesApiClient(
     private val transport: NextcloudTransport,
     private val credentials: () -> AccountCredentials,
 ) {
-    suspend fun describe(): MemoriesDescribeDto = api().describe()
+    /** Null when Memories is not installed or disabled: Nextcloud answers its routes with 404 or 410. */
+    suspend fun describe(): MemoriesDescribeDto? =
+        try {
+            api().describe()
+        } catch (error: HttpException) {
+            if (error.code() == 404 || error.code() == 410) null else throw error
+        }
 
     suspend fun config(): MemoriesConfigDto = api().config()
 
