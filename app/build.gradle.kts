@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.coroutines)
     implementation(libs.okhttp.logging.interceptor)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
