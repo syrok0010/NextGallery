@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 
 sealed interface CreateFileResult {
     /** [fileId] comes from `OC-FileId`; null when the server omits it. */
@@ -55,7 +56,7 @@ class FilesDavClient(
                     encodeDav(PropFind()).toRequestBody(XML_MEDIA_TYPE.toMediaType()),
                 ).header("Depth", "0")
                 .build()
-            transport.baseClient.newCall(request).await().use { response ->
+            transport.baseClient.newCall(request).executeAsync().use { response ->
                 when {
                     response.code == 207 -> response.body?.byteStream()?.use(::fileProperties)
                         ?: DavFileProperties(size = null, fileId = null, etag = null)
@@ -87,7 +88,7 @@ class FilesDavClient(
                 ).get()
                 .apply { etag?.let { header("If-Match", "\"$it\"") } }
                 .build()
-            transport.baseClient.newCall(request).await().use { response ->
+            transport.baseClient.newCall(request).executeAsync().use { response ->
                 when {
                     response.isSuccessful -> ReadFileResult.Read(
                         response.body?.byteStream()?.use {
