@@ -4,8 +4,8 @@ import androidx.annotation.StringRes
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import java.util.UUID
-import okhttp3.HttpUrl
 
 /** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
 @kotlinx.serialization.Serializable
@@ -40,13 +40,13 @@ internal class UploadBatch(
 )
 
 /**
- * [selection] is on the server at [url]: uploaded now ([created]) or already there with the same
- * bytes. [url] may be a neighbour name when the original one holds a different file. [fileId] is
+ * [selection] is on the server at [path]: uploaded now ([created]) or already there with the same
+ * bytes. [path] may be a neighbour name when the original one holds a different file. [fileId] is
  * the server file id when DAV returned it.
  */
 internal data class UploadedFile(
     val selection: UploadSelection,
-    val url: HttpUrl,
+    val path: DavFilePath,
     val created: Boolean,
     val fileId: Long? = null,
 )

@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.media.*
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
@@ -69,14 +70,14 @@ class UploadProcessDeathEvidence {
         for (index in 1..2) {
             val job = journal.claim(rows[index].id, credentials.uploadOwner, "fixture-before-process-kill")!!
             val file = job.selection
-            val url = journal.destination(job, "http://test.syrok/remote.php/dav/files/test/Photos/${file.displayName}")!!.destination!!
+            val path = journal.destination(job, listOf("Photos", file.displayName))!!.destination!!
             val body = UploadRequestBody(file.stamp!!.size, "image/jpeg".toMediaType(),
                 { context.contentResolver.openInputStream(android.net.Uri.parse(file.contentUri))!! }, {})
             val opener = { context.contentResolver.openInputStream(android.net.Uri.parse(file.contentUri))!! }
             val uploaded = withContext(Dispatchers.IO) {
-                placeUpload(dav, credentials.serverUrl, uploadPath(credentials, url)!!, file, body, opener)
+                placeUpload(dav, DavFilePath(credentials.userId, path), file, body, opener)
             }!!
-            if (index == 1) check(journal.accept(job, UploadReceipt(uploaded.url.toString(), uploaded.created, uploaded.fileId)) != null)
+            if (index == 1) check(journal.accept(job, UploadReceipt(uploaded.path.segments, uploaded.created, uploaded.fileId)) != null)
             // index 2 deliberately dies after server response and before local receipt.
         }
         Log.i("DurableUploadEvidence", "READY cancelled + accepted receipt + uncertain server PUT + pending; kill this automation process with SIGKILL")

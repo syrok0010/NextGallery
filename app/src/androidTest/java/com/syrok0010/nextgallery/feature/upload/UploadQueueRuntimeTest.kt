@@ -7,7 +7,7 @@ import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import org.junit.*
 import org.junit.Assert.*
 
@@ -58,8 +58,8 @@ class UploadQueueRuntimeTest {
     }
     private suspend fun transfer(account: AccountCredentials, item: UploadItem, claim: UploadJob): UploadedFile {
         transfers++
-        val url = claim.destination ?: queue.pinDestination(claim, "http://test.syrok/remote.php/dav/files/test/Photos/${item.selection.displayName}")!!
-        return UploadedFile(item.selection, url.toHttpUrl(), true, 42)
+        val path = claim.destination ?: queue.pinDestination(claim, listOf("Photos", item.selection.displayName))!!
+        return UploadedFile(item.selection, DavFilePath(account.userId, path), true, 42)
     }
     private suspend fun waitFor(predicate: () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
 
@@ -115,7 +115,7 @@ class UploadQueueRuntimeTest {
     @Test fun durableReceiptRunsOnlyStepsEvenWhenSourceDisappeared() = runBlocking {
         val batch = enqueue(listOf(ids.first()))
         val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/a.jpg", true, 42)
+        val receipt = UploadReceipt(listOf("Photos", "a.jpg"), true, 42)
         journal.accept(claim, receipt)
         stamp = null
         reopen()
@@ -128,14 +128,14 @@ class UploadQueueRuntimeTest {
     @Test fun interruptedConditionalDestinationIsUsedAfterReopen() = runBlocking {
         val batch = enqueue(listOf(ids.first()))
         val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val fixed = "http://test.syrok/remote.php/dav/files/test/Photos/original.jpg"
+        val fixed = listOf("Photos", "original.jpg")
         journal.destination(claim, fixed)
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
-        queue.runBatch(restored) { _, item, job ->
+        queue.runBatch(restored) { account, item, job ->
             assertEquals(fixed, job.destination)
             transfers++
-            UploadedFile(item.selection, job.destination!!.toHttpUrl(), false, 42)
+            UploadedFile(item.selection, DavFilePath(account.userId, job.destination!!), false, 42)
         }
         assertEquals(1, transfers); assertEquals(1, links)
         assertEquals(UploadPhase.Existing, restored.items.single().state.value.phase)
@@ -159,7 +159,7 @@ class UploadQueueRuntimeTest {
     @Test fun acceptedUploadWithUncertainAlbumRemainsVisibleAndCanBeExplicitlyAbandoned() = runBlocking {
         val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
         val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val accepted = journal.accept(claim, UploadReceipt("http://test.syrok/a", true, 42))!!
+        val accepted = journal.accept(claim, UploadReceipt(listOf("a"), true, 42))!!
         journal.step(accepted, "album", StepState.Running)
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
@@ -237,7 +237,7 @@ class UploadQueueRuntimeTest {
         assertEquals("slice1", batch.items.single().state.value.albumAdded)
         val next = enqueue(listOf(ids.last()), listOf(UploadIntent("album", owner = "test", target = "slice2")))
         val claim = journal.claim(next.items.single().id, credentials.uploadOwner, "dead-process")!!
-        journal.accept(claim, UploadReceipt("http://test.syrok/a", true, 42))
+        journal.accept(claim, UploadReceipt(listOf("a"), true, 42))
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
         queue.runBatch(restored) { _, _, _ -> error("No transfer for saved receipt") }
@@ -319,7 +319,7 @@ class UploadQueueRuntimeTest {
         val pending = enqueue(listOf(ids.last()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
         queue.release()
         val pendingClaim = journal.claim(pending.items.single().id, credentials.uploadOwner, "fixture")!!
-        val receipt = UploadReceipt("http://test.syrok/already-uploaded", true, 43)
+        val receipt = UploadReceipt(listOf("already-uploaded"), true, 43)
         val accepted = journal.accept(pendingClaim, receipt)!!
         journal.release(accepted)
         assertEquals(completed, queue.next())

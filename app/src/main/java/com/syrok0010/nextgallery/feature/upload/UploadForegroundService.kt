@@ -228,19 +228,11 @@ class UploadForegroundService : Service() {
                     ).firstOrNull()
                         ?: throw UploadException(R.string.upload_error_timeline)
                     ).also { destination = it }
-                val proposed = uploadUrl(
-                    account.serverUrl,
-                    account.userId,
-                    directory,
-                    selection.displayName,
-                ).toString()
-                queue.pinDestination(
-                    claim,
-                    proposed,
-                ) ?: throw java.io.IOException("Upload no longer claimed")
+                val proposed = DavFilePath.of(account.userId, directory, selection.displayName)
+                queue.pinDestination(claim, proposed.segments)
+                    ?: throw java.io.IOException("Upload no longer claimed")
             }
-            val path = uploadPath(account, pinned)
-                ?: throw java.io.IOException("Pinned destination outside the account")
+            val path = DavFilePath(account.userId, pinned)
             put(account, path, item) { percent ->
                 if (item.progress(percent)) {
                     queue.uploading(selection.contentUri, percent)
@@ -277,7 +269,7 @@ class UploadForegroundService : Service() {
         // Signed by the job's account, not whichever session is current by now.
         val dav = FilesDavClient(transport) { account }
         return try {
-            item.run { placeUpload(dav, account.serverUrl, path, selection, body, openLocal) }
+            item.run { placeUpload(dav, path, selection, body, openLocal) }
         } catch (error: DavHttpException) {
             val reason = when (error.code) {
                 404, 409 -> R.string.upload_error_directory

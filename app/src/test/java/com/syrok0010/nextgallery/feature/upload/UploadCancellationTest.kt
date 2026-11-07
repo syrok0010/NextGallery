@@ -54,7 +54,6 @@ class UploadCancellationTest {
                         item.run {
                             placeUpload(
                                 dav,
-                                serverUrl(server),
                                 PATH,
                                 item.selection,
                                 "bytes".toRequestBody(),

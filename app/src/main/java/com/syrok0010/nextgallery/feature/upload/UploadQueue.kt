@@ -13,7 +13,7 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.UUID
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -278,7 +278,7 @@ internal class UploadQueue(
                     // Source may change while streaming. Do not accept/link different observed bytes.
                     if (!validSource(item.selection)) { journal.problem(claim, UploadProblem.Source); continue }
                     if (!current(account)) continue
-                    claim = journal.accept(claim, UploadReceipt(uploaded.url.toString(), uploaded.created, uploaded.fileId)) ?: continue
+                    claim = journal.accept(claim, UploadReceipt(uploaded.path.segments, uploaded.created, uploaded.fileId)) ?: continue
                 }
                 val receipt = claim.receipt ?: continue
                 if (receipt.version != 1) {
@@ -294,7 +294,7 @@ internal class UploadQueue(
                 if (claim.albumStep == "Pending" && current(account)) {
                     claim = journal.step(claim, "album", StepState.Running) ?: continue
                     val intent = intents.singleOrNull { it.kind == "album" }
-                    val success = intent != null && album(account, intent, UploadedFile(item.selection, receipt.url.toHttpUrl(), receipt.created, receipt.fileId))
+                    val success = intent != null && album(account, intent, UploadedFile(item.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId))
                     journal.step(claim, "album", if (success) StepState.Done else StepState.Attention)
                 }
                 changed = true
@@ -341,7 +341,8 @@ internal class UploadQueue(
         }
     }
 
-    suspend fun pinDestination(claim: UploadJob, url: String): String? = journal.destination(claim, url)?.destination
+    suspend fun pinDestination(claim: UploadJob, path: List<String>): List<String>? =
+        journal.destination(claim, path)?.destination
     private fun current(account: AccountCredentials) = credentials()?.uploadOwner == account.uploadOwner
     private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
     private suspend fun validSource(file: UploadSelection): Boolean = withContext(Dispatchers.IO) {
