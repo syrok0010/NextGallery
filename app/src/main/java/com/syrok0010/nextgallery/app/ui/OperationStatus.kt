@@ -183,12 +183,12 @@ internal fun rememberOperationStatus(
 internal fun OperationStatusPill(
     status: OperationStatus,
     visible: Boolean,
+    onOpenUploads: () -> Unit,
     modifier: Modifier = Modifier,
     /** The viewer keeps the pill as wide as its text, so it covers less of the photo. */
     fillWidth: Boolean = true,
 ) {
     val entries = status.entries()
-    val openUploads = LocalOpenUploads.current
     var expanded by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val finished = entries.filterNot { it.running }
@@ -242,7 +242,7 @@ internal fun OperationStatusPill(
                 if (entries.any { it.operation == MediaTileOperation.Upload }) {
                     TextButton(onClick = {
                         expanded = false
-                        openUploads()
+                        onOpenUploads()
                     }) { Text(stringResource(R.string.uploads_title)) }
                 }
             }
