@@ -79,8 +79,7 @@ class AlbumAdditionTest {
         MemoriesAlbumWriterTest.Fixture { request ->
             when {
                 request.method == "MKCOL" -> 201 to ""
-                request.target.startsWith("/apps/memories/api/image/info/") ->
-                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+                request.method == "SEARCH" -> 207 to found(request.searchedFileId to "Photos/a.jpg")
                 request.method == "COPY" -> 201 to ""
                 else -> 404 to ""
             }
@@ -150,8 +149,7 @@ class AlbumAdditionTest {
         val release = java.util.concurrent.CountDownLatch(1)
         MemoriesAlbumWriterTest.Fixture { request ->
             when {
-                request.target.startsWith("/apps/memories/api/image/info/") ->
-                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+                request.method == "SEARCH" -> 207 to found(request.searchedFileId to "Photos/a.jpg")
                 request.method == "COPY" -> {
                     release.await(5, java.util.concurrent.TimeUnit.SECONDS)
                     201 to ""

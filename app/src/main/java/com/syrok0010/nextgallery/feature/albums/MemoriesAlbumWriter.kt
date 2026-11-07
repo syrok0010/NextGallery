@@ -5,8 +5,8 @@ import com.syrok0010.nextgallery.core.network.dav.AlbumPath
 import com.syrok0010.nextgallery.core.network.dav.CreateAlbumResult
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
-import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -33,10 +33,13 @@ internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
 internal class AlbumAlreadyExistsException(name: String) : IOException("Album $name already exists")
 
-/** Writes Photos albums through Nextcloud DAV; album contents are looked up via Memories. */
+/**
+ * Writes Photos albums through Nextcloud DAV. File paths come from a DAV search by file id, so a
+ * fresh upload can be added before Memories indexes it.
+ */
 internal class MemoriesAlbumWriter(
     private val dav: PhotosAlbumsDavClient,
-    private val memories: MemoriesApiClient,
+    private val files: FilesDavClient,
 ) {
     suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
         val user = credentials.userId
@@ -46,11 +49,7 @@ internal class MemoriesAlbumWriter(
         return AlbumLocation.Remote("$user/$name")
     }
 
-    suspend fun add(
-        credentials: AccountCredentials,
-        album: AlbumAddress,
-        fileIds: List<Long>,
-    ): AlbumAddResult {
+    suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumAddResult {
         val permits = Semaphore(PARALLEL_COPIES)
         val outcomes = coroutineScope {
             fileIds
@@ -59,8 +58,8 @@ internal class MemoriesAlbumWriter(
                     async {
                         permits.withPermit {
                             try {
-                                val info = memories.imageInfo(fileId)
-                                copy(DavFilePath.of(credentials.userId, info.filename), album)
+                                files.findFile(fileId)?.let { copy(it, album) }
+                                    ?: AlbumCopyOutcome.Failed
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (_: Exception) {
@@ -82,7 +81,7 @@ internal class MemoriesAlbumWriter(
         )
     }
 
-    /** Adds a file by its DAV path; works before Memories has indexed a fresh upload. */
+    /** Adds a file by its DAV path, as an upload knows it, without a lookup. */
     suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome {
         val outcome = copy(file, album)
         return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(album)) {

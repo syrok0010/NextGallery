@@ -6,6 +6,7 @@ import java.io.IOException
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -68,6 +69,35 @@ class FilesDavClient(
         }
 
     /**
+     * `SEARCH` for the file with [fileId] in the user's files; null when none has it. Nextcloud
+     * answers from its file cache, so a fresh upload is found before Memories indexes it.
+     */
+    suspend fun findFile(fileId: Long): DavFilePath? =
+        withContext(Dispatchers.IO) {
+            val credentials = credentials()
+            val user = credentials.userId
+            val request = transport
+                .authenticatedRequestBuilder(
+                    credentials,
+                    davRoot(credentials.serverUrl).addPathSegment("").build().toString(),
+                    accept = "application/xml",
+                ).method(
+                    SEARCH,
+                    encodeDav(SearchRequest.fileId(user, fileId))
+                        .toRequestBody(XML_MEDIA_TYPE.toMediaType()),
+                ).build()
+            val filesRoot = davRoot(credentials.serverUrl)
+                .addPathSegment("files")
+                .addPathSegment(user)
+                .build()
+            transport.baseClient.newCall(request).awaitUse { response ->
+                if (response.code != 207) throw DavHttpException(response.code, SEARCH)
+                val body = response.body?.byteStream() ?: throw IOException("No DAV body")
+                body.use { foundFile(decodeMultistatus(it), fileId, request.url, filesRoot, user) }
+            }
+        }
+
+    /**
      * Streams the file to [read] only while it still has [etag], so the bytes belong to the version
      * whose properties were read. Returns [ReadFileResult.Changed] once the file was replaced or
      * removed.
@@ -121,6 +151,7 @@ class FilesDavClient(
         const val GET = "GET"
         const val DELETE = "DELETE"
         const val PROPFIND = "PROPFIND"
+        const val SEARCH = "SEARCH"
         const val XML_MEDIA_TYPE = "application/xml; charset=utf-8"
     }
 }
@@ -151,6 +182,28 @@ internal fun fileProperties(body: InputStream): DavFileProperties {
         // getetag is a quoted entity tag; If-Match adds the quotes back.
         etag = found?.etag?.trim()?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() },
     )
+}
+
+/**
+ * Path of the response that reports [fileId] as found. Its `href` is resolved against the request
+ * [base] and must lie under [filesRoot], the user's files collection.
+ */
+private fun foundFile(
+    multistatus: Multistatus,
+    fileId: Long,
+    base: HttpUrl,
+    filesRoot: HttpUrl,
+    user: String,
+): DavFilePath? {
+    val prefix = filesRoot.pathSegments.filter(String::isNotEmpty)
+    return multistatus.responses.firstNotNullOfOrNull { response ->
+        val id = response.propstats.firstOrNull(PropStat::found)?.prop?.fileId?.trim()
+        val segments = base.resolve(response.href.trim())?.pathSegments?.filter(String::isNotEmpty)
+        if (id?.toLongOrNull() != fileId || segments == null) return@firstNotNullOfOrNull null
+        segments
+            .takeIf { it.size > prefix.size && it.subList(0, prefix.size) == prefix }
+            ?.let { DavFilePath(user, it.drop(prefix.size)) }
+    }
 }
 
 /**

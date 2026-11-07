@@ -51,13 +51,9 @@ class MemoriesAlbumWriterTest {
     @Test fun `add copies each server file into the album and classifies responses`() = runBlocking {
         Fixture { request ->
             when {
-                request.target.startsWith("/apps/memories/api/image/info/") -> {
-                    val id = request.target.substringAfterLast('/').toLong()
-                    if (id == 4L) {
-                        500 to ""
-                    } else {
-                        200 to """{"fileid":$id,"filename":"/Photos/Поход $id.jpg","basename":"Поход $id.jpg"}"""
-                    }
+                request.method == "SEARCH" -> when (val id = request.searchedFileId) {
+                    4L -> 207 to found()
+                    else -> 207 to found(id to "Photos/Поход%20$id.jpg")
                 }
                 request.method == "COPY" && request.decodedTarget.endsWith("Поход 2.jpg") -> 409 to ""
                 request.method == "COPY" && request.decodedTarget.endsWith("Поход 3.jpg") -> 403 to ""
@@ -67,7 +63,6 @@ class MemoriesAlbumWriterTest {
             }
         }.use { fixture ->
             val result = fixture.writer.add(
-                fixture.credentials,
                 album = AlbumAddress("anna", "Лето & море"),
                 fileIds = listOf(1, 2, 3, 4, 1),
             )
@@ -79,6 +74,31 @@ class MemoriesAlbumWriterTest {
                 URLDecoder.decode(copy.headers.getValue("destination").replace("+", "%2B"), "UTF-8"),
             )
             assertFalse(copy.headers.getValue("destination").contains(' '))
+            assertEquals(4, fixture.requests.count { it.method == "SEARCH" })
+        }
+    }
+
+    @Test fun `add finds a file by id through DAV search, not Memories`() = runBlocking {
+        Fixture { request ->
+            when (request.method) {
+                "SEARCH" -> 207 to found(7L to "Camera/Свежий.jpg")
+                "COPY" -> 201 to ""
+                else -> 404 to ""
+            }
+        }.use { fixture ->
+            assertEquals(
+                AlbumAddResult(added = 1, alreadyPresent = 0, failed = 0),
+                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(7)),
+            )
+            val search = fixture.requests.first()
+            assertEquals("/remote.php/dav/", search.target)
+            assertEquals(7L, search.searchedFileId)
+            assertTrue(search.body.contains("<d:href>/files/anna</d:href>"))
+            assertEquals(
+                "/remote.php/dav/files/anna/Camera/Свежий.jpg",
+                fixture.requests.single { it.method == "COPY" }.decodedTarget,
+            )
+            assertFalse(fixture.requests.any { it.target.startsWith("/apps/memories") })
         }
     }
 
@@ -100,7 +120,7 @@ class MemoriesAlbumWriterTest {
         }
     }
 
-    @Test fun `addFile copies an uploaded DAV path without Memories lookup`() = runBlocking {
+    @Test fun `addFile copies an uploaded DAV path without a lookup`() = runBlocking {
         Fixture { 201 to "" }.use { fixture ->
             val source = DavFilePath.of("anna", "/Photos/Поход 7.jpg")
             assertEquals(
@@ -120,8 +140,7 @@ class MemoriesAlbumWriterTest {
     @Test fun `conflict on a missing album is a failure, not already present`() = runBlocking {
         Fixture { request ->
             when {
-                request.target.startsWith("/apps/memories/api/image/info/") ->
-                    200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg"}"""
+                request.method == "SEARCH" -> 207 to found(1L to "Photos/a.jpg")
                 request.method == "COPY" -> 409 to ""
                 else -> 404 to ""
             }
@@ -133,7 +152,7 @@ class MemoriesAlbumWriterTest {
             )
             assertEquals(
                 AlbumAddResult(added = 0, alreadyPresent = 0, failed = 1),
-                fixture.writer.add(fixture.credentials, album, listOf(1)),
+                fixture.writer.add(album, listOf(1)),
             )
             assertTrue(fixture.requests.any { it.method == "PROPFIND" && it.headers["depth"] == "0" })
         }
@@ -142,10 +161,8 @@ class MemoriesAlbumWriterTest {
     @Test fun `failed album check keeps added files and fails only unconfirmed conflicts`() = runBlocking {
         Fixture { request ->
             when {
-                request.target.startsWith("/apps/memories/api/image/info/") -> {
-                    val id = request.target.substringAfterLast('/')
-                    200 to """{"filename":"/Photos/$id.jpg","basename":"$id.jpg"}"""
-                }
+                request.method == "SEARCH" ->
+                    207 to found(request.searchedFileId to "Photos/${request.searchedFileId}.jpg")
                 request.method == "COPY" && request.decodedTarget.endsWith("/2.jpg") -> 409 to ""
                 request.method == "COPY" -> 201 to ""
                 else -> 500 to ""
@@ -153,7 +170,7 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             assertEquals(
                 AlbumAddResult(added = 1, alreadyPresent = 0, failed = 1),
-                fixture.writer.add(fixture.credentials, AlbumAddress("anna", "Лето"), listOf(1, 2)),
+                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(1, 2)),
             )
         }
     }
@@ -171,8 +188,13 @@ class MemoriesAlbumWriterTest {
         val method: String,
         val target: String,
         val headers: Map<String, String>,
+        val body: String,
     ) {
         val decodedTarget: String get() = URLDecoder.decode(target.replace("+", "%2B"), "UTF-8")
+
+        /** The `oc:fileid` literal of a DAV SEARCH body. */
+        val searchedFileId: Long
+            get() = Regex("<(?:\\w+:)?literal>(\\d+)<").find(body)!!.groupValues[1].toLong()
     }
 
     internal class Fixture(
@@ -187,10 +209,7 @@ class MemoriesAlbumWriterTest {
         val writerTransport = NextcloudTransport(Json { ignoreUnknownKeys = true })
         val files = MemoriesFiles(MemoriesApiClient(writerTransport) { credentials })
         val dav = FilesDavClient(writerTransport) { credentials }
-        val writer = MemoriesAlbumWriter(
-            PhotosAlbumsDavClient(writerTransport) { credentials },
-            MemoriesApiClient(writerTransport) { credentials },
-        )
+        val writer = MemoriesAlbumWriter(PhotosAlbumsDavClient(writerTransport) { credentials }, dav)
 
         init {
             executor.execute {
@@ -206,20 +225,25 @@ class MemoriesAlbumWriterTest {
                             reader.readLine()?.takeIf(String::isNotEmpty)
                         }.toList()
                         val (method, target) = lines.first().split(' ')
-                        val request = Recorded(
-                            method,
-                            target,
-                            lines.drop(1).associate { line ->
-                                line.substringBefore(':').lowercase() to line.substringAfter(':').trim()
-                            },
-                        )
-                        // Unread body bytes would reset the connection before the client reads.
-                        request.headers["content-length"]?.toInt()?.let { length ->
-                            reader.read(CharArray(length))
+                        val headers = lines.drop(1).associate { line ->
+                            line.substringBefore(':').lowercase() to line.substringAfter(':').trim()
                         }
+                        // Unread body bytes would reset the connection before the client reads.
+                        // Bodies sent to the fixture are ASCII, so characters count as bytes.
+                        val length = headers["content-length"]?.toInt() ?: 0
+                        val body = CharArray(length).let { chars ->
+                            var total = 0
+                            while (total < length) {
+                                val count = reader.read(chars, total, length - total)
+                                if (count < 0) break
+                                total += count
+                            }
+                            String(chars, 0, total)
+                        }
+                        val request = Recorded(method, target, headers, body)
                         requests += request
-                        val (code, body) = respond(request)
-                        val bytes = body.toByteArray()
+                        val (code, answer) = respond(request)
+                        val bytes = answer.toByteArray()
                         it.getOutputStream().apply {
                             write(
                                 (
@@ -241,3 +265,15 @@ class MemoriesAlbumWriterTest {
         }
     }
 }
+
+/** DAV SEARCH multistatus listing each file id at its encoded path under `files/anna`. */
+internal fun found(vararg files: Pair<Long, String>): String =
+    files.joinToString(
+        "",
+        """<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">""",
+        "</d:multistatus>",
+    ) { (id, path) ->
+        "<d:response><d:href>/remote.php/dav/files/anna/$path</d:href><d:propstat>" +
+            "<d:prop><oc:fileid>$id</oc:fileid></d:prop>" +
+            "<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+    }
