@@ -40,7 +40,12 @@ internal enum class DeletionScope { Everywhere, PhoneOnly, CloudOnly }
 
 /** Copies to delete: local content URIs for the system trash, cloud file ids for Nextcloud. */
 @Serializable
-internal data class DeletionTargets(val contentUris: List<String>, val fileIds: List<Long>)
+internal data class DeletionTargets(
+    val contentUris: List<String>,
+    val fileIds: List<Long>,
+    /** Objects that lose every copy if the request succeeds, see [MediaDeletionRepository.removedMediaIds]. */
+    val removedMediaIds: List<String> = emptyList(),
+)
 
 /** How many selected objects have only a phone copy, only a cloud copy, or both. */
 internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val merged: Int) {
@@ -63,6 +68,9 @@ internal class DeletionPreparation private constructor(
     private val phoneOnly: List<String>,
     private val cloudOnly: List<Long>,
     private val merged: List<MergedCopies>,
+    private val phoneOnlyIds: List<String>,
+    private val cloudOnlyIds: List<String>,
+    private val mergedIds: List<String>,
 ) {
     val plan = DeletionPlan(phoneOnly.size, cloudOnly.size, merged.size)
 
@@ -79,6 +87,9 @@ internal class DeletionPreparation private constructor(
                         if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
                     ).distinct()
             },
+            removedMediaIds = phoneOnlyIds +
+                (if (cloudAllowed) cloudOnlyIds else emptyList()) +
+                if (cloudAllowed && scope == DeletionScope.Everywhere) mergedIds else emptyList(),
         )
 
     private class MergedCopies(val contentUri: String, val fileId: Long)
@@ -89,16 +100,30 @@ internal class DeletionPreparation private constructor(
             val phoneOnly = mutableListOf<String>()
             val cloudOnly = mutableListOf<Long>()
             val merged = mutableListOf<MergedCopies>()
+            val phoneOnlyIds = mutableListOf<String>()
+            val cloudOnlyIds = mutableListOf<String>()
+            val mergedIds = mutableListOf<String>()
             items.forEach { item ->
                 val local = item.localCopy?.contentUri?.let { mediaStoreItemUri(it, item.isVideo) }
                 val remote = item.remoteFileId
+                val id = item.mediaId.value
                 when {
-                    local != null && remote != null -> merged += MergedCopies(local, remote)
-                    local != null -> phoneOnly += local
-                    remote != null -> cloudOnly += remote
+                    local != null && remote != null -> {
+                        merged += MergedCopies(local, remote)
+                        mergedIds += id
+                    }
+                    local != null -> {
+                        phoneOnly += local
+                        phoneOnlyIds += id
+                    }
+                    remote != null -> {
+                        cloudOnly += remote
+                        cloudOnlyIds += id
+                    }
                 }
             }
-            return DeletionPreparation(phoneOnly, cloudOnly, merged).takeIf { it.plan.total > 0 }
+            return DeletionPreparation(phoneOnly, cloudOnly, merged, phoneOnlyIds, cloudOnlyIds, mergedIds)
+                .takeIf { it.plan.total > 0 }
         }
     }
 }
@@ -175,6 +200,11 @@ internal class MediaDeletionRepository(
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private val deletionMutex = Mutex()
 
+    // Successful full removals let a viewer release its current object once it leaves the live
+    // projection. Kept apart from the consumable result, so dismissing the status keeps it.
+    private val mutableRemovedMediaIds = MutableStateFlow<Set<MediaId>>(emptySet())
+    val removedMediaIds = mutableRemovedMediaIds.asStateFlow()
+
     /** Parent of every queued deletion, so a session change cancels the whole queue. */
     private var operationParent = SupervisorJob(scope.coroutineContext[Job])
 
@@ -188,6 +218,7 @@ internal class MediaDeletionRepository(
                     operationParent.cancel()
                     operationParent = SupervisorJob(scope.coroutineContext[Job])
                     mutableState.value = DeletionState()
+                    mutableRemovedMediaIds.value = emptySet()
                 }
                 owner = current
             }
@@ -251,6 +282,7 @@ internal class MediaDeletionRepository(
                         unseen = state.unseen?.plus(done) ?: done,
                     )
                 }
+                if (!done.failed) mutableRemovedMediaIds.update { it + targets.removedMediaIds.map(::MediaId) }
                 onDeleted()
             }
         }
