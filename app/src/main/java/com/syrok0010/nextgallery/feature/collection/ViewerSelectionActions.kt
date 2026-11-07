@@ -27,11 +27,7 @@ import com.syrok0010.nextgallery.feature.viewer.ViewerActionBarHeight
  * changing the grid selection; an action with nothing left to do shows its done state disabled.
  */
 @Composable
-internal fun ViewerSelectionActions(
-    actions: List<SelectionAction>,
-    item: MediaItem,
-    enabled: Boolean = true,
-) {
+internal fun ViewerSelectionActions(actions: List<SelectionAction>, item: MediaItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -45,7 +41,7 @@ internal fun ViewerSelectionActions(
             ViewerActionButton(
                 icon = done?.icon ?: action.icon,
                 label = done?.label ?: action.label,
-                enabled = enabled && done == null,
+                enabled = done == null,
                 // The viewer chrome stays dark in either theme, so the colors are fixed.
                 tint = if (action.isDestructive) ViewerDestructive else Color.White,
                 onClick = { action.perform(listOf(item)) {} },

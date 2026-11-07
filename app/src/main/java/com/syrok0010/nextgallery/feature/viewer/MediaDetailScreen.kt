@@ -43,7 +43,8 @@ internal fun MediaDetailScreen(
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
-    replacementMediaId: MediaId? = null,
+    /** Nothing is left to show, e.g. the only object was deleted. */
+    onEmpty: () -> Unit = {},
     /** Labeled actions for the current object; null hides the action row. */
     actions: (@Composable (MediaItem) -> Unit)? = null,
     status: @Composable (visible: Boolean) -> Unit = {},
@@ -53,10 +54,7 @@ internal fun MediaDetailScreen(
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    val currentItem = replacementMediaId?.let(sequence::item) ?: items.getOrNull(pagerState.currentPage)
-    LaunchedEffect(replacementMediaId) {
-        replacementMediaId?.let(sequence::pageIndex)?.let { pagerState.scrollToPage(it) }
-    }
+    val currentItem = items.getOrNull(pagerState.currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
     val videoFullscreen = playback.current?.state?.isFullscreen == true
     LaunchedEffect(videoFullscreen) { chromeVisible = true }
@@ -81,10 +79,8 @@ internal fun MediaDetailScreen(
     val detailsFlingPx = with(density) { ViewerDetailsFlingVelocity.toPx() }
 
     SideEffect(pagerState.currentPage, items) {
-        val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect
-        if (replacementMediaId == null || item.mediaId == replacementMediaId) {
-            onCurrentItemChange(item)
-        }
+        val item = items.getOrNull(pagerState.currentPage) ?: return@SideEffect onEmpty()
+        onCurrentItemChange(item)
 
     }
 
