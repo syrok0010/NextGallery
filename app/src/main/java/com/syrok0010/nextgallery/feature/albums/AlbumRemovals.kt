@@ -1,11 +1,18 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.dav.await
+import com.syrok0010.nextgallery.core.network.dav.awaitUse
 import com.syrok0010.nextgallery.core.network.dav.davRoot
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
+import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.ui.uiText
 import java.io.IOException
 import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
@@ -18,6 +25,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -42,7 +52,7 @@ internal class MemoriesAlbumRemover(private val transport: NextcloudTransport) {
         val request = transport.authenticatedRequestBuilder(credentials, root.toString(), "application/xml")
             .method("PROPFIND", PROPERTIES.toRequestBody("application/xml".toMediaType()))
             .header("Depth", "1").build()
-        val members = client.newCall(request).await().use {
+        val members = client.newCall(request).awaitUse {
             if (it.code != 207) throw IOException("HTTP ${it.code} listing album membership")
             albumMemberUrls(root, it.body.string())
         }
@@ -55,7 +65,7 @@ internal class MemoriesAlbumRemover(private val transport: NextcloudTransport) {
                         try {
                             val delete = transport.authenticatedRequestBuilder(credentials, url.toString(), "*/*")
                                 .delete().build()
-                            client.newCall(delete).await().use { it.isSuccessful }
+                            client.newCall(delete).awaitUse { it.isSuccessful }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
@@ -131,11 +141,13 @@ internal class AlbumRemovals(
     private val remover: MemoriesAlbumRemover,
     private val scope: CoroutineScope,
     private val onChanged: () -> Unit,
-) {
+) : OperationStatusSource {
     private val mutableProgress = MutableStateFlow<AlbumRemovalProgress?>(null)
     val progress = mutableProgress.asStateFlow()
     private val mutableResult = MutableStateFlow<AlbumRemovalOutcome?>(null)
     val result = mutableResult.asStateFlow()
+    override val operations = combine(progress, result, ::removalSnapshots)
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private var job: Job? = null
 
     init {
@@ -177,7 +189,35 @@ internal class AlbumRemovals(
     }
 
     fun consume() { mutableResult.value = null }
+
+    override fun consumeSucceeded() {
+        if (result.value?.result?.failed == 0) consume()
+    }
+
+    override fun consumeAll() {
+        consume()
+    }
 }
+
+private fun removalSnapshots(progress: AlbumRemovalProgress?, outcome: AlbumRemovalOutcome?): List<OperationStatusSnapshot> =
+    listOfNotNull(
+        progress?.let {
+            OperationStatusSnapshot(
+                kind = OperationKind.RemoveFromAlbum,
+                title = uiText(R.string.album_remove_running, it.name),
+                running = true,
+                media = it.fileIds.map { id -> OperationMediaActivity(OperationMediaReference.RemoteFileId(id)) },
+            )
+        },
+        outcome?.let {
+            OperationStatusSnapshot(
+                kind = OperationKind.RemoveFromAlbum,
+                title = uiText(R.string.album_remove_done, it.result.removed),
+                details = if (it.result.failed > 0) listOf(uiText(R.string.album_remove_failed, it.result.failed)) else emptyList(),
+                failed = it.result.failed > 0,
+            )
+        },
+    )
 
 /** Foreign Photos albums have no verified mutation/permission contract in this client. */
 internal fun supportsAlbumActions(location: AlbumLocation, user: String?): Boolean =
