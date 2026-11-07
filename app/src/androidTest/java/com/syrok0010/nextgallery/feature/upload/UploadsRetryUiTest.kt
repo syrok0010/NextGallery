@@ -6,11 +6,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.app.ui.UploadsScreen
 import com.syrok0010.nextgallery.core.media.*
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.*
 import org.junit.Assert.*
 
@@ -77,7 +77,7 @@ class UploadsRetryUiTest {
                 puts++
                 UploadedFile(
                     item.selection,
-                    "http://test.syrok/remote.php/dav/files/test/Photos/retry.jpg".toHttpUrl(),
+                    DavFilePath.of("test", "/Photos/retry.jpg"),
                     true,
                     42,
                 )
@@ -106,7 +106,7 @@ class UploadsRetryUiTest {
             ) { _, item, _ ->
                 UploadedFile(
                     item.selection,
-                    "http://test.syrok/source.jpg".toHttpUrl(),
+                    DavFilePath.of("test", "/source.jpg"),
                     true,
                     42,
                 )

@@ -259,7 +259,7 @@ class UploadQueueRuntimeTest {
         assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
         val pending = enqueue(listOf(ids.last()), listOf(intent))
         val claim = journal.claim(pending.items.single().id, credentials.uploadOwner, "dead-process")!!
-        journal.accept(claim, UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/b.jpg", true, 43))
+        journal.accept(claim, UploadReceipt(listOf("Photos", "b.jpg"), true, 43))
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
         queue.runBatch(restored) { _, _, _ -> error("Existing receipt must not transfer") }
@@ -369,7 +369,7 @@ class UploadQueueRuntimeTest {
     @Test fun versionedReceiptRecoveryRunsOnlyStepsEvenWhenOriginalUriDisappeared() = runBlocking {
         val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "slice2", albumId = 12, albumHref = "http://test.syrok/remote.php/dav/photos/test/albums/slice2")))
         val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/local-a.jpg", true, 42)
+        val receipt = UploadReceipt(listOf("Photos", "local-a.jpg"), true, 42)
         journal.accept(claim, receipt)
         stamp = null
         reopen()
@@ -433,7 +433,7 @@ class UploadQueueRuntimeTest {
     @Test fun cancelDuringStepFencesLateSuccessAndSuppressesNextStep() = runBlocking {
         val queued = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 2, owner = "test", target = "cancel", albumId = 5, albumHref = "http://test.syrok/album")))
         val accepted = journal.accept(journal.claim(queued.items.single().id, credentials.uploadOwner, "fixture")!!,
-            UploadReceipt("http://test.syrok/source.jpg", true, 42))!!
+            UploadReceipt(listOf("source.jpg"), true, 42))!!
         val running = journal.beginStep(accepted, "link")!!
         journal.cancel(credentials.uploadOwner)
         assertFalse(journal.stepCurrent(running, "link"))
@@ -450,7 +450,7 @@ class UploadQueueRuntimeTest {
     @Test fun twoStepClaimsAndOldProcessReplyCannotCommitAcrossRecovery() = runBlocking {
         val batch = enqueue(listOf(ids.first()))
         val accepted = journal.accept(journal.claim(batch.items.single().id, credentials.uploadOwner, "old")!!,
-            UploadReceipt("http://test.syrok/source.jpg", true, 42))!!
+            UploadReceipt(listOf("source.jpg"), true, 42))!!
         val old = journal.beginStep(accepted, "link")!!
         assertNull(journal.beginStep(accepted, "link"))
         reopen()
@@ -464,7 +464,7 @@ class UploadQueueRuntimeTest {
     @Test fun unknownPersistedIntentLeavesReceiptVisibleAndReportsFormatWithoutPut() = runBlocking {
         val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 99)))
         val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "old-process")!!
-        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/local-a.jpg", true, 42)
+        val receipt = UploadReceipt(listOf("Photos", "local-a.jpg"), true, 42)
         journal.accept(claim, receipt)
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()

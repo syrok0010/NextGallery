@@ -13,7 +13,7 @@ class UploadJournalMigrationTest {
         val name = "durable158-v1-migration.db"
         context.deleteDatabase(name)
         context.getDatabasePath(name).parentFile!!.mkdirs()
-        val receipt = UploadReceipt("http://test.syrok/remote.php/dav/files/test/Photos/v1.jpg", true, 42)
+        val receipt = UploadReceipt(listOf("Photos", "v1.jpg"), true, 42)
         SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name), null).use { old ->
             old.execSQL("""CREATE TABLE IF NOT EXISTS `upload_jobs` (`id` TEXT NOT NULL, `batchId` TEXT NOT NULL, `owner` TEXT NOT NULL, `requestId` TEXT NOT NULL, `position` INTEGER NOT NULL, `selectionJson` TEXT NOT NULL, `intentsJson` TEXT NOT NULL, `state` TEXT NOT NULL, `destination` TEXT, `receiptJson` TEXT, `linkStep` TEXT NOT NULL, `albumStep` TEXT NOT NULL, `problem` TEXT, `httpStatus` INTEGER, `passId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `executor` TEXT, `attempts` INTEGER NOT NULL, `policyVersion` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `seen` INTEGER NOT NULL, PRIMARY KEY(`id`))""")
             old.execSQL("""CREATE UNIQUE INDEX IF NOT EXISTS `index_upload_jobs_owner_requestId_position` ON `upload_jobs` (`owner`, `requestId`, `position`)""")
@@ -24,7 +24,7 @@ class UploadJournalMigrationTest {
                     "v1-$state", "batch-$state", "owner", "request-$state", position,
                     uploadJson.encodeToString(UploadSelection("content://media/external/images/media/42", "v1.jpg", "image/jpeg", stamp = SourceStamp(10, 1, 2))),
                     uploadJson.encodeToString(listOf(UploadIntent("link"), UploadIntent("album", owner = "test", target = "old-album"))),
-                    state, receipt.url, if (state == "Accepted") uploadJson.encodeToString(receipt) else null,
+                    state, uploadJson.encodeToString(receipt.path), if (state == "Accepted") uploadJson.encodeToString(receipt) else null,
                     if (state == "Accepted") "Pending" else "None", if (state == "Accepted") "Running" else "None",
                     null, null, "pass", 3, if (state == "Accepted") "old-process" else null, 1, 1, 0, 1,
                 ))

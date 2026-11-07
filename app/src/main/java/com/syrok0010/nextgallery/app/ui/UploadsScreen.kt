@@ -325,7 +325,7 @@ private fun uploadDetails(entry: UploadEntry): List<Pair<String, Boolean>> {
             val text = when (problem) {
                 "Format" -> R.string.uploads_format_attention
                 "TargetChanged" -> R.string.uploads_album_changed
-                "SourceChanged", "Owner" -> R.string.uploads_album_source
+                "Owner" -> R.string.uploads_album_source
                 "LegacyTarget" -> R.string.uploads_album_legacy
                 "ReplayUnsupported" -> R.string.uploads_album_replay
                 "Uncertain" -> R.string.uploads_album_uncertain
