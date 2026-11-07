@@ -2,8 +2,6 @@ package com.syrok0010.nextgallery.feature.upload
 
 import android.content.Context
 import androidx.room.*
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
@@ -114,18 +112,12 @@ internal interface UploadJournalDao {
     @Query("DELETE FROM upload_jobs") suspend fun clear()
 }
 
-@Database(entities = [UploadJob::class, UploadOwner::class], version = 2, exportSchema = true)
+@Database(entities = [UploadJob::class, UploadOwner::class], version = 1, exportSchema = true)
 internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao
     companion object {
         fun open(context: Context, name: String = "upload-journal.db"): UploadQueueDatabase =
-            Room.databaseBuilder(context, UploadQueueDatabase::class.java, name).addMigrations(MIGRATION_1_2).build()
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE upload_jobs ADD COLUMN linkResultJson TEXT")
-                db.execSQL("ALTER TABLE upload_jobs ADD COLUMN albumResultJson TEXT")
-            }
-        }
+            Room.databaseBuilder(context, UploadQueueDatabase::class.java, name).build()
     }
 }
 
