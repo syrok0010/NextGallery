@@ -278,10 +278,10 @@ class UploadQueueTest {
             queue.passFinished(UploadResult(1, 2, cancelled = 1))
             queue.consumeResult()
             queue.submit(ids("c"))
-            assertEquals(2, queue.batches.value.size)
-            assertEquals(UploadPhase.Cancelled, queue.batches.value.first().items[1].state.value.phase)
+            assertEquals(3, queue.items.value.size)
+            assertEquals(UploadPhase.Cancelled, queue.items.value[1].state.value.phase)
             queue.clearFinished()
-            assertEquals(listOf(files("c")), queue.batches.value.map { it.files })
+            assertEquals(files("c"), queue.items.value.map { it.selection })
         } finally { scope.cancel() }
     }
 
@@ -302,7 +302,7 @@ class UploadQueueTest {
             assertFalse(queue.enterForeground("refused") { throw SecurityException() })
             assertEquals(files("a"), withTimeout(1_000) { finished.await() })
             assertNull(queue.activity.value)
-            assertEquals(UploadPhase.Cancelled, queue.batches.value.single().items.single().state.value.phase)
+            assertEquals(UploadPhase.Cancelled, queue.items.value.single().state.value.phase)
         } finally { scope.cancel() }
     }
 

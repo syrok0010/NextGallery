@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.core.ui.UiText
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -33,6 +34,7 @@ internal data class UploadItemState(
 
 /** Serializes cancellation with response acceptance and with the start of the file's DAV work. */
 internal class UploadItem(val selection: UploadSelection) {
+    val id = nextItemId.incrementAndGet()
     private val mutableState = MutableStateFlow(UploadItemState())
     val state = mutableState.asStateFlow()
     private var work: Job? = null
@@ -79,6 +81,8 @@ internal class UploadItem(val selection: UploadSelection) {
             }
         }
 }
+
+private val nextItemId = AtomicLong()
 
 /** Keeps per-file outcomes even when a later file fails. Cancelled files never reach follow-ups. */
 internal suspend fun runUploadFiles(
