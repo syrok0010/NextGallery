@@ -1,7 +1,17 @@
 package com.syrok0010.nextgallery.core.network.dav
 
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
+import java.net.InetAddress
+import java.net.ServerSocket
+import kotlin.concurrent.thread
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.*
 import org.junit.Test
@@ -157,6 +167,48 @@ class FilesDavClientTest {
                 assertEquals(ReadFileResult.Changed, fixture.client.readFile(file, "6543abcd") { })
                 code = 404
                 assertEquals(ReadFileResult.Changed, fixture.client.readFile(file, null) { })
+            }
+        }
+
+    @Test fun `cancelling a read aborts a stalled body`() =
+        runBlocking {
+            ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+                val credentials = AccountCredentials(
+                    "http://127.0.0.1:${server.localPort}",
+                    "fixture",
+                    "password",
+                    userId = "anna",
+                )
+                val client = FilesDavClient(NextcloudTransport(Json)) { credentials }
+                val stalled = thread {
+                    runCatching {
+                        server.accept().use { socket ->
+                            socket.getInputStream().read(ByteArray(4096))
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nx".toByteArray(),
+                                )
+                                flush()
+                            }
+                            // Holds the connection open until the client drops it.
+                            socket.getInputStream().read()
+                        }
+                    }
+                }
+                val started = CompletableDeferred<Unit>()
+                val read = launch(Dispatchers.Default) {
+                    client.readFile(file, "6543abcd") { body ->
+                        body.read()
+                        started.complete(Unit)
+                        body.readBytes()
+                    }
+                }
+                started.await()
+                read.cancel()
+                // Well below the 30 s read timeout of the transport.
+                withTimeout(5_000) { read.join() }
+                stalled.join(5_000)
+                assertFalse(stalled.isAlive)
             }
         }
 

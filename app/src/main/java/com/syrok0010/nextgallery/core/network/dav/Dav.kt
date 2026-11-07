@@ -3,10 +3,17 @@ package com.syrok0010.nextgallery.core.network.dav
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import okhttp3.Call
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody
+import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 
 /**
@@ -77,3 +84,29 @@ internal fun DavFilePath.url(serverUrl: String): HttpUrl =
         .addPathSegment(user)
         .apply { segments.forEach(::addPathSegment) }
         .build()
+
+/**
+ * Awaits the response and hands it to [block], closing it afterwards. Cancelling the coroutine also
+ * cancels the call while [block] still reads the body, so a stalled download does not outlive it,
+ * and the coroutine ends cancelled rather than with the aborted call's I/O error.
+ */
+internal suspend fun <T> Call.awaitUse(block: suspend (Response) -> T): T =
+    coroutineScope {
+        val call = this@awaitUse
+        val abort = launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                awaitCancellation()
+            } finally {
+                call.cancel()
+            }
+        }
+        try {
+            call.executeAsync().use { block(it) }
+        } catch (error: IOException) {
+            // The aborted call fails while reading; report the cancellation instead.
+            ensureActive()
+            throw error
+        } finally {
+            abort.cancel()
+        }
+    }
