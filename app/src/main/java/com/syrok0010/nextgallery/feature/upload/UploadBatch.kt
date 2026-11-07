@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
+import java.util.concurrent.atomic.AtomicLong
 
 /** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
 internal data class UploadSelection(
@@ -31,7 +32,15 @@ internal fun uploadSelection(item: MediaItem): UploadSelection? =
 internal class UploadBatch(
     val files: List<UploadSelection>,
     val followUps: List<UploadFollowUp> = emptyList(),
-)
+) {
+    val id = nextBatchId.incrementAndGet()
+    val items = files.map(::UploadItem)
+    fun cancel() = items.forEach(UploadItem::cancel)
+
+    companion object {
+        private val nextBatchId = AtomicLong()
+    }
+}
 
 /**
  * [selection] is on the server at [path]: uploaded now ([created]) or already there with the same

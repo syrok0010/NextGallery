@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.app.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -30,6 +31,8 @@ import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import com.syrok0010.nextgallery.feature.upload.QueuedUploads
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.koin.androidx.compose.koinViewModel
 
 internal fun transitionDirection(
@@ -53,7 +56,10 @@ private fun AnimatedContentTransitionScope<*>.horizontalTransition(
 } ?: (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
 
 @Composable
-internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()) {
+internal fun NextGalleryApp(
+    links: Flow<Uri> = emptyFlow(),
+    sessionViewModel: SessionViewModel = koinViewModel(),
+) {
     val session by sessionViewModel.session.collectAsState()
     val backStack = rememberNavBackStack(session.rootRoute())
     val routes = syncedBackStack(backStack.toList(), session)
@@ -69,13 +75,19 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
             backStack.addAll(routes)
         }
     }
+    val open = { route: NextGalleryRoute ->
+        if (backStack.lastOrNull() != route) backStack.add(route)
+    }
+    val openUploads = { open(NextGalleryRoute.Uploads) }
+    // Collected only while signed in: a link that arrives earlier waits for the session.
+    LaunchedEffect(links, signedIn) {
+        if (signedIn) links.collect { link -> linkRoute(link)?.let(open) }
+    }
     LocalMediaPermissionFlow(isSignedIn = signedIn)
     if (signedIn) QueuedUploads()
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
-        CompositionLocalProvider(
-            LocalContentColor provides MaterialTheme.colorScheme.onBackground,
-        ) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -113,6 +125,9 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                         )
                     },
                     entryProvider = entryProvider {
+                        entry<NextGalleryRoute.Uploads>(clazzContentKey = { it.navContentKey() }) {
+                            if (signedIn) UploadsScreen(onBack = { backStack.removeLastOrNull() })
+                        }
                         entry<NextGalleryRoute.Login>(
                             clazzContentKey = { it.navContentKey() },
                         ) { LoginScreen() }
@@ -123,6 +138,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                 screenStates.SaveableStateProvider("photos") {
                                     PhotosScreen(
                                         onLogout = sessionViewModel::logout,
+                                        onOpenUploads = openUploads,
                                         onViewerVisibilityChanged = { viewerVisible = it },
                                         onSelectionModeChanged = { selectionMode = it },
                                     )
@@ -136,7 +152,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                     slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
                             },
                         ) { album ->
-                            if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout)
+                            if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout, onOpenUploads = openUploads)
                         }
                         entry<NextGalleryRoute.Albums>(
                             clazzContentKey = { it.navContentKey() },
@@ -145,6 +161,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                                 screenStates.SaveableStateProvider("albums") {
                                     AlbumsScreen(
                                         onLogout = sessionViewModel::logout,
+                                        onOpenUploads = openUploads,
                                         onOpen = { album ->
                                             album.location?.let { location ->
                                                 if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
@@ -158,7 +175,7 @@ internal fun NextGalleryApp(sessionViewModel: SessionViewModel = koinViewModel()
                         }
                     },
                 )
-                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album) {
+                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
                     LibraryIsland(
                         page,
                         { destination ->

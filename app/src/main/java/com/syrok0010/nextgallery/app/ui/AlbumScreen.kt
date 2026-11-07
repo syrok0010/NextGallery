@@ -17,6 +17,7 @@ internal fun AlbumScreen(
     album: NextGalleryRoute.Album,
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onOpenUploads: () -> Unit,
     viewModel: AlbumContentsViewModel = koinViewModel { parametersOf(album.location) },
 ) {
     val contents by viewModel.state.collectAsState()
@@ -31,6 +32,7 @@ internal fun AlbumScreen(
         LibraryScreenScaffold(
             TopLevelDestination.Albums,
             onLogout,
+            onOpenUploads,
             viewerVisible = viewerVisible,
             onRefresh = viewModel::refresh,
             onBack = onBack,

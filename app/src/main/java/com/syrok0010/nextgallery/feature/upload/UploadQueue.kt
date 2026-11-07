@@ -41,6 +41,9 @@ internal data class UploadResult(
     val files: Int,
     val failures: List<String> = emptyList(),
     val details: List<UiText> = emptyList(),
+    val existing: Int = 0,
+    val cancelled: Int = 0,
+    val conflicts: Int = 0,
 ) {
     operator fun plus(other: UploadResult) =
         UploadResult(
@@ -48,6 +51,9 @@ internal data class UploadResult(
             files + other.files,
             failures + other.failures,
             details + other.details,
+            existing + other.existing,
+            cancelled + other.cancelled,
+            conflicts + other.conflicts,
         )
 }
 
@@ -74,6 +80,10 @@ internal class UploadQueue(
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow(UploadQueueState())
     private val state = mutableState.asStateFlow()
+    private val mutableItems = MutableStateFlow<List<UploadItem>>(emptyList())
+
+    /** Files of all batches in submission order, kept after they finish until [clearFinished]. */
+    val items = mutableItems.asStateFlow()
     val waiting = state.map { it.waiting }.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val activity = state.map { it.activity }.stateIn(scope, SharingStarted.Eagerly, null)
     val result = state.map { it.result }.stateIn(scope, SharingStarted.Eagerly, null)
@@ -81,12 +91,20 @@ internal class UploadQueue(
         .map { uploadOperationSnapshots(it.activity, it.result) }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    fun cancelAll() = items.value.forEach(UploadItem::cancel)
+
+    fun clearFinished() {
+        mutableItems.update { items -> items.filterNot { it.state.value.phase.terminal } }
+    }
+
     init {
         scope.launch {
             var owner: AccountCredentials? = null
             sessions.session.collect { session ->
                 val current = (session as? SessionUiState.SignedIn)?.credentials
                 if (current == null || (owner != null && current != owner)) {
+                    cancelAll()
+                    mutableItems.value = emptyList()
                     mutableState.value = UploadQueueState()
                 }
                 owner = current
@@ -103,6 +121,7 @@ internal class UploadQueue(
         }
         if (files.isEmpty()) return 0
         val complete = UploadBatch(files, commonFollowUps() + followUps)
+        mutableItems.update { it + complete.items }
         mutableState.update { state ->
             state.copy(
                 waiting = state.waiting + complete,
@@ -154,10 +173,16 @@ internal class UploadQueue(
         } catch (_: RuntimeException) {
             // Includes dataSync quota, service type and permission failures from Android.
             var files = 0
-            while (true) {
-                val batch = next() ?: break
-                files += batch.files.size
-                batchFinished(batch)
+            val refused = buildList {
+                while (true) {
+                    val batch = next() ?: break
+                    files += batch.files.size
+                    add(batch)
+                }
+            }
+            refused.forEach(::batchFinished)
+            scope.launch {
+                refused.forEach { finishUploadBatch(it) }
             }
             if (files > 0) passFinished(UploadResult(0, files, failures = listOf(failureReason)))
             return false

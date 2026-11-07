@@ -14,6 +14,7 @@ import org.koin.compose.koinInject
 internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
     onLogout: () -> Unit,
+    onOpenUploads: () -> Unit,
     viewerVisible: Boolean = false,
     onRefresh: () -> Unit = {},
     onBack: (() -> Unit)? = null,
@@ -44,7 +45,13 @@ internal fun LibraryScreenScaffold(
                 onBack = onBack,
                 title = title,
                 statusActive = operations.active,
-                status = { OperationStatusPill(operations, visible = !viewerVisible) },
+                status = {
+                    OperationStatusPill(
+                        operations,
+                        visible = !viewerVisible,
+                        onOpenUploads,
+                    )
+                },
             )
         }
         Box(Modifier.weight(1f), content = content)

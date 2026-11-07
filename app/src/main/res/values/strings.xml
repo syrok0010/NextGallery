@@ -146,6 +146,8 @@
     <string name="upload_done">Загрузка завершена: %1$d из %2$d</string>
     <string name="upload_stopped">Загрузка остановлена: %1$s</string>
     <string name="upload_error_network">ошибка сети</string>
+    <string name="upload_error_memories">Memories ответил HTTP %1$d</string>
+    <string name="upload_error_unexpected">непредвиденная ошибка</string>
     <string name="upload_error_session">сессия Nextcloud больше недоступна</string>
     <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>
     <string name="upload_error_open">не удалось открыть %1$s</string>
@@ -209,4 +211,24 @@
     <string name="error_memories_version_unknown">Сервер не сообщил корректную версию Memories. Для входа нужна версия 10 или новее. Проверьте настройку Memories и повторите проверку.</string>
     <string name="error_memories_check_network">Не удалось проверить Memories из-за ошибки сети. Проверьте подключение и повторите проверку.</string>
     <string name="error_memories_check_failed">Не удалось проверить Memories. Проверьте доступ к серверу и повторите проверку. Если доступ отозван, выйдите и войдите заново.</string>
+    <string name="uploads_title">Загрузки</string>
+    <string name="uploads_back">Назад</string>
+    <string name="uploads_cancel_all">Отменить все</string>
+    <string name="uploads_cancel_file">Отменить</string>
+    <string name="uploads_clear">Очистить</string>
+    <string name="uploads_empty">Здесь появятся файлы, отправленные в облако</string>
+    <string name="uploads_section_uploading">Загружается</string>
+    <string name="uploads_section_waiting">В очереди</string>
+    <string name="uploads_section_done">Готово</string>
+    <string name="uploads_section_count">%1$s · %2$d</string>
+    <string name="uploads_section_count_size">%1$s · %2$d · %3$s</string>
+    <string name="uploads_sent">%1$s / %2$s</string>
+    <string name="uploads_percent">%1$d%%</string>
+    <string name="uploads_uploaded">Загружен</string>
+    <string name="uploads_existing">Уже в облаке</string>
+    <string name="uploads_conflict">Имя занято другим файлом</string>
+    <string name="uploads_failed">Ошибка: %1$s</string>
+    <string name="uploads_cancelled">Отменён</string>
+    <string name="upload_existing_count">Уже в облаке: %1$d</string>
+    <string name="upload_cancelled_count">Отменено: %1$d</string>
 </resources>
