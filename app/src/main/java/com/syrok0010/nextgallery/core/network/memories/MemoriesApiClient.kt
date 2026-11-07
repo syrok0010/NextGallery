@@ -1,7 +1,6 @@
 package com.syrok0010.nextgallery.core.network.memories
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
-import com.syrok0010.nextgallery.core.network.dav.await
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -10,6 +9,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.coroutines.executeAsync
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -66,7 +66,7 @@ class MemoriesApiClient(
                     accept = "application/octet-stream",
                 ).post(body)
                 .build()
-            transport.baseClient.newCall(httpRequest).await().use { response ->
+            transport.baseClient.newCall(httpRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) {
                     error("Multipreview failed with HTTP ${response.code}")
                 }

@@ -3,16 +3,11 @@ package com.syrok0010.nextgallery.core.network.dav
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody
-import okhttp3.Response
+import okhttp3.coroutines.executeAsync
 
 /**
  * File in a user's DAV files root. [segments] are decoded path segments, so a name containing
@@ -63,7 +58,7 @@ internal suspend fun NextcloudTransport.dav(
         accept = "*/*",
     ).method(method, body)
     headers.forEach { (name, value) -> builder.header(name, value) }
-    return baseClient.newCall(builder.build()).await().use { response ->
+    return baseClient.newCall(builder.build()).executeAsync().use { response ->
         DavResponse(response.code, response.headers)
     }
 }
@@ -82,19 +77,3 @@ internal fun DavFilePath.url(serverUrl: String): HttpUrl =
         .addPathSegment(user)
         .apply { segments.forEach(::addPathSegment) }
         .build()
-
-suspend fun Call.await(): Response =
-    suspendCancellableCoroutine { continuation ->
-        continuation.invokeOnCancellation { cancel() }
-        enqueue(
-            object : Callback {
-                override fun onResponse(call: Call, response: Response) {
-                    continuation.resume(response) { _, value, _ -> value.close() }
-                }
-
-                override fun onFailure(call: Call, e: IOException) {
-                    continuation.resumeWithException(e)
-                }
-            },
-        )
-    }
