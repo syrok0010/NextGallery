@@ -9,6 +9,8 @@ import java.io.InputStream
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import okhttp3.RequestBody
+import okio.buffer
+import okio.source
 
 /**
  * Puts [selection] at [path] or, while that name holds a different file, at the first free
@@ -106,31 +108,17 @@ private suspend fun compare(
 
 /** Stops at the first difference; a large identical video is still read to its end. */
 internal suspend fun sameBytes(first: InputStream, second: InputStream): Boolean {
-    val left = ByteArray(BUFFER_SIZE)
-    val right = ByteArray(BUFFER_SIZE)
-    while (true) {
+    val left = first.source().buffer()
+    val right = second.source().buffer()
+    while (left.request(1)) {
         currentCoroutineContext().ensureActive()
-        val count = first.readFully(left)
-        if (second.readFully(right) != count) return false
-        if (count == 0) return true
-        for (index in 0 until count) {
-            if (left[index] != right[index]) return false
-        }
+        val chunk = left.readByteString(left.buffer.size)
+        if (!right.rangeEquals(0, chunk)) return false
+        right.skip(chunk.size.toLong())
     }
-}
-
-/** Fills [buffer] unless the stream ends first; returns the bytes read. */
-private fun InputStream.readFully(buffer: ByteArray): Int {
-    var total = 0
-    while (total < buffer.size) {
-        val count = read(buffer, total, buffer.size - total)
-        if (count < 0) break
-        total += count
-    }
-    return total
+    return right.exhausted()
 }
 
 /** The original name plus `(2)`…`(100)`. */
 private const val MAX_NAMES = 100
 private const val MAX_CHANGES = 3
-private const val BUFFER_SIZE = 64 * 1024
