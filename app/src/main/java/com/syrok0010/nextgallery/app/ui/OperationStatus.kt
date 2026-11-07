@@ -145,12 +145,14 @@ private val OperationKind.priority: Int
         OperationKind.Delete -> 0
         OperationKind.Upload -> 1
         OperationKind.AddToAlbum -> 2
+        OperationKind.RemoveFromAlbum -> 3
     }
 
 private fun OperationKind.toTileOperation(): MediaTileOperation =
     when (this) {
         OperationKind.Upload -> MediaTileOperation.Upload
         OperationKind.AddToAlbum -> MediaTileOperation.AddToAlbum
+        OperationKind.RemoveFromAlbum -> MediaTileOperation.RemoveFromAlbum
         OperationKind.Delete -> MediaTileOperation.Delete
     }
 

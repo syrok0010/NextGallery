@@ -20,9 +20,11 @@ import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
 import com.syrok0010.nextgallery.feature.collection.rememberMediaSelection
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
+import com.syrok0010.nextgallery.feature.deletion.CloudTrashStatus
 import com.syrok0010.nextgallery.feature.deletion.DeleteSelectionDialog
 import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
+import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -38,6 +40,7 @@ internal fun AlbumScreen(
     removals: AlbumRemovals = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
     sessions: SessionStore = koinInject(),
+    trashBin: NextcloudTrashBin = koinInject(),
 ) {
     val contents by viewModel.state.collectAsStateWithLifecycle()
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
@@ -52,9 +55,13 @@ internal fun AlbumScreen(
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     var removeRequest by remember { mutableStateOf<Pair<Set<Long>, () -> Unit>?>(null) }
     val removing by removals.progress.collectAsStateWithLifecycle()
+    // Asked on every dialog, so the answer is fresh when the user decides.
+    val cloudTrash by produceState(CloudTrashStatus.Checking, deleteRequest) {
+        value = CloudTrashStatus.Checking
+        if (deleteRequest?.plan?.hasCloudCopies == true) value = trashBin.status()
+    }
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
     LaunchedEffect(contents.departedIds) { selection.remove(contents.departedIds) }
-    val statusVisible = albumRequest == null && deleteRequest == null && removeRequest == null && !delete.awaitingConfirmation
     val actions = if (!supported) emptyList() else buildList {
         if (remote != null) add(
             SelectionAction(
@@ -89,16 +96,16 @@ internal fun AlbumScreen(
         selection = selection.takeIf { supported },
         selectionActions = actions,
         viewerActions = actions,
-        completedDeletions = contents.departedIds,
+        // Members that left the album after a full refresh: the viewer stops holding them.
+        deletedMediaIds = contents.departedIds,
         viewerStatus = { visible ->
-            if (operations.active) OperationStatusPill(operations, visible = visible && statusVisible)
+            if (operations.active) OperationStatusPill(operations, visible = visible, fillWidth = false)
         },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Albums,
             onLogout,
             viewerVisible = viewerVisible,
-            statusVisible = statusVisible,
             onRefresh = viewModel::refresh,
             onBack = onBack,
             title = album.title,
@@ -136,10 +143,11 @@ internal fun AlbumScreen(
     deleteRequest?.let { preparation ->
         DeleteSelectionDialog(
             plan = preparation.plan,
+            cloudTrash = cloudTrash,
             onDismiss = { deleteRequest = null },
             onConfirm = { scope ->
                 deleteRequest = null
-                delete(preparation.confirm(scope))
+                delete(preparation.confirm(scope, cloudAllowed = cloudTrash.allowsCloud))
             },
         )
     }

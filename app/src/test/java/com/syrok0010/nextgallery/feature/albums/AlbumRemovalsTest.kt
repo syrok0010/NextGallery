@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.session.*
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -28,12 +30,24 @@ class AlbumRemovalsTest {
                 val location = AlbumLocation.Remote("anna/album")
                 assertTrue(removals.remove(location, "album", setOf(1, 2)))
                 assertEquals(setOf(1L, 2L), removals.progress.value?.fileIds)
+                // The shared status sees it running (logout waits) and marks only its members.
+                val running = removals.operations.value.single()
+                assertEquals(OperationKind.RemoveFromAlbum, running.kind)
+                assertTrue(running.running)
+                assertEquals(
+                    listOf(1L, 2L).map(OperationMediaReference::RemoteFileId),
+                    running.media.map { it.reference },
+                )
                 assertFalse(removals.remove(location, "album", setOf(3)))
                 release.countDown()
                 withTimeout(5000) { removals.result.filterNotNull().first() }
                 withTimeout(5000) { removals.progress.first { it == null } }
                 assertEquals(AlbumRemovalResult(1, 1), removals.result.value?.result)
                 assertEquals(1, refreshed)
+                // A result with failures waits until the user opens its details.
+                assertTrue(removals.operations.value.single().failed)
+                removals.consumeSucceeded()
+                assertNotNull(removals.result.value)
                 assertTrue(removals.remove(location, "album", setOf(3)))
                 withTimeout(5000) { removals.progress.first { it == null } }
                 assertEquals(AlbumRemovalResult(2, 1), removals.result.value?.result)

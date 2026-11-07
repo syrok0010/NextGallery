@@ -162,9 +162,9 @@ class AlbumContentsViewModelTest {
             runCurrent()
             assertEquals(listOf(second), vm.state.value.items)
             assertEquals(setOf(first.mediaId), vm.state.value.departedIds)
-            viewer.updateSlots(vm.state.value.items.toMediaSlots(), first.mediaId, vm.state.value.departedIds)
-            assertEquals(second.mediaId, viewer.state.replacementMediaId)
-            assertEquals(listOf(second), viewer.state.sequence.items)
+            // The departed current object is released; the pager shows what took its page.
+            val released = viewer.updateSlots(vm.state.value.items.toMediaSlots(), first.mediaId, vm.state.value.departedIds)
+            assertEquals(listOf(second), released.items)
             // A failed refresh never commits a partial empty membership or closes the viewer.
             fail = true
             vm.refresh()
@@ -175,8 +175,8 @@ class AlbumContentsViewModelTest {
             members = emptyList()
             vm.refresh()
             runCurrent()
-            viewer.updateSlots(vm.state.value.items.toMediaSlots(), second.mediaId, vm.state.value.departedIds)
-            assertTrue(viewer.state.sequence.items.isEmpty())
+            val emptied = viewer.updateSlots(vm.state.value.items.toMediaSlots(), second.mediaId, vm.state.value.departedIds)
+            assertTrue(emptied.items.isEmpty())
             // Returning membership clears its old departure, so later selection remains valid.
             members = listOf(first)
             vm.refresh()
