@@ -4,15 +4,11 @@ import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
 import java.io.InputStream
-import java.io.StringReader
-import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.w3c.dom.Element
-import org.xml.sax.InputSource
 
 sealed interface CreateFileResult {
     /** [fileId] comes from `OC-FileId`; null when the server omits it. */
@@ -56,7 +52,7 @@ class FilesDavClient(
                     accept = "application/xml",
                 ).method(
                     PROPFIND,
-                    PROPFIND_FILE_PROPERTIES.toRequestBody(XML_MEDIA_TYPE.toMediaType()),
+                    encodeDav(PropFind()).toRequestBody(XML_MEDIA_TYPE.toMediaType()),
                 ).header("Depth", "0")
                 .build()
             transport.baseClient.newCall(request).await().use { response ->
@@ -126,9 +122,6 @@ class FilesDavClient(
         const val DELETE = "DELETE"
         const val PROPFIND = "PROPFIND"
         const val XML_MEDIA_TYPE = "application/xml; charset=utf-8"
-        const val PROPFIND_FILE_PROPERTIES =
-            "<d:propfind xmlns:d=\"DAV:\" xmlns:oc=\"http://owncloud.org/ns\"><d:prop>" +
-                "<d:getcontentlength/><d:getetag/><oc:fileid/></d:prop></d:propfind>"
     }
 }
 
@@ -144,38 +137,21 @@ sealed interface ReadFileResult<out T> {
     data object Changed : ReadFileResult<Nothing>
 }
 
-private const val DAV_NAMESPACE = "DAV:"
-private const val OWNCLOUD_NAMESPACE = "http://owncloud.org/ns"
-
-/** Reads the first successful `propstat` of a multistatus body; external entities stay off. */
+/** Reads the first successful `propstat` of a multistatus body. */
 internal fun fileProperties(body: InputStream): DavFileProperties {
-    val builder = DocumentBuilderFactory
-        .newInstance()
-        .apply {
-            isNamespaceAware = true
-            isExpandEntityReferences = false
-        }.newDocumentBuilder()
-    builder.setEntityResolver { _, _ -> InputSource(StringReader("")) }
-    val document = builder.parse(body)
-    if (document.doctype != null) throw IOException("DAV response declares a DOCTYPE")
-    val propstats = document.getElementsByTagNameNS(DAV_NAMESPACE, "propstat")
-    val successful = (0 until propstats.length)
-        .map { propstats.item(it) as Element }
-        .firstOrNull { propstat ->
-            propstat.text(DAV_NAMESPACE, "status")?.split(Regex("\\s+"))?.getOrNull(1) == "200"
-        }
+    val found = decodeMultistatus(body)
+        .responses
+        .firstOrNull()
+        ?.propstats
+        ?.firstOrNull(PropStat::found)
+        ?.prop
     return DavFileProperties(
-        size = successful?.text(DAV_NAMESPACE, "getcontentlength")?.toLongOrNull(),
-        fileId = successful?.text(OWNCLOUD_NAMESPACE, "fileid")?.toLongOrNull()?.takeIf { it > 0L },
+        size = found?.size?.trim()?.toLongOrNull(),
+        fileId = found?.fileId?.trim()?.toLongOrNull()?.takeIf { it > 0L },
         // getetag is a quoted entity tag; If-Match adds the quotes back.
-        etag = successful?.text(DAV_NAMESPACE, "getetag")?.removeSurrounding("\"")?.takeIf {
-            it.isNotEmpty()
-        },
+        etag = found?.etag?.trim()?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() },
     )
 }
-
-private fun Element.text(namespace: String, name: String): String? =
-    getElementsByTagNameNS(namespace, name).item(0)?.textContent?.trim()
 
 /**
  * File id from the `OC-FileId` response header: the id zero-padded to eight digits, followed by

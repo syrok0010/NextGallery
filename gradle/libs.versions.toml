@@ -14,6 +14,8 @@ composeBom = "2026.08.00"
 koin = "4.2.1"
 ksp = "2.2.10-2.0.2"
 kotlinxSerializationJson = "1.11.0"
+# 1.0.x is built with Kotlin 2.4, which the 2.2 compiler cannot read.
+xmlutil = "0.91.3"
 okhttp = "5.3.2"
 retrofit = "3.0.0"
 coil = "3.5.0-beta01"
@@ -47,6 +49,7 @@ androidx-lifecycle-viewmodel-navigation3 = { group = "androidx.lifecycle", name 
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+xmlutil-serialization = { group = "io.github.pdvrieze.xmlutil", name = "serialization", version.ref = "xmlutil" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-coroutines = { group = "com.squareup.okhttp3", name = "okhttp-coroutines", version.ref = "okhttp" }
 okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
