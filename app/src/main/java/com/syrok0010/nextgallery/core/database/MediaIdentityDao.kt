@@ -8,10 +8,10 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 
 @Dao
 interface MediaIdentityDao {
-    @Query("SELECT * FROM media_identifiers WHERE kind = :kind AND value IN (:values)")
+    @Query("SELECT * FROM media_identifiers WHERE source = :source AND sourceKey IN (:keys)")
     suspend fun identifiers(
-        kind: MediaIdentifierKind,
-        values: Collection<String>,
+        source: MediaSourceKind,
+        keys: Collection<String>,
     ): List<MediaIdentifierEntity>
 
     @Query("SELECT * FROM media_identifiers WHERE mediaId IN (:mediaIds)")
@@ -41,6 +41,6 @@ interface MediaIdentityDao {
     @Query("DELETE FROM media_identity_conflicts WHERE source = :source")
     suspend fun deleteConflicts(source: MediaSourceKind)
 
-    @Query("DELETE FROM media_identifiers WHERE kind = :kind")
-    suspend fun deleteIdentifiers(kind: MediaIdentifierKind)
+    @Query("DELETE FROM media_identifiers WHERE source = :source")
+    suspend fun deleteIdentifiers(source: MediaSourceKind)
 }
