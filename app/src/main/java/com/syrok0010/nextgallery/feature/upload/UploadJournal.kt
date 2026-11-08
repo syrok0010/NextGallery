@@ -97,7 +97,10 @@ internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao
     companion object {
         fun open(context: Context, name: String = "upload-journal.db"): UploadQueueDatabase =
-            Room.databaseBuilder(context, UploadQueueDatabase::class.java, name).build()
+            // The app is not released yet: a schema change resets the queue instead of migrating it.
+            Room.databaseBuilder(context, UploadQueueDatabase::class.java, name)
+                .fallbackToDestructiveMigration(true)
+                .build()
     }
 }
 
@@ -129,8 +132,9 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
             dao.update(old.copy(
                 state = if (old.state == "Running") "Uncertain" else old.state,
                 linkStep = if (old.linkStep == "Running") "Pending" else old.linkStep,
-                albumStep = if (old.albumStep in setOf("Pending", "Running")) "Attention" else old.albumStep,
-                problem = if (old.albumStep in setOf("Pending", "Running")) UploadProblem.Album.name else old.problem,
+                // Pending album work never started; only a started COPY has an unknown outcome.
+                albumStep = if (old.albumStep == "Running") "Attention" else old.albumStep,
+                problem = if (old.albumStep == "Running") UploadProblem.Album.name else old.problem,
                 executor = null,
                 revision = old.revision + 1,
             ))

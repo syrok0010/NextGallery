@@ -79,9 +79,6 @@ internal fun AddToAlbumSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
         }
-        if ((additionState as? AlbumAdditionState.Failed)?.reason == AlbumAdditionFailure.QueueStorage) {
-            Text(stringResource(R.string.uploads_enqueue_rejected), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp))
-        }
         if (albums.remote.failed) {
             Text(
                 stringResource(R.string.albums_remote_error),

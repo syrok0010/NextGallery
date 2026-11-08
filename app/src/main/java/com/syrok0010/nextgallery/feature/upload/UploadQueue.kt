@@ -349,7 +349,8 @@ internal class UploadQueue(
         file.stamp != null && try { snapshot(file) == file.stamp } catch (_: Exception) { false }
     }
 
-    fun uploading(contentUri: String, percent: Int?) {
+    // Synchronized with [project], which rebuilds the activity from the journal and must not drop this update.
+    @Synchronized fun uploading(contentUri: String, percent: Int?) {
         mutableActivity.update { it?.copy(current = uploadedLocalIdentityUri(contentUri), percent = percent) }
     }
 

@@ -258,7 +258,12 @@ private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
             }
         }
         SizeText(fileSize(entry.item.selection.local.sizeBytes))
-        if (phase.terminal) StatusIcon(entry.state) else CancelButton(onCancel)
+        // A file waiting for attention or for its follow-up blocks logout, so it stays cancellable.
+        if (!phase.terminal || entry.state.attention || entry.state.pendingAction) {
+            CancelButton(onCancel)
+        } else {
+            StatusIcon(entry.state)
+        }
     }
 }
 

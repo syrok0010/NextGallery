@@ -104,6 +104,17 @@ class DurableUploadJournalTest {
             assertNotNull(journal.accept(resumed, receipt.copy(created = false)))
         }
 
+    @Test fun albumStepThatNeverStartedRunsAfterReopen() =
+        runBlocking {
+            val claim = journal.claim(enqueue().id, owner, "process-1")!!
+            journal.accept(claim, receipt)!!
+            reopen()
+            val restored = journal.jobs(owner).single()
+            assertEquals("Pending", restored.albumStep)
+            assertTrue(restored.runnable)
+            assertNotNull(journal.claim(restored.id, owner, "process-2"))
+        }
+
     @Test fun receiptReopensForStepsWithoutNewTransferAndAlbumRunningNeedsAttention() =
         runBlocking {
             val claim = journal.claim(enqueue().id, owner, "process-1")!!

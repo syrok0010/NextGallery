@@ -230,7 +230,7 @@ class UploadQueueRuntimeTest {
         assertEquals(1, links)
     }
 
-    @Test fun newlyAcceptedAlbumRunsOnceAndReceiptPendingAlbumDoesNotReplayOnReopen() = runBlocking {
+    @Test fun newlyAcceptedAlbumRunsOnceAndUnstartedAlbumRunsOnReopen() = runBlocking {
         val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
         queue.runBatch(batch, ::transfer)
         assertEquals(1, albums)
@@ -241,9 +241,9 @@ class UploadQueueRuntimeTest {
         reopen()
         val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
         queue.runBatch(restored) { _, _, _ -> error("No transfer for saved receipt") }
-        assertEquals(1, albums)
-        assertTrue(restored.items.single().state.value.attention)
-        assertFalse(queue.logout { error("Pending album action must block logout") })
+        assertEquals(2, albums)
+        assertEquals("slice2", restored.items.single().state.value.albumAdded)
+        assertFalse(restored.items.single().state.value.attention)
     }
 
     @Test fun missingCredentialsDoNotEraseJournalAndEmptySelectionIsNotAStorageFailure() = runBlocking {
