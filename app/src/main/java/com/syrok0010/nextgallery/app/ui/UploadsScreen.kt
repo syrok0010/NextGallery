@@ -1,7 +1,5 @@
 package com.syrok0010.nextgallery.app.ui
 
-import android.content.ContentResolver
-import android.provider.OpenableColumns
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,9 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,24 +37,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.feature.images.LocalThumbnail
 import com.syrok0010.nextgallery.feature.upload.UploadItem
 import com.syrok0010.nextgallery.feature.upload.UploadItemState
 import com.syrok0010.nextgallery.feature.upload.UploadPhase
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 private class UploadEntry(val item: UploadItem, val state: UploadItemState)
@@ -82,7 +74,6 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
     val waiting = entries.filter { it.state.phase == UploadPhase.Waiting }
     // Files that need attention come before ordinary outcomes.
     val done = entries.filter { it.state.phase.terminal }.sortedBy { !it.state.phase.problem }
-    val sizes = rememberFileSizes(items)
 
     Scaffold(
         topBar = {
@@ -123,12 +114,12 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     uploading,
                     key = { it.item.id },
-                ) { UploadingRow(it, sizes[it.item.selection.contentUri]) }
+                ) { UploadingRow(it) }
             }
             if (waiting.isNotEmpty()) {
                 item(key = "waiting") {
                     SectionHeader(
-                        sectionTitle(R.string.uploads_section_waiting, waiting, sizes),
+                        sectionTitle(R.string.uploads_section_waiting, waiting),
                         stringResource(R.string.uploads_cancel_all),
                         queue::cancelAll,
                     )
@@ -136,12 +127,12 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     waiting,
                     key = { it.item.id },
-                ) { UploadRow(it, sizes[it.item.selection.contentUri]) }
+                ) { UploadRow(it) }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
                     SectionHeader(
-                        sectionTitle(R.string.uploads_section_done, done, sizes),
+                        sectionTitle(R.string.uploads_section_done, done),
                         stringResource(R.string.uploads_clear),
                         queue::clearFinished,
                     )
@@ -149,7 +140,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     done,
                     key = { it.item.id },
-                ) { UploadRow(it, sizes[it.item.selection.contentUri]) }
+                ) { UploadRow(it) }
             }
         }
     }
@@ -158,21 +149,14 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
 private val UploadPhase.problem: Boolean
     get() = this == UploadPhase.Failed || this == UploadPhase.NameConflict
 
-/** The total size is shown only when every file's size is known; a partial sum would mislead. */
 @Composable
-private fun sectionTitle(title: Int, entries: List<UploadEntry>, sizes: Map<String, Long>): String {
-    val known = entries.mapNotNull { sizes[it.item.selection.contentUri] }
-    return if (known.size == entries.size) {
-        stringResource(
-            R.string.uploads_section_count_size,
-            stringResource(title),
-            entries.size,
-            fileSize(known.sum()),
-        )
-    } else {
-        stringResource(R.string.uploads_section_count, stringResource(title), entries.size)
-    }
-}
+private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
+    stringResource(
+        R.string.uploads_section_count_size,
+        stringResource(title),
+        entries.size,
+        fileSize(entries.sumOf { it.item.selection.local.sizeBytes }),
+    )
 
 @Composable
 private fun SectionHeader(title: String, action: String? = null, onAction: () -> Unit = {}) {
@@ -195,14 +179,18 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
 }
 
 @Composable
-private fun UploadingRow(entry: UploadEntry, size: Long?) {
+private fun UploadingRow(entry: UploadEntry) {
     val percent = entry.state.percent
+    val size = entry.item.selection.local.sizeBytes
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumbnail(entry.item, 36)
+        LocalThumbnail(
+            entry.item.selection.local,
+            Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)),
+        )
         Column(Modifier.weight(1f)) {
             FileName(entry.item)
             Row(
@@ -218,19 +206,17 @@ private fun UploadingRow(entry: UploadEntry, size: Long?) {
                         percent / 100f
                     }, bar)
                 }
-                val sent = when {
-                    percent != null && size != null ->
+                SizeText(
+                    if (percent == null) {
+                        fileSize(size)
+                    } else {
                         stringResource(
                             R.string.uploads_sent,
                             fileSize(size * percent / 100),
                             fileSize(size),
                         )
-
-                    percent != null -> stringResource(R.string.uploads_percent, percent)
-
-                    else -> size?.let { fileSize(it) }
-                }
-                if (sent != null) SizeText(sent)
+                    },
+                )
             }
         }
         CancelButton(entry.item)
@@ -238,7 +224,7 @@ private fun UploadingRow(entry: UploadEntry, size: Long?) {
 }
 
 @Composable
-private fun UploadRow(entry: UploadEntry, size: Long?) {
+private fun UploadRow(entry: UploadEntry) {
     val phase = entry.state.phase
     val problem = when (phase) {
         UploadPhase.Failed -> stringResource(R.string.uploads_failed, entry.state.failure.orEmpty())
@@ -254,7 +240,10 @@ private fun UploadRow(entry: UploadEntry, size: Long?) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumbnail(entry.item, 32)
+        LocalThumbnail(
+            entry.item.selection.local,
+            Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
+        )
         Column(Modifier.weight(1f)) {
             FileName(entry.item)
             if (problem != null) {
@@ -267,7 +256,7 @@ private fun UploadRow(entry: UploadEntry, size: Long?) {
                 )
             }
         }
-        size?.let { SizeText(fileSize(it)) }
+        SizeText(fileSize(entry.item.selection.local.sizeBytes))
         if (phase.terminal) StatusIcon(entry.state) else CancelButton(entry.item)
     }
 }
@@ -328,16 +317,6 @@ private fun CancelButton(item: UploadItem) {
 }
 
 @Composable
-private fun Thumbnail(item: UploadItem, size: Int) {
-    AsyncImage(
-        model = item.selection.contentUri,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = Modifier.size(size.dp).clip(RoundedCornerShape(6.dp)),
-    )
-}
-
-@Composable
 private fun FileName(item: UploadItem) {
     Text(
         item.selection.displayName,
@@ -359,26 +338,3 @@ private fun SizeText(text: String) {
 @Composable
 private fun fileSize(bytes: Long): String =
     Formatter.formatShortFileSize(LocalContext.current, bytes)
-
-/** Sizes come from MediaStore off the main thread; a file it no longer knows simply has no size. */
-@Composable
-private fun rememberFileSizes(items: List<UploadItem>): Map<String, Long> {
-    val resolver = LocalContext.current.contentResolver
-    val sizes = remember { mutableStateMapOf<String, Long>() }
-    LaunchedEffect(items) {
-        val missing = items.map { it.selection.contentUri }.distinct().filterNot(sizes::containsKey)
-        if (missing.isEmpty()) return@LaunchedEffect
-        val found = withContext(Dispatchers.IO) {
-            missing.mapNotNull { uri -> resolver.size(uri)?.let { uri to it } }
-        }
-        sizes.putAll(found)
-    }
-    return sizes
-}
-
-private fun ContentResolver.size(uri: String): Long? =
-    runCatching {
-        query(uri.toUri(), arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
-        }
-    }.getOrNull()

@@ -174,6 +174,7 @@ class TimelineSnapshotAssemblerTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/7",
                 modifiedAtEpochSeconds = null,
+                sizeBytes = 1,
             ),
         )
 
@@ -192,6 +193,7 @@ class TimelineSnapshotAssemblerTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/7",
                 modifiedAtEpochSeconds = null,
+                sizeBytes = 1,
             ),
         )
 

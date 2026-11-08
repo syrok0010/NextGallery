@@ -108,6 +108,7 @@ class TimelineScrollAnchorControllerTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
                 modifiedAtEpochSeconds = 1_728_000_100,
+                sizeBytes = 1,
             ),
         )
         val initialItems = gridItems(local)

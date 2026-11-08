@@ -46,7 +46,7 @@ class UnifiedTimelineProjectionPersistenceTest {
         runBlocking {
             val local = item(
                 mediaId = MediaId("published-local"),
-                assetRef = MediaAssetRef.LocalContent("content://images/42", 1_700_000_000),
+                assetRef = MediaAssetRef.LocalContent("content://images/42", 1_700_000_000, 1),
             )
             RoomMediaIdentityRegistry(database).resolve(listOf(local.identityCandidate()))
 
@@ -76,13 +76,13 @@ class UnifiedTimelineProjectionPersistenceTest {
         runBlocking {
             val first = item(
                 mediaId = MediaId("local-first"),
-                assetRef = MediaAssetRef.LocalContent("content://images/1", 1_700_000_000),
+                assetRef = MediaAssetRef.LocalContent("content://images/1", 1_700_000_000, 1),
                 auid = "first-auid",
                 buid = "first-buid",
             )
             val second = item(
                 mediaId = MediaId("local-second"),
-                assetRef = MediaAssetRef.LocalContent("content://images/2", 1_700_000_000),
+                assetRef = MediaAssetRef.LocalContent("content://images/2", 1_700_000_000, 1),
                 auid = "second-auid",
                 buid = "second-buid",
             )

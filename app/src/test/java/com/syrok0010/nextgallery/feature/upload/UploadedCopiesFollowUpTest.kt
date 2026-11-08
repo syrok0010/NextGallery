@@ -198,7 +198,7 @@ class UploadedCopiesFollowUpTest {
     }
 
     private fun localItem(mediaId: MediaId) =
-        item(mediaId, LOCAL_AUID, LOCAL_BUID, MediaAssetRef.LocalContent(CONTENT_URI, TAKEN_AT))
+        item(mediaId, LOCAL_AUID, LOCAL_BUID, MediaAssetRef.LocalContent(CONTENT_URI, TAKEN_AT, 1))
 
     private fun remoteItem(mediaId: MediaId, fileId: Long = FILE_ID) =
         item(mediaId, auid = null, buid = null, MediaAssetRef.MemoriesFile(fileId))
@@ -227,7 +227,8 @@ class UploadedCopiesFollowUpTest {
     private companion object {
         const val CONTENT_URI = "content://media/external/images/media/42"
         const val OTHER_CONTENT_URI = "content://media/external/images/media/43"
-        val SELECTION = UploadSelection(CONTENT_URI, "a.jpg", "image/jpeg")
+        val SELECTION =
+            UploadSelection(MediaAssetRef.LocalContent(CONTENT_URI, 1, 1), "a.jpg", "image/jpeg")
         const val FILE_ID = 183L
         const val SECOND_FILE_ID = 190L
         const val TAKEN_AT = 1_716_900_000L

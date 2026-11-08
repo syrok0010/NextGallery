@@ -96,7 +96,7 @@ class MediaContractTest {
         val item =
             item(
                 MediaAssetRef.LocalFirst(
-                    MediaAssetRef.LocalContent("content://media/1", 1),
+                    MediaAssetRef.LocalContent("content://media/1", 1, 1),
                     MediaAssetRef.MemoriesFile(42),
                 ),
             )

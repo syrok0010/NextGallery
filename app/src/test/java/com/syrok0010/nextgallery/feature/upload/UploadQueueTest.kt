@@ -309,9 +309,9 @@ class UploadQueueTest {
     private fun ids(vararg names: String) = names.map(::MediaId)
 
     private fun files(vararg names: String) =
-        names.map { UploadSelection("content://media/$it", "$it.jpg", "image/jpeg") }
+        names.map { UploadSelection(MediaAssetRef.LocalContent("content://media/$it", 1, 1), "$it.jpg", "image/jpeg") }
 
-    private fun local(name: String) = MediaAssetRef.LocalContent("content://media/$name", 1)
+    private fun local(name: String) = MediaAssetRef.LocalContent("content://media/$name", 1, 1)
 
     private fun item(name: String, asset: MediaAssetRef) =
         MediaItem(

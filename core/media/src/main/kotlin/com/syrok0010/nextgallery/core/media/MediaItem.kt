@@ -33,8 +33,11 @@ data class MediaItem(
 sealed interface MediaAssetRef {
     data class MemoriesFile(val photoFileId: Long) : MediaAssetRef
 
-    data class LocalContent(val contentUri: String, val modifiedAtEpochSeconds: Long?) :
-        MediaAssetRef
+    data class LocalContent(
+        val contentUri: String,
+        val modifiedAtEpochSeconds: Long?,
+        val sizeBytes: Long,
+    ) : MediaAssetRef
 
     data class LocalFirst(val local: LocalContent, val remote: MemoriesFile) : MediaAssetRef
 }

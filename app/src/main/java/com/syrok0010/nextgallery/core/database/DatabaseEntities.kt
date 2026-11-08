@@ -90,6 +90,7 @@ data class LocalMediaEntity(
     val height: Int?,
     val takenAtEpochSeconds: Long,
     val modifiedAtEpochSeconds: Long?,
+    val sizeBytes: Long,
     val isVideo: Boolean,
     val videoDurationSeconds: Long?,
     val auid: String?,

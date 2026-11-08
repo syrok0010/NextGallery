@@ -278,7 +278,7 @@ class QueuedUploadsTest {
                 videoDurationSeconds = null,
                 isFavorite = false,
                 isHidden = false,
-                assetRef = MediaAssetRef.LocalContent(contentUri, 1),
+                assetRef = MediaAssetRef.LocalContent(contentUri, 1, 1),
             )
     }
 }

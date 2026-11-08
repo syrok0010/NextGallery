@@ -77,6 +77,7 @@ class ViewerSequenceMemoizationTest {
                 local = MediaAssetRef.LocalContent(
                     contentUri = "content://media/current",
                     modifiedAtEpochSeconds = 123,
+                    sizeBytes = 1,
                 ),
                 remote = MediaAssetRef.MemoriesFile(photoFileId = 22),
             ),

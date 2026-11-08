@@ -66,7 +66,7 @@ class MediaCollectionSelectionTest {
         mimeType = "image/jpeg", width = 100, height = 100, etag = null, livePhotoId = null,
         auid = null, buid = null, sharedBy = null, takenAtEpochSeconds = null, isVideo = false,
         videoDurationSeconds = null, isFavorite = false, isHidden = false,
-        assetRef = MediaAssetRef.LocalContent("content://selection/first", null),
+        assetRef = MediaAssetRef.LocalContent("content://selection/first", null, 1),
     )
     private val second = first.copy(
         mediaId = MediaId("selection-second"),

@@ -37,6 +37,7 @@ class MediaAssetImageTest {
             val localAsset = MediaAssetRef.LocalContent(
                 contentUri = "content://missing/images/42",
                 modifiedAtEpochSeconds = 1_700_000_000,
+                sizeBytes = 1,
             )
             val local = mediaItem(localAsset).copy(
                 mediaId = MediaId("published-local"),

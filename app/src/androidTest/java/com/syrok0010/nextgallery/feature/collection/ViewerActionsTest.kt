@@ -195,7 +195,7 @@ class ViewerActionsTest {
             mimeType = "image/jpeg", width = 100, height = 100, etag = null, livePhotoId = null,
             auid = null, buid = null, sharedBy = null, takenAtEpochSeconds = null, isVideo = false,
             videoDurationSeconds = null, isFavorite = false, isHidden = false,
-            assetRef = MediaAssetRef.LocalContent("content://viewer/first", null),
+            assetRef = MediaAssetRef.LocalContent("content://viewer/first", null, 1),
         )
         private val middle = first.copy(
             mediaId = MediaId("viewer-middle"),
@@ -206,7 +206,7 @@ class ViewerActionsTest {
             mediaId = MediaId("viewer-last"),
             displayName = "last.jpg",
             assetRef = MediaAssetRef.LocalFirst(
-                MediaAssetRef.LocalContent("content://viewer/last", null),
+                MediaAssetRef.LocalContent("content://viewer/last", null, 1),
                 MediaAssetRef.MemoriesFile(3),
             ),
         )

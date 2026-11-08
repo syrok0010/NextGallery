@@ -102,7 +102,7 @@ class AuthenticatedVideoSourceTest {
     }
 
     @Test fun `source plan prefers local and exposes only one remote fallback`() {
-        val local = MediaAssetRef.LocalContent("content://media/42", null)
+        val local = MediaAssetRef.LocalContent("content://media/42", null, 1)
         val remote = MediaAssetRef.MemoriesFile(42)
         assertEquals(VideoSources(local.contentUri), VideoSources.from(local))
         assertEquals(VideoSources(local.contentUri, VideoSources.from(remote, "https://cloud.example").primary, RemoteVideoOriginal(42, "https://cloud.example")), VideoSources.from(MediaAssetRef.LocalFirst(local, remote), "https://cloud.example"))

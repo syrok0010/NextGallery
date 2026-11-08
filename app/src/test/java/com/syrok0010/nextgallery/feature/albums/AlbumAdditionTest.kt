@@ -119,7 +119,7 @@ class AlbumAdditionTest {
                     uploads.waiting.first { it.isNotEmpty() }
                     mkcolBeforeSubmit = fixture.requests.any { it.method == "MKCOL" }
                 }
-                val local = UploadSelection("content://media/local", "local.jpg", "image/jpeg")
+                val local = UploadSelection(MediaAssetRef.LocalContent("content://media/local", 1, 1), "local.jpg", "image/jpeg")
                 val accepted = additions.add(
                     AlbumTarget.New("Поход"),
                     AlbumAdditionRequest(listOf(1L), listOf(MediaId("local"))),
@@ -204,7 +204,7 @@ class AlbumAdditionTest {
         override fun clear() = Unit
     }
 
-    private fun local(id: String) = MediaAssetRef.LocalContent("content://media/$id", 1)
+    private fun local(id: String) = MediaAssetRef.LocalContent("content://media/$id", 1, 1)
 
     private fun item(id: String, asset: MediaAssetRef) =
         MediaItem(

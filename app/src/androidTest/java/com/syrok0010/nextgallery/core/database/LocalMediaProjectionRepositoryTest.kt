@@ -160,6 +160,7 @@ class LocalMediaProjectionRepositoryTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = contentUri,
                 modifiedAtEpochSeconds = modifiedAtEpochSeconds,
+                sizeBytes = 1,
             ),
         )
     }

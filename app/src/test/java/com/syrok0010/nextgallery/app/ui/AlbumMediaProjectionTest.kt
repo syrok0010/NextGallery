@@ -17,7 +17,7 @@ class AlbumMediaProjectionTest {
     private val local = remote.copy(
         dayId = 19,
         takenAtEpochSeconds = 1_641_600,
-        assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7", 100),
+        assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/7", 100, 1),
     )
 
     @Test fun `folder keeps canonical cloud date and both copies without importing other media`() {

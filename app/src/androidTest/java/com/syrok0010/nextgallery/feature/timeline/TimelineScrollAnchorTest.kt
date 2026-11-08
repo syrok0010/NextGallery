@@ -123,6 +123,7 @@ class TimelineScrollAnchorTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
                 modifiedAtEpochSeconds = 1_728_000_100L,
+                sizeBytes = 1,
             ),
         )
         initialMedia[anchorIndex] = local

@@ -89,6 +89,20 @@ internal fun MediaAssetImage(
     }
 }
 
+/** A phone copy known without its media item, e.g. a queued upload; shares the grid tile cache. */
+@Composable
+internal fun LocalThumbnail(local: MediaAssetRef.LocalContent, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    AsyncImage(
+        model = remember(context, local) {
+            localRequest(context, local, MediaImagePurpose.TimelineThumbnail)
+        },
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = ContentScale.Crop,
+    )
+}
+
 @Composable
 internal fun rememberFallbackImageRequest(
     context: Context,

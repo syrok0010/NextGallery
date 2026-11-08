@@ -96,7 +96,7 @@ class AndroidMediaStoreReader(
                     mimeType = cursor.nullableString(mimeColumn),
                     width = orientedWidth,
                     height = orientedHeight,
-                    sizeBytes = cursor.nullableLong(sizeColumn),
+                    sizeBytes = cursor.getLong(sizeColumn),
                     dateTakenMillis = dateTakenMillis,
                     memoriesTimelineEpochSeconds = null,
                     imageUniqueId = null,

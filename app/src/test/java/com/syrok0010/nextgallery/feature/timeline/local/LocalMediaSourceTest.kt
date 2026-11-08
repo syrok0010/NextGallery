@@ -150,6 +150,7 @@ class LocalMediaSourceTest {
             MediaAssetRef.LocalContent(
                 contentUri = "content://video/2",
                 modifiedAtEpochSeconds = 250,
+                sizeBytes = 1_000,
             ),
             finalState.items[1].assetRef,
         )
@@ -535,7 +536,7 @@ class LocalMediaSourceTest {
         videoDurationSeconds = null,
         isFavorite = false,
         isHidden = false,
-        assetRef = MediaAssetRef.LocalContent(uri, timestamp),
+        assetRef = MediaAssetRef.LocalContent(uri, timestamp, 1),
     )
 }
 
