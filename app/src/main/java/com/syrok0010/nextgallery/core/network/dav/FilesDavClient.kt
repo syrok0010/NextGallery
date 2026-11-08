@@ -43,30 +43,15 @@ class FilesDavClient(
     }
 
     /** `PROPFIND Depth: 0` of the file; null when it is missing. */
-    suspend fun properties(file: DavFilePath): DavFileProperties? =
-        withContext(Dispatchers.IO) {
-            val credentials = credentials()
-            val request = transport
-                .authenticatedRequestBuilder(
-                    credentials,
-                    file.url(credentials.serverUrl).toString(),
-                    accept = "application/xml",
-                ).method(
-                    PROPFIND,
-                    encodeDav(PropFind()).toRequestBody(XML_MEDIA_TYPE.toMediaType()),
-                ).header("Depth", "0")
-                .build()
-            transport.baseClient.newCall(request).awaitUse { response ->
-                when {
-                    response.code == 207 -> response.body?.byteStream()?.use(::fileProperties)
-                        ?: DavFileProperties(size = null, fileId = null, etag = null)
-
-                    response.code == 404 -> null
-
-                    else -> throw DavHttpException(response.code, PROPFIND)
-                }
-            }
-        }
+    suspend fun properties(file: DavFilePath): DavFileProperties? {
+        val credentials = credentials()
+        return transport.propfind(
+            credentials,
+            file.url(credentials.serverUrl),
+            depth = 0,
+            ::fileProperties,
+        )
+    }
 
     /**
      * `SEARCH` for the file with [fileId] in the user's files; null when none has it. Nextcloud
@@ -150,7 +135,6 @@ class FilesDavClient(
         const val PUT = "PUT"
         const val GET = "GET"
         const val DELETE = "DELETE"
-        const val PROPFIND = "PROPFIND"
         const val SEARCH = "SEARCH"
         const val XML_MEDIA_TYPE = "application/xml; charset=utf-8"
     }
