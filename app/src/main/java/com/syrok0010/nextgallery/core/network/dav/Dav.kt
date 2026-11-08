@@ -3,16 +3,21 @@ package com.syrok0010.nextgallery.core.network.dav
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.io.IOException
+import java.io.InputStream
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 
@@ -69,6 +74,32 @@ internal suspend fun NextcloudTransport.dav(
         DavResponse(response.code, response.headers)
     }
 }
+
+/** `PROPFIND` of [FileProps] at [url]; [read] parses the multistatus body, null on 404. */
+internal suspend fun <T : Any> NextcloudTransport.propfind(
+    credentials: AccountCredentials,
+    url: HttpUrl,
+    depth: Int,
+    read: (InputStream) -> T,
+): T? =
+    withContext(Dispatchers.IO) {
+        val request = authenticatedRequestBuilder(
+            credentials,
+            url.toString(),
+            accept = "application/xml",
+        ).method(
+            "PROPFIND",
+            encodeDav(PropFind()).toRequestBody("application/xml; charset=utf-8".toMediaType()),
+        ).header("Depth", depth.toString())
+            .build()
+        baseClient.newCall(request).awaitUse { response ->
+            when (response.code) {
+                207 -> response.body?.byteStream()?.use(read) ?: throw IOException("No DAV body")
+                404 -> null
+                else -> throw DavHttpException(response.code, "PROPFIND")
+            }
+        }
+    }
 
 internal fun davRoot(serverUrl: String): HttpUrl.Builder =
     NextcloudTransport

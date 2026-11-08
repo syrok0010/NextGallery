@@ -2,12 +2,7 @@ package com.syrok0010.nextgallery.core.network.dav
 
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import java.io.IOException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 
 enum class CreateAlbumResult { Created, AlreadyExists }
 
@@ -50,42 +45,19 @@ class PhotosAlbumsDavClient(
     }
 
     /** Checks exact membership by file id without issuing a second COPY. */
-    suspend fun containsFile(album: AlbumPath, fileId: Long): Boolean =
-        withContext(Dispatchers.IO) {
-            val account = credentials()
-            val request = transport
-                .authenticatedRequestBuilder(
-                    account,
-                    albumUrl(account.serverUrl, album).toString(),
-                    accept = "application/xml",
-                ).method(
-                    PROPFIND,
-                    encodeDav(PropFind()).toRequestBody(XML_MEDIA_TYPE.toMediaType()),
-                ).header("Depth", "1")
-                .build()
-            transport.baseClient.newCall(request).awaitUse { response ->
-                when {
-                    response.code == 404 -> false
-
-                    response.code != 207 -> throw DavHttpException(response.code, PROPFIND)
-
-                    else -> {
-                        val body = response.body?.byteStream() ?: throw IOException("No DAV body")
-                        body.use {
-                            decodeMultistatus(it).responses.any { member ->
-                                member.propstats
-                                    .firstOrNull(
-                                        PropStat::found,
-                                    )?.prop
-                                    ?.fileId
-                                    ?.trim()
-                                    ?.toLongOrNull() == fileId
-                            }
-                        }
-                    }
-                }
+    suspend fun containsFile(album: AlbumPath, fileId: Long): Boolean {
+        val account = credentials()
+        return transport.propfind(account, albumUrl(account.serverUrl, album), depth = 1) { body ->
+            decodeMultistatus(body).responses.any { member ->
+                member.propstats
+                    .firstOrNull(PropStat::found)
+                    ?.prop
+                    ?.fileId
+                    ?.trim()
+                    ?.toLongOrNull() == fileId
             }
-        }
+        } ?: false
+    }
 
     /** Copies [file] into [album] under its own name; the album deduplicates by file id. */
     suspend fun addFile(album: AlbumPath, file: DavFilePath): AddToAlbumResult {
@@ -120,6 +92,5 @@ class PhotosAlbumsDavClient(
         const val MKCOL = "MKCOL"
         const val PROPFIND = "PROPFIND"
         const val COPY = "COPY"
-        const val XML_MEDIA_TYPE = "application/xml; charset=utf-8"
     }
 }
