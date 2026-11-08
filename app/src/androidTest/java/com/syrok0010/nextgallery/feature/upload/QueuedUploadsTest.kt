@@ -33,7 +33,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -50,7 +49,7 @@ class QueuedUploadsTest {
     private val db by lazy { UploadQueueDatabase.open(context, "queued-uploads-ui-test.db") }
     private val queue by lazy {
         UploadQueue(SessionStore(SignedIn), library, scope, UploadJournal(db),
-            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _, _ -> true }, {})
+            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _ -> true }, {})
     }
     private var starts = 0
     private val registry = PermissionRegistry()
@@ -85,27 +84,22 @@ class QueuedUploadsTest {
     }
 
     @Test
-    fun denialStartsWaitingBatchOnceAndDoesNotAskAgain() {
+    fun denialStartsWaitingJobsOnceAndDoesNotAskAgain() {
         showQueuedUploads()
         submit(BATCH)
+        rule.waitUntil(5_000) { registry.requests.size == 1 }
         rule.runOnIdle {
-            assertEquals(1, registry.requests.size)
             assertEquals(0, starts)
             registry.dispatchResult(registry.requests.single(), false)
         }
-        rule.runOnIdle {
-            assertEquals(1, starts)
-            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
-        }
+        rule.waitUntil(5_000) { starts == 1 }
         submit(BATCH)
-        rule.runOnIdle {
-            assertEquals(1, registry.requests.size)
-            assertEquals(2, starts)
-        }
+        rule.waitUntil(5_000) { starts == 2 }
+        rule.runOnIdle { assertEquals(1, registry.requests.size) }
     }
 
     @Test
-    fun waitingBatchSurvivesRecreationAndDuplicatePermissionResult() {
+    fun waitingJobsSurviveRecreationAndDuplicatePermissionResult() {
         val restoration = StateRestorationTester(rule)
         restoration.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner, LocalContext provides permissionContext) {
@@ -113,14 +107,12 @@ class QueuedUploadsTest {
             }
         }
         submit(BATCH)
-        rule.waitForIdle()
+        rule.waitUntil(5_000) { registry.requests.size == 1 }
         restoration.emulateSavedInstanceStateRestore()
         rule.runOnIdle { registry.dispatchResult(registry.requests.single(), true) }
         rule.runOnIdle { registry.dispatchResult(registry.requests.single(), true) }
-        rule.runOnIdle {
-            assertEquals(1, registry.requests.size)
-            assertEquals(1, starts)
-        }
+        rule.waitUntil(5_000) { starts == 1 }
+        rule.runOnIdle { assertEquals(1, registry.requests.size) }
     }
 
     @Test
@@ -128,14 +120,23 @@ class QueuedUploadsTest {
         notificationsGranted = true
         showQueuedUploads()
         submit(BATCH)
-        rule.runOnIdle {
-            assertEquals(emptyList<Int>(), registry.requests)
-            assertEquals(1, starts)
-        }
+        rule.waitUntil(5_000) { starts == 1 }
+        rule.runOnIdle { assertEquals(emptyList<Int>(), registry.requests) }
     }
 
     @Test
-    fun refusedStartKeepsBatchUntilAppIsVisibleAgain() {
+    fun jobQueuedWhileTheServiceRunsStartsItAgain() {
+        notificationsGranted = true
+        showQueuedUploads()
+        submit(BATCH)
+        rule.waitUntil(5_000) { starts == 1 }
+        submit(OTHER)
+        rule.waitUntil(5_000) { starts == 2 }
+        rule.runOnIdle { assertEquals(3, queue.waiting.value.size) }
+    }
+
+    @Test
+    fun refusedStartKeepsJobsUntilAppIsVisibleAgain() {
         notificationsGranted = true
         var refuse = true
         val screen = Screen()
@@ -153,70 +154,17 @@ class QueuedUploadsTest {
             }
         }
         submit(BATCH)
-        rule.runOnIdle {
-            assertEquals(1, starts)
-            assertEquals(listOf(BATCH.files), queue.waiting.value.map { batch -> batch.files.map { it.copy(stamp = null) } })
-            assertNull(queue.next())
-        }
+        rule.waitUntil(5_000) { starts == 1 }
         submit(OTHER)
+        rule.waitUntil(5_000) { queue.waiting.value.size == 3 }
         rule.runOnIdle { assertEquals("no retries while the screen stays visible", 1, starts) }
 
         refuse = false
         rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.CREATED }
         rule.runOnIdle { assertEquals(1, starts) }
         rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
-        rule.runOnIdle {
-            assertEquals("one start for all waiting batches", 2, starts)
-            assertEquals(emptyList<UploadBatch>(), queue.waiting.value)
-            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
-            assertEquals(OTHER.files, queue.next()?.files?.map { it.copy(stamp = null) })
-            assertNull(queue.next())
-        }
-    }
-
-    @Test
-    fun foregroundEntryRefusalEndsTheOperationWithoutAutomaticRetries() {
-        notificationsGranted = true
-        var refuse = true
-        val screen = Screen()
-        rule.runOnUiThread { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
-        rule.setContent {
-            CompositionLocalProvider(
-                LocalActivityResultRegistryOwner provides owner,
-                LocalContext provides permissionContext,
-                LocalLifecycleOwner provides screen,
-            ) {
-                QueuedUploads(queue) {
-                    starts++
-                    // onStartCommand runs after startForegroundService has already returned.
-                }
-            }
-        }
-        submit(BATCH + OTHER)
-        rule.runOnIdle {
-            assertEquals(1, starts)
-            assertEquals(false, queue.enterForeground("Android refused foreground") {
-                if (refuse) throw IllegalStateException("dataSync quota exhausted")
-            })
-            assertNull(queue.next())
-        }
-        rule.waitUntil(5_000) { queue.batches.value.flatMap { it.items }.all { it.state.value.phase == UploadPhase.NeedsAttention } }
-        rule.runOnIdle {
-            assertNull(queue.activity.value)
-            assertEquals(3, queue.result.value?.files)
-        }
-        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.CREATED }
-        rule.runOnIdle { screen.lifecycle.currentState = Lifecycle.State.RESUMED }
-        rule.runOnIdle { assertEquals("failed work must not be retried automatically", 1, starts) }
-        refuse = false
-        submit(BATCH)
-        rule.runOnIdle {
-            assertEquals(2, starts)
-            assertEquals(true, queue.enterForeground("Android refused foreground") {
-                if (refuse) throw IllegalStateException("dataSync quota exhausted")
-            })
-            assertEquals(BATCH.files, queue.next()?.files?.map { it.copy(stamp = null) })
-        }
+        rule.waitUntil(5_000) { starts == 2 }
+        rule.runOnIdle { assertEquals("one start for all waiting jobs", 2, starts) }
     }
 
     private fun showQueuedUploads() {
@@ -254,8 +202,6 @@ class QueuedUploadsTest {
     }
 
     private fun submit(items: List<MediaItem>) = runBlocking { queue.submit(items.map { it.mediaId }) }
-
-    private val List<MediaItem>.files get() = mapNotNull(::uploadSelection)
 
     private object SignedIn : CredentialsStore {
         override fun load() = AccountCredentials("http://cloud", "anna", "secret", "anna")

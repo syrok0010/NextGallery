@@ -29,7 +29,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,36 +43,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.feature.images.LocalThumbnail
-import com.syrok0010.nextgallery.feature.upload.UploadItem
-import com.syrok0010.nextgallery.feature.upload.UploadItemState
+import com.syrok0010.nextgallery.feature.upload.UploadEntry
 import com.syrok0010.nextgallery.feature.upload.UploadPhase
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
+import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import org.koin.compose.koinInject
-
-private class UploadEntry(val item: UploadItem, val state: UploadItemState)
 
 /** Files grouped by status rather than by batch: batches are how files were sent, not what the user tracks. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
-    val items by queue.items.collectAsStateWithLifecycle()
-    val states by remember(items) {
-        if (items.isEmpty()) {
-            flowOf(
-                emptyList(),
-            )
-        } else {
-            combine(items.map { it.state }) { it.toList() }
-        }
-    }.collectAsStateWithLifecycle(items.map { it.state.value })
-    val entries = items.zip(states, ::UploadEntry)
-    val uploading = entries.filter { it.state.phase == UploadPhase.Uploading }
-    val waiting = entries.filter { it.state.phase == UploadPhase.Waiting }
+    val entries by queue.entries.collectAsStateWithLifecycle()
+    val uploading = entries.filter { it.phase == UploadPhase.Uploading }
+    val waiting = entries.filter { it.phase == UploadPhase.Waiting }
     // Files that need attention come before ordinary outcomes.
-    val done = entries.filter { it.state.phase.terminal }.sortedBy { !it.state.phase.problem }
+    val done = (entries - uploading.toSet() - waiting.toSet()).sortedBy {
+        it.problem == null && it.phase != UploadPhase.NameConflict
+    }
 
     Scaffold(
         topBar = {
@@ -113,8 +101,8 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 ) { SectionHeader(stringResource(R.string.uploads_section_uploading)) }
                 items(
                     uploading,
-                    key = { it.item.id },
-                ) { UploadingRow(it) { queue.cancel(it.item) } }
+                    key = { it.id },
+                ) { UploadingRow(it) { queue.cancel(it.id) } }
             }
             if (waiting.isNotEmpty()) {
                 item(key = "waiting") {
@@ -126,8 +114,8 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 }
                 items(
                     waiting,
-                    key = { it.item.id },
-                ) { UploadRow(it) { queue.cancel(it.item) } }
+                    key = { it.id },
+                ) { UploadRow(it) { queue.cancel(it.id) } }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
@@ -139,15 +127,12 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 }
                 items(
                     done,
-                    key = { it.item.id },
-                ) { UploadRow(it) { queue.cancel(it.item) } }
+                    key = { it.id },
+                ) { UploadRow(it) { queue.cancel(it.id) } }
             }
         }
     }
 }
-
-private val UploadPhase.problem: Boolean
-    get() = this == UploadPhase.Failed || this == UploadPhase.NeedsAttention || this == UploadPhase.NameConflict
 
 @Composable
 private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
@@ -155,7 +140,7 @@ private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
         R.string.uploads_section_count_size,
         stringResource(title),
         entries.size,
-        fileSize(entries.sumOf { it.item.selection.local.sizeBytes }),
+        fileSize(entries.sumOf { it.selection.local.sizeBytes }),
     )
 
 @Composable
@@ -180,19 +165,19 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
 
 @Composable
 private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
-    val percent = entry.state.percent
-    val size = entry.item.selection.local.sizeBytes
+    val percent = entry.percent
+    val size = entry.selection.local.sizeBytes
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LocalThumbnail(
-            entry.item.selection.local,
+            entry.selection.local,
             Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)),
         )
         Column(Modifier.weight(1f)) {
-            FileName(entry.item)
+            FileName(entry.selection)
             Row(
                 Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -225,11 +210,10 @@ private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
 
 @Composable
 private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
-    val phase = entry.state.phase
-    val problem = when (phase) {
-        UploadPhase.Failed, UploadPhase.NeedsAttention ->
-            stringResource(R.string.uploads_failed, entry.state.failure.orEmpty())
-        UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
+    val phase = entry.phase
+    val problem = when {
+        entry.problem != null -> stringResource(R.string.uploads_failed, entry.problem.asString())
+        phase == UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
         else -> null
     }
     Row(
@@ -242,11 +226,11 @@ private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LocalThumbnail(
-            entry.item.selection.local,
+            entry.selection.local,
             Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
         )
         Column(Modifier.weight(1f)) {
-            FileName(entry.item)
+            FileName(entry.selection)
             if (problem != null) {
                 Text(
                     problem,
@@ -257,20 +241,15 @@ private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
                 )
             }
         }
-        SizeText(fileSize(entry.item.selection.local.sizeBytes))
-        // A file waiting for attention or for its follow-up blocks logout, so it stays cancellable.
-        if (!phase.terminal || entry.state.attention || entry.state.pendingAction) {
-            CancelButton(onCancel)
-        } else {
-            StatusIcon(entry.state)
-        }
+        SizeText(fileSize(entry.selection.local.sizeBytes))
+        if (entry.cancellable) CancelButton(onCancel) else StatusIcon(entry)
     }
 }
 
 @Composable
-private fun StatusIcon(state: UploadItemState) {
+private fun StatusIcon(entry: UploadEntry) {
     val colors = MaterialTheme.colorScheme
-    val (painter: Painter, tint: Color, description: String) = when (state.phase) {
+    val (painter: Painter, tint: Color, description: String) = when (entry.phase) {
         UploadPhase.Uploaded ->
             Triple(
                 painterResource(R.drawable.ic_check),
@@ -292,10 +271,10 @@ private fun StatusIcon(state: UploadItemState) {
                 stringResource(R.string.uploads_conflict),
             )
 
-        UploadPhase.Failed, UploadPhase.NeedsAttention -> Triple(
+        UploadPhase.NeedsAttention -> Triple(
             painterResource(R.drawable.ic_error),
             colors.error,
-            stringResource(R.string.uploads_failed, state.failure.orEmpty()),
+            stringResource(R.string.uploads_failed, entry.problem?.asString().orEmpty()),
         )
 
         else -> Triple(
@@ -323,9 +302,9 @@ private fun CancelButton(onCancel: () -> Unit) {
 }
 
 @Composable
-private fun FileName(item: UploadItem) {
+private fun FileName(selection: UploadSelection) {
     Text(
-        item.selection.displayName,
+        selection.displayName,
         style = MaterialTheme.typography.bodyMedium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

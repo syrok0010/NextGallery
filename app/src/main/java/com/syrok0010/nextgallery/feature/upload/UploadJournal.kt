@@ -2,102 +2,103 @@ package com.syrok0010.nextgallery.feature.upload
 
 import android.content.Context
 import androidx.room.*
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
-import com.syrok0010.nextgallery.core.session.AccountCredentials
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import kotlinx.serialization.json.Json
 
-/** Opaque login token plus the actual account address; never app passwords. */
-internal val AccountCredentials.uploadOwner: String
-    get() = uploadJson.encodeToString(QueueOwner(ownerToken, serverUrl.toHttpUrl().toString().trimEnd('/'), userId))
+/** Jobs belong to an account. Logout needs an empty queue and clears the journal. */
+internal val AccountCredentials.uploadOwner: String get() = "${serverUrl.trimEnd('/')}#$userId"
 
-@Serializable
-private data class QueueOwner(val token: String, val server: String, val uid: String, val version: Int = 1)
-
-@Serializable
-internal data class UploadIntent(val kind: String, val version: Int = 1, val owner: String = "", val target: String = "")
-
+/** Metadata of the phone file when it was queued; a different value later means it changed. */
 @Serializable
 internal data class SourceStamp(val size: Long, val modified: Long?, val generation: Long?)
 
+/** Album the user picked; the file is added to it once uploaded. */
 @Serializable
-internal data class UploadReceipt(
-    /** `DavFilePath.segments` in the files root of the queue owner. */
-    val path: List<String>,
-    val created: Boolean,
-    val fileId: Long?,
-    val version: Int = 1,
-)
+internal data class UploadAlbum(val owner: String, val name: String)
+
+/** The file is on the server at [path] (`DavFilePath.segments`): uploaded now ([created]) or found with the same bytes. */
+@Serializable
+internal data class UploadReceipt(val path: List<String>, val created: Boolean, val fileId: Long?)
 
 internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
+
 internal enum class StepState { None, Pending, Running, Done, Attention, Suppressed }
-internal enum class UploadProblem { Source, Transfer, Foreground, Link, Album, Format, Directory, Http }
 
-@Entity(tableName = "upload_owner")
-internal data class UploadOwner(@PrimaryKey val slot: Int = 1, val token: String?)
+/** Why a job needs the user; shown on the uploads screen and in the result. */
+internal enum class UploadProblem { Source, Network, Timeline, Directory, Http, Memories, Unexpected, Link, Album }
 
-@Entity(tableName = "upload_jobs", indices = [Index(value = ["owner", "requestId", "position"], unique = true)])
+/**
+ * One file of a manual upload. [executor] is the process running it, [revision] fences writes of
+ * a claim that was taken away meanwhile. Link and album steps run only after the [receipt].
+ */
+@Entity(tableName = "upload_jobs")
 internal data class UploadJob(
     @PrimaryKey val id: String,
     val batchId: String,
     val owner: String,
-    val requestId: String,
-    val position: Int,
-    val selectionJson: String,
-    val intentsJson: String,
-    val state: String = TransferState.Pending.name,
-    val destinationJson: String? = null,
-    val receiptJson: String? = null,
-    val linkStep: String = StepState.None.name,
-    val albumStep: String = StepState.None.name,
-    val problem: String? = null,
+    val selection: UploadSelection,
+    val album: UploadAlbum? = null,
+    /** Files of one pass share one progress counter; a batch queued during a pass joins it. */
+    val passId: String,
+    val state: TransferState = TransferState.Pending,
+    /** Pinned original name, so a restart looks for an earlier copy under the same names. */
+    val destination: List<String>? = null,
+    val receipt: UploadReceipt? = null,
+    val linkStep: StepState = StepState.None,
+    val albumStep: StepState = StepState.None,
+    val problem: UploadProblem? = null,
     val httpStatus: Int? = null,
-    val passId: String = "",
-    val revision: Long = 0,
     val executor: String? = null,
-    val attempts: Int = 0,
-    // Scheduler/user preferences are deliberately not chosen in this slice.
-    val policyVersion: Int = 1,
+    val revision: Long = 0,
     val hidden: Boolean = false,
     val seen: Boolean = false,
 ) {
-    val selection get() = uploadJson.decodeFromString<UploadSelection>(selectionJson)
-    val intents get() = uploadJson.decodeFromString<List<UploadIntent>>(intentsJson)
-    val receipt get() = receiptJson?.let { uploadJson.decodeFromString<UploadReceipt>(it) }
-
-    /** Pinned original name as `DavFilePath.segments` in the files root of the queue owner. */
-    val destination get() = destinationJson?.let { uploadJson.decodeFromString<List<String>>(it) }
-    val unfinished get() = state in setOf("Pending", "Running", "Uncertain", "Attention") ||
-        linkStep in unfinishedSteps || albumStep in unfinishedSteps
-    val runnable get() = state in setOf("Pending", "Uncertain") ||
-        (receiptJson != null && (linkStep == "Pending" || albumStep == "Pending"))
-    val hasAttention get() = state == "Attention" || linkStep == "Attention" || albumStep == "Attention"
-    val hasResult get() = !unfinished || hasAttention
+    val unfinished: Boolean
+        get() = state in unfinishedStates || linkStep in unfinishedSteps || albumStep in unfinishedSteps
+    val runnable: Boolean
+        get() = state == TransferState.Pending || state == TransferState.Uncertain ||
+            (receipt != null && (linkStep == StepState.Pending || albumStep == StepState.Pending))
+    val hasAttention: Boolean
+        get() = state == TransferState.Attention || linkStep == StepState.Attention || albumStep == StepState.Attention
+    val hasResult: Boolean get() = !unfinished || hasAttention
 }
 
-private val unfinishedSteps = setOf("Pending", "Running", "Attention")
-internal val uploadJson = Json { ignoreUnknownKeys = false; encodeDefaults = true }
+private val unfinishedStates = setOf(TransferState.Pending, TransferState.Running, TransferState.Uncertain, TransferState.Attention)
+private val unfinishedSteps = setOf(StepState.Pending, StepState.Running, StepState.Attention)
+private val uploadJson = Json
+
+internal class UploadConverters {
+    @TypeConverter fun fromSelection(value: UploadSelection): String = uploadJson.encodeToString(value)
+    @TypeConverter fun toSelection(value: String): UploadSelection = uploadJson.decodeFromString(value)
+    @TypeConverter fun fromAlbum(value: UploadAlbum?): String? = value?.let(uploadJson::encodeToString)
+    @TypeConverter fun toAlbum(value: String?): UploadAlbum? = value?.let(uploadJson::decodeFromString)
+    @TypeConverter fun fromReceipt(value: UploadReceipt?): String? = value?.let(uploadJson::encodeToString)
+    @TypeConverter fun toReceipt(value: String?): UploadReceipt? = value?.let(uploadJson::decodeFromString)
+    @TypeConverter fun fromPath(value: List<String>?): String? = value?.let(uploadJson::encodeToString)
+    @TypeConverter fun toPath(value: String?): List<String>? = value?.let(uploadJson::decodeFromString)
+}
 
 @Dao
 internal interface UploadJournalDao {
-    @Query("SELECT * FROM upload_owner WHERE slot = 1") suspend fun owner(): UploadOwner?
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun owner(owner: UploadOwner)
     @Query("SELECT * FROM upload_jobs WHERE owner = :owner ORDER BY rowid") suspend fun jobs(owner: String): List<UploadJob>
     @Query("SELECT * FROM upload_jobs WHERE owner = :owner AND hidden = 0 ORDER BY rowid") fun observe(owner: String): Flow<List<UploadJob>>
     @Query("SELECT * FROM upload_jobs WHERE id = :id") suspend fun job(id: String): UploadJob?
     @Insert suspend fun insert(jobs: List<UploadJob>)
-    @Update suspend fun update(job: UploadJob)
+    @Update suspend fun update(jobs: List<UploadJob>)
     @Query("DELETE FROM upload_jobs") suspend fun clear()
 }
 
-@Database(entities = [UploadJob::class, UploadOwner::class], version = 1, exportSchema = true)
+@Database(entities = [UploadJob::class], version = 1, exportSchema = false)
+@TypeConverters(UploadConverters::class)
 internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao
+
     companion object {
+        /** Apart from the cache DB, which is rebuilt freely; a schema change still resets it, the app is not released yet. */
         fun open(context: Context, name: String = "upload-journal.db"): UploadQueueDatabase =
-            // The app is not released yet: a schema change resets the queue instead of migrating it.
             Room.databaseBuilder(context, UploadQueueDatabase::class.java, name)
                 .fallbackToDestructiveMigration(true)
                 .build()
@@ -110,49 +111,20 @@ internal sealed interface EnqueueResult {
     data object NothingToUpload : EnqueueResult
 }
 
-/** Durable protocol. Every mutation and its fencing check share one Room writer transaction. */
+/** Every change and its fencing check share one Room transaction. */
 internal class UploadJournal(private val db: UploadQueueDatabase) {
     private val dao = db.journal()
+
     fun observe(owner: String) = dao.observe(owner)
+
     suspend fun jobs(owner: String) = dao.jobs(owner)
 
-    suspend fun activate(owner: String?) = db.withTransaction {
-        // Missing credentials are not an explicit logout and must not erase accepted intents.
-        if (owner == null) return@withTransaction
-        if (dao.owner()?.token != owner) {
-            // The journal is account scoped, credentials live only in the secure session store.
-            dao.clear()
-            dao.owner(UploadOwner(token = owner))
-        }
-    }
-
-    suspend fun recover(owner: String, process: String) = db.withTransaction {
-        if (dao.owner()?.token != owner) return@withTransaction
-        dao.jobs(owner).filter { it.executor != null && it.executor != process }.forEach { old ->
-            dao.update(old.copy(
-                state = if (old.state == "Running") "Uncertain" else old.state,
-                linkStep = if (old.linkStep == "Running") "Pending" else old.linkStep,
-                // Pending album work never started; only a started COPY has an unknown outcome.
-                albumStep = if (old.albumStep == "Running") "Attention" else old.albumStep,
-                problem = if (old.albumStep == "Running") UploadProblem.Album.name else old.problem,
-                executor = null,
-                revision = old.revision + 1,
-            ))
-        }
-    }
-
-    suspend fun enqueue(owner: String, requestId: String, files: List<UploadSelection>, intents: List<UploadIntent>): EnqueueResult =
+    suspend fun enqueue(owner: String, files: List<UploadSelection>, album: UploadAlbum?): EnqueueResult =
         try {
             db.withTransaction {
-                if (dao.owner()?.token != owner || files.isEmpty()) return@withTransaction EnqueueResult.Rejected
-                val prior = dao.jobs(owner).filter { it.requestId == requestId }
-                if (prior.isNotEmpty()) return@withTransaction EnqueueResult.Accepted(prior.first().batchId, prior.size)
                 val batch = UUID.randomUUID().toString()
                 val pass = dao.jobs(owner).lastOrNull { it.runnable || it.executor != null }?.passId ?: UUID.randomUUID().toString()
-                dao.insert(files.mapIndexed { index, file ->
-                    UploadJob(UUID.randomUUID().toString(), batch, owner, requestId, index,
-                        uploadJson.encodeToString(file), uploadJson.encodeToString(intents), passId = pass)
-                })
+                dao.insert(files.map { UploadJob(UUID.randomUUID().toString(), batch, owner, it, album, pass) })
                 EnqueueResult.Accepted(batch, files.size)
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -161,78 +133,103 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
             EnqueueResult.Rejected
         }
 
-    suspend fun prior(owner: String, requestId: String): EnqueueResult.Accepted? =
-        dao.jobs(owner).filter { it.requestId == requestId }.takeIf { it.isNotEmpty() }?.let {
-            EnqueueResult.Accepted(it.first().batchId, it.size)
-        }
-
-    suspend fun claim(id: String, owner: String, process: String): UploadJob? = db.withTransaction {
-        val old = dao.job(id) ?: return@withTransaction null
-        if (dao.owner()?.token != owner || old.owner != owner || !old.runnable || old.executor != null) return@withTransaction null
-        old.copy(state = if (old.receiptJson == null) "Running" else old.state,
-            executor = process, revision = old.revision + 1, attempts = old.attempts + 1).also { dao.update(it) }
+    /** Takes the first runnable job nobody runs. */
+    suspend fun claimNext(owner: String, executor: String): UploadJob? = db.withTransaction {
+        val job = dao.jobs(owner).firstOrNull { it.runnable && it.executor == null } ?: return@withTransaction null
+        job.copy(
+            state = if (job.receipt == null) TransferState.Running else job.state,
+            executor = executor,
+            revision = job.revision + 1,
+        ).also { update(it) }
     }
 
-    private suspend fun mutate(claim: UploadJob, change: (UploadJob) -> UploadJob?): UploadJob? = db.withTransaction {
+    /**
+     * Gives up the claims of executors that match [executor]: a transfer that was on the wire has
+     * an unknown outcome, and so has a started album COPY. A link may run again.
+     */
+    suspend fun release(owner: String, executor: (String) -> Boolean) = db.withTransaction {
+        dao.update(dao.jobs(owner).filter { it.executor?.let(executor) == true }.map {
+            it.copy(
+                state = if (it.state == TransferState.Running) TransferState.Uncertain else it.state,
+                linkStep = if (it.linkStep == StepState.Running) StepState.Pending else it.linkStep,
+                albumStep = if (it.albumStep == StepState.Running) StepState.Attention else it.albumStep,
+                problem = if (it.albumStep == StepState.Running) UploadProblem.Album else it.problem,
+                seen = it.seen && it.albumStep != StepState.Running,
+                executor = null,
+                revision = it.revision + 1,
+            )
+        })
+    }
+
+    /** Applies [change] only while [claim] still holds the job and the user has not cancelled it. */
+    private suspend fun mutate(claim: UploadJob, change: (UploadJob) -> UploadJob): UploadJob? = db.withTransaction {
         val old = dao.job(claim.id) ?: return@withTransaction null
-        if (dao.owner()?.token != claim.owner || old.owner != claim.owner ||
-            old.executor != claim.executor || old.revision != claim.revision || old.state == "Cancelled") return@withTransaction null
-        change(old)?.also { dao.update(it) }
+        if (old.executor != claim.executor || old.revision != claim.revision || old.state == TransferState.Cancelled) {
+            return@withTransaction null
+        }
+        change(old).also { update(it) }
     }
 
-    suspend fun destination(claim: UploadJob, path: List<String>): UploadJob? =
-        mutate(claim) { it.copy(destinationJson = it.destinationJson ?: uploadJson.encodeToString(path)) }
+    suspend fun pin(claim: UploadJob, path: List<String>): UploadJob? = mutate(claim) { it.copy(destination = it.destination ?: path) }
 
     suspend fun accept(claim: UploadJob, receipt: UploadReceipt): UploadJob? = mutate(claim) {
-        if (it.receiptJson != null || it.state != "Running") null else it.copy(state = "Accepted", receiptJson = uploadJson.encodeToString(receipt),
-            linkStep = "Pending", albumStep = if (it.intents.any { intent -> intent.kind == "album" }) "Pending" else "None")
+        it.copy(
+            state = TransferState.Accepted,
+            receipt = receipt,
+            linkStep = StepState.Pending,
+            albumStep = if (it.album != null) StepState.Pending else StepState.None,
+        )
     }
 
-    suspend fun problem(claim: UploadJob, problem: UploadProblem, conflict: Boolean = false, httpStatus: Int? = null) =
-        mutate(claim) { it.copy(state = if (conflict) "Conflict" else "Attention", problem = problem.name, httpStatus = httpStatus, executor = null, seen = false) }
-
-    suspend fun step(claim: UploadJob, kind: String, state: StepState): UploadJob? = mutate(claim) {
-        if (kind == "link") it.copy(linkStep = state.name, seen = false) else it.copy(albumStep = state.name, seen = false)
-    }
-    suspend fun release(claim: UploadJob) = mutate(claim) { it.copy(executor = null) }
-
-    suspend fun interrupt(owner: String, batches: Set<String>, process: String) = db.withTransaction {
-        if (dao.owner()?.token != owner) return@withTransaction
-        dao.jobs(owner).filter {
-            it.batchId in batches && it.unfinished && (it.executor == null || it.executor == process) &&
-                (it.runnable || it.state == "Running" || it.linkStep == "Running" || it.albumStep == "Running")
-        }.forEach {
-            dao.update(it.copy(state = if (it.receiptJson == null) "Attention" else it.state,
-                linkStep = if (it.linkStep in setOf("Pending", "Running")) "Attention" else it.linkStep,
-                albumStep = if (it.albumStep in setOf("Pending", "Running")) "Attention" else it.albumStep,
-                problem = UploadProblem.Transfer.name, executor = null, revision = it.revision + 1, seen = false))
-        }
+    suspend fun problem(claim: UploadJob, problem: UploadProblem?, conflict: Boolean = false, httpStatus: Int? = null) = mutate(claim) {
+        it.copy(
+            state = if (conflict) TransferState.Conflict else TransferState.Attention,
+            problem = problem,
+            httpStatus = httpStatus,
+            executor = null,
+            seen = false,
+        )
     }
 
+    suspend fun link(claim: UploadJob, state: StepState) = mutate(claim) {
+        it.copy(linkStep = state, problem = if (state == StepState.Attention) UploadProblem.Link else it.problem, seen = false)
+    }
+
+    suspend fun album(claim: UploadJob, state: StepState) = mutate(claim) {
+        it.copy(albumStep = state, problem = if (state == StepState.Attention) UploadProblem.Album else it.problem, seen = false)
+    }
+
+    suspend fun finish(claim: UploadJob) = mutate(claim) { it.copy(executor = null) }
+
+    /** A transfer not accepted yet is cancelled; after the receipt only the remaining steps are. */
     suspend fun cancel(owner: String, ids: Set<String>? = null) = db.withTransaction {
-        if (dao.owner()?.token != owner) return@withTransaction
-        dao.jobs(owner).filter { (ids == null || it.id in ids) && it.unfinished }.forEach {
-            dao.update(it.copy(state = if (it.receiptJson == null) "Cancelled" else it.state,
-                linkStep = if (it.linkStep in unfinishedSteps) "Suppressed" else it.linkStep,
-                albumStep = if (it.albumStep in unfinishedSteps) "Suppressed" else it.albumStep,
-                executor = null, revision = it.revision + 1, seen = false))
-        }
+        dao.update(dao.jobs(owner).filter { (ids == null || it.id in ids) && it.unfinished }.map {
+            it.copy(
+                state = if (it.receipt == null) TransferState.Cancelled else it.state,
+                linkStep = if (it.linkStep in unfinishedSteps) StepState.Suppressed else it.linkStep,
+                albumStep = if (it.albumStep in unfinishedSteps) StepState.Suppressed else it.albumStep,
+                executor = null,
+                revision = it.revision + 1,
+                seen = false,
+            )
+        })
     }
+
+    /** Per file: the screen lists files, so a finished file leaves even while its batch runs. */
     suspend fun clearFinished(owner: String) = db.withTransaction {
-        // Per file: the screen lists files, not batches, so a finished file leaves even while its batch runs.
-        dao.jobs(owner).filterNot { it.unfinished }.forEach { dao.update(it.copy(hidden = true)) }
+        dao.update(dao.jobs(owner).filter { !it.unfinished && !it.hidden }.map { it.copy(hidden = true) })
     }
+
     suspend fun seen(owner: String) = db.withTransaction {
-        dao.jobs(owner).filter { it.hasResult && !it.seen }.forEach { dao.update(it.copy(seen = true)) }
+        dao.update(dao.jobs(owner).filter { it.hasResult && !it.seen }.map { it.copy(seen = true) })
     }
-    suspend fun revokeIfFinished(owner: String): Boolean = db.withTransaction {
-        if (dao.owner()?.token != owner || dao.jobs(owner).any { it.unfinished }) return@withTransaction false
+
+    /** Clears the journal for logout unless some work is unfinished. */
+    suspend fun clearIfFinished(owner: String): Boolean = db.withTransaction {
+        if (dao.jobs(owner).any { it.unfinished }) return@withTransaction false
         dao.clear()
-        dao.owner(UploadOwner(token = null))
         true
     }
 
-    suspend fun canLogout(owner: String): Boolean = db.withTransaction {
-        dao.owner()?.token == owner && dao.jobs(owner).none { it.unfinished }
-    }
+    private suspend fun update(job: UploadJob) = dao.update(listOf(job))
 }

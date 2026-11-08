@@ -2,7 +2,6 @@ package com.syrok0010.nextgallery.core.session
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
 
 internal interface CredentialsTextStore {
     fun loadText(): String?
@@ -18,17 +17,7 @@ internal class JsonCredentialsStore(
         val payload = textStore.loadText() ?: return null
 
         return try {
-            json.decodeFromString<AccountCredentials>(payload).takeIf { it.isComplete() }?.also {
-                // Upgrade old secure payload once, before restoring any durable work.
-                if (!json
-                        .parseToJsonElement(
-                            payload,
-                        ).toString()
-                        .contains("\"ownerToken\"")
-                ) {
-                    save(it)
-                }
-            }
+            json.decodeFromString<AccountCredentials>(payload).takeIf { it.isComplete() }
         } catch (_: SerializationException) {
             textStore.clear()
             null
@@ -53,6 +42,5 @@ internal class JsonCredentialsStore(
         serverUrl.isNotBlank() &&
             loginName.isNotBlank() &&
             appPassword.isNotBlank() &&
-            userId.isNotBlank() &&
-            ownerToken.isNotBlank()
+            userId.isNotBlank()
 }

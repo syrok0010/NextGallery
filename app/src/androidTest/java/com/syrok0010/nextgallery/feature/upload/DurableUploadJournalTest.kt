@@ -23,146 +23,135 @@ class DurableUploadJournalTest {
     private val receipt =
         UploadReceipt(listOf("Photos", "slice1.jpg"), true, 42)
 
-    @Before fun open() =
-        runBlocking {
-            context.deleteDatabase(name)
-            db = UploadQueueDatabase.open(context, name)
-            journal = UploadJournal(db)
-            journal.activate(owner)
-        }
+    @Before fun open() {
+        context.deleteDatabase(name)
+        db = UploadQueueDatabase.open(context, name)
+        journal = UploadJournal(db)
+    }
 
     @After fun close() {
         db.close()
         context.deleteDatabase(name)
     }
-    private suspend fun enqueue(request: String = "request-1"): UploadJob {
+
+    private suspend fun enqueue(): UploadJob {
         assertTrue(
             journal.enqueue(
                 owner,
-                request,
                 listOf(file),
-                listOf(UploadIntent("album", owner = "test", target = "task-album")),
+                UploadAlbum("test", "task-album"),
             ) is EnqueueResult.Accepted,
         )
         return journal.jobs(owner).last()
     }
+
+    /** A new process: claims of the previous one are released. */
     private suspend fun reopen() {
         db.close()
         db = UploadQueueDatabase.open(context, name)
         journal = UploadJournal(db)
-        journal.activate(owner)
-        journal.recover(owner, "process-2")
+        journal.release(owner) { it != "process-2" }
     }
 
     @Test fun cancelBeforeAcceptSurvivesReopenAndSuppressesEveryFollowUp() =
         runBlocking {
-            val queued = enqueue()
-            val claim = journal.claim(queued.id, owner, "process-1")!!
-            journal.cancel(owner, setOf(queued.id))
+            enqueue()
+            val claim = journal.claimNext(owner, "process-1")!!
+            journal.cancel(owner, setOf(claim.id))
             assertNull(journal.accept(claim, receipt))
             reopen()
             val restored = journal.jobs(owner).single()
-            assertEquals("Cancelled", restored.state)
+            assertEquals(TransferState.Cancelled, restored.state)
             assertNull(restored.receipt)
             assertFalse(restored.runnable)
-            assertTrue(journal.canLogout(owner))
+            assertTrue(journal.clearIfFinished(owner))
         }
 
-    @Test fun acceptIsSingleCasAndReceiptIsIrreversible() =
+    @Test fun cancelAfterAcceptKeepsTheReceipt() =
         runBlocking {
-            val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            assertNotNull(journal.accept(claim, receipt))
-            assertNull(
-                "one claim may accept only once",
-                journal.accept(claim, receipt.copy(fileId = 999)),
-            )
+            enqueue()
+            assertNotNull(journal.accept(journal.claimNext(owner, "process-1")!!, receipt))
             journal.cancel(owner)
             reopen()
             val restored = journal.jobs(owner).single()
             assertEquals(receipt, restored.receipt)
-            assertEquals("Accepted", restored.state)
-            assertEquals("Suppressed", restored.linkStep)
-            assertEquals("Suppressed", restored.albumStep)
-            assertTrue(journal.canLogout(owner))
+            assertEquals(TransferState.Accepted, restored.state)
+            assertEquals(StepState.Suppressed, restored.linkStep)
+            assertEquals(StepState.Suppressed, restored.albumStep)
+            assertTrue(journal.clearIfFinished(owner))
         }
 
     @Test fun interruptedPutKeepsDestinationAndFencesTheOldExecutor() =
         runBlocking {
-            val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            journal.destination(claim, receipt.path)
-            assertNull(journal.claim(claim.id, owner, "other-runner"))
+            enqueue()
+            val claim = journal.claimNext(owner, "process-1")!!
+            journal.pin(claim, receipt.path)
+            assertNull(journal.claimNext(owner, "other-runner"))
             reopen()
             val uncertain = journal.jobs(owner).single()
-            assertEquals("Uncertain", uncertain.state)
+            assertEquals(TransferState.Uncertain, uncertain.state)
             assertEquals(receipt.path, uncertain.destination)
             assertNull(journal.accept(claim, receipt))
-            val resumed = journal.claim(claim.id, owner, "process-2")!!
+            val resumed = journal.claimNext(owner, "process-2")!!
             assertEquals(
                 receipt.path,
-                journal.destination(resumed, listOf("wrong", "new", "path"))!!.destination,
+                journal.pin(resumed, listOf("wrong", "new", "path"))!!.destination,
             )
             assertNotNull(journal.accept(resumed, receipt.copy(created = false)))
         }
 
     @Test fun albumStepThatNeverStartedRunsAfterReopen() =
         runBlocking {
-            val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            journal.accept(claim, receipt)!!
+            enqueue()
+            journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
             reopen()
             val restored = journal.jobs(owner).single()
-            assertEquals("Pending", restored.albumStep)
+            assertEquals(StepState.Pending, restored.albumStep)
             assertTrue(restored.runnable)
-            assertNotNull(journal.claim(restored.id, owner, "process-2"))
+            assertNotNull(journal.claimNext(owner, "process-2"))
         }
 
-    @Test fun receiptReopensForStepsWithoutNewTransferAndAlbumRunningNeedsAttention() =
+    @Test fun startedAlbumCopyNeedsAttentionAfterReopen() =
         runBlocking {
-            val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            val accepted = journal.accept(claim, receipt)!!
-            journal.step(accepted, "album", StepState.Running)
+            enqueue()
+            val accepted = journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
+            journal.album(accepted, StepState.Running)
             reopen()
             val restored = journal.jobs(owner).single()
             assertEquals(receipt, restored.receipt)
-            assertEquals("Attention", restored.albumStep)
-            assertFalse(journal.canLogout(owner))
+            assertEquals(StepState.Attention, restored.albumStep)
+            assertEquals(UploadProblem.Album, restored.problem)
+            assertFalse(journal.clearIfFinished(owner))
             journal.clearFinished(owner)
             assertFalse(journal.jobs(owner).single().hidden)
             journal.cancel(owner)
-            assertTrue(journal.canLogout(owner))
+            assertTrue(journal.clearIfFinished(owner))
         }
 
-    @Test fun duplicateRequestAndIdentityRolesSurviveReopen() =
+    @Test fun selectionSurvivesReopen() =
+        runBlocking {
+            enqueue()
+            reopen()
+            val restored = journal.jobs(owner).single()
+            assertEquals(file, restored.selection)
+            assertEquals("content://media/external/images/media/42", restored.selection.identityUri)
+            assertEquals(UploadAlbum("test", "task-album"), restored.album)
+        }
+
+    @Test fun batchQueuedDuringAPassJoinsIt() =
         runBlocking {
             val first = enqueue()
-            reopen()
-            val again = journal.enqueue(
-                owner,
-                first.requestId,
-                listOf(file),
-                emptyList(),
-            ) as EnqueueResult.Accepted
-            assertEquals(first.batchId, again.batchId)
-            assertEquals(1, journal.jobs(owner).size)
-            val restored = journal.jobs(owner).single().selection
-            assertEquals(file.contentUri, restored.contentUri)
-            assertEquals("content://media/external/images/media/42", restored.identityUri)
-            assertEquals(file.stamp, restored.stamp)
+            journal.claimNext(owner, "process-1")!!
+            val second = enqueue()
+            assertEquals(first.passId, second.passId)
+            assertNotEquals(first.batchId, second.batchId)
         }
 
     @Test fun rejectedStorageCommitDoesNotAcknowledgeEnqueue() =
         runBlocking {
+            // Room opens lazily; a database never opened would open again on the next write.
+            journal.jobs(owner)
             db.close()
-            assertEquals(
-                EnqueueResult.Rejected,
-                journal.enqueue(owner, "reject", listOf(file), emptyList()),
-            )
-        }
-
-    @Test fun newSessionCannotAcceptOldResultEvenForSameServerUid() =
-        runBlocking {
-            val claim = journal.claim(enqueue().id, owner, "process-1")!!
-            journal.activate("owner-B")
-            assertNull(journal.accept(claim, receipt))
-            assertTrue(journal.jobs("owner-B").isEmpty())
+            assertEquals(EnqueueResult.Rejected, journal.enqueue(owner, listOf(file), null))
         }
 }

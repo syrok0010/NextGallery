@@ -2,19 +2,20 @@ package com.syrok0010.nextgallery.feature.upload
 
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.media.*
+import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.UUID
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import org.junit.*
 import org.junit.Assert.*
 
+/** The queue over a real on-disk journal; [reopen] stands for a new process. */
 class UploadQueueRuntimeTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val dbName = "runtime-upload-test.db"
     private val credentials = AccountCredentials("http://test.syrok", "test", "fixture", "test")
+    private val owner = credentials.uploadOwner
     private lateinit var db: UploadQueueDatabase
     private lateinit var journal: UploadJournal
     private lateinit var scope: CoroutineScope
@@ -23,17 +24,16 @@ class UploadQueueRuntimeTest {
     private val library = MediaLibraryIndex()
     private var stamp: SourceStamp? = SourceStamp(5, 10, 20)
     private var links = 0
-    private var albums = 0
+    private val albums = mutableListOf<String>()
     private var transfers = 0
-    private var allowLink = true
-    private var albumSuccess = true
     private val ids = listOf(MediaId("local-a"), MediaId("local-b"))
 
     @Before fun setup() {
         context.deleteDatabase(dbName)
-        library.publish(ids.map { id -> media(id) })
+        library.publish(ids.map(::media))
         open()
     }
+
     private fun open() {
         db = UploadQueueDatabase.open(context, dbName)
         journal = UploadJournal(db)
@@ -43,306 +43,241 @@ class UploadQueueRuntimeTest {
             override fun clear() = Unit
         })
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        queue = UploadQueue(sessions, library, scope, journal,
+        queue = UploadQueue(
+            sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
-            { _, _, _ -> links++; allowLink },
-            { _, _, _ -> albums++; albumSuccess }, {}, UUID.randomUUID().toString())
+            { _, _, _ -> links++; true },
+            { album, _ -> albums += album.name; true },
+            {}, UUID.randomUUID().toString(),
+        )
     }
-    @After fun cleanup() = runBlocking { scope.cancel(); scope.coroutineContext[Job]!!.join(); db.close(); context.deleteDatabase(dbName); Unit }
+
+    @After fun cleanup() = runBlocking {
+        scope.coroutineContext[Job]!!.cancelAndJoin()
+        db.close()
+        context.deleteDatabase(dbName)
+        Unit
+    }
+
     private suspend fun reopen() {
-        scope.cancel(); scope.coroutineContext[Job]!!.join(); db.close(); open()
+        scope.coroutineContext[Job]!!.cancelAndJoin()
+        db.close()
+        open()
     }
-    private suspend fun enqueue(ids: List<MediaId> = this.ids, intents: List<UploadIntent> = emptyList()): UploadBatch {
-        assertTrue(queue.submit(ids, intents) is EnqueueResult.Accepted)
-        return queue.waiting.value.last()
+
+    private suspend fun enqueue(ids: List<MediaId> = this.ids, album: String? = null): List<String> {
+        assertTrue(queue.submit(ids, album?.let { UploadAlbum("test", it) }) is EnqueueResult.Accepted)
+        return journal.jobs(owner).takeLast(ids.size).map { it.id }
     }
-    private suspend fun transfer(account: AccountCredentials, item: UploadItem, claim: UploadJob): UploadedFile {
+
+    private suspend fun transfer(account: AccountCredentials, job: UploadJob, onProgress: (Int?) -> Unit): UploadedFile {
         transfers++
-        val path = claim.destination ?: queue.pinDestination(claim, listOf("Photos", item.selection.displayName))!!
-        return UploadedFile(item.selection, DavFilePath(account.userId, path), true, 42)
+        val path = queue.pin(job, DavFilePath(account.userId, listOf("Photos", job.selection.displayName)))
+        return UploadedFile(job.selection, path, true, 42)
     }
+
     private suspend fun waitFor(predicate: () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
 
-    @Test fun queueReopenRetainsStableRequestAndAllThreeCancellationScopes() = runBlocking {
-        val result = queue.submit(ids, requestId = "stable-request") as EnqueueResult.Accepted
-        queue.cancel(queue.batches.value.single().items.first())
-        waitFor { queue.batches.value.single().items.first().state.value.phase == UploadPhase.Cancelled }
+    private fun phases() = queue.entries.value.map { it.phase }
+
+    /** A job claimed by a process that died; a reopened queue releases it. */
+    private suspend fun deadClaim() = journal.claimNext(owner, "dead-process")!!
+
+    @Test fun cancellationOfOneFileAndOfAllSurvivesReopen() = runBlocking {
+        val (first) = enqueue()
+        queue.cancel(first)
+        waitFor { phases() == listOf(UploadPhase.Cancelled, UploadPhase.Waiting) }
         reopen()
-        val duplicate = queue.submit(ids, requestId = "stable-request")
-        assertEquals(result, duplicate)
-        assertEquals(2, queue.batches.value.single().items.size)
-        queue.cancel(queue.batches.value.single())
-        waitFor { queue.batches.value.single().items.all { it.state.value.phase == UploadPhase.Cancelled } }
-        enqueue(listOf(ids.first()))
+        waitFor { phases() == listOf(UploadPhase.Cancelled, UploadPhase.Waiting) }
         queue.cancelAll()
-        waitFor { queue.batches.value.flatMap { it.items }.all { it.state.value.phase == UploadPhase.Cancelled } }
+        waitFor { phases().all { it == UploadPhase.Cancelled } }
         var loggedOut = false
         assertTrue(queue.logout { loggedOut = true; sessions.signOut() })
         assertTrue(loggedOut)
+        assertTrue(journal.jobs(owner).isEmpty())
     }
 
-    @Test fun cancelCommittedBeforeTransferResponsePreventsLinkAndAlbumAfterReopen() = runBlocking {
-        val batch = enqueue(intents = listOf(UploadIntent("album", owner = "test", target = "slice1")))
+    @Test fun cancelCommittedBeforeTheResponseFencesAcceptAndEveryFollowUp() = runBlocking {
+        enqueue(album = "slice1")
         val response = CompletableDeferred<Unit>()
         val sending = CompletableDeferred<Unit>()
-        val runner = async(Dispatchers.Default) {
-            queue.runBatch(batch) { account, item, claim ->
-                sending.complete(Unit); response.await(); transfer(account, item, claim)
+        val runner = async {
+            queue.drain { account, job, progress ->
+                val file = transfer(account, job, progress)
+                sending.complete(Unit)
+                // The response arrives although the user cancelled meanwhile.
+                withContext(NonCancellable) { response.await() }
+                file
             }
         }
         sending.await()
         queue.cancelAll()
-        waitFor { batch.items.all { it.state.value.phase == UploadPhase.Cancelled } }
-        response.complete(Unit); runner.await()
-        assertEquals(0, links); assertEquals(0, albums)
+        waitFor { phases().all { it == UploadPhase.Cancelled } }
+        response.complete(Unit)
+        runner.await()
+        assertEquals(1, transfers)
+        assertEquals(0, links)
+        assertTrue(albums.isEmpty())
         reopen()
-        waitFor { queue.batches.value.isNotEmpty() }
+        waitFor { queue.entries.value.size == 2 }
         assertTrue(queue.waiting.value.isEmpty())
-        assertTrue(queue.batches.value.single().items.all { it.state.value.phase == UploadPhase.Cancelled })
+        assertTrue(phases().all { it == UploadPhase.Cancelled })
     }
 
-    @Test fun competingExecutorsCannotTransferSameClaimTwice() = runBlocking {
-        val batch = enqueue(listOf(ids.first()))
-        val entered = CompletableDeferred<Unit>()
-        val finish = CompletableDeferred<Unit>()
-        val first = async(Dispatchers.Default) { queue.runBatch(batch) { account, item, claim -> entered.complete(Unit); finish.await(); transfer(account, item, claim) } }
-        entered.await()
-        queue.runBatch(batch, ::transfer)
-        finish.complete(Unit); first.await()
-        assertEquals(1, transfers); assertEquals(1, links)
-    }
-
-    @Test fun durableReceiptRunsOnlyStepsEvenWhenSourceDisappeared() = runBlocking {
-        val batch = enqueue(listOf(ids.first()))
-        val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val receipt = UploadReceipt(listOf("Photos", "a.jpg"), true, 42)
-        journal.accept(claim, receipt)
+    @Test fun savedReceiptRunsOnlyTheStepsEvenWhenTheSourceDisappeared() = runBlocking {
+        enqueue(listOf(ids.first()))
+        journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))
         stamp = null
         reopen()
-        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
-        queue.runBatch(restored) { _, _, _ -> error("Receipt must not trigger PUT or source access") }
-        assertEquals(0, transfers); assertEquals(1, links)
-        assertEquals(UploadPhase.Uploaded, restored.items.single().state.value.phase)
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.drain { _, _, _ -> error("A receipt must not trigger PUT or source access") }
+        assertEquals(0, transfers)
+        assertEquals(1, links)
+        assertEquals(listOf(UploadPhase.Uploaded), phases())
     }
 
-    @Test fun interruptedConditionalDestinationIsUsedAfterReopen() = runBlocking {
-        val batch = enqueue(listOf(ids.first()))
-        val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
+    @Test fun interruptedTransferReusesThePinnedNameAfterReopen() = runBlocking {
+        enqueue(listOf(ids.first()))
         val fixed = listOf("Photos", "original.jpg")
-        journal.destination(claim, fixed)
+        journal.pin(deadClaim(), fixed)
         reopen()
-        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
-        queue.runBatch(restored) { account, item, job ->
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.drain { account, job, _ ->
             assertEquals(fixed, job.destination)
             transfers++
-            UploadedFile(item.selection, DavFilePath(account.userId, job.destination!!), false, 42)
+            UploadedFile(job.selection, DavFilePath(account.userId, job.destination!!), false, 42)
         }
-        assertEquals(1, transfers); assertEquals(1, links)
-        assertEquals(UploadPhase.Existing, restored.items.single().state.value.phase)
+        assertEquals(1, transfers)
+        assertEquals(1, links)
+        waitFor { phases() == listOf(UploadPhase.Existing) }
     }
 
-    @Test fun changedOrInaccessibleOriginalRequiresAttentionAndBlocksLogoutUntilCancel() = runBlocking {
-        val batch = enqueue()
+    @Test fun changedOriginalNeedsAttentionAndBlocksLogoutUntilCancel() = runBlocking {
+        enqueue()
         stamp = stamp!!.copy(generation = 21)
-        queue.runBatch(batch, ::transfer)
+        queue.drain(::transfer)
         assertEquals(0, transfers)
-        assertTrue(batch.items.all { it.state.value.phase == UploadPhase.NeedsAttention })
+        waitFor { phases().all { it == UploadPhase.NeedsAttention } }
         assertFalse(queue.logout { error("Unfinished jobs must block logout") })
         queue.clearFinished()
         delay(50)
-        assertEquals(1, queue.batches.value.size)
+        assertEquals(2, queue.entries.value.size)
         queue.cancelAll()
-        waitFor { batch.items.all { it.state.value.phase == UploadPhase.Cancelled } }
+        waitFor { phases().all { it == UploadPhase.Cancelled } }
         assertTrue(queue.logout { sessions.signOut() })
     }
 
-    @Test fun acceptedUploadWithUncertainAlbumRemainsVisibleAndCanBeExplicitlyAbandoned() = runBlocking {
-        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
-        val claim = journal.claim(batch.items.single().id, credentials.uploadOwner, "dead-process")!!
-        val accepted = journal.accept(claim, UploadReceipt(listOf("a"), true, 42))!!
-        journal.step(accepted, "album", StepState.Running)
+    @Test fun startedAlbumCopyNeedsAttentionAfterReopenAndCanBeAbandoned() = runBlocking {
+        enqueue(listOf(ids.first()), album = "slice1")
+        val accepted = journal.accept(deadClaim(), UploadReceipt(listOf("a"), true, 42))!!
+        journal.album(accepted, StepState.Running)
         reopen()
-        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
-        queue.runBatch(restored) { _, _, _ -> error("No second PUT") }
-        assertEquals(0, albums)
-        val state = restored.items.single().state.value
-        assertEquals(UploadPhase.Uploaded, state.phase); assertTrue(state.attention); assertTrue(state.pendingAction)
-        assertFalse(queue.logout { error("Pending album action") })
-        queue.cancel(restored.items.single())
-        waitFor { !restored.items.single().state.value.pendingAction }
-        assertEquals(UploadPhase.Uploaded, restored.items.single().state.value.phase)
+        waitFor { queue.entries.value.singleOrNull()?.problem != null }
+        queue.drain { _, _, _ -> error("No second PUT") }
+        assertTrue(albums.isEmpty())
+        val entry = queue.entries.value.single()
+        assertEquals(UploadPhase.Uploaded, entry.phase)
+        assertTrue(entry.cancellable)
+        assertFalse(queue.logout { error("The album step is unresolved") })
+        queue.cancel(entry.id)
+        waitFor { !queue.entries.value.single().cancellable }
+        assertEquals(UploadPhase.Uploaded, queue.entries.value.single().phase)
         assertTrue(queue.logout { sessions.signOut() })
     }
 
-    @Test fun successfulHistoryDoesNotBlockLogoutAndChangedAccountAddressCannotReuseJobs() = runBlocking {
-        val batch = enqueue(listOf(ids.first()))
-        queue.runBatch(batch, ::transfer)
-        assertEquals(UploadPhase.Uploaded, batch.items.single().state.value.phase)
-        assertTrue(queue.batches.value.isNotEmpty())
-        assertTrue(queue.logout { sessions.signOut() })
-        sessions.signIn(credentials.copy(serverUrl = "http://other.example/"))
-        delay(100)
-        assertTrue(queue.batches.value.isEmpty())
-        assertEquals(0, albums)
-    }
-
-    @Test fun historyIsExcludedFromNewPassButConcurrentEnqueueExtendsCurrentPass() = runBlocking {
-        val completed = enqueue(listOf(ids.first()))
-        queue.runBatch(completed, ::transfer)
-        assertNull(queue.activity.value)
-        val pending = enqueue(listOf(ids.last()))
-        assertEquals(1, queue.activity.value!!.total)
-        assertEquals(0, queue.activity.value!!.processed)
+    @Test fun batchQueuedDuringAPassExtendsItAndHistoryStartsANewOne() = runBlocking {
         enqueue(listOf(ids.first()))
-        assertEquals(2, queue.activity.value!!.total)
+        queue.drain(::transfer)
+        waitFor { queue.activity.value == null }
+        enqueue(listOf(ids.last()))
+        waitFor { queue.activity.value?.total == 1 }
+        enqueue(listOf(ids.first()))
+        waitFor { queue.activity.value?.total == 2 }
         assertEquals(0, queue.activity.value!!.processed)
-        assertEquals(3, queue.batches.value.size)
-        queue.cancelAll()
     }
 
-    @Test fun completedAndCancelledFilesDoNotKeepProgressWhileAnotherFileWaits() = runBlocking {
-        val active = enqueue()
-        val waiting = enqueue(listOf(ids.first()))
-        queue.runBatch(active) { account, item, claim ->
-            if (item == active.items.first()) {
-                queue.uploading(item.selection.contentUri, 100)
-            } else {
-                assertEquals(1, queue.activity.value!!.processed)
-                assertNull("Completed file must not remain current", queue.activity.value!!.current)
-                assertNull(queue.activity.value!!.percent)
-                queue.uploading(item.selection.contentUri, 25)
-                queue.consumeResult()
-                waitFor { queue.result.value == null }
-                assertEquals(item.selection.identityUri, queue.activity.value!!.current)
-                assertEquals(25, queue.activity.value!!.percent)
-                queue.cancel(item)
-                waitFor { item.state.value.phase == UploadPhase.Cancelled }
-                assertNull("Cancelled file must not remain current", queue.activity.value!!.current)
-                assertNull(queue.activity.value!!.percent)
+    @Test fun finishedAndCancelledFilesDoNotKeepProgress() = runBlocking {
+        val (first, second) = enqueue()
+        val (third) = enqueue(listOf(ids.first()))
+        queue.drain { account, job, progress ->
+            when (job.id) {
+                first -> progress(100)
+                second -> withContext(NonCancellable) {
+                    // A finished file must not stay current.
+                    waitFor { queue.activity.value!!.let { it.processed == 1 && it.current == null } }
+                    progress(25)
+                    queue.consumeResult()
+                    waitFor { queue.result.value == null }
+                    waitFor { queue.activity.value!!.percent == 25 }
+                    assertEquals(job.selection.identityUri, queue.activity.value!!.current)
+                    queue.cancel(job.id)
+                    waitFor { phases()[1] == UploadPhase.Cancelled }
+                    assertNull("A cancelled file must not stay current", queue.activity.value!!.current)
+                    assertNull(queue.activity.value!!.percent)
+                }
+                third -> waitFor { queue.activity.value!!.processed == 2 }
             }
-            transfer(account, item, claim)
+            transfer(account, job, progress)
         }
-        assertEquals(UploadPhase.Uploaded, active.items.first().state.value.phase)
-        assertEquals(UploadPhase.Cancelled, active.items.last().state.value.phase)
-        assertEquals(UploadPhase.Waiting, waiting.items.single().state.value.phase)
-        assertEquals(2, queue.activity.value!!.processed)
-        assertEquals(3, queue.activity.value!!.total)
-        assertEquals(1, links)
+        assertEquals(listOf(UploadPhase.Uploaded, UploadPhase.Cancelled, UploadPhase.Uploaded), phases())
+        assertEquals(2, links)
     }
 
-    @Test fun newlyAcceptedAlbumRunsOnceAndUnstartedAlbumRunsOnReopen() = runBlocking {
-        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
-        queue.runBatch(batch, ::transfer)
-        assertEquals(1, albums)
-        assertEquals("slice1", batch.items.single().state.value.albumAdded)
-        val next = enqueue(listOf(ids.last()), listOf(UploadIntent("album", owner = "test", target = "slice2")))
-        val claim = journal.claim(next.items.single().id, credentials.uploadOwner, "dead-process")!!
-        journal.accept(claim, UploadReceipt(listOf("a"), true, 42))
+    @Test fun newAlbumStepRunsOnceAndAnUnstartedOneRunsAfterReopen() = runBlocking {
+        enqueue(listOf(ids.first()), album = "slice1")
+        queue.drain(::transfer)
+        assertEquals(listOf("slice1"), albums)
+        enqueue(listOf(ids.last()), album = "slice2")
+        journal.accept(deadClaim(), UploadReceipt(listOf("a"), true, 42))
         reopen()
-        val restored = withTimeout(5_000) { queue.waiting.first { it.isNotEmpty() } }.single()
-        queue.runBatch(restored) { _, _, _ -> error("No transfer for saved receipt") }
-        assertEquals(2, albums)
-        assertEquals("slice2", restored.items.single().state.value.albumAdded)
-        assertFalse(restored.items.single().state.value.attention)
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.drain { _, _, _ -> error("No transfer for a saved receipt") }
+        assertEquals(listOf("slice1", "slice2"), albums)
+        assertTrue(queue.entries.value.all { it.problem == null })
     }
 
-    @Test fun missingCredentialsDoNotEraseJournalAndEmptySelectionIsNotAStorageFailure() = runBlocking {
-        assertEquals(EnqueueResult.NothingToUpload, queue.submit(emptyList()))
-        assertFalse(queue.storageError.value)
-        val batch = enqueue(listOf(ids.first()))
-        journal.activate(null)
-        assertEquals(1, journal.jobs(credentials.uploadOwner).size)
-        assertFalse(journal.revokeIfFinished(credentials.uploadOwner))
-        assertEquals(UploadPhase.Waiting, batch.items.single().state.value.phase)
-    }
-
-    @Test fun unknownIntentVersionIsAttentionAndNeverExecutesTransfer() = runBlocking {
-        val batch = enqueue(listOf(ids.first()), listOf(UploadIntent("album", version = 99)))
-        queue.runBatch(batch, ::transfer)
-        assertEquals(0, transfers); assertEquals(UploadPhase.NeedsAttention, batch.items.single().state.value.phase)
-    }
-
-    @Test fun rejectedJournalDoesNotConsumeSelectionOrPublishAcceptedBatch() = runBlocking {
-        queue.submit(emptyList()) // await startup
-        db.close()
-        assertEquals(EnqueueResult.Rejected, queue.submit(ids))
-        assertEquals(2, library.state.value.size)
-        assertTrue(queue.batches.value.isEmpty())
-    }
-
-    @Test fun executorCancellationStopsTheWholeReleasedPassWithoutAReopenLoop() = runBlocking {
-        val active = enqueue()
-        val queued = enqueue(listOf(ids.first()))
-        assertEquals(listOf(active, queued), queue.release())
-        assertEquals(active, queue.next())
+    @Test fun stoppedExecutorLeavesTheTransferUncertainAndItRunsAgain() = runBlocking {
+        enqueue()
         val sending = CompletableDeferred<Unit>()
-        val runner = launch(Dispatchers.Default) {
-            queue.runBatch(active) { _, _, _ -> sending.complete(Unit); awaitCancellation() }
+        val runner = launch {
+            queue.drain { _, _, _ -> sending.complete(Unit); awaitCancellation() }
         }
         sending.await()
         runner.cancelAndJoin()
-        assertTrue("Every released file must expose the executor stop", (active.items + queued.items).all {
-            it.state.value.phase == UploadPhase.NeedsAttention
-        })
-        assertNull(queue.next())
-        assertEquals(0, queue.releasedFiles())
-        assertTrue(queue.waiting.value.isEmpty())
-        assertNull(queue.activity.value)
+        assertEquals(listOf(TransferState.Uncertain, TransferState.Pending), journal.jobs(owner).map { it.state })
+        waitFor { queue.waiting.value.size == 2 }
         reopen()
-        waitFor { queue.batches.value.size == 2 }
-        assertTrue(queue.waiting.value.isEmpty())
-        assertTrue(queue.batches.value.flatMap { it.items }.all { it.state.value.phase == UploadPhase.NeedsAttention })
-        assertFalse(queue.logout { error("Stopped jobs need explicit cancellation") })
-        val fresh = enqueue(listOf(ids.last()))
-        assertEquals(listOf(fresh), queue.release())
+        waitFor { queue.waiting.value.size == 2 }
+        queue.drain(::transfer)
+        assertEquals(2, transfers)
+        waitFor { phases().all { it == UploadPhase.Uploaded } }
     }
 
-    @Test fun viewingAttentionConsumesOnlyTheSummaryAndCancellationPublishesANewResult() = runBlocking {
-        val batch = enqueue(listOf(ids.first()))
+    @Test fun viewingAProblemConsumesOnlyTheSummaryAndCancellationPublishesANewResult() = runBlocking {
+        enqueue(listOf(ids.first()))
         stamp = null
-        queue.runBatch(batch, ::transfer)
-        assertEquals(1, queue.result.value!!.attention)
+        queue.drain(::transfer)
+        waitFor { queue.result.value?.problems?.size == 1 }
         queue.consumeResult()
         waitFor { queue.result.value == null }
-        assertEquals(UploadPhase.NeedsAttention, batch.items.single().state.value.phase)
+        assertEquals(listOf(UploadPhase.NeedsAttention), phases())
         assertFalse(queue.logout { error("Viewing a result does not finish the job") })
         reopen()
-        waitFor { queue.batches.value.isNotEmpty() }
+        waitFor { queue.entries.value.isNotEmpty() }
         assertNull(queue.result.value)
         queue.cancelAll()
         waitFor { queue.result.value?.cancelled == 1 }
         assertTrue(queue.logout { sessions.signOut() })
     }
 
-    @Test fun stopBetweenBatchesPreservesReceiptAndSuppressesReleasedPendingAlbumWithoutPut() = runBlocking {
-        val completed = enqueue(listOf(ids.first()))
-        val pending = enqueue(listOf(ids.last()), listOf(UploadIntent("album", owner = "test", target = "slice1")))
-        queue.release()
-        val pendingClaim = journal.claim(pending.items.single().id, credentials.uploadOwner, "fixture")!!
-        val receipt = UploadReceipt(listOf("already-uploaded"), true, 43)
-        val accepted = journal.accept(pendingClaim, receipt)!!
-        journal.release(accepted)
-        assertEquals(completed, queue.next())
-        queue.runBatch(completed, ::transfer)
-        assertEquals(1, transfers)
-        queue.stopExecutor()
-        val stopped = journal.jobs(credentials.uploadOwner).last()
-        assertEquals(receipt, stopped.receipt)
-        assertEquals("Attention", stopped.linkStep)
-        assertEquals("Attention", stopped.albumStep)
-        assertNull(stopped.executor)
-        assertNull(queue.next())
-        assertTrue(queue.waiting.value.isEmpty())
-        queue.consumeResult()
-        waitFor { queue.result.value == null }
-        assertTrue(pending.items.single().state.value.pendingAction)
-        assertFalse(queue.logout { error("Unresolved steps must block logout") })
-        queue.cancel(pending)
-        waitFor { !pending.items.single().state.value.pendingAction }
-        assertEquals(UploadPhase.Uploaded, pending.items.single().state.value.phase)
-        assertEquals(1, queue.result.value!!.uploaded)
-        assertEquals(1, transfers)
-        assertTrue(queue.logout { sessions.signOut() })
+    @Test fun emptySelectionIsNotAStorageFailureAndARejectedJournalPublishesNothing() = runBlocking {
+        assertEquals(EnqueueResult.NothingToUpload, queue.submit(emptyList()))
+        enqueue(listOf(ids.first()))
+        // The queue has started observing the journal, so closing it fails only the next write.
+        waitFor { queue.entries.value.isNotEmpty() }
+        db.close()
+        assertEquals(EnqueueResult.Rejected, queue.submit(ids))
+        assertEquals(1, queue.entries.value.size)
     }
 
     private fun media(id: MediaId) = MediaItem(id, 1, "${id.value}.jpg", "image/jpeg", null, null, null, null, null, null, null,

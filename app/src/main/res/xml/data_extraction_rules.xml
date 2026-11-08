@@ -4,12 +4,10 @@
         <exclude domain="database" path="upload-journal.db" />
         <exclude domain="database" path="upload-journal.db-wal" />
         <exclude domain="database" path="upload-journal.db-shm" />
-        <exclude domain="sharedpref" path="nextgallery.credentials.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="upload-journal.db" />
         <exclude domain="database" path="upload-journal.db-wal" />
         <exclude domain="database" path="upload-journal.db-shm" />
-        <exclude domain="sharedpref" path="nextgallery.credentials.xml" />
     </device-transfer>
 </data-extraction-rules>

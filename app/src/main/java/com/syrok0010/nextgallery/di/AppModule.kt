@@ -95,7 +95,7 @@ val appModule = module {
             get(),
             get(),
             get(),
-            { ids, intents -> uploads.submit(ids, intents) },
+            { ids, album -> uploads.submit(ids, album) },
             get(named("libraryScope")),
         )
     } bind OperationStatusSource::class
@@ -129,9 +129,9 @@ val appModule = module {
             link = { account, identity, fileId ->
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
-            album = { account, intent, file ->
+            album = { album, file ->
                 val success =
-                    writer.addFile(file.path, AlbumAddress(intent.owner, intent.target)) ==
+                    writer.addFile(file.path, AlbumAddress(album.owner, album.name)) ==
                         AlbumCopyOutcome.Added
                 catalog.refresh()
                 success
