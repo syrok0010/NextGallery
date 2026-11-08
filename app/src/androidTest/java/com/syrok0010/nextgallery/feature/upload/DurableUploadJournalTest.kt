@@ -76,8 +76,13 @@ class DurableUploadJournalTest {
             val restored = journal.jobs(owner).single()
             assertEquals(receipt, restored.receipt)
             assertEquals(TransferState.Accepted, restored.state)
-            assertEquals(StepState.Suppressed, restored.linkStep)
-            assertEquals(StepState.Suppressed, restored.albumStep)
+            assertEquals(
+                mapOf(
+                    FollowUp.Link to StepState.Suppressed,
+                    FollowUp.Album to StepState.Suppressed,
+                ),
+                restored.steps,
+            )
             assertTrue(journal.clearIfFinished(owner))
         }
 
@@ -100,30 +105,21 @@ class DurableUploadJournalTest {
             assertNotNull(journal.accept(resumed, receipt.copy(created = false)))
         }
 
-    @Test fun albumStepThatNeverStartedRunsAfterReopen() =
-        runBlocking {
-            enqueue()
-            journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
-            reopen()
-            val restored = journal.jobs(owner).single()
-            assertEquals(StepState.Pending, restored.albumStep)
-            assertTrue(restored.runnable)
-            assertNotNull(journal.claimNext(owner, "process-2"))
-        }
-
-    @Test fun startedAlbumCopyRunsAgainAfterReopen() =
+    @Test fun unfinishedStepsRunAfterReopenAndAFinishedOneDoesNot() =
         runBlocking {
             enqueue()
             val accepted = journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
-            journal.album(accepted, StepState.Running)
+            journal.step(accepted, FollowUp.Link, StepState.Done)
             reopen()
             val restored = journal.jobs(owner).single()
-            assertEquals(receipt, restored.receipt)
-            assertEquals(StepState.Pending, restored.albumStep)
-            assertNull(restored.problem)
+            assertEquals(
+                mapOf(FollowUp.Link to StepState.Done, FollowUp.Album to StepState.Pending),
+                restored.steps,
+            )
+            assertNull(restored.executor)
+            assertTrue(restored.runnable)
             assertFalse(journal.clearIfFinished(owner))
-            journal.cancel(owner)
-            assertTrue(journal.clearIfFinished(owner))
+            assertNotNull(journal.claimNext(owner, "process-2"))
         }
 
     @Test fun deferredJobIsSkippedForTheRestOfThePassAndFencesItsOldClaim() =

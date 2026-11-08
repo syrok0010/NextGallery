@@ -27,7 +27,7 @@ class UploadQueueRuntimeTest {
     private var stamp: SourceStamp? = SourceStamp(5, 10, 20)
     private var links = 0
     private val albums = mutableListOf<String>()
-    private val albumModes = mutableListOf<AlbumStepMode>()
+    private val albumRecovered = mutableListOf<Boolean>()
     private var transfers = 0
     private var albumAdds = true
     private var schedules = 0
@@ -51,8 +51,12 @@ class UploadQueueRuntimeTest {
         queue = UploadQueue(
             sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
-            { _, _, _ -> links++; true },
-            { album, _, mode -> albums += album.name; albumModes += mode; albumAdds },
+            { step, _, job, _, recovered ->
+                when (step) {
+                    FollowUp.Link -> { links++; true }
+                    FollowUp.Album -> { albums += job.album!!.name; albumRecovered += recovered; albumAdds }
+                }
+            },
             {}, UUID.randomUUID().toString(), { schedules++ },
         )
     }
@@ -172,14 +176,13 @@ class UploadQueueRuntimeTest {
         assertTrue(queue.logout { sessions.signOut() })
     }
 
-    @Test fun startedAlbumCopyIsCheckedAgainAfterReopenWithoutAnotherPut() = runBlocking {
+    @Test fun albumStepAfterReopenIsRecoveredAndNeverPutsAgain() = runBlocking {
         enqueue(listOf(ids.first()), album = "slice1")
-        val accepted = journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))!!
-        journal.album(accepted, StepState.Running)
+        journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))
         reopen()
         waitFor { queue.waiting.value.isNotEmpty() }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
-        assertEquals(listOf(AlbumStepMode.Reconcile), albumModes)
+        assertEquals(listOf(true), albumRecovered)
         assertEquals(0, transfers)
         waitFor { queue.entries.value.single().let { it.problem == null && !it.cancellable } }
     }
@@ -194,7 +197,7 @@ class UploadQueueRuntimeTest {
         queue.retry(queue.entries.value.single().id)
         waitFor { queue.waiting.value.isNotEmpty() }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
-        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
         waitFor { queue.entries.value.single().let { it.problem == null && !it.cancellable } }
     }
@@ -222,18 +225,22 @@ class UploadQueueRuntimeTest {
         enqueue(listOf(ids.first()), album = "slice1")
         var albumCalls = 0
         queue = UploadQueue(
-            sessions, library, scope, journal, { stamp!! }, { _, _, _ -> links++; true },
-            { _, _, mode ->
-                albumModes += mode
-                if (albumCalls++ == 0) throw DavHttpException(503, "COPY")
+            sessions, library, scope, journal, { stamp!! },
+            { step, _, _, _, recovered ->
+                if (step == FollowUp.Link) {
+                    links++
+                } else {
+                    albumRecovered += recovered
+                    if (albumCalls++ == 0) throw DavHttpException(503, "COPY")
+                }
                 true
             },
             {}, UUID.randomUUID().toString(),
         )
         assertTrue(queue.drain(::transfer))
-        assertEquals(StepState.Pending, journal.jobs(owner).single().albumStep)
+        assertEquals(StepState.Pending, journal.jobs(owner).single().steps[FollowUp.Album])
         assertFalse(queue.drain { _, _, _ -> error("No second PUT") })
-        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
         assertEquals(1, links)
     }

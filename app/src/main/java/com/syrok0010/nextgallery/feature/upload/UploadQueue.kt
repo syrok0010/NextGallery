@@ -76,8 +76,12 @@ internal class UploadQueue(
     private val scope: CoroutineScope,
     private val journal: UploadJournal,
     private val snapshot: (UploadSelection) -> SourceStamp,
-    private val link: suspend (AccountCredentials, String, Long) -> Boolean,
-    private val album: suspend (UploadAlbum, UploadedFile, AlbumStepMode) -> Boolean,
+    /**
+     * Runs one step for [UploadJob] whose [UploadedFile] is on the server. `recovered` is false
+     * only for the executor that accepted the file just now; a later attempt may follow one whose
+     * outcome is unknown, so a step that is not safe to repeat checks the server first.
+     */
+    private val followUp: suspend (FollowUp, AccountCredentials, UploadJob, UploadedFile, Boolean) -> Boolean,
     private val refreshLibrary: () -> Unit,
     private val processId: String = UUID.randomUUID().toString(),
     private val schedule: suspend () -> Unit = {},
@@ -255,22 +259,11 @@ internal class UploadQueue(
             acceptedNow = true
         }
         val receipt = checkNotNull(claim.receipt)
-        if (claim.linkStep == StepState.Pending) {
-            claim = journal.link(claim, StepState.Running) ?: return true
-            val linked = followUp { receipt.fileId?.let { link(account, claim.selection.identityUri, it) } == true }
-                ?: return journal.defer(claim).let { defer(); true }
-            claim = journal.link(claim, linked) ?: return true
-        }
-        val target = claim.album
-        if (claim.albumStep == StepState.Pending && target != null) {
-            // Marked running before the COPY, so a stop in between makes the next attempt check first.
-            claim = journal.album(claim, StepState.Running) ?: return true
-            val file = UploadedFile(claim.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId)
-            // Only the executor that accepted this receipt COPYs right away; any later attempt may
-            // follow an earlier COPY, so it checks membership first.
-            val mode = if (acceptedNow) AlbumStepMode.Initial else AlbumStepMode.Reconcile
-            val added = followUp { album(target, file, mode) } ?: return journal.defer(claim).let { defer(); true }
-            claim = journal.album(claim, added) ?: return true
+        val file = UploadedFile(claim.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId)
+        for (step in FollowUp.entries) {
+            if (claim.steps[step] != StepState.Pending) continue
+            val state = attempt { followUp(step, account, claim, file, !acceptedNow) } ?: return journal.defer(claim).let { defer(); true }
+            claim = journal.step(claim, step, state) ?: return true
         }
         journal.finish(claim)
         return true
@@ -329,8 +322,8 @@ internal class UploadQueue(
 
 private data class Progress(val id: String, val percent: Int?)
 
-/** Done or Attention; null when the follow-up failed temporarily and should run again later. */
-private suspend fun followUp(action: suspend () -> Boolean): StepState? =
+/** Done or Attention; null when the step failed temporarily and should run again later. */
+private suspend fun attempt(action: suspend () -> Boolean): StepState? =
     try {
         if (action()) StepState.Done else StepState.Attention
     } catch (cancelled: CancellationException) {
@@ -401,6 +394,13 @@ private fun uploadResult(rows: List<UploadJob>): UploadResult? {
 
 private fun UploadJob.problemText(): UiText {
     val name = selection.displayName
+    if (state != TransferState.Attention) {
+        when (steps.entries.firstOrNull { it.value == StepState.Attention }?.key) {
+            FollowUp.Link -> return uiText(R.string.upload_error_link)
+            FollowUp.Album -> return uiText(R.string.upload_error_album)
+            null -> Unit
+        }
+    }
     return when (problem ?: UploadProblem.Unexpected) {
         UploadProblem.Source -> uiText(R.string.upload_error_source, name)
         UploadProblem.Timeline -> uiText(R.string.upload_error_timeline)
@@ -408,8 +408,6 @@ private fun UploadJob.problemText(): UiText {
         UploadProblem.Http -> uiText(R.string.upload_error_http, httpStatus ?: 0, name)
         UploadProblem.Memories -> uiText(R.string.upload_error_memories, httpStatus ?: 0)
         UploadProblem.Unexpected -> uiText(R.string.upload_error_unexpected)
-        UploadProblem.Link -> uiText(R.string.upload_error_link)
-        UploadProblem.Album -> uiText(R.string.upload_error_album)
     }
 }
 
