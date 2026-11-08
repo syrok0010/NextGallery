@@ -61,6 +61,7 @@ import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
 import com.syrok0010.nextgallery.feature.upload.UploadSource
+import com.syrok0010.nextgallery.feature.upload.UploadWorker
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
@@ -121,6 +122,7 @@ val appModule = module {
         val sessions: SessionStore = get()
         val writer: MemoriesAlbumWriter = get()
         val catalog: AlbumCatalogRepository = get()
+        val context = androidContext()
         UploadQueue(
             get(),
             get(),
@@ -139,12 +141,16 @@ val appModule = module {
                         target,
                     ) != AlbumCopyOutcome.Failed
 
-                    AlbumStepMode.Reconcile -> writer.containsFile(file.path, target, file.fileId)
+                    // An earlier COPY may have landed; a conflict after a negative check stays unclear.
+                    AlbumStepMode.Reconcile ->
+                        writer.containsFile(file.path, target, file.fileId) ||
+                            writer.addFile(file.path, target) == AlbumCopyOutcome.Added
                 }
                 catalog.refresh()
                 success
             },
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
+            schedule = { UploadWorker.schedule(context) },
         )
     }
     single<OperationStatusSource> { get<UploadQueue>() }

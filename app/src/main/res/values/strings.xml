@@ -42,8 +42,6 @@
     <string name="status_open_browser_confirm_login">Открой браузер и подтверди вход</string>
     <string name="status_waiting_browser_confirmation">Жду подтверждения входа в браузере</string>
     <string name="timeline_empty">Пока нет загруженных элементов</string>
-    <string name="upload_without_notifications">Уведомления выключены. Загрузка началась.</string>
-    <string name="upload_start_refused">Android не дал начать загрузку. Она начнётся, когда вы снова откроете приложение.</string>
     <string name="timeline_day_header_pattern">d MMMM</string>
     <string name="timeline_scroll_date_current_year_pattern">d MMMM</string>
     <string name="timeline_scroll_date_with_year_pattern">d MMMM yyyy</string>
@@ -156,7 +154,6 @@
     <string name="upload_preparing">Подготовка загрузки</string>
     <string name="upload_progress">Загрузка: %1$d из %2$d</string>
     <string name="upload_done">Загрузка завершена: %1$d из %2$d</string>
-    <string name="upload_error_network">ошибка сети</string>
     <string name="upload_error_memories">Memories ответил HTTP %1$d</string>
     <string name="upload_error_unexpected">непредвиденная ошибка</string>
     <string name="upload_error_timeline">Memories не сообщил папку таймлайна</string>

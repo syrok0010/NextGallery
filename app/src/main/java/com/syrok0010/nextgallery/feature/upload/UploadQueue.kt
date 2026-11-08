@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.upload
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
 import com.syrok0010.nextgallery.core.operation.OperationMediaReference
@@ -66,8 +67,8 @@ internal data class UploadResult(
 
 /**
  * Manual uploads. Room keeps every job, so a queue survives the process; the screen, the status
- * pill and the notification all show projections of the journal. [UploadForegroundService] runs
- * the jobs through [drain] while the app has queued work.
+ * pill and the notification all show projections of the journal. [UploadWorker] runs the jobs
+ * through [drain]; each newly waiting job calls [schedule] to make sure a worker will take it.
  */
 internal class UploadQueue(
     private val sessions: SessionStore,
@@ -79,6 +80,7 @@ internal class UploadQueue(
     private val album: suspend (UploadAlbum, UploadedFile, AlbumStepMode) -> Boolean,
     private val refreshLibrary: () -> Unit,
     private val processId: String = UUID.randomUUID().toString(),
+    private val schedule: suspend () -> Unit = {},
 ) : OperationStatusSource {
     private val commands = Mutex()
     private val rows = MutableStateFlow<List<UploadJob>>(emptyList())
@@ -88,7 +90,7 @@ internal class UploadQueue(
     val entries: StateFlow<List<UploadEntry>> =
         combine(rows, progress, ::uploadEntries).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Jobs nobody runs yet; the app starts the service while there are any. */
+    /** Jobs nobody runs yet. */
     val waiting: StateFlow<Set<String>> =
         rows.map { jobs -> jobs.filter { it.runnable && it.executor == null }.mapTo(HashSet()) { it.id } }
             .stateIn(scope, SharingStarted.Eagerly, emptySet())
@@ -113,6 +115,22 @@ internal class UploadQueue(
                 // Claims of an earlier process died with it.
                 journal.release(owner) { it != processId }
                 journal.observe(owner).collect { rows.value = it }
+            }
+        }
+        scope.launch {
+            // A job that waits again, after a retry or a stop, schedules once more as well.
+            var previous = emptySet<String>()
+            waiting.collect { ids ->
+                if (!previous.containsAll(ids)) {
+                    try {
+                        schedule()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // The jobs stay in the journal; the next start of the app schedules them.
+                    }
+                }
+                previous = ids
             }
         }
     }
@@ -170,17 +188,22 @@ internal class UploadQueue(
 
     /**
      * Runs jobs one by one until none is waiting. [put] transfers the bytes and reports percent;
-     * it returns null when every free name holds a different file.
+     * it returns null when every free name holds a different file. Returns true when a job failed
+     * temporarily and waits for another attempt.
      */
-    suspend fun drain(put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?) {
-        val account = credentials() ?: return
+    suspend fun drain(put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?): Boolean {
+        val account = credentials() ?: return false
         val owner = account.uploadOwner
         var reachedServer = false
+        val deferred = HashSet<String>()
         try {
+            // One process runs uploads, so any other claim belongs to a process that died.
+            journal.release(owner) { it != processId }
             while (credentials() == account) {
-                val claim = journal.claimNext(owner, processId) ?: break
-                reachedServer = runJob(account, claim, put) || reachedServer
+                val claim = journal.claimNext(owner, processId, deferred) ?: break
+                reachedServer = runJob(account, claim, deferred, put) || reachedServer
             }
+            return deferred.isNotEmpty()
         } finally {
             withContext(NonCancellable) {
                 progress.value = null
@@ -202,9 +225,10 @@ internal class UploadQueue(
     private suspend fun runJob(
         account: AccountCredentials,
         claim: UploadJob,
+        deferred: MutableSet<String>,
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
     ): Boolean = coroutineScope {
-        val work = async { execute(account, claim, put) }
+        val work = async { execute(account, claim, put) { deferred += claim.id } }
         running[claim.id] = work
         try {
             work.await()
@@ -217,33 +241,36 @@ internal class UploadQueue(
         }
     }
 
+    /** [defer] is called when the job gave up on a temporary failure. */
     private suspend fun execute(
         account: AccountCredentials,
         start: UploadJob,
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        defer: () -> Unit,
     ): Boolean {
         var claim = start
         var acceptedNow = false
         if (claim.receipt == null) {
-            claim = transfer(account, claim, put) ?: return false
+            claim = transfer(account, claim, put, defer) ?: return false
             acceptedNow = true
         }
         val receipt = checkNotNull(claim.receipt)
         if (claim.linkStep == StepState.Pending) {
             claim = journal.link(claim, StepState.Running) ?: return true
-            val linked = attempt { receipt.fileId?.let { link(account, claim.selection.identityUri, it) } == true }
-            claim = journal.link(claim, if (linked) StepState.Done else StepState.Attention) ?: return true
+            val linked = followUp { receipt.fileId?.let { link(account, claim.selection.identityUri, it) } == true }
+                ?: return journal.defer(claim).let { defer(); true }
+            claim = journal.link(claim, linked) ?: return true
         }
         val target = claim.album
         if (claim.albumStep == StepState.Pending && target != null) {
-            // Marked running before the COPY: after a crash only a started COPY has an unknown outcome.
+            // Marked running before the COPY, so a stop in between makes the next attempt check first.
             claim = journal.album(claim, StepState.Running) ?: return true
             val file = UploadedFile(claim.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId)
-            // Only the executor that accepted this receipt may issue the first COPY. Reopen and
-            // explicit retry always reconcile the durable server state instead.
+            // Only the executor that accepted this receipt COPYs right away; any later attempt may
+            // follow an earlier COPY, so it checks membership first.
             val mode = if (acceptedNow) AlbumStepMode.Initial else AlbumStepMode.Reconcile
-            val added = attempt { album(target, file, mode) }
-            claim = journal.album(claim, if (added) StepState.Done else StepState.Attention) ?: return true
+            val added = followUp { album(target, file, mode) } ?: return journal.defer(claim).let { defer(); true }
+            claim = journal.album(claim, added) ?: return true
         }
         journal.finish(claim)
         return true
@@ -254,18 +281,17 @@ internal class UploadQueue(
         account: AccountCredentials,
         claim: UploadJob,
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        defer: () -> Unit,
     ): UploadJob? {
         if (!sourceUnchanged(claim.selection)) return journal.problem(claim, UploadProblem.Source).let { null }
         val uploaded = try {
             put(account, claim) { percent -> progress.value = Progress(claim.id, percent) }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (error: UploadException) {
-            return journal.problem(claim, error.problem, httpStatus = error.httpStatus).let { null }
-        } catch (_: IOException) {
-            return journal.problem(claim, UploadProblem.Network).let { null }
-        } catch (_: Exception) {
-            return journal.problem(claim, UploadProblem.Unexpected).let { null }
+        } catch (error: Exception) {
+            if (error.temporary) return journal.defer(claim).let { defer(); null }
+            val failure = error as? UploadException
+            return journal.problem(claim, failure?.problem ?: UploadProblem.Unexpected, httpStatus = failure?.httpStatus).let { null }
         }
         if (uploaded == null) return journal.problem(claim, null, conflict = true).let { null }
         // The file may change while it is read; then the server copy is not this phone file.
@@ -303,15 +329,26 @@ internal class UploadQueue(
 
 private data class Progress(val id: String, val percent: Int?)
 
-/** A follow-up that throws failed like one that reported failure. */
-private suspend fun attempt(action: suspend () -> Boolean): Boolean =
+/** Done or Attention; null when the follow-up failed temporarily and should run again later. */
+private suspend fun followUp(action: suspend () -> Boolean): StepState? =
     try {
-        action()
+        if (action()) StepState.Done else StepState.Attention
     } catch (cancelled: CancellationException) {
         throw cancelled
-    } catch (_: Exception) {
-        false
+    } catch (error: Exception) {
+        if (error.temporary) null else StepState.Attention
     }
+
+/** No connection, a timeout or a server that is busy or down; another attempt may succeed. */
+private val Exception.temporary: Boolean
+    get() = when (this) {
+        is UploadException -> httpStatus?.let(::temporaryStatus) == true
+        is DavHttpException -> temporaryStatus(code)
+        is IOException -> true
+        else -> false
+    }
+
+private fun temporaryStatus(code: Int) = code == 408 || code == 429 || code >= 500
 
 private fun uploadEntries(rows: List<UploadJob>, progress: Progress?): List<UploadEntry> =
     rows.map { row ->
@@ -366,7 +403,6 @@ private fun UploadJob.problemText(): UiText {
     val name = selection.displayName
     return when (problem ?: UploadProblem.Unexpected) {
         UploadProblem.Source -> uiText(R.string.upload_error_source, name)
-        UploadProblem.Network -> uiText(R.string.upload_error_network)
         UploadProblem.Timeline -> uiText(R.string.upload_error_timeline)
         UploadProblem.Directory -> uiText(R.string.upload_error_directory, httpStatus ?: 0, name)
         UploadProblem.Http -> uiText(R.string.upload_error_http, httpStatus ?: 0, name)

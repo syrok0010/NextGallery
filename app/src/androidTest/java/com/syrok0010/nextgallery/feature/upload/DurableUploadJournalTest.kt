@@ -111,7 +111,7 @@ class DurableUploadJournalTest {
             assertNotNull(journal.claimNext(owner, "process-2"))
         }
 
-    @Test fun startedAlbumCopyNeedsAttentionAfterReopen() =
+    @Test fun startedAlbumCopyRunsAgainAfterReopen() =
         runBlocking {
             enqueue()
             val accepted = journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
@@ -119,13 +119,23 @@ class DurableUploadJournalTest {
             reopen()
             val restored = journal.jobs(owner).single()
             assertEquals(receipt, restored.receipt)
-            assertEquals(StepState.Attention, restored.albumStep)
-            assertEquals(UploadProblem.Album, restored.problem)
+            assertEquals(StepState.Pending, restored.albumStep)
+            assertNull(restored.problem)
             assertFalse(journal.clearIfFinished(owner))
-            journal.clearFinished(owner)
-            assertFalse(journal.jobs(owner).single().hidden)
             journal.cancel(owner)
             assertTrue(journal.clearIfFinished(owner))
+        }
+
+    @Test fun deferredJobIsSkippedForTheRestOfThePassAndFencesItsOldClaim() =
+        runBlocking {
+            enqueue()
+            val claim = journal.claimNext(owner, "process-1")!!
+            val deferred = journal.defer(claim)!!
+            assertEquals(TransferState.Uncertain, deferred.state)
+            assertNull(deferred.executor)
+            assertNull(journal.claimNext(owner, "process-1", skip = setOf(claim.id)))
+            assertNull(journal.accept(claim, receipt))
+            assertNotNull(journal.claimNext(owner, "process-1"))
         }
 
     @Test fun selectionSurvivesReopen() =

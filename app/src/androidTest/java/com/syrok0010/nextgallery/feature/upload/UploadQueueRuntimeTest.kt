@@ -3,6 +3,8 @@ package com.syrok0010.nextgallery.feature.upload
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.media.*
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
+import java.io.IOException
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.util.UUID
@@ -27,6 +29,8 @@ class UploadQueueRuntimeTest {
     private val albums = mutableListOf<String>()
     private val albumModes = mutableListOf<AlbumStepMode>()
     private var transfers = 0
+    private var albumAdds = true
+    private var schedules = 0
     private val ids = listOf(MediaId("local-a"), MediaId("local-b"))
 
     @Before fun setup() {
@@ -48,8 +52,8 @@ class UploadQueueRuntimeTest {
             sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
             { _, _, _ -> links++; true },
-            { album, _, mode -> albums += album.name; albumModes += mode; true },
-            {}, UUID.randomUUID().toString(),
+            { album, _, mode -> albums += album.name; albumModes += mode; albumAdds },
+            {}, UUID.randomUUID().toString(), { schedules++ },
         )
     }
 
@@ -168,36 +172,82 @@ class UploadQueueRuntimeTest {
         assertTrue(queue.logout { sessions.signOut() })
     }
 
-    @Test fun startedAlbumCopyNeedsAttentionAfterReopenAndCanBeAbandoned() = runBlocking {
+    @Test fun startedAlbumCopyIsCheckedAgainAfterReopenWithoutAnotherPut() = runBlocking {
         enqueue(listOf(ids.first()), album = "slice1")
-        val accepted = journal.accept(deadClaim(), UploadReceipt(listOf("a"), true, 42))!!
+        val accepted = journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))!!
         journal.album(accepted, StepState.Running)
         reopen()
-        waitFor { queue.entries.value.singleOrNull()?.problem != null }
-        queue.drain { _, _, _ -> error("No second PUT") }
-        assertTrue(albums.isEmpty())
-        val entry = queue.entries.value.single()
-        assertEquals(UploadPhase.Uploaded, entry.phase)
-        assertTrue(entry.cancellable)
-        assertFalse(queue.logout { error("The album step is unresolved") })
-        queue.cancel(entry.id)
-        waitFor { !queue.entries.value.single().cancellable }
-        assertEquals(UploadPhase.Uploaded, queue.entries.value.single().phase)
-        assertTrue(queue.logout { sessions.signOut() })
-    }
-
-    @Test fun recoveredAlbumUsesMembershipCheckModeAndNeverPutsAgain() = runBlocking {
-        enqueue(listOf(ids.first()), album = "slice1")
-        val claim = journal.claimNext(owner, "dead-process")!!
-        val accepted = journal.accept(claim, UploadReceipt(listOf("Photos", "a.jpg"), true, 42))!!
-        journal.album(accepted, StepState.Running)
-        reopen()
-        val id = journal.jobs(owner).single().id
-        queue.retry(id)
         waitFor { queue.waiting.value.isNotEmpty() }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
         assertEquals(listOf(AlbumStepMode.Reconcile), albumModes)
         assertEquals(0, transfers)
+        waitFor { queue.entries.value.single().let { it.problem == null && !it.cancellable } }
+    }
+
+    @Test fun failedAlbumStepNeedsAttentionAndRetryChecksMembership() = runBlocking {
+        enqueue(listOf(ids.first()), album = "slice1")
+        albumAdds = false
+        queue.drain(::transfer)
+        waitFor { queue.entries.value.single().retryable }
+        assertFalse(queue.logout { error("The album step is unresolved") })
+        albumAdds = true
+        queue.retry(queue.entries.value.single().id)
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(1, transfers)
+        waitFor { queue.entries.value.single().let { it.problem == null && !it.cancellable } }
+    }
+
+    @Test fun temporaryFailureWaitsForTheNextAttemptAndAPermanentOneNeedsAttention() = runBlocking {
+        val (first, second) = enqueue()
+        val retry = queue.drain { _, job, _ ->
+            transfers++
+            when (job.id) {
+                first -> throw IOException("offline")
+                else -> throw UploadException(UploadProblem.Http, 403)
+            }
+        }
+        assertTrue(retry)
+        assertEquals("A deferred job is not taken again in the same pass", 2, transfers)
+        val jobs = journal.jobs(owner).associateBy { it.id }
+        assertEquals(TransferState.Uncertain, jobs.getValue(first).state)
+        assertNull(jobs.getValue(first).problem)
+        assertEquals(TransferState.Attention, jobs.getValue(second).state)
+        assertFalse(queue.drain(::transfer))
+        waitFor { phases() == listOf(UploadPhase.Uploaded, UploadPhase.NeedsAttention) }
+    }
+
+    @Test fun serverErrorInAFollowUpDefersOnlyThatStep() = runBlocking {
+        enqueue(listOf(ids.first()), album = "slice1")
+        var albumCalls = 0
+        queue = UploadQueue(
+            sessions, library, scope, journal, { stamp!! }, { _, _, _ -> links++; true },
+            { _, _, mode ->
+                albumModes += mode
+                if (albumCalls++ == 0) throw DavHttpException(503, "COPY")
+                true
+            },
+            {}, UUID.randomUUID().toString(),
+        )
+        assertTrue(queue.drain(::transfer))
+        assertEquals(StepState.Pending, journal.jobs(owner).single().albumStep)
+        assertFalse(queue.drain { _, _, _ -> error("No second PUT") })
+        assertEquals(listOf(AlbumStepMode.Initial, AlbumStepMode.Reconcile), albumModes)
+        assertEquals(1, transfers)
+        assertEquals(1, links)
+    }
+
+    @Test fun everyNewlyWaitingJobSchedulesTheWorkerAlsoAfterReopen() = runBlocking {
+        enqueue(listOf(ids.first()))
+        waitFor { schedules == 1 }
+        enqueue(listOf(ids.last()))
+        waitFor { schedules == 2 }
+        reopen()
+        waitFor { schedules == 3 }
+        queue.drain(::transfer)
+        delay(50)
+        assertEquals("Finishing schedules nothing", 3, schedules)
     }
 
     @Test fun batchQueuedDuringAPassExtendsItAndHistoryStartsANewOne() = runBlocking {

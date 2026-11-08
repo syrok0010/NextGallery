@@ -27,11 +27,11 @@ internal enum class TransferState { Pending, Running, Uncertain, Accepted, Confl
 
 internal enum class StepState { None, Pending, Running, Done, Attention, Suppressed }
 
-/** The first pass may COPY; a recovered or explicitly retried step may only reconcile. */
+/** The first pass COPYs; a recovered or retried step checks membership before it COPYs. */
 internal enum class AlbumStepMode { Initial, Reconcile }
 
 /** Why a job needs the user; shown on the uploads screen and in the result. */
-internal enum class UploadProblem { Source, Network, Timeline, Directory, Http, Memories, Unexpected, Link, Album }
+internal enum class UploadProblem { Source, Timeline, Directory, Http, Memories, Unexpected, Link, Album }
 
 /**
  * One file of a manual upload. [executor] is the process running it, [revision] fences writes of
@@ -131,9 +131,9 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
             EnqueueResult.Rejected
         }
 
-    /** Takes the first runnable job nobody runs. */
-    suspend fun claimNext(owner: String, executor: String): UploadJob? = db.withTransaction {
-        val job = dao.jobs(owner).firstOrNull { it.runnable && it.executor == null } ?: return@withTransaction null
+    /** Takes the first runnable job nobody runs, except those in [skip]. */
+    suspend fun claimNext(owner: String, executor: String, skip: Set<String> = emptySet()): UploadJob? = db.withTransaction {
+        val job = dao.jobs(owner).firstOrNull { it.runnable && it.executor == null && it.id !in skip } ?: return@withTransaction null
         job.copy(
             state = if (job.receipt == null) TransferState.Running else job.state,
             executor = executor,
@@ -141,23 +141,13 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         ).also { update(it) }
     }
 
-    /**
-     * Gives up the claims of executors that match [executor]: a transfer that was on the wire has
-     * an unknown outcome, and so has a started album COPY. A link may run again.
-     */
+    /** Gives up the claims of executors that match [executor]. */
     suspend fun release(owner: String, executor: (String) -> Boolean) = db.withTransaction {
-        dao.update(dao.jobs(owner).filter { it.executor?.let(executor) == true }.map {
-            it.copy(
-                state = if (it.state == TransferState.Running) TransferState.Uncertain else it.state,
-                linkStep = if (it.linkStep == StepState.Running) StepState.Pending else it.linkStep,
-                albumStep = if (it.albumStep == StepState.Running) StepState.Attention else it.albumStep,
-                problem = if (it.albumStep == StepState.Running) UploadProblem.Album else it.problem,
-                seen = it.seen && it.albumStep != StepState.Running,
-                executor = null,
-                revision = it.revision + 1,
-            )
-        })
+        dao.update(dao.jobs(owner).filter { it.executor?.let(executor) == true }.map(UploadJob::released))
     }
+
+    /** Gives a job back after a temporary failure; it runs again on a later attempt. */
+    suspend fun defer(claim: UploadJob) = mutate(claim, UploadJob::released)
 
     /** Applies [change] only while [claim] still holds the job and the user has not cancelled it. */
     private suspend fun mutate(claim: UploadJob, change: (UploadJob) -> UploadJob): UploadJob? = db.withTransaction {
@@ -249,3 +239,15 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
     private suspend fun update(job: UploadJob) = dao.update(listOf(job))
 }
+
+/**
+ * A job nobody runs any more. A transfer that was on the wire has an unknown outcome and runs
+ * again; a started step runs again too, and the album step then checks membership first.
+ */
+private fun UploadJob.released() = copy(
+    state = if (state == TransferState.Running) TransferState.Uncertain else state,
+    linkStep = if (linkStep == StepState.Running) StepState.Pending else linkStep,
+    albumStep = if (albumStep == StepState.Running) StepState.Pending else albumStep,
+    executor = null,
+    revision = revision + 1,
+)
