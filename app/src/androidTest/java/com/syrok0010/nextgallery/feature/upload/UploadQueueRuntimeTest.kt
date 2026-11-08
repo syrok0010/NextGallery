@@ -25,6 +25,7 @@ class UploadQueueRuntimeTest {
     private var stamp: SourceStamp? = SourceStamp(5, 10, 20)
     private var links = 0
     private val albums = mutableListOf<String>()
+    private val albumModes = mutableListOf<AlbumStepMode>()
     private var transfers = 0
     private val ids = listOf(MediaId("local-a"), MediaId("local-b"))
 
@@ -47,7 +48,7 @@ class UploadQueueRuntimeTest {
             sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
             { _, _, _ -> links++; true },
-            { album, _ -> albums += album.name; true },
+            { album, _, mode -> albums += album.name; albumModes += mode; true },
             {}, UUID.randomUUID().toString(),
         )
     }
@@ -183,6 +184,20 @@ class UploadQueueRuntimeTest {
         waitFor { !queue.entries.value.single().cancellable }
         assertEquals(UploadPhase.Uploaded, queue.entries.value.single().phase)
         assertTrue(queue.logout { sessions.signOut() })
+    }
+
+    @Test fun recoveredAlbumUsesMembershipCheckModeAndNeverPutsAgain() = runBlocking {
+        enqueue(listOf(ids.first()), album = "slice1")
+        val claim = journal.claimNext(owner, "dead-process")!!
+        val accepted = journal.accept(claim, UploadReceipt(listOf("Photos", "a.jpg"), true, 42))!!
+        journal.album(accepted, StepState.Running)
+        reopen()
+        val id = journal.jobs(owner).single().id
+        queue.retry(id)
+        waitFor { queue.waiting.value.isNotEmpty() }
+        queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
+        assertEquals(listOf(AlbumStepMode.Reconcile), albumModes)
+        assertEquals(0, transfers)
     }
 
     @Test fun batchQueuedDuringAPassExtendsItAndHistoryStartsANewOne() = runBlocking {

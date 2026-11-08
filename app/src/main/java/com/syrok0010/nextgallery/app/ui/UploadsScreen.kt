@@ -115,7 +115,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     waiting,
                     key = { it.id },
-                ) { UploadRow(it) { queue.cancel(it.id) } }
+                ) { UploadRow(it, { queue.cancel(it.id) }, { queue.retry(it.id) }) }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
@@ -128,7 +128,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 items(
                     done,
                     key = { it.id },
-                ) { UploadRow(it) { queue.cancel(it.id) } }
+                ) { UploadRow(it, { queue.cancel(it.id) }, { queue.retry(it.id) }) }
             }
         }
     }
@@ -209,7 +209,7 @@ private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
+private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit, onRetry: () -> Unit) {
     val phase = entry.phase
     val problem = when {
         entry.problem != null -> stringResource(R.string.uploads_failed, entry.problem.asString())
@@ -239,6 +239,12 @@ private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (entry.retryable) {
+                TextButton(
+                    onClick = onRetry,
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                ) { Text(stringResource(R.string.uploads_retry_actions)) }
             }
         }
         SizeText(fileSize(entry.selection.local.sizeBytes))

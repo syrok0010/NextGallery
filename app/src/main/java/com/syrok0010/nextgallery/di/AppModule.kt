@@ -56,6 +56,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
+import com.syrok0010.nextgallery.feature.upload.AlbumStepMode
 import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
@@ -129,11 +130,17 @@ val appModule = module {
             link = { account, identity, fileId ->
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
-            album = { album, file ->
-                // A confirmed conflict means the album already holds the file.
-                val success =
-                    writer.addFile(file.path, AlbumAddress(album.owner, album.name)) !=
-                        AlbumCopyOutcome.Failed
+            album = { album, file, mode ->
+                val target = AlbumAddress(album.owner, album.name)
+                val success = when (mode) {
+                    // A confirmed conflict means the album already holds the file.
+                    AlbumStepMode.Initial -> writer.addFile(
+                        file.path,
+                        target,
+                    ) != AlbumCopyOutcome.Failed
+
+                    AlbumStepMode.Reconcile -> writer.containsFile(file.path, target, file.fileId)
+                }
                 catalog.refresh()
                 success
             },
