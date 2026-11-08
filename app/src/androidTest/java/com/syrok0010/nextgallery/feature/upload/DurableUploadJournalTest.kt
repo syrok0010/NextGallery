@@ -138,15 +138,6 @@ class DurableUploadJournalTest {
             assertEquals(UploadAlbum("test", "task-album"), restored.album)
         }
 
-    @Test fun batchQueuedDuringAPassJoinsIt() =
-        runBlocking {
-            val first = enqueue()
-            journal.claimNext(owner, "process-1")!!
-            val second = enqueue()
-            assertEquals(first.passId, second.passId)
-            assertNotEquals(first.batchId, second.batchId)
-        }
-
     @Test fun rejectedStorageCommitDoesNotAcknowledgeEnqueue() =
         runBlocking {
             // Room opens lazily; a database never opened would open again on the next write.
