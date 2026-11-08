@@ -37,12 +37,9 @@ internal enum class UploadProblem { Source, Network, Timeline, Directory, Http, 
 @Entity(tableName = "upload_jobs")
 internal data class UploadJob(
     @PrimaryKey val id: String,
-    val batchId: String,
     val owner: String,
     val selection: UploadSelection,
     val album: UploadAlbum? = null,
-    /** Files of one pass share one progress counter; a batch queued during a pass joins it. */
-    val passId: String,
     val state: TransferState = TransferState.Pending,
     /** Pinned original name, so a restart looks for an earlier copy under the same names. */
     val destination: List<String>? = null,
@@ -106,7 +103,7 @@ internal abstract class UploadQueueDatabase : RoomDatabase() {
 }
 
 internal sealed interface EnqueueResult {
-    data class Accepted(val batchId: String, val count: Int) : EnqueueResult
+    data class Accepted(val count: Int) : EnqueueResult
     data object Rejected : EnqueueResult
     data object NothingToUpload : EnqueueResult
 }
@@ -122,10 +119,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     suspend fun enqueue(owner: String, files: List<UploadSelection>, album: UploadAlbum?): EnqueueResult =
         try {
             db.withTransaction {
-                val batch = UUID.randomUUID().toString()
-                val pass = dao.jobs(owner).lastOrNull { it.runnable || it.executor != null }?.passId ?: UUID.randomUUID().toString()
-                dao.insert(files.map { UploadJob(UUID.randomUUID().toString(), batch, owner, it, album, pass) })
-                EnqueueResult.Accepted(batch, files.size)
+                dao.insert(files.map { UploadJob(UUID.randomUUID().toString(), owner, it, album) })
+                EnqueueResult.Accepted(files.size)
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
@@ -215,7 +210,7 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         })
     }
 
-    /** Per file: the screen lists files, so a finished file leaves even while its batch runs. */
+    /** Per file: a finished file leaves the screen even while others still run. */
     suspend fun clearFinished(owner: String) = db.withTransaction {
         dao.update(dao.jobs(owner).filter { !it.unfinished && !it.hidden }.map { it.copy(hidden = true) })
     }

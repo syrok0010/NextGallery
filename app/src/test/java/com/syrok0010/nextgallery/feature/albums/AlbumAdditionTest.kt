@@ -109,7 +109,7 @@ class AlbumAdditionTest {
                     catalog,
                     { ids, album ->
                         submittedAlbum.value = album
-                        EnqueueResult.Accepted("batch", ids.size)
+                        EnqueueResult.Accepted(ids.size)
                     },
                     scope,
                 )
@@ -162,7 +162,7 @@ class AlbumAdditionTest {
                     sessions,
                     fixture.writer,
                     emptyCatalog(sessions, scope),
-                    { ids, _ -> EnqueueResult.Accepted("batch", ids.size) },
+                    { ids, _ -> EnqueueResult.Accepted(ids.size) },
                     scope,
                 )
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")

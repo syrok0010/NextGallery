@@ -40,7 +40,7 @@ internal data class UploadEntry(
 /**
  * Upload work shown next to the system notification. [pending] holds identity URIs of files not
  * done yet; [current] is on the wire. [total] and [processed] count files of the current pass, so
- * a batch queued meanwhile extends the same progress.
+ * a file queued meanwhile extends the same progress.
  */
 internal data class UploadActivity(
     val pending: Set<String>,
@@ -90,8 +90,15 @@ internal class UploadQueue(
     val waiting: StateFlow<Set<String>> =
         rows.map { jobs -> jobs.filter { it.runnable && it.executor == null }.mapTo(HashSet()) { it.id } }
             .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+    /** Ids of the current pass: a file queued while others run joins it until none is active. */
+    private val pass = rows.runningFold(emptyList<UploadJob>() to emptySet<String>()) { (_, ids), jobs ->
+        val active = jobs.filter(::active).mapTo(HashSet()) { it.id }
+        jobs to if (active.isEmpty()) emptySet() else ids + active
+    }
     val activity: StateFlow<UploadActivity?> =
-        combine(rows, progress, ::uploadActivity).stateIn(scope, SharingStarted.Eagerly, null)
+        combine(pass, progress) { (jobs, ids), progress -> uploadActivity(jobs, ids, progress) }
+            .stateIn(scope, SharingStarted.Eagerly, null)
     val result: StateFlow<UploadResult?> = rows.map(::uploadResult).stateIn(scope, SharingStarted.Eagerly, null)
     override val operations =
         combine(activity, result, ::uploadOperationSnapshots).stateIn(scope, SharingStarted.Eagerly, emptyList())
@@ -314,11 +321,11 @@ private fun uploadEntries(rows: List<UploadJob>, progress: Progress?): List<Uplo
         )
     }
 
-private fun uploadActivity(rows: List<UploadJob>, progress: Progress?): UploadActivity? {
-    val active = rows.filter { it.runnable || it.executor != null }
+private fun active(job: UploadJob) = job.runnable || job.executor != null
+
+private fun uploadActivity(rows: List<UploadJob>, pass: Set<String>, progress: Progress?): UploadActivity? {
+    val active = rows.filter(::active)
     if (active.isEmpty()) return null
-    val passes = active.mapTo(HashSet()) { it.passId }
-    val pass = rows.filter { it.passId in passes }
     val current = progress?.let { p -> active.firstOrNull { it.id == p.id && it.state == TransferState.Running } }
     return UploadActivity(
         pending = active.mapTo(HashSet()) { it.selection.identityUri },
