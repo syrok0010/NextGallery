@@ -182,8 +182,9 @@ internal class AlbumRemovals(
                 // Keep unacknowledged outcomes, including failures from a previous removal.
                 AlbumRemovalOutcome(name, AlbumRemovalResult(it.result.removed + result.removed, it.result.failed + result.failed))
             } ?: AlbumRemovalOutcome(name, result)
-            mutableProgress.value = null
+            // Asked before the removal reads as finished, so whoever sees it done finds the refresh requested.
             onChanged()
+            mutableProgress.value = null
         }
         return true
     }
