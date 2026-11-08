@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.combine
 import org.koin.compose.koinInject
 
 /**
- * Starts the upload service for batches waiting in [queue] while the app is visible. Before the
+ * Starts the upload service while [queue] has jobs nobody runs and the app is visible. Before the
  * first upload it asks for the notification permission once; uploads start either way.
  */
 @Composable
@@ -51,8 +51,11 @@ internal fun QueuedUploads(
     LaunchedEffect(queue, lifecycle, context) {
         // A foreground service may only start from a visible app.
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            // Each newly queued job starts the service once more: a worker that is just finishing
+            // takes it instead of leaving it for the next visit.
+            var started = emptySet<String>()
             combine(queue.waiting, snapshotFlow { asking }, ::Pair).collect { (waiting, isAsking) ->
-                if (waiting.isEmpty() || isAsking) return@collect
+                if (started.containsAll(waiting) || isAsking) return@collect
                 val shouldRequest = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     ContextCompat.checkSelfPermission(
                         context,
@@ -64,9 +67,11 @@ internal fun QueuedUploads(
                     preferences.edit().putBoolean("notifications_requested", true).apply()
                     asking = true
                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else if (!handOff(context, queue, start)) {
+                } else if (startUploads(context, start)) {
+                    started = started + waiting
+                } else {
                     // Retrying while still visible would most likely be refused again; the
-                    // batches wait for the next time the app comes to the foreground.
+                    // jobs wait for the next time the app comes to the foreground.
                     awaitCancellation()
                 }
             }
@@ -74,15 +79,12 @@ internal fun QueuedUploads(
     }
 }
 
-/** Starts the service once for all waiting batches; false if the system refused to start it. */
-private fun handOff(context: Context, queue: UploadQueue, start: (Context) -> Unit): Boolean {
-    val released = queue.release()
-    if (released.isEmpty()) return true
+/** False if the system refused to start the service; the jobs stay queued. */
+private fun startUploads(context: Context, start: (Context) -> Unit): Boolean {
     try {
         start(context)
     } catch (_: IllegalStateException) {
         // ForegroundServiceStartNotAllowedException and the background start limit before Android 12.
-        queue.restore(released)
         Toast.makeText(context, R.string.upload_start_refused, Toast.LENGTH_LONG).show()
         return false
     }

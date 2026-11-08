@@ -10,7 +10,7 @@ import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
  * Links a phone file and its uploaded or already existing server copy as one media object.
- * The explicit link does not depend on matching AUID/BUID; upload knows both source identities. One instance serves one upload batch.
+ * The explicit link does not depend on matching AUID/BUID; upload knows both source identities.
  */
 internal class UploadedCopiesFollowUp(
     private val identities: MediaIdentityRegistry,

@@ -101,8 +101,6 @@ dependencies {
     add("automationImplementation", libs.androidx.compose.ui.tooling)
 }
 
-ksp { arg("room.schemaLocation", "$projectDir/schemas") }
-
 // Package boundaries are checked until individual features justify separate Gradle projects.
 val verifyFeatureBoundaries by tasks.registering {
     group = "verification"

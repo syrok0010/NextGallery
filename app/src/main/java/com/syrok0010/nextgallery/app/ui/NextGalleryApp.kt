@@ -13,6 +13,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.LocalContentColor
+import com.syrok0010.nextgallery.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -62,12 +67,12 @@ internal fun NextGalleryApp(
 ) {
     val session by sessionViewModel.session.collectAsState()
     val logoutBlocked by sessionViewModel.logoutBlocked.collectAsState()
-    if (logoutBlocked) androidx.compose.material3.AlertDialog(
+    if (logoutBlocked) AlertDialog(
         onDismissRequest = { sessionViewModel.logoutBlocked.value = false },
-        text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.syrok0010.nextgallery.R.string.uploads_logout_blocked)) },
+        text = { Text(stringResource(R.string.uploads_logout_blocked)) },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { sessionViewModel.logoutBlocked.value = false }) {
-                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(android.R.string.ok))
+            TextButton(onClick = { sessionViewModel.logoutBlocked.value = false }) {
+                Text(stringResource(android.R.string.ok))
             }
         },
     )

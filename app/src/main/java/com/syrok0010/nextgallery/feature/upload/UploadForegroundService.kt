@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.IBinder
-import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.AppLinks
@@ -22,21 +21,17 @@ import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.asString
-import com.syrok0010.nextgallery.core.ui.pluralText
 import java.io.FileNotFoundException
 import java.io.IOException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -44,23 +39,20 @@ import org.koin.android.ext.android.inject
 import retrofit2.HttpException
 
 /**
- * Uploads batches from [UploadQueue] and runs their follow-ups. It knows nothing about why a file
- * is uploaded: the journal decides which persisted steps remain after transfer.
+ * Runs the jobs of [UploadQueue] in the foreground. It knows nothing about why a file is uploaded:
+ * the journal decides which steps remain after the transfer.
  */
 class UploadForegroundService : Service() {
     private val transport: NextcloudTransport by inject()
     private val memories: MemoriesApiClient by inject()
     private val queue: UploadQueue by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val notificationManager: NotificationManager by lazy {
-        checkNotNull(
-            getSystemService(),
-        )
-    }
+    private val notificationManager: NotificationManager by lazy { checkNotNull(getSystemService()) }
 
-    // Main thread only: starts arrive there, and the worker runs there.
+    // Main thread only: starts arrive there, and the worker resumes there.
     private var worker: Job? = null
     private var lastStartId = 0
+    private var startedAgain = false
 
     override fun onCreate() {
         super.onCreate()
@@ -69,124 +61,75 @@ class UploadForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
-        // A running worker picks up the new batch and stops the service with the latest start id.
-        // Not a null check: with an empty queue the worker may finish before launch returns.
-        if (worker?.isActive != true) {
-            // startForegroundService requires startForeground even when the queue is already empty.
-            val entered = queue.enterForeground(getString(R.string.upload_error_foreground)) {
-                startForeground(
-                    FOREGROUND_NOTIFICATION_ID,
-                    notification(getString(R.string.upload_preparing), uploading = true),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            }
-            if (!entered) {
-                stopSelfResult(startId)
-                return START_NOT_STICKY
-            }
-            worker = serviceScope.launch { drainQueue() }
+        if (worker?.isActive == true) {
+            // A job queued after the worker found none would wait for the next start otherwise.
+            startedAgain = true
+            return START_NOT_STICKY
         }
+        try {
+            // startForegroundService requires startForeground even when there is nothing left to do.
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                notification(getString(R.string.upload_preparing), uploading = true),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } catch (_: RuntimeException) {
+            // The jobs stay queued for the next time the app is visible.
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
+        worker = serviceScope.launch { work() }
         return START_NOT_STICKY
     }
 
-    /**
-     * Batches run one after another as one pass under one foreground notification. Progress and
-     * the result count files of the whole pass, so a batch released while another is running
-     * extends the same counter instead of starting a new one. The service leaves the foreground
-     * only when no batch is waiting.
-     */
-    private suspend fun drainQueue() {
-        val pass = UploadPass()
-        try {
-            while (true) {
-                val batch = queue.next() ?: break
-                runBatch(batch, pass)
-            }
-        } catch (error: Exception) {
-            // Also covers a stop during the notification delay between two batches.
-            queue.stopExecutor()
-            throw error
-        }
-        // No suspension from the empty check to here, so no start can slip in between.
-        if (pass.files > 0) {
-            notificationManager.notify(
-                RESULT_NOTIFICATION_ID,
-                resultNotification(pass),
-            )
-        }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelfResult(lastStartId)
-    }
-
-    private suspend fun runBatch(batch: UploadBatch, pass: UploadPass) {
-        pass.files += batch.files.size
-        val before = pass.processed
-        // Android drops bursts of notification updates, including the terminal result.
-        // Keep only the latest progress and leave room for foreground/final updates.
-        val updates = Channel<Notification>(Channel.CONFLATED)
-        val result = coroutineScope {
-            val publisher = launch {
-                for (update in updates) {
-                    notificationManager.notify(FOREGROUND_NOTIFICATION_ID, update)
-                    delay(500L)
-                }
-            }
-            val result = runCatching {
+    private suspend fun work() {
+        var destination: String? = null
+        while (true) {
+            startedAgain = false
+            coroutineScope {
+                val progress = launch { publishProgress() }
                 withContext(Dispatchers.IO) {
-                    upload(batch) { index, percent ->
-                        // Read per update: batches released meanwhile join the total at once.
-                        val total = pass.files + queue.releasedFiles()
-                        val message = getString(R.string.upload_progress, before + index + 1, total)
-                        updates.trySend(notification(message, uploading = true, progress = percent))
+                    queue.drain { account, job, onProgress ->
+                        upload(account, job, { destination ?: timelineDirectory().also { destination = it } }, onProgress)
                     }
                 }
+                progress.cancel()
             }
-            publisher.cancelAndJoin()
-            updates.close()
-            result
+            val result = queue.unseenResult()
+            // No suspension from this check to the stop, so no start can slip in between.
+            if (startedAgain) continue
+            if (result != null) notificationManager.notify(RESULT_NOTIFICATION_ID, resultNotification(result))
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(lastStartId)
+            return
         }
-        (result.exceptionOrNull() as? CancellationException)?.let { throw it }
-        result.exceptionOrNull()?.let { error ->
-            val reason = failureReason(error)
-            pass.failures += reason
-            batch.items.forEach { it.complete(UploadPhase.Failed, reason) }
-        }
-        pass.processed += batch.files.size
-        val states = batch.items.map { it.state.value }
-        pass.uploaded += states.count {
-            it.phase == UploadPhase.Uploaded || it.phase == UploadPhase.Existing
-        }
-        pass.existing += states.count { it.phase == UploadPhase.Existing }
-        pass.cancelled += states.count { it.phase == UploadPhase.Cancelled }
-        pass.nameTaken += states.count { it.phase == UploadPhase.NameConflict }
-        pass.failures += states.mapNotNull { it.failure }.distinct()
-        if (states.any {
-                it.attention || it.pendingAction
-            }
-        ) {
-            pass.failures += getString(R.string.uploads_attention)
-        }
-        // Leaves room for the result after the last progress update.
-        delay(500L)
     }
 
-    private fun resultNotification(pass: UploadPass): Notification {
-        val lines = buildList {
-            if (pass.failures.isNotEmpty()) {
-                add(getString(R.string.upload_count, pass.uploaded, pass.files))
-            }
-            pass.detailLines().mapTo(this) { it.asString(this@UploadForegroundService) }
+    /** Android drops bursts of notification updates; the delay leaves room for the result. */
+    private suspend fun publishProgress() {
+        queue.activity.filterNotNull().collect { activity ->
+            val message = getString(R.string.upload_progress, (activity.processed + 1).coerceAtMost(activity.total), activity.total)
+            notificationManager.notify(FOREGROUND_NOTIFICATION_ID, notification(message, uploading = true, progress = activity.percent))
+            delay(500L)
         }
-        val title = if (pass.failures.isEmpty()) {
-            getString(R.string.upload_done, pass.uploaded, pass.files)
-        } else {
-            getString(R.string.upload_stopped, pass.failures.distinct().joinToString(", "))
+    }
+
+    private suspend fun timelineDirectory(): String {
+        val config = try {
+            memories.config()
+        } catch (error: HttpException) {
+            throw UploadException(UploadProblem.Memories, error.code())
         }
+        return timelinePaths(config.timelinePath).firstOrNull() ?: throw UploadException(UploadProblem.Timeline)
+    }
+
+    private fun resultNotification(result: UploadResult): Notification {
+        val lines = result.details().map { it.asString(this) }
         return Notification
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
             .setContentIntent(uploadsIntent())
-            .setContentTitle(title)
+            .setContentTitle(result.title().asString(this))
             .apply {
                 if (lines.isNotEmpty()) {
                     setContentText(lines.joinToString(" · "))
@@ -196,50 +139,19 @@ class UploadForegroundService : Service() {
             .build()
     }
 
-    /** The user sees the kind of failure; the raw message only goes to the log. */
-    private fun failureReason(error: Throwable): String {
-        Log.w(TAG, "Upload failed", error)
-        return when (error) {
-            is UploadException -> getString(error.reason, *error.args)
-
-            is SourceUnavailable -> getString(R.string.upload_error_open, error.name)
-
-            is HttpException -> getString(R.string.upload_error_memories, error.code())
-
-            // Timeouts, dropped connections and DNS failures carry OkHttp's English messages.
-            is IOException -> getString(R.string.upload_error_network)
-
-            else -> getString(R.string.upload_error_unexpected)
-        }
-    }
-
+    /** The original name in the timeline folder; after a restart its neighbours are checked again. */
     private suspend fun upload(
-        batch: UploadBatch,
-        onProgress: (index: Int, percent: Int?) -> Unit,
-    ) {
-        var destination: String? = null
-        queue.runBatch(batch) { account, item, claim ->
-            val selection = item.selection
-            // The original name in the chosen folder; neighbour names are derived from it again
-            // after a restart, so an earlier copy under one of them is found by its bytes.
-            val pinned = claim.destination ?: run {
-                val directory = destination ?: (
-                    timelinePaths(
-                        memories.config().timelinePath,
-                    ).firstOrNull()
-                        ?: throw UploadException(R.string.upload_error_timeline)
-                    ).also { destination = it }
-                val proposed = DavFilePath.of(account.userId, directory, selection.displayName)
-                queue.pinDestination(claim, proposed.segments)
-                    ?: throw java.io.IOException("Upload no longer claimed")
-            }
-            val path = DavFilePath(account.userId, pinned)
-            put(account, path, item) { percent ->
-                if (item.progress(percent)) {
-                    queue.uploading(selection.contentUri, percent)
-                    onProgress(batch.items.indexOf(item), percent)
-                }
-            }
+        account: AccountCredentials,
+        job: UploadJob,
+        directory: suspend () -> String,
+        onProgress: (Int?) -> Unit,
+    ): UploadedFile? {
+        val pinned = job.destination?.let { DavFilePath(account.userId, it) }
+            ?: queue.pin(job, DavFilePath.of(account.userId, directory(), job.selection.displayName))
+        return try {
+            put(account, pinned, job.selection, onProgress)
+        } catch (_: SourceUnavailable) {
+            throw UploadException(UploadProblem.Source)
         }
     }
 
@@ -247,19 +159,17 @@ class UploadForegroundService : Service() {
     private suspend fun put(
         account: AccountCredentials,
         path: DavFilePath,
-        item: UploadItem,
+        selection: UploadSelection,
         onProgress: (Int?) -> Unit,
     ): UploadedFile? {
-        val selection = item.selection
         val uri = Uri.parse(selection.contentUri)
-        val name = selection.displayName
-        val length = readSource(name) {
+        val length = readSource {
             contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         } ?: -1L
         onProgress(if (length >= 0L) 0 else null)
         val openLocal = {
-            val stream = readSource(name) { contentResolver.openInputStream(uri) }
-            stream ?: throw SourceUnavailable(name)
+            val stream = readSource { contentResolver.openInputStream(uri) }
+            stream ?: throw SourceUnavailable()
         }
         val body = UploadRequestBody(
             length = length,
@@ -270,13 +180,10 @@ class UploadForegroundService : Service() {
         // Signed by the job's account, not whichever session is current by now.
         val dav = FilesDavClient(transport) { account }
         return try {
-            item.run { placeUpload(dav, path, selection, body, openLocal) }
+            placeUpload(dav, path, selection, body, openLocal)
         } catch (error: DavHttpException) {
-            val reason = when (error.code) {
-                404, 409 -> R.string.upload_error_directory
-                else -> R.string.upload_error_http
-            }
-            throw UploadException(reason, error.code, selection.displayName)
+            val problem = if (error.code == 404 || error.code == 409) UploadProblem.Directory else UploadProblem.Http
+            throw UploadException(problem, error.code)
         }
     }
 
@@ -318,44 +225,6 @@ class UploadForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /** Results of all batches in one pass of the queue; changed on the main thread only. */
-    private class UploadPass {
-        var files = 0
-        var processed = 0
-        var uploaded = 0
-        var nameTaken = 0
-        var existing = 0
-        var cancelled = 0
-        val failures = mutableListOf<String>()
-        val details = mutableListOf<UiText>()
-
-        fun detailLines(): List<UiText> =
-            buildList {
-                if (existing > 0) {
-                    add(
-                        com.syrok0010.nextgallery.core.ui.uiText(
-                            R.string.upload_existing_count,
-                            existing,
-                        ),
-                    )
-                }
-                if (cancelled > 0) {
-                    add(
-                        com.syrok0010.nextgallery.core.ui.uiText(
-                            R.string.upload_cancelled_count,
-                            cancelled,
-                        ),
-                    )
-                }
-                if (nameTaken > 0) {
-                    add(
-                        pluralText(R.plurals.upload_name_taken, nameTaken, nameTaken),
-                    )
-                }
-                addAll(details)
-            }
-    }
-
     private fun uploadsIntent(): PendingIntent =
         PendingIntent.getActivity(
             this,
@@ -369,28 +238,24 @@ class UploadForegroundService : Service() {
      * The local file can no longer be read. An [IOException], so OkHttp passes it out of the
      * request body unchanged instead of rethrowing it on its dispatcher thread.
      */
-    private class SourceUnavailable(val name: String, cause: Throwable? = null) : IOException(cause)
+    private class SourceUnavailable(cause: Throwable? = null) : IOException(cause)
 
     /** Turns a file that vanished or lost its permission into [SourceUnavailable]. */
-    private inline fun <T> readSource(name: String, open: () -> T): T =
+    private inline fun <T> readSource(open: () -> T): T =
         try {
             open()
         } catch (error: FileNotFoundException) {
-            throw SourceUnavailable(name, error)
+            throw SourceUnavailable(error)
         } catch (error: SecurityException) {
-            throw SourceUnavailable(name, error)
+            throw SourceUnavailable(error)
         }
 
     companion object {
-        private const val TAG = "UploadService"
         private const val CHANNEL_ID = "cloud-upload"
         private const val FOREGROUND_NOTIFICATION_ID = 42
         private const val RESULT_NOTIFICATION_ID = 43
 
-        /**
-         * Takes all batches released by [UploadQueue], including ones released while it runs. Throws
-         * if the system does not let the app start a foreground service right now.
-         */
+        /** Throws if the system does not let the app start a foreground service right now. */
         fun start(context: Context) {
             ContextCompat.startForegroundService(
                 context,

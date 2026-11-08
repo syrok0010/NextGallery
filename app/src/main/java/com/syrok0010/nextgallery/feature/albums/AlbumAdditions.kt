@@ -16,7 +16,7 @@ import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
-import com.syrok0010.nextgallery.feature.upload.UploadIntent
+import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -82,7 +82,7 @@ internal class AlbumAdditions(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
-    private val enqueueUploads: suspend (Collection<MediaId>, List<UploadIntent>) -> EnqueueResult,
+    private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
     private val scope: CoroutineScope,
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
@@ -128,13 +128,19 @@ internal class AlbumAdditions(
                 if (address == null || address.owner != credentials.userId) {
                     AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
                 } else {
-                    val queued = if (request.uploads.isEmpty()) 0 else when (val enqueue = enqueueUploads(
-                        request.uploads,
-                        listOf(UploadIntent("album", owner = address.owner, target = address.name)),
-                    )) {
-                        is EnqueueResult.Accepted -> enqueue.count
-                        EnqueueResult.NothingToUpload -> 0
-                        EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                    val queued = if (request.uploads.isEmpty()) {
+                        0
+                    } else {
+                        when (
+                            val enqueue = enqueueUploads(
+                                request.uploads,
+                                UploadAlbum(address.owner, address.name),
+                            )
+                        ) {
+                            is EnqueueResult.Accepted -> enqueue.count
+                            EnqueueResult.NothingToUpload -> 0
+                            EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                        }
                     }
                     AlbumAdditionState.Done(
                         target.name,

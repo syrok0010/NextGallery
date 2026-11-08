@@ -18,7 +18,6 @@ class UploadQueueTest {
         val selected = uploadSelection(item("local", local("external_primary/images/media/42")))!!
         assertEquals("content://media/external_primary/images/media/42", selected.contentUri)
         assertEquals("content://media/external/images/media/42", selected.identityUri)
-        assertEquals("local", selected.mediaId)
     }
     private fun local(name: String) = MediaAssetRef.LocalContent("content://media/$name", 1, 1)
 

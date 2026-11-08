@@ -1,12 +1,10 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import androidx.annotation.StringRes
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
-import java.util.UUID
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -19,11 +17,12 @@ internal data class UploadSelection(
     @Serializable(with = LocalContentSerializer::class) val local: MediaAssetRef.LocalContent,
     val displayName: String,
     val mimeType: String?,
-    val identityUri: String = uploadedLocalIdentityUri(local.contentUri),
-    val mediaId: String? = null,
     val stamp: SourceStamp? = null,
 ) {
     val contentUri: String get() = local.contentUri
+
+    /** The URI the device-wide media index and identity links use for this file. */
+    val identityUri: String get() = uploadedLocalIdentityUri(contentUri)
 }
 
 /** Keeps the phone copy in the journal while core/media stays free of serialization. */
@@ -57,19 +56,8 @@ internal fun uploadSelection(item: MediaItem): UploadSelection? =
             local = local,
             displayName = item.displayName,
             mimeType = item.mimeType,
-            mediaId = item.mediaId.value,
         )
     }
-
-/**
- * Files the user sent to the cloud in one action, with what the caller wants done to each of them
- * once it is on the server. Upload itself only puts bytes on the server.
- */
-internal class UploadBatch(
-    val files: List<UploadSelection>,
-    val id: String = UUID.randomUUID().toString(),
-    val items: List<UploadItem> = files.map(::UploadItem),
-)
 
 /**
  * [selection] is on the server at [path]: uploaded now ([created]) or already there with the same
@@ -83,5 +71,6 @@ internal data class UploadedFile(
     val fileId: Long? = null,
 )
 
-/** A failure the user can act on; [reason] is a string resource formatted with [args]. */
-internal class UploadException(@StringRes val reason: Int, vararg val args: Any) : Exception()
+/** A failure the user can act on; [httpStatus] is the server answer when there was one. */
+internal class UploadException(val problem: UploadProblem, val httpStatus: Int? = null) :
+    Exception()
