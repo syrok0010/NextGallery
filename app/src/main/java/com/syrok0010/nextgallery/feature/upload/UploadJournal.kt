@@ -25,17 +25,20 @@ internal data class UploadReceipt(val path: List<String>, val created: Boolean, 
 
 internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
 
-internal enum class StepState { None, Pending, Running, Done, Attention, Suppressed }
+/**
+ * Work after the [UploadJob.receipt], run in this order. The journal only tracks each step's
+ * state; the queue gets one function that knows what a step does.
+ */
+internal enum class FollowUp { Link, Album }
 
-/** The first pass COPYs; a recovered or retried step checks membership before it COPYs. */
-internal enum class AlbumStepMode { Initial, Reconcile }
+internal enum class StepState { Pending, Done, Attention, Suppressed }
 
-/** Why a job needs the user; shown on the uploads screen and in the result. */
-internal enum class UploadProblem { Source, Timeline, Directory, Http, Memories, Unexpected, Link, Album }
+/** Why a transfer needs the user; shown on the uploads screen and in the result. */
+internal enum class UploadProblem { Source, Timeline, Directory, Http, Memories, Unexpected }
 
 /**
  * One file of a manual upload. [executor] is the process running it, [revision] fences writes of
- * a claim that was taken away meanwhile. Link and album steps run only after the [receipt].
+ * a claim that was taken away meanwhile. [steps] run only after the [receipt].
  */
 @Entity(tableName = "upload_jobs")
 internal data class UploadJob(
@@ -47,8 +50,7 @@ internal data class UploadJob(
     /** Pinned original name, so a restart looks for an earlier copy under the same names. */
     val destination: List<String>? = null,
     val receipt: UploadReceipt? = null,
-    val linkStep: StepState = StepState.None,
-    val albumStep: StepState = StepState.None,
+    val steps: Map<FollowUp, StepState> = emptyMap(),
     val problem: UploadProblem? = null,
     val httpStatus: Int? = null,
     val executor: String? = null,
@@ -57,17 +59,17 @@ internal data class UploadJob(
     val seen: Boolean = false,
 ) {
     val unfinished: Boolean
-        get() = state in unfinishedStates || linkStep in unfinishedSteps || albumStep in unfinishedSteps
+        get() = state in unfinishedStates || steps.values.any { it in unfinishedSteps }
     val runnable: Boolean
         get() = state == TransferState.Pending || state == TransferState.Uncertain ||
-            (receipt != null && (linkStep == StepState.Pending || albumStep == StepState.Pending))
+            (receipt != null && StepState.Pending in steps.values)
     val hasAttention: Boolean
-        get() = state == TransferState.Attention || linkStep == StepState.Attention || albumStep == StepState.Attention
+        get() = state == TransferState.Attention || StepState.Attention in steps.values
     val hasResult: Boolean get() = !unfinished || hasAttention
 }
 
 private val unfinishedStates = setOf(TransferState.Pending, TransferState.Running, TransferState.Uncertain, TransferState.Attention)
-private val unfinishedSteps = setOf(StepState.Pending, StepState.Running, StepState.Attention)
+private val unfinishedSteps = setOf(StepState.Pending, StepState.Attention)
 private val uploadJson = Json
 
 internal class UploadConverters {
@@ -79,6 +81,8 @@ internal class UploadConverters {
     @TypeConverter fun toReceipt(value: String?): UploadReceipt? = value?.let(uploadJson::decodeFromString)
     @TypeConverter fun fromPath(value: List<String>?): String? = value?.let(uploadJson::encodeToString)
     @TypeConverter fun toPath(value: String?): List<String>? = value?.let(uploadJson::decodeFromString)
+    @TypeConverter fun fromSteps(value: Map<FollowUp, StepState>): String = uploadJson.encodeToString(value)
+    @TypeConverter fun toSteps(value: String): Map<FollowUp, StepState> = uploadJson.decodeFromString(value)
 }
 
 @Dao
@@ -160,13 +164,10 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
     suspend fun pin(claim: UploadJob, path: List<String>): UploadJob? = mutate(claim) { it.copy(destination = it.destination ?: path) }
 
-    suspend fun accept(claim: UploadJob, receipt: UploadReceipt): UploadJob? = mutate(claim) {
-        it.copy(
-            state = TransferState.Accepted,
-            receipt = receipt,
-            linkStep = StepState.Pending,
-            albumStep = if (it.album != null) StepState.Pending else StepState.None,
-        )
+    /** Every file links its phone copy; one with an album is added to it as well. */
+    suspend fun accept(claim: UploadJob, receipt: UploadReceipt): UploadJob? = mutate(claim) { job ->
+        val steps = listOfNotNull(FollowUp.Link, FollowUp.Album.takeIf { job.album != null })
+        job.copy(state = TransferState.Accepted, receipt = receipt, steps = steps.associateWith { StepState.Pending })
     }
 
     suspend fun problem(claim: UploadJob, problem: UploadProblem?, conflict: Boolean = false, httpStatus: Int? = null) = mutate(claim) {
@@ -179,12 +180,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         )
     }
 
-    suspend fun link(claim: UploadJob, state: StepState) = mutate(claim) {
-        it.copy(linkStep = state, problem = if (state == StepState.Attention) UploadProblem.Link else it.problem, seen = false)
-    }
-
-    suspend fun album(claim: UploadJob, state: StepState) = mutate(claim) {
-        it.copy(albumStep = state, problem = if (state == StepState.Attention) UploadProblem.Album else it.problem, seen = false)
+    suspend fun step(claim: UploadJob, step: FollowUp, state: StepState) = mutate(claim) {
+        it.copy(steps = it.steps + (step to state), seen = false)
     }
 
     /** Retries only actions after a durable receipt; the transfer and its destination stay intact. */
@@ -194,9 +191,7 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
                 (ids == null || it.id in ids) && it.receipt != null && it.hasAttention && it.unfinished
             }.map { job ->
                 job.copy(
-                    linkStep = if (job.linkStep == StepState.Attention) StepState.Pending else job.linkStep,
-                    albumStep = if (job.albumStep == StepState.Attention) StepState.Pending else job.albumStep,
-                    problem = null,
+                    steps = job.steps.mapValues { (_, state) -> if (state == StepState.Attention) StepState.Pending else state },
                     executor = null,
                     revision = job.revision + 1,
                     seen = false,
@@ -212,8 +207,7 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         dao.update(dao.jobs(owner).filter { (ids == null || it.id in ids) && it.unfinished }.map {
             it.copy(
                 state = if (it.receipt == null) TransferState.Cancelled else it.state,
-                linkStep = if (it.linkStep in unfinishedSteps) StepState.Suppressed else it.linkStep,
-                albumStep = if (it.albumStep in unfinishedSteps) StepState.Suppressed else it.albumStep,
+                steps = it.steps.mapValues { (_, state) -> if (state in unfinishedSteps) StepState.Suppressed else state },
                 executor = null,
                 revision = it.revision + 1,
                 seen = false,
@@ -242,12 +236,10 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
 /**
  * A job nobody runs any more. A transfer that was on the wire has an unknown outcome and runs
- * again; a started step runs again too, and the album step then checks membership first.
+ * again; a step stays pending until it is done, so a later attempt repeats it.
  */
 private fun UploadJob.released() = copy(
     state = if (state == TransferState.Running) TransferState.Uncertain else state,
-    linkStep = if (linkStep == StepState.Running) StepState.Pending else linkStep,
-    albumStep = if (albumStep == StepState.Running) StepState.Pending else albumStep,
     executor = null,
     revision = revision + 1,
 )

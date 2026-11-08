@@ -43,7 +43,7 @@ class UploadNotificationPermissionTest {
     private val db by lazy { UploadQueueDatabase.open(context, DB_NAME) }
     private val queue by lazy {
         UploadQueue(SessionStore(SignedIn), library, scope, UploadJournal(db),
-            { SourceStamp(10, 1, 1) }, { _, _, _ -> true }, { _, _, _ -> true }, {})
+            { SourceStamp(10, 1, 1) }, { _, _, _, _, _ -> true }, {})
     }
     private val registry = PermissionRegistry()
     private var notificationsGranted = false

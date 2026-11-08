@@ -56,7 +56,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
-import com.syrok0010.nextgallery.feature.upload.AlbumStepMode
+import com.syrok0010.nextgallery.feature.upload.FollowUp
 import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
@@ -129,25 +129,29 @@ val appModule = module {
             get(named("libraryScope")),
             get(),
             get<UploadSource>()::snapshot,
-            link = { account, identity, fileId ->
-                UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
-            },
-            album = { album, file, mode ->
-                val target = AlbumAddress(album.owner, album.name)
-                val success = when (mode) {
-                    // A confirmed conflict means the album already holds the file.
-                    AlbumStepMode.Initial -> writer.addFile(
-                        file.path,
-                        target,
-                    ) != AlbumCopyOutcome.Failed
+            followUp = { step, account, job, file, recovered ->
+                when (step) {
+                    FollowUp.Link -> file.fileId?.let {
+                        UploadedCopiesFollowUp(
+                            identities,
+                            sessions,
+                        ).link(account, job.selection.identityUri, it)
+                    } == true
 
-                    // An earlier COPY may have landed; a conflict after a negative check stays unclear.
-                    AlbumStepMode.Reconcile ->
-                        writer.containsFile(file.path, target, file.fileId) ||
-                            writer.addFile(file.path, target) == AlbumCopyOutcome.Added
+                    FollowUp.Album -> {
+                        val target = checkNotNull(job.album).let { AlbumAddress(it.owner, it.name) }
+                        // A first COPY counts a confirmed conflict as added. After an interrupted
+                        // attempt membership is checked first, and a conflict then stays unclear.
+                        val added = if (recovered) {
+                            writer.containsFile(file.path, target, file.fileId) ||
+                                writer.addFile(file.path, target) == AlbumCopyOutcome.Added
+                        } else {
+                            writer.addFile(file.path, target) != AlbumCopyOutcome.Failed
+                        }
+                        catalog.refresh()
+                        added
+                    }
                 }
-                catalog.refresh()
-                success
             },
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
             schedule = { UploadWorker.schedule(context) },
