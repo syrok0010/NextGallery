@@ -114,7 +114,7 @@ internal class AlbumAdditions(
      * Local-only objects are queued for upload once the album exists, so they never race album
      * creation; they are not uploaded when the album cannot be written.
      */
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest, onAccepted: () -> Unit = {}): Boolean {
+    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
         val credentials = credentials() ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
@@ -136,7 +136,6 @@ internal class AlbumAdditions(
                         EnqueueResult.NothingToUpload -> 0
                         EnqueueResult.Rejected -> throw UploadEnqueueRejected()
                     }
-                    onAccepted()
                     AlbumAdditionState.Done(
                         target.name,
                         writer.add(address, request.fileIds),

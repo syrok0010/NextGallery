@@ -29,6 +29,7 @@ import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
+import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -85,10 +86,10 @@ internal fun PhotosScreen(
             appliesTo = { it.hasRemoteCopy },
         ),
     ) { items, onDone ->
-        // The app root starts the batch and asks for the notification permission.
+        // The app root starts the batch and asks for the notification permission. A queue that
+        // could not be saved keeps the selection, so the user can try again.
         scope.launch {
-            uploads.submit(items.map { it.mediaId })
-            onDone()
+            if (uploads.submit(items.map { it.mediaId }) != EnqueueResult.Rejected) onDone()
         }
     }
     MediaCollectionScreen(
