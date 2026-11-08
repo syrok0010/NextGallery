@@ -130,9 +130,10 @@ val appModule = module {
                 UploadedCopiesFollowUp(identities, sessions).link(account, identity, fileId)
             },
             album = { album, file ->
+                // A confirmed conflict means the album already holds the file.
                 val success =
-                    writer.addFile(file.path, AlbumAddress(album.owner, album.name)) ==
-                        AlbumCopyOutcome.Added
+                    writer.addFile(file.path, AlbumAddress(album.owner, album.name)) !=
+                        AlbumCopyOutcome.Failed
                 catalog.refresh()
                 success
             },
