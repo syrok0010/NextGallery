@@ -100,7 +100,7 @@ internal fun AlbumScreen(
         // Members that left the album after a full refresh: the viewer stops holding them.
         deletedMediaIds = contents.departedIds,
         viewerStatus = { visible ->
-            if (operations.active) OperationStatusPill(operations, visible = visible, fillWidth = false)
+            if (operations.active) OperationStatusPill(operations, visible = visible, onOpenUploads = onOpenUploads, fillWidth = false)
         },
     ) { viewerVisible, content ->
         LibraryScreenScaffold(

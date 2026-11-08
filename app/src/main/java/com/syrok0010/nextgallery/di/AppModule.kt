@@ -25,8 +25,8 @@ import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
-import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
 import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
+import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource

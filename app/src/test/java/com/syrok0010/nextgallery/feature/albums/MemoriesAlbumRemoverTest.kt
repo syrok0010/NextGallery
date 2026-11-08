@@ -1,12 +1,13 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
 class MemoriesAlbumRemoverTest {
     @Test fun `removal lists membership once and only deletes selected album links`() = runBlocking {
-        MemoriesAlbumWriterTest.Fixture { request ->
+        NextcloudFixture { request ->
             when (request.method) {
                 "PROPFIND" -> 207 to listing("/remote.php/dav/photos/anna/albums/Лето & море")
                 "DELETE" -> (if (request.decodedTarget.endsWith("/2-b.jpg")) 403 else 204) to ""
@@ -15,7 +16,7 @@ class MemoriesAlbumRemoverTest {
         }.use { fixture ->
             assertEquals(
                 AlbumRemovalResult(2, 1),
-                MemoriesAlbumRemover(fixture.writerTransport).remove(
+                MemoriesAlbumRemover(fixture.transport).remove(
                     fixture.credentials, AlbumLocation.Remote("anna/Лето & море"), setOf(1, 2, 99),
                 ),
             )
@@ -28,7 +29,7 @@ class MemoriesAlbumRemoverTest {
     }
 
     @Test fun `parses captured Photos membership response including root propstat 404`() {
-        MemoriesAlbumWriterTest.Fixture { 500 to "" }.use { fixture ->
+        NextcloudFixture { 500 to "" }.use { fixture ->
             val xml = requireNotNull(javaClass.getResource("/albums/membership-propfind.xml")).readText()
             val root = albumUrl(fixture.origin, AlbumAddress("test", "ng133-1793518885-1"))
             val member = albumMemberUrls(root, xml).getValue(305)
@@ -37,9 +38,9 @@ class MemoriesAlbumRemoverTest {
     }
 
     @Test fun `listing error never attempts a delete or treats selected files as absent`() = runBlocking {
-        MemoriesAlbumWriterTest.Fixture { 403 to "" }.use { fixture ->
+        NextcloudFixture { 403 to "" }.use { fixture ->
             try {
-                MemoriesAlbumRemover(fixture.writerTransport).remove(fixture.credentials, AlbumLocation.Remote("anna/album"), setOf(1))
+                MemoriesAlbumRemover(fixture.transport).remove(fixture.credentials, AlbumLocation.Remote("anna/album"), setOf(1))
                 fail("Expected failed listing")
             } catch (_: java.io.IOException) { }
             assertEquals(listOf("PROPFIND"), fixture.requests.map { it.method })
@@ -47,9 +48,9 @@ class MemoriesAlbumRemoverTest {
     }
 
     @Test fun `foreign album fails before issuing HTTP`() = runBlocking {
-        MemoriesAlbumWriterTest.Fixture { error("Must not request foreign album") }.use { fixture ->
+        NextcloudFixture { error("Must not request foreign album") }.use { fixture ->
             try {
-                MemoriesAlbumRemover(fixture.writerTransport).remove(fixture.credentials, AlbumLocation.Remote("someone/album"), setOf(1))
+                MemoriesAlbumRemover(fixture.transport).remove(fixture.credentials, AlbumLocation.Remote("someone/album"), setOf(1))
                 fail("Expected rejected foreign album")
             } catch (_: IllegalArgumentException) { }
             assertTrue(fixture.requests.isEmpty())
@@ -57,7 +58,7 @@ class MemoriesAlbumRemoverTest {
     }
 
     @Test fun `DAV hrefs cannot escape album origin collection or file identity`() {
-        MemoriesAlbumWriterTest.Fixture { 500 to "" }.use { fixture ->
+        NextcloudFixture { 500 to "" }.use { fixture ->
             val root = albumUrl(fixture.origin, AlbumAddress("anna", "album"))
             val valid = listing(root.encodedPath)
             assertEquals(setOf(1L, 2L, 3L), albumMemberUrls(root, valid).keys)
