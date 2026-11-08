@@ -13,6 +13,7 @@ internal data class LocalMediaProjectionItem(
     val height: Int?,
     val takenAtEpochSeconds: Long,
     val modifiedAtEpochSeconds: Long?,
+    val sizeBytes: Long,
     val isVideo: Boolean,
     val videoDurationSeconds: Long?,
     val auid: String?,
@@ -39,6 +40,7 @@ internal data class LocalMediaProjectionItem(
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = contentUri,
                 modifiedAtEpochSeconds = modifiedAtEpochSeconds,
+                sizeBytes = sizeBytes,
             ),
         )
 

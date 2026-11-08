@@ -148,7 +148,7 @@ class VanishedSourceAliasesTest {
             mimeType = "image/jpeg",
             width = null,
             height = null,
-            sizeBytes = null,
+            sizeBytes = 1,
             dateTakenMillis = null,
             dateModifiedSeconds = null,
             dateAddedSeconds = null,
@@ -411,7 +411,7 @@ class VanishedSourceAliasesTest {
         isFavorite = false,
         isHidden = false,
         assetRef = if (source.source == MediaSourceKind.Local) {
-            MediaAssetRef.LocalContent(source.sourceKey, null)
+            MediaAssetRef.LocalContent(source.sourceKey, null, 1)
         } else {
             MediaAssetRef.MemoriesFile(source.sourceKey.toLong())
         },

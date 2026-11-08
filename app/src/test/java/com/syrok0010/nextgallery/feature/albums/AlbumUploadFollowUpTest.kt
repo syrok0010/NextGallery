@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -81,7 +82,7 @@ class AlbumUploadFollowUpTest {
         }
     }
 
-    private fun selection(name: String) = UploadSelection("content://media/$name", name, "image/jpeg")
+    private fun selection(name: String) = UploadSelection(MediaAssetRef.LocalContent("content://media/$name", 1, 1), name, "image/jpeg")
 
     private fun uploaded(fixture: MemoriesAlbumWriterTest.Fixture, name: String) =
         UploadedFile(selection(name), DavFilePath.of("anna", "/Photos/$name"), created = true)

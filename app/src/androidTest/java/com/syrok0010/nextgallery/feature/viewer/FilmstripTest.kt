@@ -239,6 +239,7 @@ class FilmstripTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://filmstrip/$id",
                 modifiedAtEpochSeconds = 1_728_000_000L,
+                sizeBytes = 1,
             ),
         )
 }

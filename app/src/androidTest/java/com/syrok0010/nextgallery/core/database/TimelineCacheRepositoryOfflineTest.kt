@@ -258,6 +258,7 @@ class TimelineCacheRepositoryOfflineTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = LOCAL_CONTENT_URI,
                 modifiedAtEpochSeconds = 1_717_100_000L,
+                sizeBytes = 1,
             ),
         )
 

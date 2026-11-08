@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavFixtureServer
 import com.syrok0010.nextgallery.core.network.dav.DavRequest
@@ -237,6 +238,11 @@ class UploadPlacementTest {
     }
 
     private companion object {
-        val SELECTION = UploadSelection("content://media/1", "a.jpg", "image/jpeg")
+        val SELECTION =
+            UploadSelection(
+                MediaAssetRef.LocalContent("content://media/1", 1, 1),
+                "a.jpg",
+                "image/jpeg",
+            )
     }
 }

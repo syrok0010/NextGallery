@@ -304,7 +304,7 @@ class UnifiedTimelineProjectionTest {
         videoDurationSeconds = null,
         isFavorite = false,
         isHidden = false,
-        assetRef = MediaAssetRef.LocalContent(contentUri, 1_716_900_000),
+        assetRef = MediaAssetRef.LocalContent(contentUri, 1_716_900_000, 1),
     )
 
     private fun remoteItem(

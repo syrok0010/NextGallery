@@ -59,6 +59,7 @@ class ThumbnailKeyTest {
         val original = MediaAssetRef.LocalContent(
             contentUri = "content://media/external/images/media/42",
             modifiedAtEpochSeconds = 1_700_000_000,
+            sizeBytes = 1,
         )
         val modified = original.copy(modifiedAtEpochSeconds = 1_700_000_001)
 

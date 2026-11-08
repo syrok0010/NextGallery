@@ -98,6 +98,7 @@ class TimelineSlotTileTest {
             assetRef = MediaAssetRef.LocalContent(
                 contentUri = "content://media/external/images/media/42",
                 modifiedAtEpochSeconds = null,
+                sizeBytes = 1,
             ),
         )
 
@@ -130,6 +131,7 @@ class TimelineSlotTileTest {
                 local = MediaAssetRef.LocalContent(
                     contentUri = "content://media/external/images/media/42",
                     modifiedAtEpochSeconds = null,
+                    sizeBytes = 1,
                 ),
                 remote = remote.assetRef as MediaAssetRef.MemoriesFile,
             ),

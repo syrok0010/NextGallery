@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
@@ -10,16 +11,18 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Phone copy of one object, fixed by [UploadQueue.submit] when the object is queued. */
 internal data class UploadSelection(
-    val contentUri: String,
+    val local: MediaAssetRef.LocalContent,
     val displayName: String,
     val mimeType: String?,
-)
+) {
+    val contentUri: String get() = local.contentUri
+}
 
 /** Only objects that exist just on the phone are uploaded; others already have a server copy. */
 internal fun uploadSelection(item: MediaItem): UploadSelection? =
     item.localCopy?.takeUnless { item.hasRemoteCopy }?.let { local ->
         UploadSelection(
-            contentUri = local.contentUri,
+            local = local,
             displayName = item.displayName,
             mimeType = item.mimeType,
         )

@@ -278,7 +278,7 @@ class MediaDetailScreenTest {
             width = 800, height = 600, etag = null, livePhotoId = null,
             auid = null, buid = null, sharedBy = null, takenAtEpochSeconds = null,
             isVideo = isVideo, videoDurationSeconds = null, isFavorite = false, isHidden = false,
-            assetRef = MediaAssetRef.LocalContent(file.toURI().toString(), 123),
+            assetRef = MediaAssetRef.LocalContent(file.toURI().toString(), 123, 1),
         )
     }
 

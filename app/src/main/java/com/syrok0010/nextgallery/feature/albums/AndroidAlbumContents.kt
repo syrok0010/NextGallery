@@ -32,7 +32,7 @@ internal class AndroidAlbumContents(
             .associateBy { it.localCopy?.contentUri }
         val columns = arrayOf(
             "_id", "media_type", "_display_name", "mime_type", "width", "height",
-            "datetaken", "date_modified", "date_added", "duration", "orientation",
+            "datetaken", "date_modified", "date_added", "duration", "orientation", "_size",
         )
         val selection =
             "volume_name = ? AND relative_path = ? AND media_type IN (?, ?) AND is_pending = 0 AND is_trashed = 0"
@@ -94,7 +94,7 @@ internal class AndroidAlbumContents(
                     videoDurationSeconds = if (video) cursor.getLong(9) / 1000 else null,
                     isFavorite = false,
                     isHidden = false,
-                    assetRef = MediaAssetRef.LocalContent(uri, modified),
+                    assetRef = MediaAssetRef.LocalContent(uri, modified, cursor.getLong(11)),
                 )
             }
         } ?: error("MediaStore returned no folder cursor")

@@ -604,7 +604,7 @@ class VideoPlaybackIntegrationTest {
             displayName = "Local H.264 + AAC.mp4", mimeType = "video/mp4",
             width = 640, height = 360, etag = null, livePhotoId = null, auid = null, buid = null,
             sharedBy = null, takenAtEpochSeconds = null, isVideo = true, videoDurationSeconds = 12,
-            isFavorite = false, isHidden = false, assetRef = MediaAssetRef.LocalContent(uri.toString(), 123),
+            isFavorite = false, isHidden = false, assetRef = MediaAssetRef.LocalContent(uri.toString(), 123, 1),
         )
     }
 

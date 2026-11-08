@@ -37,7 +37,7 @@ data class LocalMediaMetadata(
     val mimeType: String?,
     val width: Int?,
     val height: Int?,
-    val sizeBytes: Long?,
+    val sizeBytes: Long,
     val dateTakenMillis: Long?,
     val memoriesTimelineEpochSeconds: Long? = null,
     val imageUniqueId: String? = null,
@@ -187,7 +187,7 @@ class LocalMediaSource(
             val timestamp = item.timelineEpochSeconds() ?: return@mapNotNull null
             val aliases = MemoriesMediaIdentity.calculate(
                 baseName = item.displayName,
-                sizeBytes = item.sizeBytes ?: 0,
+                sizeBytes = item.sizeBytes,
                 dateTakenMillis = item.dateTakenMillis ?: 0,
                 imageUniqueId = item.imageUniqueId,
             )
@@ -221,6 +221,7 @@ class LocalMediaSource(
         height = metadata.height,
         takenAtEpochSeconds = timelineEpochSeconds,
         modifiedAtEpochSeconds = metadata.dateModifiedSeconds,
+        sizeBytes = metadata.sizeBytes,
         isVideo = metadata.isVideo,
         videoDurationSeconds = metadata.durationMillis?.takeIf { it > 0 }?.div(1_000),
         auid = aliases.auid,

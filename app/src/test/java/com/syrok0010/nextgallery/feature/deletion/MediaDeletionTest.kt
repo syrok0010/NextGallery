@@ -311,7 +311,7 @@ class MediaDeletionTest {
         override fun clear() = Unit
     }
 
-    private fun local(id: Long) = MediaAssetRef.LocalContent("content://media/external/file/$id", 1)
+    private fun local(id: Long) = MediaAssetRef.LocalContent("content://media/external/file/$id", 1, 1)
 
     private fun item(id: String, asset: MediaAssetRef, isVideo: Boolean = false) =
         MediaItem(
