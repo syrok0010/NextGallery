@@ -86,7 +86,7 @@ internal fun PhotosScreen(
             appliesTo = { it.hasRemoteCopy },
         ),
     ) { items, onDone ->
-        // The app root starts the batch and asks for the notification permission. A queue that
+        // The queue schedules the upload and the app root asks for notifications. A queue that
         // could not be saved keeps the selection, so the user can try again.
         scope.launch {
             if (uploads.submit(items.map { it.mediaId }) != EnqueueResult.Rejected) onDone()
