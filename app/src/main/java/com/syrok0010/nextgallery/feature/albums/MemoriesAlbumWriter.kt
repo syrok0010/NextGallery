@@ -91,6 +91,10 @@ internal class MemoriesAlbumWriter(
         }
     }
 
+    /** Reads album membership for recovery; it never performs COPY. */
+    suspend fun containsFile(file: DavFilePath, album: AlbumAddress, fileId: Long?): Boolean =
+        fileId != null && dav.containsFile(AlbumPath(album.owner, album.name), fileId)
+
     /**
      * Confirms a 409 against the album. A failed check must not discard the whole batch, so an
      * unconfirmed conflict counts as a failure for that file only.

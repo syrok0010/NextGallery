@@ -35,6 +35,8 @@ internal data class UploadEntry(
     val problem: UiText? = null,
     /** Unfinished work blocks logout, so the user can always cancel it. */
     val cancellable: Boolean = false,
+    /** A receipt exists and a follow-up can be retried without another upload. */
+    val retryable: Boolean = false,
 )
 
 /**
@@ -74,7 +76,7 @@ internal class UploadQueue(
     private val journal: UploadJournal,
     private val snapshot: (UploadSelection) -> SourceStamp,
     private val link: suspend (AccountCredentials, String, Long) -> Boolean,
-    private val album: suspend (UploadAlbum, UploadedFile) -> Boolean,
+    private val album: suspend (UploadAlbum, UploadedFile, AlbumStepMode) -> Boolean,
     private val refreshLibrary: () -> Unit,
     private val processId: String = UUID.randomUUID().toString(),
 ) : OperationStatusSource {
@@ -137,6 +139,9 @@ internal class UploadQueue(
         journal.cancel(owner, setOf(id))
         running[id]?.cancel()
     }
+
+    /** Re-runs link/album reconciliation without reading the source or issuing another PUT. */
+    fun retry(id: String) = command { owner -> journal.retry(owner, setOf(id)) }
 
     fun clearFinished() = command(journal::clearFinished)
 
@@ -218,7 +223,11 @@ internal class UploadQueue(
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
     ): Boolean {
         var claim = start
-        if (claim.receipt == null) claim = transfer(account, claim, put) ?: return false
+        var acceptedNow = false
+        if (claim.receipt == null) {
+            claim = transfer(account, claim, put) ?: return false
+            acceptedNow = true
+        }
         val receipt = checkNotNull(claim.receipt)
         if (claim.linkStep == StepState.Pending) {
             claim = journal.link(claim, StepState.Running) ?: return true
@@ -230,7 +239,10 @@ internal class UploadQueue(
             // Marked running before the COPY: after a crash only a started COPY has an unknown outcome.
             claim = journal.album(claim, StepState.Running) ?: return true
             val file = UploadedFile(claim.selection, DavFilePath(account.userId, receipt.path), receipt.created, receipt.fileId)
-            val added = attempt { album(target, file) }
+            // Only the executor that accepted this receipt may issue the first COPY. Reopen and
+            // explicit retry always reconcile the durable server state instead.
+            val mode = if (acceptedNow) AlbumStepMode.Initial else AlbumStepMode.Reconcile
+            val added = attempt { album(target, file, mode) }
             claim = journal.album(claim, if (added) StepState.Done else StepState.Attention) ?: return true
         }
         journal.finish(claim)
@@ -318,6 +330,7 @@ private fun uploadEntries(rows: List<UploadJob>, progress: Progress?): List<Uplo
             percent = progress?.takeIf { it.id == row.id && phase == UploadPhase.Uploading }?.percent,
             problem = row.takeIf { it.hasAttention }?.problemText(),
             cancellable = row.unfinished,
+            retryable = row.receipt != null && row.hasAttention && row.unfinished,
         )
     }
 

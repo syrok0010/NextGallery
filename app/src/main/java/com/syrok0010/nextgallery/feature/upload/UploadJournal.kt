@@ -27,6 +27,9 @@ internal enum class TransferState { Pending, Running, Uncertain, Accepted, Confl
 
 internal enum class StepState { None, Pending, Running, Done, Attention, Suppressed }
 
+/** The first pass may COPY; a recovered or explicitly retried step may only reconcile. */
+internal enum class AlbumStepMode { Initial, Reconcile }
+
 /** Why a job needs the user; shown on the uploads screen and in the result. */
 internal enum class UploadProblem { Source, Network, Timeline, Directory, Http, Memories, Unexpected, Link, Album }
 
@@ -192,6 +195,24 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
     suspend fun album(claim: UploadJob, state: StepState) = mutate(claim) {
         it.copy(albumStep = state, problem = if (state == StepState.Attention) UploadProblem.Album else it.problem, seen = false)
+    }
+
+    /** Retries only actions after a durable receipt; the transfer and its destination stay intact. */
+    suspend fun retry(owner: String, ids: Set<String>? = null) = db.withTransaction {
+        dao.update(
+            dao.jobs(owner).filter {
+                (ids == null || it.id in ids) && it.receipt != null && it.hasAttention && it.unfinished
+            }.map { job ->
+                job.copy(
+                    linkStep = if (job.linkStep == StepState.Attention) StepState.Pending else job.linkStep,
+                    albumStep = if (job.albumStep == StepState.Attention) StepState.Pending else job.albumStep,
+                    problem = null,
+                    executor = null,
+                    revision = job.revision + 1,
+                    seen = false,
+                )
+            },
+        )
     }
 
     suspend fun finish(claim: UploadJob) = mutate(claim) { it.copy(executor = null) }
