@@ -1,114 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import android.content.Context
-import androidx.room.*
-import com.syrok0010.nextgallery.core.session.AccountCredentials
+import androidx.room.withTransaction
 import java.util.UUID
-import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-
-/** Jobs belong to an account. Logout needs an empty queue and clears the journal. */
-internal val AccountCredentials.uploadOwner: String get() = "${serverUrl.trimEnd('/')}#$userId"
-
-/** Metadata of the phone file when it was queued; a different value later means it changed. */
-@Serializable
-internal data class SourceStamp(val size: Long, val modified: Long?, val generation: Long?)
-
-/** Album the user picked; the file is added to it once uploaded. */
-@Serializable
-internal data class UploadAlbum(val owner: String, val name: String)
-
-/** The file is on the server at [path] (`DavFilePath.segments`): uploaded now ([created]) or found with the same bytes. */
-@Serializable
-internal data class UploadReceipt(val path: List<String>, val created: Boolean, val fileId: Long?)
-
-internal enum class TransferState { Pending, Running, Uncertain, Accepted, Conflict, Attention, Cancelled }
-
-/**
- * Work after the [UploadJob.receipt], run in this order. The journal only tracks each step's
- * state; the queue gets one function that knows what a step does.
- */
-internal enum class FollowUp { Link, Album }
-
-internal enum class StepState { Pending, Done, Attention, Suppressed }
-
-/** Why a transfer needs the user; shown on the uploads screen and in the result. */
-internal enum class UploadProblem { Source, Timeline, Directory, Http, Memories, Unexpected }
-
-/**
- * One file of a manual upload. [executor] is the process running it, [revision] fences writes of
- * a claim that was taken away meanwhile. [steps] run only after the [receipt].
- */
-@Entity(tableName = "upload_jobs")
-internal data class UploadJob(
-    @PrimaryKey val id: String,
-    val owner: String,
-    val selection: UploadSelection,
-    val album: UploadAlbum? = null,
-    val state: TransferState = TransferState.Pending,
-    /** Pinned original name, so a restart looks for an earlier copy under the same names. */
-    val destination: List<String>? = null,
-    val receipt: UploadReceipt? = null,
-    val steps: Map<FollowUp, StepState> = emptyMap(),
-    val problem: UploadProblem? = null,
-    val httpStatus: Int? = null,
-    val executor: String? = null,
-    val revision: Long = 0,
-    val hidden: Boolean = false,
-    val seen: Boolean = false,
-) {
-    val unfinished: Boolean
-        get() = state in unfinishedStates || steps.values.any { it in unfinishedSteps }
-    val runnable: Boolean
-        get() = state == TransferState.Pending || state == TransferState.Uncertain ||
-            (receipt != null && StepState.Pending in steps.values)
-    val hasAttention: Boolean
-        get() = state == TransferState.Attention || StepState.Attention in steps.values
-    val hasResult: Boolean get() = !unfinished || hasAttention
-}
-
-private val unfinishedStates = setOf(TransferState.Pending, TransferState.Running, TransferState.Uncertain, TransferState.Attention)
-private val unfinishedSteps = setOf(StepState.Pending, StepState.Attention)
-private val uploadJson = Json
-
-internal class UploadConverters {
-    @TypeConverter fun fromSelection(value: UploadSelection): String = uploadJson.encodeToString(value)
-    @TypeConverter fun toSelection(value: String): UploadSelection = uploadJson.decodeFromString(value)
-    @TypeConverter fun fromAlbum(value: UploadAlbum?): String? = value?.let(uploadJson::encodeToString)
-    @TypeConverter fun toAlbum(value: String?): UploadAlbum? = value?.let(uploadJson::decodeFromString)
-    @TypeConverter fun fromReceipt(value: UploadReceipt?): String? = value?.let(uploadJson::encodeToString)
-    @TypeConverter fun toReceipt(value: String?): UploadReceipt? = value?.let(uploadJson::decodeFromString)
-    @TypeConverter fun fromPath(value: List<String>?): String? = value?.let(uploadJson::encodeToString)
-    @TypeConverter fun toPath(value: String?): List<String>? = value?.let(uploadJson::decodeFromString)
-    @TypeConverter fun fromSteps(value: Map<FollowUp, StepState>): String = uploadJson.encodeToString(value)
-    @TypeConverter fun toSteps(value: String): Map<FollowUp, StepState> = uploadJson.decodeFromString(value)
-}
-
-@Dao
-internal interface UploadJournalDao {
-    @Query("SELECT * FROM upload_jobs WHERE owner = :owner ORDER BY rowid") suspend fun jobs(owner: String): List<UploadJob>
-    @Query("SELECT * FROM upload_jobs WHERE owner = :owner AND hidden = 0 ORDER BY rowid") fun observe(owner: String): Flow<List<UploadJob>>
-    @Query("SELECT * FROM upload_jobs WHERE id = :id") suspend fun job(id: String): UploadJob?
-    @Insert suspend fun insert(jobs: List<UploadJob>)
-    @Update suspend fun update(jobs: List<UploadJob>)
-    @Query("DELETE FROM upload_jobs") suspend fun clear()
-}
-
-/** Bump [version] on every schema change: the destructive fallback runs only when it changes. */
-@Database(entities = [UploadJob::class], version = 2, exportSchema = false)
-@TypeConverters(UploadConverters::class)
-internal abstract class UploadQueueDatabase : RoomDatabase() {
-    abstract fun journal(): UploadJournalDao
-
-    companion object {
-        /** Apart from the cache DB, which is rebuilt freely; a schema change still resets it, the app is not released yet. */
-        fun open(context: Context, name: String = "upload-journal.db"): UploadQueueDatabase =
-            Room.databaseBuilder(context, UploadQueueDatabase::class.java, name)
-                .fallbackToDestructiveMigration(true)
-                .build()
-    }
-}
 
 internal sealed interface EnqueueResult {
     data class Accepted(val count: Int) : EnqueueResult
@@ -138,7 +31,7 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
     /** Takes the first runnable job nobody runs, except those in [skip]. */
     suspend fun claimNext(owner: String, executor: String, skip: Set<String> = emptySet()): UploadJob? = db.withTransaction {
-        val job = dao.jobs(owner).firstOrNull { it.runnable && it.executor == null && it.id !in skip } ?: return@withTransaction null
+        val job = dao.jobs(owner).firstOrNull { it.waiting && it.id !in skip } ?: return@withTransaction null
         job.copy(
             state = if (job.receipt == null) TransferState.Running else job.state,
             executor = executor,
@@ -234,13 +127,3 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
 
     private suspend fun update(job: UploadJob) = dao.update(listOf(job))
 }
-
-/**
- * A job nobody runs any more. A transfer that was on the wire has an unknown outcome and runs
- * again; a step stays pending until it is done, so a later attempt repeats it.
- */
-private fun UploadJob.released() = copy(
-    state = if (state == TransferState.Running) TransferState.Uncertain else state,
-    executor = null,
-    revision = revision + 1,
-)
