@@ -217,6 +217,9 @@ class UploadQueueRuntimeTest {
         assertEquals(TransferState.Uncertain, jobs.getValue(first).state)
         assertNull(jobs.getValue(first).problem)
         assertEquals(TransferState.Attention, jobs.getValue(second).state)
+        // The server still holds the lock of a PUT interrupted by process death.
+        assertTrue(queue.drain { _, _, _ -> throw UploadException(UploadProblem.Http, 423) })
+        assertEquals(TransferState.Uncertain, journal.jobs(owner).first { it.id == first }.state)
         assertFalse(queue.drain(::transfer))
         waitFor { phases() == listOf(UploadPhase.Uploaded, UploadPhase.NeedsAttention) }
     }
