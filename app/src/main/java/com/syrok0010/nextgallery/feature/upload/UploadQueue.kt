@@ -332,7 +332,10 @@ private suspend fun attempt(action: suspend () -> Boolean): StepState? =
         if (error.temporary) null else StepState.Attention
     }
 
-/** No connection, a timeout or a server that is busy or down; another attempt may succeed. */
+/**
+ * No connection, a timeout, a server that is busy or down, or a lock (423) still held by an
+ * interrupted request; another attempt may succeed.
+ */
 private val Exception.temporary: Boolean
     get() = when (this) {
         is UploadException -> httpStatus?.let(::temporaryStatus) == true
@@ -341,7 +344,7 @@ private val Exception.temporary: Boolean
         else -> false
     }
 
-private fun temporaryStatus(code: Int) = code == 408 || code == 429 || code >= 500
+private fun temporaryStatus(code: Int) = code == 408 || code == 423 || code == 429 || code >= 500
 
 private fun uploadEntries(rows: List<UploadJob>, progress: Progress?): List<UploadEntry> =
     rows.map { row ->
