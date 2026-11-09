@@ -95,7 +95,8 @@ internal interface UploadJournalDao {
     @Query("DELETE FROM upload_jobs") suspend fun clear()
 }
 
-@Database(entities = [UploadJob::class], version = 1, exportSchema = false)
+/** Bump [version] on every schema change: the destructive fallback runs only when it changes. */
+@Database(entities = [UploadJob::class], version = 2, exportSchema = false)
 @TypeConverters(UploadConverters::class)
 internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao
