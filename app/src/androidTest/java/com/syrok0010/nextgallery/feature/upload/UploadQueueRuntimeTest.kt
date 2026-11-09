@@ -51,12 +51,10 @@ class UploadQueueRuntimeTest {
         queue = UploadQueue(
             sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
-            { step, _, job, _, recovered ->
-                when (step) {
-                    FollowUp.Link -> { links++; true }
-                    FollowUp.Album -> { albums += job.album!!.name; albumRecovered += recovered; albumAdds }
-                }
-            },
+            UploadFollowUps(
+                link = { _, _, _, _ -> links++; true },
+                album = { _, job, _, recovered -> albums += job.album!!.name; albumRecovered += recovered; albumAdds },
+            ),
             {}, UUID.randomUUID().toString(), { schedules++ },
         )
     }
@@ -229,15 +227,14 @@ class UploadQueueRuntimeTest {
         var albumCalls = 0
         queue = UploadQueue(
             sessions, library, scope, journal, { stamp!! },
-            { step, _, _, _, recovered ->
-                if (step == FollowUp.Link) {
-                    links++
-                } else {
+            UploadFollowUps(
+                link = { _, _, _, _ -> links++; true },
+                album = { _, _, _, recovered ->
                     albumRecovered += recovered
                     if (albumCalls++ == 0) throw DavHttpException(503, "COPY")
-                }
-                true
-            },
+                    true
+                },
+            ),
             {}, UUID.randomUUID().toString(),
         )
         assertTrue(queue.drain(::transfer))

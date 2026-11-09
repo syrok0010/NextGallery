@@ -19,12 +19,11 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.AlbumAddress
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
-import com.syrok0010.nextgallery.feature.albums.AlbumCopyOutcome
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
@@ -56,7 +55,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
-import com.syrok0010.nextgallery.feature.upload.FollowUp
+import com.syrok0010.nextgallery.feature.upload.UploadFollowUps
 import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
@@ -118,10 +117,6 @@ val appModule = module {
     single { UploadJournal(get()) }
     single { UploadSource(androidContext().contentResolver) }
     single {
-        val identities: MediaIdentityRegistry = get()
-        val sessions: SessionStore = get()
-        val writer: MemoriesAlbumWriter = get()
-        val catalog: AlbumCatalogRepository = get()
         val context = androidContext()
         UploadQueue(
             get(),
@@ -129,30 +124,10 @@ val appModule = module {
             get(named("libraryScope")),
             get(),
             get<UploadSource>()::snapshot,
-            followUp = { step, account, job, file, recovered ->
-                when (step) {
-                    FollowUp.Link -> file.fileId?.let {
-                        UploadedCopiesFollowUp(
-                            identities,
-                            sessions,
-                        ).link(account, job.selection.identityUri, it)
-                    } == true
-
-                    FollowUp.Album -> {
-                        val target = checkNotNull(job.album).let { AlbumAddress(it.owner, it.name) }
-                        // A first COPY counts a confirmed conflict as added. After an interrupted
-                        // attempt membership is checked first, and a conflict then stays unclear.
-                        val added = if (recovered) {
-                            writer.containsFile(file.path, target, file.fileId) ||
-                                writer.addFile(file.path, target) == AlbumCopyOutcome.Added
-                        } else {
-                            writer.addFile(file.path, target) != AlbumCopyOutcome.Failed
-                        }
-                        catalog.refresh()
-                        added
-                    }
-                }
-            },
+            UploadFollowUps(
+                link = UploadedCopiesFollowUp(get(), get()),
+                album = AlbumUploadFollowUp(get(), get()),
+            ),
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
             schedule = { UploadWorker.schedule(context) },
         )

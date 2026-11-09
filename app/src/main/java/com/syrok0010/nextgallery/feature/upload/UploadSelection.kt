@@ -4,7 +4,6 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.core.media.localCopy
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -59,18 +58,11 @@ internal fun uploadSelection(item: MediaItem): UploadSelection? =
         )
     }
 
-/**
- * [selection] is on the server at [path]: uploaded now ([created]) or already there with the same
- * bytes. [path] may be a neighbour name when the original one holds a different file. [fileId] is
- * the server file id when DAV returned it.
- */
-internal data class UploadedFile(
-    val selection: UploadSelection,
-    val path: DavFilePath,
-    val created: Boolean,
-    val fileId: Long? = null,
-)
-
-/** A failure the user can act on; [httpStatus] is the server answer when there was one. */
-internal class UploadException(val problem: UploadProblem, val httpStatus: Int? = null) :
-    Exception()
+/** Exact-volume reads and aggregate device-index identities have different URI roles. */
+internal fun uploadedLocalIdentityUri(uri: String): String {
+    val match = Regex(
+        "content://media/([^/]+)/(images|video)/media/([0-9]+)",
+    ).matchEntire(uri) ?: return uri
+    if (match.groupValues[1] == "internal") return uri
+    return "content://media/external/${match.groupValues[2]}/media/${match.groupValues[3]}"
+}

@@ -6,7 +6,6 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
-import com.syrok0010.nextgallery.core.ui.UiText
 
 /**
  * Links a phone file and its uploaded or already existing server copy as one media object.
@@ -15,7 +14,15 @@ import com.syrok0010.nextgallery.core.ui.UiText
 internal class UploadedCopiesFollowUp(
     private val identities: MediaIdentityRegistry,
     private val sessions: SessionStore,
-) {
+) : UploadFollowUp {
+    /** Without a server file id there is nothing exact to link. Linking again is harmless. */
+    override suspend fun run(
+        account: AccountCredentials,
+        job: UploadJob,
+        file: UploadedFile,
+        recovered: Boolean,
+    ): Boolean = file.fileId?.let { link(account, job.selection.identityUri, it) } == true
+
     /**
      * Links only while [credentials] are still signed in: logout clears Memories identities, and
      * the same numeric file id on another server is a different file.
@@ -35,13 +42,4 @@ internal class UploadedCopiesFollowUp(
                 (sessions.session.value as? SessionUiState.SignedIn)?.credentials == credentials
             },
         )
-}
-
-/** Exact-volume reads and aggregate device-index identities have different URI roles. */
-internal fun uploadedLocalIdentityUri(uri: String): String {
-    val match = Regex(
-        "content://media/([^/]+)/(images|video)/media/([0-9]+)",
-    ).matchEntire(uri) ?: return uri
-    if (match.groupValues[1] == "internal") return uri
-    return "content://media/external/${match.groupValues[2]}/media/${match.groupValues[3]}"
 }

@@ -64,7 +64,7 @@ class UploadsRetryUiTest {
         queue = UploadQueue(
             sessions, library, scope, UploadJournal(db),
             { SourceStamp(10, 1, 1) },
-            { step, _, _, _, _ -> step != FollowUp.Link || linked },
+            UploadFollowUps(link = { _, _, _, _ -> linked }, album = { _, _, _, _ -> true }),
             {}, UUID.randomUUID().toString(),
         )
     }

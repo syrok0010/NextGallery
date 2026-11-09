@@ -4,6 +4,11 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.provider.MediaStore
 import java.io.FileNotFoundException
+import kotlinx.serialization.Serializable
+
+/** Metadata of the phone file when it was queued; a different value later means it changed. */
+@Serializable
+internal data class SourceStamp(val size: Long, val modified: Long?, val generation: Long?)
 
 /** Observe only available metadata; no hash/identity policy is introduced. Opening proves access. */
 internal class UploadSource(private val resolver: ContentResolver) {
