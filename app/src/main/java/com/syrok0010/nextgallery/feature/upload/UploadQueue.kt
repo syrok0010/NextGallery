@@ -43,12 +43,6 @@ internal class UploadQueue(
     val entries: StateFlow<List<UploadEntry>> =
         combine(rows, progress, ::uploadEntries).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Jobs nobody runs yet. */
-    val waiting: StateFlow<Set<String>> =
-        rows
-            .map { jobs -> jobs.filter { it.waiting }.mapTo(HashSet()) { it.id } }
-            .stateIn(scope, SharingStarted.Eagerly, emptySet())
-
     /** Ids of the current pass: a file queued while others run joins it until none is active. */
     private val pass =
         rows.runningFold(emptyList<UploadJob>() to emptySet<String>()) { (_, ids), jobs ->

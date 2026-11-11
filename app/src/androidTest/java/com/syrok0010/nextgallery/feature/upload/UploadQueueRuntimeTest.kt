@@ -85,7 +85,10 @@ class UploadQueueRuntimeTest {
         return UploadedFile(job.selection, path, true, 42)
     }
 
-    private suspend fun waitFor(predicate: () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
+    private suspend fun waitFor(predicate: suspend () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
+
+    /** Runnable jobs nobody holds, read from the journal. */
+    private suspend fun waiting() = journal.jobs(owner).count { it.waiting }
 
     private fun phases() = queue.entries.value.map { it.phase }
 
@@ -129,7 +132,7 @@ class UploadQueueRuntimeTest {
         assertTrue(albums.isEmpty())
         reopen()
         waitFor { queue.entries.value.size == 2 }
-        assertTrue(queue.waiting.value.isEmpty())
+        assertEquals(0, waiting())
         assertTrue(phases().all { it == UploadPhase.Cancelled })
     }
 
@@ -138,7 +141,7 @@ class UploadQueueRuntimeTest {
         journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))
         stamp = null
         reopen()
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { waiting() > 0 }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT or source access") }
         assertEquals(0, transfers)
         assertEquals(1, links)
@@ -150,7 +153,7 @@ class UploadQueueRuntimeTest {
         val fixed = listOf("Photos", "original.jpg")
         journal.pin(deadClaim(), fixed)
         reopen()
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { waiting() > 0 }
         queue.drain { account, job, _ ->
             assertEquals(fixed, job.destination)
             transfers++
@@ -180,7 +183,7 @@ class UploadQueueRuntimeTest {
         enqueue(listOf(ids.first()), album = "slice1")
         journal.accept(deadClaim(), UploadReceipt(listOf("Photos", "a.jpg"), true, 42))
         reopen()
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { waiting() > 0 }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
         assertEquals(listOf(true), albumRecovered)
         assertEquals(0, transfers)
@@ -196,7 +199,7 @@ class UploadQueueRuntimeTest {
         albumAdds = true
         val scheduled = schedules
         queue.retry(queue.entries.value.single().id)
-        waitFor { queue.waiting.value.isNotEmpty() && schedules == scheduled + 1 }
+        waitFor { waiting() > 0 && schedules == scheduled + 1 }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
         assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
@@ -291,7 +294,7 @@ class UploadQueueRuntimeTest {
         enqueue(listOf(ids.first()))
         assertTrue("Scheduled before submit returns", schedules > 0)
         // The start-up check may have seen the first job as well; it is done once the rows show.
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { queue.entries.value.isNotEmpty() }
         val base = schedules
         enqueue(listOf(ids.last()))
         assertEquals(base + 1, schedules)
@@ -348,7 +351,7 @@ class UploadQueueRuntimeTest {
         enqueue(listOf(ids.last()), album = "slice2")
         journal.accept(deadClaim(), UploadReceipt(listOf("a"), true, 42))
         reopen()
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { waiting() > 0 }
         queue.drain { _, _, _ -> error("No transfer for a saved receipt") }
         assertEquals(listOf("slice1", "slice2"), albums)
         assertTrue(queue.entries.value.all { it.problem == null })
@@ -363,9 +366,9 @@ class UploadQueueRuntimeTest {
         sending.await()
         runner.cancelAndJoin()
         assertEquals(listOf(TransferState.Uncertain, TransferState.Pending), journal.jobs(owner).map { it.state })
-        waitFor { queue.waiting.value.size == 2 }
+        waitFor { waiting() == 2 }
         reopen()
-        waitFor { queue.waiting.value.size == 2 }
+        waitFor { waiting() == 2 }
         queue.drain(::transfer)
         assertEquals(2, transfers)
         waitFor { phases().all { it == UploadPhase.Uploaded } }
