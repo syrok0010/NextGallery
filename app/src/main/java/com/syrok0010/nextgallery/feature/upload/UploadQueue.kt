@@ -33,6 +33,9 @@ internal class UploadQueue(
     private val schedule: suspend () -> Unit = {},
 ) : OperationStatusSource {
     private val commands = Mutex()
+
+    /** WorkManager does not wait for a stopped worker's cleanup before it starts the next one. */
+    private val passes = Mutex()
     private val rows = MutableStateFlow<List<UploadJob>>(emptyList())
     private val progress = MutableStateFlow<Progress?>(null)
     private val running = ConcurrentHashMap<String, Job>()
@@ -144,29 +147,29 @@ internal class UploadQueue(
      */
     suspend fun drain(
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
-    ): Boolean {
-        val account = credentials() ?: return false
-        val owner = account.uploadOwner
-        var reachedServer = false
-        val deferred = HashSet<String>()
-        try {
-            // The unique work runs one pass at a time, so every claim left now is stale: a dead
-            // process, or an earlier pass here that could not release its own. Revision fences
-            // whatever such a pass might still write.
-            journal.release(owner) { true }
-            while (credentials() == account) {
-                val claim = journal.claimNext(owner, processId, deferred) ?: break
-                reachedServer = runJob(account, claim, deferred, put) || reachedServer
+    ): Boolean =
+        passes.withLock {
+            val account = credentials() ?: return@withLock false
+            val owner = account.uploadOwner
+            var reachedServer = false
+            val deferred = HashSet<String>()
+            try {
+                // Passes never overlap, so every claim left now is stale: a dead process, or an
+                // earlier pass here that could not release its own.
+                journal.release(owner) { true }
+                while (credentials() == account) {
+                    val claim = journal.claimNext(owner, processId, deferred) ?: break
+                    reachedServer = runJob(account, claim, deferred, put) || reachedServer
+                }
+                deferred.isNotEmpty()
+            } finally {
+                withContext(NonCancellable) {
+                    progress.value = null
+                    journal.release(owner) { it == processId }
+                }
+                if (reachedServer) refreshLibrary()
             }
-            return deferred.isNotEmpty()
-        } finally {
-            withContext(NonCancellable) {
-                progress.value = null
-                journal.release(owner) { it == processId }
-            }
-            if (reachedServer) refreshLibrary()
         }
-    }
 
     /** Read from the journal, so it already counts the job [drain] finished last. */
     suspend fun unseenResult(): UploadResult? =
