@@ -32,6 +32,7 @@ class UploadQueueRuntimeTest {
     private var albumAdds = true
     private var schedules = 0
     private val ids = listOf(MediaId("local-a"), MediaId("local-b"))
+    private var processId = ""
 
     @Before fun setup() {
         context.deleteDatabase(dbName)
@@ -48,6 +49,7 @@ class UploadQueueRuntimeTest {
             override fun clear() = Unit
         })
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        processId = UUID.randomUUID().toString()
         queue = UploadQueue(
             sessions, library, scope, journal,
             { stamp ?: throw SecurityException() },
@@ -55,7 +57,7 @@ class UploadQueueRuntimeTest {
                 link = { _, _, _, _ -> links++; true },
                 album = { _, job, _, recovered -> albums += job.album!!.name; albumRecovered += recovered; albumAdds },
             ),
-            {}, UUID.randomUUID().toString(), { schedules++ },
+            {}, processId, { schedules++ },
         )
     }
 
@@ -244,6 +246,14 @@ class UploadQueueRuntimeTest {
         assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
         assertEquals(1, links)
+    }
+
+    @Test fun aClaimAnEarlierPassHereCouldNotReleaseRunsInTheNextPass() = runBlocking {
+        enqueue(listOf(ids.first()))
+        journal.claimNext(owner, processId)!!
+        assertFalse(queue.drain(::transfer))
+        assertEquals(1, transfers)
+        assertFalse(journal.jobs(owner).single().unfinished)
     }
 
     @Test fun acceptingAndReopeningScheduleTheWorkerButADeferralLeavesItToBackoff() = runBlocking {

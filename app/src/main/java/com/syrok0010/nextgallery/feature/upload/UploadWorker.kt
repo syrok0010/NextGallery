@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.upload
 
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -38,9 +39,10 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
             if (run()) Result.retry() else Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             // A failed work fails the runs appended after it too, and their jobs would wait for
             // the next start of the app. The journal still holds them, so try again later.
+            Log.w("UploadWorker", "Upload pass failed, retrying", error)
             Result.retry()
         }
 
