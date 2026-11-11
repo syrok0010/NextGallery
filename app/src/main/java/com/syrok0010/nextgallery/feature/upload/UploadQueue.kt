@@ -150,8 +150,10 @@ internal class UploadQueue(
         var reachedServer = false
         val deferred = HashSet<String>()
         try {
-            // One process runs uploads, so any other claim belongs to a process that died.
-            journal.release(owner) { it != processId }
+            // The unique work runs one pass at a time, so every claim left now is stale: a dead
+            // process, or an earlier pass here that could not release its own. Revision fences
+            // whatever such a pass might still write.
+            journal.release(owner) { true }
             while (credentials() == account) {
                 val claim = journal.claimNext(owner, processId, deferred) ?: break
                 reachedServer = runJob(account, claim, deferred, put) || reachedServer
