@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
+import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,6 +45,11 @@ class AlbumUploadFollowUpTest {
     @Test fun `conflict after a negative check is unclear and needs the user`() {
         val (added, _) = run(recovered = true, members = emptyList(), copy = 409)
         assertFalse(added)
+    }
+
+    @Test fun `a busy server is retried later and a refusal needs the user`() {
+        assertThrows(DavHttpException::class.java) { run(recovered = false, members = emptyList(), copy = 503) }
+        assertFalse(run(recovered = false, members = emptyList(), copy = 403).first)
     }
 
     /** Returns the step result and the DAV methods it sent, PROPFIND with its depth. */
