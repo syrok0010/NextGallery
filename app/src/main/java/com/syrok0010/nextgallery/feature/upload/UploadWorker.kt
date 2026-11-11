@@ -9,14 +9,13 @@ import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import com.syrok0010.nextgallery.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -79,25 +78,20 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
         private const val WORK_NAME = "uploads"
 
         /**
-         * Makes sure a worker takes the waiting jobs. A running worker is not replaced: its
-         * transfer would restart. A follow-up run is appended instead, in case it has just found
-         * the journal empty. A worker waiting for backoff or network is replaced to try now.
+         * Makes sure a worker takes the waiting jobs. A run is appended to the existing one rather
+         * than replacing it: a running transfer would restart and a worker in backoff would retry
+         * at once. The appended run drains whatever the current one has missed.
          */
         suspend fun schedule(context: Context) {
-            val work = WorkManager.getInstance(context)
-            val running = work.getWorkInfosForUniqueWorkFlow(WORK_NAME).first().any {
-                it.state == WorkInfo.State.RUNNING
-            }
             val request = OneTimeWorkRequestBuilder<UploadWorker>()
                 .setConstraints(
                     Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
                 ).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
-            work.enqueueUniqueWork(
-                WORK_NAME,
-                if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
-                request,
-            )
+            WorkManager
+                .getInstance(context)
+                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+                .await()
         }
     }
 }

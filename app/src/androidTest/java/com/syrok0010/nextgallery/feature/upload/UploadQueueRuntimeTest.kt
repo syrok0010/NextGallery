@@ -192,8 +192,9 @@ class UploadQueueRuntimeTest {
         waitFor { queue.entries.value.single().retryable }
         assertFalse(queue.logout { error("The album step is unresolved") })
         albumAdds = true
+        val scheduled = schedules
         queue.retry(queue.entries.value.single().id)
-        waitFor { queue.waiting.value.isNotEmpty() }
+        waitFor { queue.waiting.value.isNotEmpty() && schedules == scheduled + 1 }
         queue.drain { _, _, _ -> error("A receipt must not trigger PUT") }
         assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
@@ -245,16 +246,20 @@ class UploadQueueRuntimeTest {
         assertEquals(1, links)
     }
 
-    @Test fun everyNewlyWaitingJobSchedulesTheWorkerAlsoAfterReopen() = runBlocking {
+    @Test fun acceptingAndReopeningScheduleTheWorkerButADeferralLeavesItToBackoff() = runBlocking {
         enqueue(listOf(ids.first()))
-        waitFor { schedules == 1 }
+        assertTrue("Scheduled before submit returns", schedules > 0)
+        // The start-up check may have seen the first job as well; it is done once the rows show.
+        waitFor { queue.waiting.value.isNotEmpty() }
+        val base = schedules
         enqueue(listOf(ids.last()))
-        waitFor { schedules == 2 }
+        assertEquals(base + 1, schedules)
         reopen()
-        waitFor { schedules == 3 }
+        waitFor { schedules == base + 2 }
+        assertTrue(queue.drain { _, _, _ -> throw IOException("offline") })
         queue.drain(::transfer)
         delay(50)
-        assertEquals("Finishing schedules nothing", 3, schedules)
+        assertEquals("A deferral and finishing schedule nothing", base + 2, schedules)
     }
 
     @Test fun batchQueuedDuringAPassExtendsItAndHistoryStartsANewOne() = runBlocking {
