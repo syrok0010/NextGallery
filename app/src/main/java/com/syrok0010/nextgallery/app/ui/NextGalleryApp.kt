@@ -35,7 +35,6 @@ import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
-import com.syrok0010.nextgallery.feature.upload.UploadNotificationPermission
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.koin.androidx.compose.koinViewModel
@@ -99,7 +98,6 @@ internal fun NextGalleryApp(
         if (signedIn) links.collect { link -> linkRoute(link)?.let(open) }
     }
     LocalMediaPermissionFlow(isSignedIn = signedIn)
-    if (signedIn) UploadNotificationPermission()
     if (signedIn) LibrarySystemBars()
     NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {

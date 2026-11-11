@@ -33,6 +33,7 @@ import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
 import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.rememberUploadNotificationRequest
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -54,6 +55,7 @@ internal fun PhotosScreen(
     val tileActivity = remember(operations) { operations::tileActivity }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val askForNotifications = rememberUploadNotificationRequest()
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     // Asked on every dialog, so the answer is fresh when the user decides.
@@ -89,13 +91,23 @@ internal fun PhotosScreen(
             appliesTo = { it.hasRemoteCopy },
         ),
     ) { items, onDone ->
-        // The queue schedules the upload and the app root asks for notifications. A queue that
-        // could not be saved keeps the selection, so the user can try again.
+        // A queue that could not be saved keeps the selection, so the user can try again.
         scope.launch {
-            if (uploads.submit(items.map { it.mediaId }) != EnqueueResult.Rejected) {
-                onDone()
-            } else {
-                Toast.makeText(context, R.string.upload_enqueue_rejected, Toast.LENGTH_SHORT).show()
+            when (uploads.submit(items.map { it.mediaId })) {
+                is EnqueueResult.Accepted -> {
+                    onDone()
+                    askForNotifications()
+                }
+
+                EnqueueResult.NothingToUpload -> onDone()
+
+                EnqueueResult.Rejected ->
+                    Toast
+                        .makeText(
+                            context,
+                            R.string.upload_enqueue_rejected,
+                            Toast.LENGTH_SHORT,
+                        ).show()
             }
         }
     }
@@ -162,6 +174,8 @@ internal fun PhotosScreen(
                 if (additions.add(target, request)) {
                     albumRequest = null
                     onDone()
+                    // Phone-only items are uploaded into the album.
+                    if (request.uploads.isNotEmpty()) scope.launch { askForNotifications() }
                 }
             },
         )
