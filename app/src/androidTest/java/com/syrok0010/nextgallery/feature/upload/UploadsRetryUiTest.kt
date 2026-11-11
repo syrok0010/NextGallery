@@ -87,7 +87,7 @@ class UploadsRetryUiTest {
         rule.onNodeWithText("Повторить действие").assertIsDisplayed()
         linked = true
         rule.onNodeWithText("Повторить действие").performClick()
-        withTimeout(5_000) { while (queue.waiting.value.isEmpty()) delay(10) }
+        withTimeout(5_000) { while (queue.entries.value.single().retryable) delay(10) }
         queue.drain { _, _, _ -> error("receipt retry must not PUT") }
         rule.waitUntil(5_000) { queue.entries.value.single().retryable.not() }
         rule.waitUntil(5_000) {
