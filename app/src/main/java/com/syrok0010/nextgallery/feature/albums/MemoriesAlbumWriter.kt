@@ -8,6 +8,7 @@ import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.upload.temporary
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -81,10 +82,14 @@ internal class MemoriesAlbumWriter(
         )
     }
 
-    /** Adds a file by its DAV path, as an upload knows it, without a lookup. */
+    /**
+     * Adds a file by its DAV path, as an upload knows it, without a lookup. A temporary failure
+     * (no network, 5xx, 423, 429) is thrown, so the upload step tries again later.
+     */
     suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome {
         val outcome = copy(file, album)
-        return if (outcome == AlbumCopyOutcome.AlreadyPresent && !albumExists(album)) {
+        val path = AlbumPath(album.owner, album.name)
+        return if (outcome == AlbumCopyOutcome.AlreadyPresent && !dav.albumExists(path)) {
             AlbumCopyOutcome.Failed
         } else {
             outcome
@@ -118,7 +123,8 @@ internal class MemoriesAlbumWriter(
                 AddToAlbumResult.Added -> AlbumCopyOutcome.Added
                 AddToAlbumResult.Conflict -> AlbumCopyOutcome.AlreadyPresent
             }
-        } catch (_: DavHttpException) {
+        } catch (error: DavHttpException) {
+            if (error.temporary) throw error
             AlbumCopyOutcome.Failed
         }
 
