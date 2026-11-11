@@ -256,6 +256,37 @@ class UploadQueueRuntimeTest {
         assertFalse(journal.jobs(owner).single().unfinished)
     }
 
+    @Test fun aPassStartedWhileAStoppedOneStillCleansUpWaitsForIt() = runBlocking {
+        enqueue(listOf(ids.first()))
+        val response = CompletableDeferred<Unit>()
+        val sending = CompletableDeferred<Unit>()
+        var first = true
+        val put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile? = { account, job, progress ->
+            val file = transfer(account, job, progress)
+            if (first) {
+                first = false
+                sending.complete(Unit)
+                // The stopped worker's request is still on the wire.
+                withContext(NonCancellable) { response.await() }
+            }
+            file
+        }
+        val stopped = launch(Dispatchers.Default) { queue.drain(put) }
+        sending.await()
+        stopped.cancel()
+        val next = async(Dispatchers.Default) { queue.drain(put) }
+        try {
+            delay(200)
+            assertEquals("The next pass waits for the stopped one", 1, transfers)
+        } finally {
+            response.complete(Unit)
+        }
+        stopped.join()
+        assertFalse(next.await())
+        assertEquals(2, transfers)
+        assertFalse("The next pass keeps its claim", journal.jobs(owner).single().unfinished)
+    }
+
     @Test fun acceptingAndReopeningScheduleTheWorkerButADeferralLeavesItToBackoff() = runBlocking {
         enqueue(listOf(ids.first()))
         assertTrue("Scheduled before submit returns", schedules > 0)
