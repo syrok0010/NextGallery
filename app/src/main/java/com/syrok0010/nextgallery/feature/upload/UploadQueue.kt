@@ -18,7 +18,8 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Manual uploads. Room keeps every job, so a queue survives the process; the screen, the status
  * pill and the notification all show projections of the journal. [UploadWorker] runs the jobs
- * through [drain]; each newly waiting job calls [schedule] to make sure a worker will take it.
+ * through [drain]. Accepted and retried jobs call [schedule]; a temporary failure leaves the
+ * next attempt to the worker's own backoff.
  */
 internal class UploadQueue(
     private val sessions: SessionStore,
@@ -70,24 +71,10 @@ internal class UploadQueue(
                     if (owner == null) return@collectLatest
                     // Claims of an earlier process died with it.
                     journal.release(owner) { it != processId }
+                    // Covers a process that died between accepting jobs and scheduling them.
+                    if (journal.jobs(owner).any { it.waiting }) scheduleWorker()
                     journal.observe(owner).collect { rows.value = it }
                 }
-        }
-        scope.launch {
-            // A job that waits again, after a retry or a stop, schedules once more as well.
-            var previous = emptySet<String>()
-            waiting.collect { ids ->
-                if (!previous.containsAll(ids)) {
-                    try {
-                        schedule()
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        // The jobs stay in the journal; the next start of the app schedules them.
-                    }
-                }
-                previous = ids
-            }
         }
     }
 
@@ -100,7 +87,9 @@ internal class UploadQueue(
             if (files.isEmpty()) return@withLock EnqueueResult.NothingToUpload
             // A file that cannot be read now is still queued and then needs attention.
             val stamped = withContext(Dispatchers.IO) { files.map { it.copy(stamp = stamp(it)) } }
-            journal.enqueue(owner, stamped, album)
+            journal.enqueue(owner, stamped, album).also {
+                if (it is EnqueueResult.Accepted) scheduleWorker()
+            }
         }
 
     fun cancelAll() =
@@ -117,7 +106,11 @@ internal class UploadQueue(
         }
 
     /** Re-runs link/album reconciliation without reading the source or issuing another PUT. */
-    fun retry(id: String) = command { owner -> journal.retry(owner, setOf(id)) }
+    fun retry(id: String) =
+        command { owner ->
+            journal.retry(owner, setOf(id))
+            scheduleWorker()
+        }
 
     fun clearFinished() = command(journal::clearFinished)
 
@@ -226,11 +219,11 @@ internal class UploadQueue(
             )
         for (step in FollowUp.entries) {
             if (claim.steps[step] != StepState.Pending) continue
-            val state = attempt {
-                followUps[step].run(account, claim, file, !acceptedNow)
-            } ?: return journal.defer(claim).let {
+            val state = attempt { followUps[step].run(account, claim, file, !acceptedNow) }
+            if (state == null) {
+                journal.defer(claim)
                 defer()
-                true
+                return true
             }
             claim = journal.step(claim, step, state) ?: return true
         }
@@ -245,49 +238,38 @@ internal class UploadQueue(
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
         defer: () -> Unit,
     ): UploadJob? {
-        if (!sourceUnchanged(
-                claim.selection,
-            )
-        ) {
-            return journal.problem(claim, UploadProblem.Source).let {
-                null
-            }
-        }
+        if (!sourceUnchanged(claim.selection)) return problem(claim, UploadProblem.Source)
         val uploaded = try {
             put(account, claim) { percent -> progress.value = Progress(claim.id, percent) }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             if (error.temporary) {
-                return journal.defer(claim).let {
-                    defer()
-                    null
-                }
+                journal.defer(claim)
+                defer()
+                return null
             }
             val failure = error as? UploadException
-            return journal
-                .problem(
-                    claim,
-                    failure?.problem ?: UploadProblem.Unexpected,
-                    httpStatus = failure?.httpStatus,
-                ).let {
-                    null
-                }
+            return problem(claim, failure?.problem ?: UploadProblem.Unexpected, failure?.httpStatus)
         }
-        if (uploaded == null) return journal.problem(claim, null, conflict = true).let { null }
+        if (uploaded == null) return problem(claim, null, conflict = true)
         // The file may change while it is read; then the server copy is not this phone file.
-        if (!sourceUnchanged(
-                claim.selection,
-            )
-        ) {
-            return journal.problem(claim, UploadProblem.Source).let {
-                null
-            }
-        }
+        if (!sourceUnchanged(claim.selection)) return problem(claim, UploadProblem.Source)
         return journal.accept(
             claim,
             UploadReceipt(uploaded.path.segments, uploaded.created, uploaded.fileId),
         )
+    }
+
+    /** Leaves the job to the user; null, so [transfer] returns it. */
+    private suspend fun problem(
+        claim: UploadJob,
+        problem: UploadProblem?,
+        httpStatus: Int? = null,
+        conflict: Boolean = false,
+    ): UploadJob? {
+        journal.problem(claim, problem, conflict, httpStatus)
+        return null
     }
 
     private fun command(action: suspend (String) -> Unit) {
@@ -300,6 +282,16 @@ internal class UploadQueue(
             } catch (_: Exception) {
                 // The journal is unchanged; the user can repeat the action.
             }
+        }
+    }
+
+    private suspend fun scheduleWorker() {
+        try {
+            schedule()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // The jobs stay in the journal; the next start of the app schedules them.
         }
     }
 
