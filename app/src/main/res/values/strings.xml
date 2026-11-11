@@ -239,6 +239,7 @@
     <string name="uploads_retry_actions">Повторить действие</string>
     <string name="upload_existing_count">Уже в облаке: %1$d</string>
     <string name="upload_cancelled_count">Отменено: %1$d</string>
+    <string name="upload_enqueue_rejected">Не удалось поставить файлы в очередь загрузки. Попробуйте снова.</string>
     <string name="uploads_enqueue_rejected">Не удалось поставить файлы в очередь загрузки для «%1$s». Попробуйте снова.</string>
     <string name="uploads_logout_blocked">Есть незавершённые загрузки или действия. Завершите или отмените их на экране «Загрузки» перед выходом.</string>
 </resources>

@@ -1,11 +1,13 @@
 package com.syrok0010.nextgallery.app.ui
 
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +53,7 @@ internal fun PhotosScreen(
     val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     // Asked on every dialog, so the answer is fresh when the user decides.
@@ -89,7 +92,11 @@ internal fun PhotosScreen(
         // The queue schedules the upload and the app root asks for notifications. A queue that
         // could not be saved keeps the selection, so the user can try again.
         scope.launch {
-            if (uploads.submit(items.map { it.mediaId }) != EnqueueResult.Rejected) onDone()
+            if (uploads.submit(items.map { it.mediaId }) != EnqueueResult.Rejected) {
+                onDone()
+            } else {
+                Toast.makeText(context, R.string.upload_enqueue_rejected, Toast.LENGTH_SHORT).show()
+            }
         }
     }
     MediaCollectionScreen(
