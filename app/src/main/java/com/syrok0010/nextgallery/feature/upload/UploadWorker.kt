@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
 import com.syrok0010.nextgallery.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
@@ -32,7 +33,19 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
     private val queue: UploadQueue by inject()
     private val notifications = UploadNotifications(context)
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result =
+        try {
+            if (run()) Result.retry() else Result.success()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // A failed work fails the runs appended after it too, and their jobs would wait for
+            // the next start of the app. The journal still holds them, so try again later.
+            Result.retry()
+        }
+
+    /** Returns true when a job waits for another attempt. */
+    private suspend fun run(): Boolean {
         notifications.createChannel()
         val foreground = try {
             setForeground(getForegroundInfo())
@@ -48,7 +61,7 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
             queue.drain(transfer::upload).also { progress.cancel() }
         }
         queue.unseenResult()?.let(notifications::showResult)
-        return if (retry) Result.retry() else Result.success()
+        return retry
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
