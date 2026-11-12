@@ -34,3 +34,7 @@
 ### Тестовый Nextcloud
 
 Для интеграционных проверок Nextcloud/Memories, тестовых медиа, скриншотов для PR и управления стендом читай `docs/agents/test-nextcloud.md`.
+
+### Релизная сборка
+
+Подпись, сборка release и версии — в `docs/agents/release.md`.

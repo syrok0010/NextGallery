@@ -14,9 +14,22 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // The key stays outside the repository: ~/.gradle/gradle.properties or ORG_GRADLE_PROJECT_*.
+    val releaseStore = providers.gradleProperty("nextgalleryReleaseStoreFile").orNull
+    signingConfigs {
+        if (releaseStore != null) {
+            create("release") {
+                storeFile = file(releaseStore)
+                storePassword = providers.gradleProperty("nextgalleryReleasePassword").get()
+                keyAlias = "nextgallery"
+                keyPassword = storePassword
+            }
+        }
     }
 
     buildTypes {
@@ -30,7 +43,8 @@ android {
         }
 
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            // Without the key the release APK is built unsigned.
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
