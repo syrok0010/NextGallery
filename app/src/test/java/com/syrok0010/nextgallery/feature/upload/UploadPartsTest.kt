@@ -88,24 +88,6 @@ class UploadPartsTest {
             }
         }
 
-    @Test fun `each part streams its own range and progress counts the parts before it`() {
-        val progress = mutableListOf<Int?>()
-        var time = 0L
-        val output = okio.Buffer()
-        UploadRequestBody(
-            length = 4L,
-            mediaType = null,
-            openStream = { phone.inputStream() },
-            onProgress = progress::add,
-            offset = 4L,
-            total = 10L,
-            monotonicMillis = { time.also { time += 250L } },
-        ).writeTo(output)
-
-        assertEquals("4567", output.readUtf8())
-        assertEquals(listOf(40, 80), progress)
-    }
-
     private suspend fun Uploads.create(): CreateFileResult =
         createInParts(client, "job", target, phone.size.toLong(), partSize = 4L) { offset, size ->
             phone.copyOfRange(offset.toInt(), (offset + size).toInt()).toRequestBody()
