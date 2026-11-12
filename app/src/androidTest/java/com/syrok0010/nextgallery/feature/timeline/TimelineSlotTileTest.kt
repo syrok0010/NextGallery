@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
@@ -21,6 +22,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.MediaSlotTile
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import com.syrok0010.nextgallery.string
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -213,9 +215,9 @@ class TimelineSlotTileTest {
         const val DAY_ID = 20_660
         const val CLOUD_INDICATOR_TAG = "remote-cloud-indicator"
         const val LOCAL_INDICATOR_TAG = "local-device-indicator"
-        const val CLOUD_COPY_DESCRIPTION = "Облачная копия"
-        const val LOCAL_COPY_DESCRIPTION = "Локальная копия"
-        const val VIDEO_BADGE = "VIDEO"
+        val CLOUD_COPY_DESCRIPTION get() = string(R.string.media_cloud_copy)
+        val LOCAL_COPY_DESCRIPTION get() = string(R.string.media_local_copy)
+        val VIDEO_BADGE get() = string(R.string.media_video_badge)
         val CREDENTIALS = AccountCredentials(
             serverUrl = "https://cloud.example.com",
             loginName = "test",

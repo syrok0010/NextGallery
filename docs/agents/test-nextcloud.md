@@ -33,8 +33,8 @@ cleartext-трафика к точному домену `test.syrok` в network 
 
 ## Скриншоты и состояния
 
-- Язык приложения: `adb shell cmd locale set-app-locales <пакет> --locales ru-RU`,
-  иначе даты и plurals на английском.
+- Русский интерфейс на английском эмуляторе:
+  `adb shell cmd locale set-app-locales <пакет> --locales ru-RU`.
 - Свежие серверные файлы остаются серыми: `multipreview` отвечает 200 с пустым телом,
   пока превью не созданы. Прогрей их запросом
   `GET /core/preview?fileId=<id>&x=512&y=512&a=0` на каждый файл и перезапусти приложение.

@@ -24,13 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -132,16 +130,13 @@ private fun TimelineScrollTooltip(
         LocalDate.ofEpochDay(currentDayId.toLong())
     }
     val currentYear = LocalDate.now().year
-    val pattern = stringResource(
+    val formatter = rememberDateFormatter(
         if (date.year == currentYear) {
             R.string.timeline_scroll_date_current_year_pattern
         } else {
             R.string.timeline_scroll_date_with_year_pattern
         },
     )
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
-    }
     val label = remember(date, formatter) {
         date.format(formatter)
     }
