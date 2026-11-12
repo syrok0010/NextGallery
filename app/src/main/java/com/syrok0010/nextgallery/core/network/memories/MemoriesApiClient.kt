@@ -9,9 +9,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import okhttp3.coroutines.executeAsync
 import retrofit2.HttpException
 import retrofit2.http.GET
+import retrofit2.http.Headers
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -87,6 +89,15 @@ class MemoriesApiClient(
         }.flowOn(Dispatchers.IO)
     }
 
+    /**
+     * The preview of [fileId] at [width]×[height], aspect ratio kept. Unlike [multipreview], the
+     * server generates a missing preview, so a just uploaded file gets one.
+     */
+    suspend fun preview(fileId: Long, width: Int, height: Int): MemoriesPreviewDto =
+        api().preview(fileId, width, height, keepAspectRatio = 1).use { body ->
+            MemoriesPreviewDto(fileId, body.contentType()?.toString().orEmpty(), body.bytes())
+        }
+
     private fun api(): MemoriesApi {
         val account = credentials()
         return transport
@@ -121,6 +132,15 @@ private interface MemoriesApi {
 
     @GET("apps/memories/api/clusters/albums")
     suspend fun albums(): List<MemoriesAlbumDto>
+
+    @Headers("Accept: image/*")
+    @GET("apps/memories/api/image/preview/{id}")
+    suspend fun preview(
+        @Path("id") fileId: Long,
+        @Query("x") width: Int,
+        @Query("y") height: Int,
+        @Query("a") keepAspectRatio: Int,
+    ): ResponseBody
 
     @GET("apps/memories/api/image/info/{id}")
     suspend fun imageInfo(@Path("id") fileId: Long): MemoriesImageInfoDto

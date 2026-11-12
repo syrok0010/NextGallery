@@ -172,7 +172,9 @@ private class LibraryFixture : AutoCloseable {
                             path.contains("multipreview") -> ByteArrayOutputStream().apply {
                                 val json = Json.parseToJsonElement(String(requestBody)) as JsonObject
                                 val files = json["files"] as JsonArray
-                                files.forEach { file ->
+                                // fixture-1 has no generated preview yet, like a just uploaded file:
+                                // multipreview skips it and the app asks image/preview for it.
+                                files.filter { (it as JsonObject)["fileid"].toString() != "1" }.forEach { file ->
                                     val obj = file as JsonObject
                                     val header = """{"reqid":${obj["reqid"]},"len":${jpeg.size},"type":"image/jpeg"}""".toByteArray()
                                     write(header.size); write(header); write(jpeg)
