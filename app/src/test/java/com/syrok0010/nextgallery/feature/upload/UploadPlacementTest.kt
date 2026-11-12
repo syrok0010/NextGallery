@@ -170,7 +170,8 @@ class UploadPlacementTest {
             dav = server.client,
             path = path,
             selection = SELECTION,
-            body = phone.toRequestBody(),
+            length = phone.size.toLong(),
+            create = { server.client.createFile(it, phone.toRequestBody()) },
             openLocal = { phone.inputStream() },
         )
 

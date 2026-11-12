@@ -42,7 +42,8 @@ class UploadCancellationTest {
                         dav,
                         PATH,
                         SELECTION,
-                        "bytes".toRequestBody(),
+                        5L,
+                        { dav.createFile(it, "bytes".toRequestBody()) },
                     ) { "bytes".byteInputStream() }
                 }
                 assertTrue(entered.await(5, TimeUnit.SECONDS))
