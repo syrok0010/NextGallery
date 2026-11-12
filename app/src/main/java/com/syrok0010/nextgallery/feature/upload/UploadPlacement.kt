@@ -8,7 +8,6 @@ import com.syrok0010.nextgallery.core.network.dav.ReadFileResult
 import java.io.InputStream
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import okhttp3.RequestBody
 import okio.buffer
 import okio.source
 
@@ -18,14 +17,16 @@ import okio.source
  * counts as this upload only when its bytes equal the phone file: then its id links both copies
  * (ADR 0017). Returns null when every name up to [MAX_NAMES] holds a different file.
  *
- * Each name is checked before `PUT`: a web server takes the whole body before Nextcloud answers
- * `412`, so probing with `PUT` would send the file once per taken name.
+ * Each name is checked before [create] sends the [length] bytes without overwriting: a web server
+ * takes the whole body before Nextcloud answers `412`, so probing with `PUT` would send the file
+ * once per taken name.
  */
 internal suspend fun placeUpload(
     dav: FilesDavClient,
     path: DavFilePath,
     selection: UploadSelection,
-    body: RequestBody,
+    length: Long,
+    create: suspend (DavFilePath) -> CreateFileResult,
     openLocal: () -> InputStream,
 ): UploadedFile? {
     var index = 1
@@ -40,15 +41,15 @@ internal suspend fun placeUpload(
         }
         val existing = dav.properties(candidate)
         val outcome = if (existing == null) {
-            when (val created = dav.createFile(candidate, body)) {
+            when (val created = create(candidate)) {
                 is CreateFileResult.Created ->
                     return UploadedFile(selection, candidate, created = true, created.fileId)
 
-                // Taken between the check and PUT.
+                // Taken between the check and the upload.
                 CreateFileResult.AlreadyExists -> Existing.Changed
             }
         } else {
-            compare(dav, candidate, existing, body.contentLength(), openLocal)
+            compare(dav, candidate, existing, length, openLocal)
         }
         when (outcome) {
             is Existing.Same ->

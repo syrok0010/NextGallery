@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.core.network.capabilities
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.OcsResponseDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import retrofit2.http.GET
 
@@ -37,4 +38,11 @@ data class NextcloudCapabilitiesDto(val files: FilesCapabilitiesDto? = null)
 
 /** `undelete` is published by files_trashbin. */
 @Serializable
-data class FilesCapabilitiesDto(val undelete: Boolean? = null)
+data class FilesCapabilitiesDto(
+    val undelete: Boolean? = null,
+    @SerialName("chunked_upload") val chunkedUpload: ChunkedUploadDto? = null,
+)
+
+/** Admin setting `files.chunked_upload.max_size`: the part size, 0 or less turns chunking off. */
+@Serializable
+data class ChunkedUploadDto(@SerialName("max_size") val maxSize: Long? = null)
