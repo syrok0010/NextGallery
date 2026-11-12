@@ -1,9 +1,11 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import java.io.EOFException
 import java.io.InputStream
 import okhttp3.MediaType
 import okhttp3.RequestBody
 import okio.BufferedSink
+import okio.source
 
 /**
  * Streams [length] bytes of a file from [offset]: the whole file or one part of it. Progress is
@@ -29,21 +31,16 @@ internal class UploadRequestBody(
         var lastProgress = percent(0L)
         var lastUpdate = monotonicMillis()
         onProgress(lastProgress)
-        openStream().use { input ->
-            input.skipFully(offset)
-            val buffer = ByteArray(64 * 1024)
-            while (length < 0L || written < length) {
-                val wanted = if (length < 0L) {
-                    buffer.size
-                } else {
-                    minOf(
-                        buffer.size.toLong(),
-                        length - written,
-                    ).toInt()
-                }
-                val count = input.read(buffer, 0, wanted)
-                if (count < 0) break
-                sink.write(buffer, 0, count)
+        openStream().use { stream ->
+            // A file stream seeks; Okio's skip would read every skipped byte.
+            if (stream.skip(offset) < offset) throw EOFException("The file is shorter than before")
+            val input = stream.source()
+            // Unknown length: to the end of the file.
+            val end = if (length < 0L) Long.MAX_VALUE else length
+            while (written < end) {
+                val count = input.read(sink.buffer, minOf(SEGMENT, end - written))
+                if (count < 0L) break
+                sink.emitCompleteSegments()
                 written += count
                 val progress = percent(written)
                 val now = monotonicMillis()
@@ -64,17 +61,4 @@ internal class UploadRequestBody(
         }
 }
 
-/** Stops early at the end of the stream; the short body then fails the request. */
-private fun InputStream.skipFully(count: Long) {
-    var left = count
-    while (left > 0L) {
-        val skipped = skip(left)
-        if (skipped > 0L) {
-            left -= skipped
-        } else if (read() < 0) {
-            return
-        } else {
-            left--
-        }
-    }
-}
+private const val SEGMENT = 64L * 1024
