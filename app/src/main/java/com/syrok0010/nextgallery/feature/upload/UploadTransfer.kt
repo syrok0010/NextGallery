@@ -87,19 +87,16 @@ internal class UploadTransfer(
         val length = readSource {
             resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         } ?: -1L
-        onProgress(if (length >= 0L) 0 else null)
+        onProgress(sentPercent(0L, length))
         val openLocal = {
             val stream = readSource { resolver.openInputStream(uri) }
             stream ?: throw SourceUnavailable()
         }
-        fun body(offset: Long, size: Long) = UploadRequestBody(
-            length = size,
-            mediaType = selection.mimeType?.toMediaTypeOrNull(),
-            openStream = openLocal,
-            onProgress = onProgress,
-            offset = offset,
-            total = length,
-        )
+        // Parts already sent count as sent.
+        fun body(offset: Long, size: Long) =
+            UploadRequestBody(size, selection.mimeType?.toMediaTypeOrNull(), openLocal, offset) { sent ->
+                onProgress(sentPercent(offset + sent, length))
+            }
         // Signed by the job's account, not whichever session is current by now.
         val dav = FilesDavClient(transport) { account }
         val uploads = UploadsDavClient(transport) { account }

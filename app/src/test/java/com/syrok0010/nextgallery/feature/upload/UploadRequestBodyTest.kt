@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.upload
 
-import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import okio.Buffer
@@ -8,69 +7,60 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UploadRequestBodyTest {
-    @Test fun `streams identical bytes and resets progress on another write`() {
+    @Test fun `streams identical bytes and counts them from zero on another write`() {
         val bytes = ByteArray(1024 * 1024) { it.toByte() }
-        val progress = mutableListOf<Int?>()
-        var time = 0L
-        val body = UploadRequestBody(
-            bytes.size.toLong(),
-            null,
-            { ByteArrayInputStream(bytes) },
-            progress::add,
-            monotonicMillis = { time.also { time += 250L } },
-        )
+        val sent = mutableListOf<Long>()
+        val body =
+            UploadRequestBody(
+                bytes.size.toLong(),
+                null,
+                { bytes.inputStream() },
+                onSent = sent::add,
+            )
         repeat(2) {
-            progress.clear()
+            sent.clear()
             val output = Buffer()
             body.writeTo(output)
             assertArrayEquals(bytes, output.readByteArray())
-            assertEquals(0, progress.first())
-            assertTrue(progress.any { it != null && it in 1..98 })
-            assertEquals(99, progress.last())
-            assertEquals(progress.distinct().sortedBy { it }, progress)
+            assertEquals(0L, sent.first())
+            assertEquals(bytes.size.toLong(), sent.last())
+            assertEquals(sent.sorted(), sent)
         }
     }
 
-    @Test fun `fast writes do not flood notifications`() {
-        val progress = mutableListOf<Int?>()
-        val bytes = ByteArray(1024 * 1024)
+    @Test fun `a part streams its own range`() {
+        val sent = mutableListOf<Long>()
+        val output = Buffer()
         UploadRequestBody(
-            bytes.size.toLong(),
+            4L,
             null,
-            { bytes.inputStream() },
-            progress::add,
-            monotonicMillis = { 0L },
-        ).writeTo(Buffer())
-        assertEquals(listOf(0), progress)
+            { "0123456789".byteInputStream() },
+            offset = 4L,
+            onSent = sent::add,
+        ).writeTo(output)
+        assertEquals("4567", output.readUtf8())
+        assertEquals(listOf(0L, 4L), sent)
     }
 
-    @Test fun `unknown and empty lengths do not invent a percentage`() {
-        for (length in listOf(-1L, 0L)) {
-            val progress = mutableListOf<Int?>()
-            val bytes = if (length < 0) byteArrayOf(1, 2, 3) else byteArrayOf()
-            val output = Buffer()
-            UploadRequestBody(length, null, { bytes.inputStream() }, progress::add).writeTo(output)
-            assertEquals(listOf(if (length < 0) null else 0), progress)
-            assertArrayEquals(bytes, output.readByteArray())
+    @Test fun `unknown length streams to the end`() {
+        val output = Buffer()
+        UploadRequestBody(-1L, null, { byteArrayOf(1, 2, 3).inputStream() }) {}.writeTo(output)
+        assertArrayEquals(byteArrayOf(1, 2, 3), output.readByteArray())
+    }
+
+    @Test fun `a file shorter than the offset fails`() {
+        assertThrows(IOException::class.java) {
+            UploadRequestBody(
+                4L,
+                null,
+                { "012".byteInputStream() },
+                offset = 4L,
+            ) {}.writeTo(Buffer())
         }
     }
 
-    @Test fun `large lengths do not overflow progress arithmetic`() {
-        val progress = mutableListOf<Int?>()
-        var time = 0L
-        UploadRequestBody(
-            Long.MAX_VALUE,
-            null,
-            { ByteArray(65536).inputStream() },
-            progress::add,
-            monotonicMillis = { time.also { time += 250L } },
-        ).writeTo(Buffer())
-        assertEquals(listOf(0), progress)
-    }
-
-    @Test fun `read failure closes input and never reports completion`() {
+    @Test fun `read failure closes input`() {
         var closed = false
-        val progress = mutableListOf<Int?>()
         val input = object : InputStream() {
             override fun read(): Int = throw IOException("lost source")
             override fun close() {
@@ -78,9 +68,17 @@ class UploadRequestBodyTest {
             }
         }
         assertThrows(IOException::class.java) {
-            UploadRequestBody(100L, null, { input }, progress::add).writeTo(Buffer())
+            UploadRequestBody(100L, null, { input }) {}.writeTo(Buffer())
         }
         assertTrue(closed)
-        assertFalse(progress.contains(100))
+    }
+
+    @Test fun `percent leaves 100 for the response and needs a known size`() {
+        assertEquals(0, sentPercent(0L, 10L))
+        assertEquals(40, sentPercent(4L, 10L))
+        assertEquals(99, sentPercent(10L, 10L))
+        assertEquals(0, sentPercent(0L, 0L))
+        assertNull(sentPercent(5L, -1L))
+        assertEquals(50, sentPercent(Long.MAX_VALUE / 2, Long.MAX_VALUE))
     }
 }
