@@ -10,7 +10,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.string
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -36,7 +38,10 @@ class SelectionActionBarTest {
         assertEquals(layout.layoutInput.text.length, layout.getLineEnd(0))
         assertTrue(layout.getLineLeft(0) >= 0)
         assertTrue(layout.getLineRight(0) <= layout.size.width)
-        rule.onNodeWithContentDescription("Ещё действия").assertDoesNotExist()
+        rule
+            .onNodeWithContentDescription(
+                string(R.string.selection_more_actions),
+            ).assertDoesNotExist()
         album.performClick()
         rule.runOnIdle { assertSame(actions[1], performed) }
     }
@@ -53,7 +58,7 @@ class SelectionActionBarTest {
         show(actions, onPerform = { performed = it })
         rule.onNodeWithText("В альбом").assertDoesNotExist()
         rule.onNodeWithText("Загрузить").assertExists()
-        rule.onNodeWithContentDescription("Ещё действия").performClick()
+        rule.onNodeWithContentDescription(string(R.string.selection_more_actions)).performClick()
         rule.onNodeWithText("В альбом").performClick()
         rule.runOnIdle { assertSame(actions[1], performed) }
         rule.onNodeWithText("В альбом").assertDoesNotExist()
@@ -63,7 +68,7 @@ class SelectionActionBarTest {
         show(listOf(action("В альбом"), action("Загрузить", true)), count = 0)
         rule.onNodeWithContentDescription("В альбом").assertIsNotEnabled()
         rule.onNodeWithText("Загрузить").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("Отменить выбор").assertIsEnabled()
+        rule.onNodeWithContentDescription(string(R.string.selection_cancel)).assertIsEnabled()
     }
 
     private fun show(

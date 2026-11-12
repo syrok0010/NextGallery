@@ -44,20 +44,16 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasLocalCopy
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
+import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
 import com.syrok0010.nextgallery.feature.images.MediaImagePurpose
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import org.koin.compose.koinInject
 
 @Composable
 internal fun MediaDayHeader(dayId: Int) {
-    val pattern = stringResource(R.string.timeline_day_header_pattern)
-    val formatter = remember(pattern) {
-        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
-    }
+    val formatter = rememberDateFormatter(R.string.timeline_day_header_pattern)
     val title = remember(dayId, formatter) {
         LocalDate.ofEpochDay(dayId.toLong()).format(formatter)
     }

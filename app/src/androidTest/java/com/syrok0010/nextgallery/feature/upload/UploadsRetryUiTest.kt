@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.string
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -84,17 +86,17 @@ class UploadsRetryUiTest {
             UploadedFile(job.selection, DavFilePath.of(account.userId, "/Photos/retry.jpg"), true, 42)
         }
         rule.setContent { MaterialTheme { UploadsScreen({}, queue) } }
-        rule.onNodeWithText("Повторить действие").assertIsDisplayed()
+        rule.onNodeWithText(string(R.string.uploads_retry_actions)).assertIsDisplayed()
         linked = true
-        rule.onNodeWithText("Повторить действие").performClick()
+        rule.onNodeWithText(string(R.string.uploads_retry_actions)).performClick()
         withTimeout(5_000) { while (queue.entries.value.single().retryable) delay(10) }
         queue.drain { _, _, _ -> error("receipt retry must not PUT") }
         rule.waitUntil(5_000) { queue.entries.value.single().retryable.not() }
         rule.waitUntil(5_000) {
-            rule.onAllNodesWithContentDescription("Загружен").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithContentDescription(string(R.string.uploads_uploaded)).fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithContentDescription("Загружен").assertIsDisplayed()
-        rule.onAllNodesWithText("Повторить действие").assertCountEquals(0)
+        rule.onNodeWithContentDescription(string(R.string.uploads_uploaded)).assertIsDisplayed()
+        rule.onAllNodesWithText(string(R.string.uploads_retry_actions)).assertCountEquals(0)
         assertEquals(1, puts)
     }
 }

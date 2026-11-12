@@ -50,7 +50,7 @@ import com.syrok0010.nextgallery.core.media.hasLocalCopy
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -179,25 +179,13 @@ internal fun ViewerDetailsSheet(
                 ?.let { Instant.ofEpochSecond(it).atZone(ZoneId.systemDefault()) }
                 ?.takeIf { it.toLocalDate() == item.day }
                 ?.toLocalTime()
+            val date = rememberDateFormatter(R.string.viewer_details_date_pattern)
+            val clock = rememberDateFormatter(R.string.viewer_details_time_pattern)
+            val weekday = rememberDateFormatter(R.string.viewer_details_weekday_pattern)
             DetailsRow(
                 icon = rememberVectorPainter(Icons.Default.DateRange),
-                title = listOfNotNull(
-                    item.day.format(
-                        DateTimeFormatter.ofPattern(
-                            stringResource(R.string.viewer_details_date_pattern),
-                        ),
-                    ),
-                    time?.format(
-                        DateTimeFormatter.ofPattern(
-                            stringResource(R.string.viewer_details_time_pattern),
-                        ),
-                    ),
-                ).joinToString(", "),
-                subtitle = item.day.format(
-                    DateTimeFormatter.ofPattern(
-                        stringResource(R.string.viewer_details_weekday_pattern),
-                    ),
-                ),
+                title = listOfNotNull(item.day.format(date), time?.format(clock)).joinToString(", "),
+                subtitle = item.day.format(weekday),
             )
             DetailsRow(
                 icon = painterResource(R.drawable.ic_photos),

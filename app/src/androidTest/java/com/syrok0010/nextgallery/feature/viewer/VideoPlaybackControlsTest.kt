@@ -16,7 +16,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
+import com.syrok0010.nextgallery.string
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -111,7 +113,7 @@ class VideoPlaybackControlsTest {
         }
 
         composeRule
-            .onNodeWithContentDescription("Выйти из полноэкранного режима")
+            .onNodeWithContentDescription(string(R.string.video_playback_exit_fullscreen))
             .assertIsDisplayed()
             .performClick()
 

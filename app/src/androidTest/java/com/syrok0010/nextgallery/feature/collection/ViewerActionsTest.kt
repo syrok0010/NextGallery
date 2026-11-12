@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.collection
 
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.string
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -99,24 +101,24 @@ class ViewerActionsTest {
         rule.onNodeWithTag("filmstrip_tile_1").performClick()
         rule.onNodeWithText("В облако").assertDoesNotExist()
         rule.onNodeWithText("В облаке").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("Есть в облаке").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Есть на телефоне").assertDoesNotExist()
+        rule.onNodeWithContentDescription(string(R.string.viewer_copy_cloud)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(string(R.string.viewer_copy_phone)).assertDoesNotExist()
     }
 
     @Test fun swipeUpOpensDetailsAndSwipeDownClosesThem() {
         show()
         rule.onNodeWithContentDescription(last.displayName).performClick()
-        rule.onNodeWithText("Сведения").assertDoesNotExist()
+        rule.onNodeWithText(string(R.string.viewer_details)).assertDoesNotExist()
         // From the middle of the screen: the photo, not the chrome over its edges.
         rule.onRoot().performTouchInput {
             swipe(center, center.copy(y = center.y - height / 3f), durationMillis = 250)
         }
-        rule.onNodeWithText("Сведения").assertIsDisplayed()
-        rule.onNodeWithText("На телефоне").assertIsDisplayed()
+        rule.onNodeWithText(string(R.string.viewer_details)).assertIsDisplayed()
+        rule.onNodeWithText(string(R.string.viewer_details_on_phone)).assertIsDisplayed()
         rule.onNodeWithTag("viewer_details").performTouchInput {
             swipe(center, center.copy(y = center.y + height), durationMillis = 250)
         }
-        rule.waitUntil { rule.onAllNodesWithText("Сведения").fetchSemanticsNodes().isEmpty() }
+        rule.waitUntil { rule.onAllNodesWithText(string(R.string.viewer_details)).fetchSemanticsNodes().isEmpty() }
         rule.runOnIdle { assertEquals(true, visible.value) }
     }
 

@@ -5,10 +5,12 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.string
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -29,13 +31,13 @@ class MediaCollectionSelectionTest {
         rule.onNodeWithContentDescription("second.jpg").performClick()
         rule.onNodeWithText("Действие").performClick()
         rule.runOnIdle { assertEquals(listOf(first, second), received) }
-        rule.onNodeWithContentDescription("Отменить выбор").assertExists()
+        rule.onNodeWithContentDescription(string(R.string.selection_cancel)).assertExists()
         rule.onNodeWithContentDescription("second.jpg").performClick()
         rule.runOnIdle {
             assertEquals(listOf(first, second), received)
             done!!()
         }
-        rule.onNodeWithContentDescription("Отменить выбор").assertDoesNotExist()
+        rule.onNodeWithContentDescription(string(R.string.selection_cancel)).assertDoesNotExist()
     }
 
     private fun show(perform: (List<MediaItem>, () -> Unit) -> Unit) {

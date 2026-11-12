@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.string
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -54,8 +56,8 @@ class LibraryIntegrationTest {
                 }
                 // Permission explanation is an existing first-run flow on a fresh automation package.
                 rule.waitForIdle()
-                rule.onAllNodesWithText("Не сейчас").fetchSemanticsNodes().takeIf { it.isNotEmpty() }?.let {
-                    rule.onNodeWithText("Не сейчас").performClick()
+                rule.onAllNodesWithText(string(R.string.action_not_now)).fetchSemanticsNodes().takeIf { it.isNotEmpty() }?.let {
+                    rule.onNodeWithText(string(R.string.action_not_now)).performClick()
                 }
                 rule.waitUntil(15_000) { rule.onAllNodesWithContentDescription("fixture-1.jpg").fetchSemanticsNodes().isNotEmpty() }
                 val imageResult = runBlocking(Dispatchers.IO) {
@@ -71,7 +73,7 @@ class LibraryIntegrationTest {
                 screenshot("photos")
                 rule.onNodeWithContentDescription("fixture-1.jpg").performClick()
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
-                rule.onNodeWithContentDescription("Назад").performClick()
+                rule.onNodeWithContentDescription(string(R.string.action_back)).performClick()
                 rule.onNodeWithTag("library_island").assertIsDisplayed()
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 rule.waitUntil(10_000) { rule.onAllNodesWithTag("album_card:remote:1").fetchSemanticsNodes().isNotEmpty() }
@@ -88,7 +90,7 @@ class LibraryIntegrationTest {
                 rule.onNodeWithContentDescription("album-120.jpg").performClick()
                 restoration.emulateSavedInstanceStateRestore()
                 rule.onNodeWithText("album-120.jpg").assertIsDisplayed()
-                rule.onNodeWithContentDescription("Назад").performClick()
+                rule.onNodeWithContentDescription(string(R.string.action_back)).performClick()
                 rule.onNodeWithTag("media_grid").assertIsDisplayed()
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
                 Espresso.pressBack()
@@ -107,7 +109,7 @@ class LibraryIntegrationTest {
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 assertEquals(anchor, rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top, 1f)
                 rule.runOnUiThread { sessions.signOut() }
-                rule.onNodeWithText("Подключение к Nextcloud").assertIsDisplayed()
+                rule.onNodeWithText(string(R.string.login_title)).assertIsDisplayed()
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
                 rule.onNodeWithTag("album_catalog").assertDoesNotExist()
                 rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture")) }

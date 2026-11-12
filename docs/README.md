@@ -32,3 +32,5 @@
 - [ADR 0016: Удаление выбранных медиа в корзины](adr/0016-delete-selection.md)
 - [ADR 0017: Связь локальной и облачной копий после загрузки](adr/0017-link-uploaded-copies.md)
 - [ADR 0019: Журнал ручных загрузок и выполнение через WorkManager](adr/0019-durable-manual-uploads.md)
+- [ADR 0020: Возобновление прерванной передачи частями](adr/0020-resumable-uploads.md)
+- [ADR 0021: Английский и русский языки приложения](adr/0021-app-languages.md)
