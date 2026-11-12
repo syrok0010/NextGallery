@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.core.network.dav.DavFixtureServer
 import com.syrok0010.nextgallery.core.network.dav.DavRequest
 import com.syrok0010.nextgallery.core.network.dav.DavResponseStub
 import com.syrok0010.nextgallery.core.network.dav.UploadsDavClient
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -61,15 +62,21 @@ class UploadPartsTest {
             }
         }
 
-    @Test fun `an upload the server dropped meanwhile starts over once`() =
+    @Test fun `an upload whose state the server lost is dropped and the next attempt starts over`() =
         runBlocking {
             Uploads().use { uploads ->
-                uploads.beforePut = { number -> if (number == 2 && uploads.drops++ == 0) uploads.parts = null }
+                // Object storage: the folder stays, but parts are refused with 412.
+                uploads.beforePut = { number -> if (number == 2) uploads.lost = true }
 
+                assertThrows(IOException::class.java) { runBlocking { uploads.create() } }
+                assertEquals(listOf("PROPFIND", "MKCOL", "PUT 1", "PUT 2", "DELETE"), uploads.calls())
+
+                uploads.beforePut = {}
+                uploads.server.requests.clear()
                 uploads.create()
 
                 assertEquals(
-                    listOf("PROPFIND", "MKCOL", "PUT 1", "PUT 2", "PROPFIND", "MKCOL", "PUT 1", "PUT 2", "PUT 3", "MOVE .file"),
+                    listOf("PROPFIND", "MKCOL", "PUT 1", "PUT 2", "PUT 3", "MOVE .file"),
                     uploads.calls(),
                 )
                 assertArrayEquals(phone, uploads.created)
@@ -99,7 +106,7 @@ class UploadPartsTest {
         @Volatile var parts: MutableMap<Int, ByteArray>? = null
         var created: ByteArray? = null
         var taken = false
-        var drops = 0
+        var lost = false
         var beforePut: (Int) -> Unit = {}
         val server = DavFixtureServer(::respond)
         val client = UploadsDavClient(NextcloudTransport(Json)) { server.credentials }
@@ -126,10 +133,13 @@ class UploadPartsTest {
                 "PUT" -> {
                     val number = child.toInt()
                     beforePut(number)
-                    parts?.let {
-                        it[number] = request.body
-                        DavResponseStub(201)
-                    } ?: DavResponseStub(404)
+                    when {
+                        lost -> DavResponseStub(412)
+                        else -> parts?.let {
+                            it[number] = request.body
+                            DavResponseStub(201)
+                        } ?: DavResponseStub(404)
+                    }
                 }
 
                 "MOVE" -> {
@@ -142,6 +152,7 @@ class UploadPartsTest {
 
                 "DELETE" -> {
                     parts = null
+                    lost = false
                     DavResponseStub(204)
                 }
 
