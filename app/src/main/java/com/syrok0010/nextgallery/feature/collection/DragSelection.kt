@@ -196,5 +196,5 @@ internal fun Modifier.dragSelection(drag: GridDragSelection): Modifier =
         }
     }
 
-private val DragScrollEdge = 64.dp
+private val DragScrollEdge = 120.dp
 private val DragScrollMaxSpeed = 1200.dp
