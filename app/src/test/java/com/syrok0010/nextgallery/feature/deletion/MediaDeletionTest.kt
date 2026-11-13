@@ -40,7 +40,7 @@ class MediaDeletionTest {
         )
         assertEquals(DeletionPlan(phoneOnly = 2, cloudOnly = 1, merged = 1), preparation.plan)
         assertEquals(
-            DeletionTargets(
+            targets(
                 contentUris = listOf(
                     "content://media/external/images/media/1",
                     "content://media/external/video/media/3",
@@ -51,7 +51,7 @@ class MediaDeletionTest {
             preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
         )
         assertEquals(
-            DeletionTargets(
+            targets(
                 contentUris = listOf(
                     "content://media/external/images/media/1",
                     "content://media/external/video/media/3",
@@ -62,7 +62,7 @@ class MediaDeletionTest {
             preparation.confirm(DeletionScope.PhoneOnly, cloudAllowed = true),
         )
         assertEquals(
-            DeletionTargets(
+            targets(
                 contentUris = listOf(
                     "content://media/external/images/media/1",
                     "content://media/external/video/media/3",
@@ -73,7 +73,7 @@ class MediaDeletionTest {
         )
         // Without an answer about the server trash the cloud stays untouched.
         assertEquals(
-            DeletionTargets(
+            targets(
                 contentUris = listOf(
                     "content://media/external/images/media/1",
                     "content://media/external/video/media/3",
@@ -111,7 +111,7 @@ class MediaDeletionTest {
                     index,
                     MemoriesCloudTrash(fixture.dav, fixture.files),
                     InMemoryMediaIdentityRegistry(),
-                    { it.size },
+                    { it },
                     scope,
                 ) {}
                 val preparation = repository.prepare(listOf(MediaId("both"), MediaId("gone")))
@@ -120,7 +120,7 @@ class MediaDeletionTest {
                 index.clear()
 
                 assertEquals(
-                    DeletionTargets(
+                    targets(
                         contentUris = listOf("content://media/external/images/media/2"),
                         fileIds = listOf(20),
                     ),
@@ -181,7 +181,7 @@ class MediaDeletionTest {
                     MediaLibraryIndex(),
                     CloudTrash { _, fileId -> fileId != 3L },
                     InMemoryMediaIdentityRegistry(),
-                    { it.size - 1 },
+                    { it.drop(1) },
                     scope,
                 ) { refreshed.incrementAndGet() }
                 val phone = listOf("content://media/external/images/media/8", "content://media/external/images/media/9")
@@ -217,12 +217,14 @@ class MediaDeletionTest {
         }
     }
 
-    @Test fun `a cloud copy moved to the trash is no longer linked to its phone copy`() = runBlocking {
+    @Test fun `a deleted copy is no longer linked to the other copy`() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val identities = InMemoryMediaIdentityRegistry()
-            val deleted = phoneCopyLinkedTo(identities, 1)
-            val failed = phoneCopyLinkedTo(identities, 3)
+            val cloudDeleted = phoneCopyLinkedTo(identities, 1)
+            val cloudFailed = phoneCopyLinkedTo(identities, 3)
+            phoneCopyLinkedTo(identities, 5)
+            phoneCopyLinkedTo(identities, 7)
             val refreshed = AtomicInteger()
             val repository = MediaDeletionRepository(
                 SessionStore(
@@ -231,15 +233,25 @@ class MediaDeletionTest {
                 MediaLibraryIndex(),
                 CloudTrash { _, fileId -> fileId != 3L },
                 identities,
-                { it.size },
+                // Phone copy 7 did not move to the trash.
+                { uris -> uris.filterNot { it.endsWith("/7") } },
                 scope,
             ) { refreshed.incrementAndGet() }
             repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
-            withTimeout(5_000) { while (refreshed.get() < 1) kotlinx.coroutines.delay(10) }
+            repository.delete(
+                targets(
+                    contentUris = listOf("content://media/external/images/media/5", "content://media/external/images/media/7"),
+                    fileIds = emptyList(),
+                ),
+            )
+            withTimeout(5_000) { while (refreshed.get() < 2) kotlinx.coroutines.delay(10) }
 
             // The phone file uploaded again links to the new copy; a copy still on the server stays.
-            assertEquals(true, identities.link(deleted, memories(11)))
-            assertEquals(false, identities.link(failed, memories(13)))
+            assertEquals(true, identities.link(cloudDeleted, memories(11)))
+            assertEquals(false, identities.link(cloudFailed, memories(13)))
+            // The same for a cloud copy whose phone copy went to the trash.
+            assertEquals(true, identities.link(memories(5), phone(15)))
+            assertEquals(false, identities.link(memories(7), phone(17)))
         } finally {
             scope.cancel()
         }
@@ -247,15 +259,25 @@ class MediaDeletionTest {
 
     private suspend fun phoneCopyLinkedTo(
         identities: InMemoryMediaIdentityRegistry,
-        fileId: Long,
+        id: Long,
     ): MediaSourceIdentity {
-        val phone = MediaSourceIdentity(MediaSourceKind.Local, "content://media/external/images/media/$fileId")
+        val phone = phone(id)
         identities.resolve(listOf(MediaIdentityCandidate(source = phone, aliases = emptySet())))
-        assertEquals(true, identities.link(phone, memories(fileId)))
+        assertEquals(true, identities.link(phone, memories(id)))
         return phone
     }
 
+    private fun phone(id: Long) = MediaSourceIdentity(MediaSourceKind.Local, "content://media/external/file/$id")
+
     private fun memories(fileId: Long) = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
+
+    /** Phone copies are indexed by their `file` URI and trashed by the typed one. */
+    private fun targets(contentUris: List<String>, fileIds: List<Long>) =
+        DeletionTargets(
+            contentUris = contentUris,
+            fileIds = fileIds,
+            phoneSources = contentUris.associateWith { "content://media/external/file/${it.substringAfterLast('/')}" },
+        )
 
     @Test fun `progress marks queued cloud copies until the queue is done`() = runBlocking {
         val release = CountDownLatch(1)
@@ -273,7 +295,7 @@ class MediaDeletionTest {
                         fileId != 3L
                     },
                     InMemoryMediaIdentityRegistry(),
-                    { it.size },
+                    { it },
                     scope,
                 ) {}
                 repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
@@ -304,7 +326,7 @@ class MediaDeletionTest {
                     MediaLibraryIndex(),
                     CloudTrash { _, _ -> error("no cloud request expected") },
                     InMemoryMediaIdentityRegistry(),
-                    { it.size },
+                    { it },
                     scope,
                 ) {}
                 repository.delete(
