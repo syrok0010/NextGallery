@@ -3,7 +3,7 @@ package com.syrok0010.nextgallery.feature.collection
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -107,7 +108,8 @@ internal fun MediaSlotTile(
                     onSelect(item)
                 }
             },
-            onLongClick = selection?.let { { it.select(item.mediaId) } },
+            // Touch reaches the grid's drag selection; this one is for accessibility services.
+            onLongPress = selection?.let { { it.select(item.mediaId) } },
         )
     }
 }
@@ -138,7 +140,7 @@ private fun MediaTile(
     selected: Boolean,
     activity: MediaTileActivity?,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)?,
+    onLongPress: (() -> Unit)?,
 ) {
     val coordinatesHolder = remember(item.mediaId) {
         TimelineTileCoordinates()
@@ -167,10 +169,18 @@ private fun MediaTile(
                 } else {
                     Modifier
                 },
-            ).combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            ),
+            ).then(
+                if (onLongPress != null) {
+                    Modifier.semantics {
+                        onLongClick {
+                            onLongPress()
+                            true
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            ).clickable(onClick = onClick),
     ) {
         MediaAssetImage(
             item = item,

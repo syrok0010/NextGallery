@@ -28,6 +28,12 @@ internal class MediaSelection(active: Boolean = false, selectedIds: Set<MediaId>
         selectedIds += id
     }
 
+    /** A drag across the grid: enters the mode with exactly [ids]. */
+    fun replace(ids: Set<MediaId>) {
+        active = true
+        selectedIds = ids
+    }
+
     fun toggle(id: MediaId) {
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
     }

@@ -40,6 +40,28 @@ class MediaCollectionSelectionTest {
         rule.onNodeWithContentDescription(string(R.string.selection_cancel)).assertDoesNotExist()
     }
 
+    @Test fun dragAfterLongPressSelectsEveryTileUpToTheFinger() {
+        var received = emptyList<MediaItem>()
+        show { items, _ -> received = items }
+        val grid = rule.onNodeWithTag("media_grid")
+        val origin = grid.fetchSemanticsNode().boundsInRoot.topLeft
+        fun center(name: String) =
+            rule
+                .onNodeWithContentDescription(
+                    name,
+                ).fetchSemanticsNode()
+                .boundsInRoot.center -
+                origin
+        grid.performTouchInput {
+            down(center("first.jpg"))
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            moveTo(center("second.jpg"))
+            up()
+        }
+        rule.onNodeWithText("Действие").performClick()
+        rule.runOnIdle { assertEquals(listOf(first, second), received) }
+    }
+
     private fun show(perform: (List<MediaItem>, () -> Unit) -> Unit) {
         rule.setContent {
             NextGalleryTheme {
