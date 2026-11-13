@@ -46,6 +46,12 @@ interface MediaIdentityRegistry {
     suspend fun removeSource(source: MediaSourceKind)
 
     /**
+     * Drops copies that no longer exist, such as cloud files the app moved to the trash, with
+     * their links and conflicts. The objects keep their other copies.
+     */
+    suspend fun forget(sources: Collection<MediaSourceIdentity>)
+
+    /**
      * Records [linked] as the copy of the media already known as [existing] in [linked]'s source,
      * for example the server file just uploaded from a phone file. This exact link outranks
      * aliases. An object [linked] had alone may be merged, but an existing link is never replaced.

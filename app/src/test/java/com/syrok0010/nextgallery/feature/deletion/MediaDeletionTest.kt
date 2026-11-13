@@ -2,11 +2,15 @@ package com.syrok0010.nextgallery.feature.deletion
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -106,6 +110,7 @@ class MediaDeletionTest {
                     SessionStore(FixedCredentials(fixture.credentials)),
                     index,
                     MemoriesCloudTrash(fixture.dav, fixture.files),
+                    InMemoryMediaIdentityRegistry(),
                     { it.size },
                     scope,
                 ) {}
@@ -175,6 +180,7 @@ class MediaDeletionTest {
                     sessions,
                     MediaLibraryIndex(),
                     CloudTrash { _, fileId -> fileId != 3L },
+                    InMemoryMediaIdentityRegistry(),
                     { it.size - 1 },
                     scope,
                 ) { refreshed.incrementAndGet() }
@@ -211,6 +217,46 @@ class MediaDeletionTest {
         }
     }
 
+    @Test fun `a cloud copy moved to the trash is no longer linked to its phone copy`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val identities = InMemoryMediaIdentityRegistry()
+            val deleted = phoneCopyLinkedTo(identities, 1)
+            val failed = phoneCopyLinkedTo(identities, 3)
+            val refreshed = AtomicInteger()
+            val repository = MediaDeletionRepository(
+                SessionStore(
+                    FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna")),
+                ),
+                MediaLibraryIndex(),
+                CloudTrash { _, fileId -> fileId != 3L },
+                identities,
+                { it.size },
+                scope,
+            ) { refreshed.incrementAndGet() }
+            repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
+            withTimeout(5_000) { while (refreshed.get() < 1) kotlinx.coroutines.delay(10) }
+
+            // The phone file uploaded again links to the new copy; a copy still on the server stays.
+            assertEquals(true, identities.link(deleted, memories(11)))
+            assertEquals(false, identities.link(failed, memories(13)))
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private suspend fun phoneCopyLinkedTo(
+        identities: InMemoryMediaIdentityRegistry,
+        fileId: Long,
+    ): MediaSourceIdentity {
+        val phone = MediaSourceIdentity(MediaSourceKind.Local, "content://media/external/images/media/$fileId")
+        identities.resolve(listOf(MediaIdentityCandidate(source = phone, aliases = emptySet())))
+        assertEquals(true, identities.link(phone, memories(fileId)))
+        return phone
+    }
+
+    private fun memories(fileId: Long) = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
+
     @Test fun `progress marks queued cloud copies until the queue is done`() = runBlocking {
         val release = CountDownLatch(1)
         Fixture { request ->
@@ -226,6 +272,7 @@ class MediaDeletionTest {
                         release.await()
                         fileId != 3L
                     },
+                    InMemoryMediaIdentityRegistry(),
                     { it.size },
                     scope,
                 ) {}
@@ -256,6 +303,7 @@ class MediaDeletionTest {
                     SessionStore(FixedCredentials(null)),
                     MediaLibraryIndex(),
                     CloudTrash { _, _ -> error("no cloud request expected") },
+                    InMemoryMediaIdentityRegistry(),
                     { it.size },
                     scope,
                 ) {}

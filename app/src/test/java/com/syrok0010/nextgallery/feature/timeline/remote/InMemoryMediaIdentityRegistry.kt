@@ -63,11 +63,20 @@ class InMemoryMediaIdentityRegistry(
     }
 
     override suspend fun removeSource(source: MediaSourceKind) {
+        remove { it.source == source }
+    }
+
+    override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
+        val forgotten = sources.toSet()
+        remove { it in forgotten }
+    }
+
+    private fun remove(predicate: (MediaSourceIdentity) -> Boolean) {
         val removedMediaIds = sourceMediaIds
-            .filterKeys { it.source == source }
+            .filterKeys(predicate)
             .values
             .toSet()
-        sourceMediaIds.keys.removeAll { it.source == source }
+        sourceMediaIds.keys.removeAll(predicate)
         val retainedMediaIds = sourceMediaIds.values.toSet()
         aliasMediaIds.entries.removeAll { (_, mediaId) ->
             mediaId in removedMediaIds && mediaId !in retainedMediaIds
