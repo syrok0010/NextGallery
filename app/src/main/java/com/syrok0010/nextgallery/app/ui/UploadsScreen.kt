@@ -3,7 +3,12 @@ package com.syrok0010.nextgallery.app.ui
 import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -53,7 +59,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.ui.asString
@@ -71,8 +79,8 @@ import org.koin.compose.koinInject
 @Composable
 internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
     val entries by queue.entries.collectAsStateWithLifecycle()
-    val finishing = rememberFinishing(entries)
-    val uploading = entries.filter { it.phase == UploadPhase.Uploading || it.id in finishing }
+    val moves = rememberRowMoves(entries)
+    val uploading = entries.filter { it.phase == UploadPhase.Uploading || it.id in moves.finishing }
     val waiting = entries.filter { it.phase == UploadPhase.Waiting }
     // Files that need attention come before ordinary outcomes; the latest come first.
     val done = (entries - uploading.toSet() - waiting.toSet()).asReversed().sortedBy {
@@ -108,12 +116,15 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             return@Scaffold
         }
         // One key per file in every section: a finished upload moves to «Done» instead of reappearing.
+        // Slow enough for the eye to follow the row across the list.
+        val moveSpec = tween<IntOffset>(ROW_MOVE_MILLIS, easing = FastOutSlowInEasing)
         val row: @Composable LazyItemScope.(UploadEntry) -> Unit = { entry ->
             UploadRow(
                 entry,
                 { queue.cancel(entry.id) },
                 { queue.retry(entry.id) },
-                Modifier.animateItem(),
+                entry.id in moves.moving,
+                Modifier.animateItem(placementSpec = moveSpec),
             )
         }
         LazyColumn(
@@ -124,7 +135,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 item(key = "uploading") {
                     SectionHeader(
                         stringResource(R.string.uploads_section_uploading),
-                        Modifier.animateItem(),
+                        Modifier.animateItem(placementSpec = moveSpec),
                     )
                 }
                 items(uploading, key = { it.id }) { row(it) }
@@ -133,7 +144,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 item(key = "waiting") {
                     SectionHeader(
                         sectionTitle(R.string.uploads_section_waiting, waiting),
-                        Modifier.animateItem(),
+                        Modifier.animateItem(placementSpec = moveSpec),
                         stringResource(R.string.uploads_cancel_all),
                         queue::cancelAll,
                     )
@@ -144,7 +155,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                 item(key = "done") {
                     SectionHeader(
                         sectionTitle(R.string.uploads_section_done, done),
-                        Modifier.animateItem(),
+                        Modifier.animateItem(placementSpec = moveSpec),
                         stringResource(R.string.uploads_clear),
                         queue::clearFinished,
                     )
@@ -156,13 +167,17 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
 }
 
 /**
- * Files whose transfer has just ended. They stay a moment under «Uploading» in their final state,
- * so the user sees the outcome before the row moves on to «Done».
+ * [finishing]: files whose transfer has just ended. They stay a moment under «Uploading» in their
+ * final state, so the user sees the outcome before the row moves on to «Done».
+ * [moving]: files on their way to «Done», lifted above the list while they travel.
  */
+private class RowMoves(val finishing: Set<String>, val moving: Set<String>)
+
 @Composable
-private fun rememberFinishing(entries: List<UploadEntry>): Set<String> {
+private fun rememberRowMoves(entries: List<UploadEntry>): RowMoves {
     val scope = rememberCoroutineScope()
     val finishing = remember { mutableStateSetOf<String>() }
+    val moving = remember { mutableStateSetOf<String>() }
     var transferring by remember { mutableStateOf(emptySet<String>()) }
     val now = entries.filter { it.phase == UploadPhase.Uploading }.mapTo(HashSet()) { it.id }
     // A file sent back to waiting moves at once: it has no outcome to show.
@@ -175,15 +190,19 @@ private fun rememberFinishing(entries: List<UploadEntry>): Set<String> {
             if (finishing.add(entry.id)) {
                 scope.launch {
                     delay(FINISHED_PAUSE_MILLIS)
+                    moving.add(entry.id)
                     finishing.remove(entry.id)
+                    delay(ROW_MOVE_MILLIS.toLong())
+                    moving.remove(entry.id)
                 }
             }
         }
     }
-    return finishing + ended.map { it.id }
+    return RowMoves(finishing + ended.map { it.id }, moving)
 }
 
 private const val FINISHED_PAUSE_MILLIS = 800L
+private const val ROW_MOVE_MILLIS = 600
 
 @Composable
 private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
@@ -225,8 +244,15 @@ private fun UploadRow(
     entry: UploadEntry,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
+    lifted: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // A moving row rises over its neighbours with its own background, so it does not blend in.
+    val colors = MaterialTheme.colorScheme
+    val background by animateColorAsState(
+        if (lifted) colors.surfaceContainerHighest else colors.background,
+    )
+    val elevation by animateDpAsState(if (lifted) 6.dp else 0.dp)
     val phase = entry.phase
     val uploading = phase == UploadPhase.Uploading
     val problem = when {
@@ -237,7 +263,10 @@ private fun UploadRow(
     val alpha by animateFloatAsState(if (phase == UploadPhase.Cancelled) 0.55f else 1f)
     Row(
         modifier
+            .zIndex(if (lifted) 1f else 0f)
             .fillMaxWidth()
+            .shadow(elevation)
+            .background(background)
             .heightIn(min = 56.dp)
             .padding(start = 16.dp, end = 4.dp)
             .alpha(alpha),
