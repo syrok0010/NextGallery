@@ -202,6 +202,7 @@
     <string name="error_memories_check_network">Не удалось проверить Memories из-за ошибки сети. Проверьте подключение и повторите проверку.</string>
     <string name="error_memories_check_failed">Не удалось проверить Memories. Проверьте доступ к серверу и повторите проверку. Если доступ отозван, выйдите и войдите заново.</string>
     <string name="uploads_title">Загрузки</string>
+    <string name="uploads_open">Открыть загрузки</string>
     <string name="uploads_back">Назад</string>
     <string name="uploads_cancel_all">Отменить все</string>
     <string name="uploads_cancel_file">Отменить</string>
