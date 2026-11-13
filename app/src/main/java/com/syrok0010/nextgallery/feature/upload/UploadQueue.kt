@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.withLock
  * Manual uploads. Room keeps every job, so a queue survives the process; the screen, the status
  * pill and the notification all show projections of the journal. [UploadWorker] runs the jobs
  * through [drain]. Accepted and retried jobs call [schedule]; a temporary failure leaves the
- * next attempt to the worker's own backoff.
+ * next attempt to the worker's own backoff, which the user can cut short with [retryNow].
  */
 internal class UploadQueue(
     private val sessions: SessionStore,
@@ -31,6 +31,8 @@ internal class UploadQueue(
     private val refreshLibrary: () -> Unit,
     private val processId: String = UUID.randomUUID().toString(),
     private val schedule: suspend () -> Unit = {},
+    /** Starts the worker at once, even when one waits out its backoff. */
+    private val restart: suspend () -> Unit = {},
 ) : OperationStatusSource {
     private val commands = Mutex()
 
@@ -39,6 +41,9 @@ internal class UploadQueue(
     private val rows = MutableStateFlow<List<UploadJob>>(emptyList())
     private val progress = MutableStateFlow<Progress?>(null)
     private val running = ConcurrentHashMap<String, Job>()
+
+    /** Set when a pass left a job for another attempt, until the next pass starts. */
+    private val backoff = MutableStateFlow(false)
 
     val entries: StateFlow<List<UploadEntry>> =
         combine(rows, progress, ::uploadEntries).stateIn(scope, SharingStarted.Eagerly, emptyList())
@@ -52,6 +57,11 @@ internal class UploadQueue(
     val activity: StateFlow<UploadActivity?> =
         combine(pass, progress) { (jobs, ids), progress -> uploadActivity(jobs, ids, progress) }
             .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** Files wait out the worker's backoff, and nothing runs: [retryNow] can start them. */
+    val paused: StateFlow<Boolean> =
+        combine(rows, backoff) { jobs, backoff -> backoff && jobs.any { it.waiting } }
+            .stateIn(scope, SharingStarted.Eagerly, false)
     val result: StateFlow<UploadResult?> =
         rows.map(::uploadResult).stateIn(scope, SharingStarted.Eagerly, null)
     override val operations =
@@ -109,6 +119,21 @@ internal class UploadQueue(
             scheduleWorker()
         }
 
+    /** The user knows the server is reachable again and does not want to wait out the backoff. */
+    fun retryNow() =
+        command {
+            if (!paused.value) return@command
+            backoff.value = false
+            try {
+                restart()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The backoff still runs; the user can tap again.
+                backoff.value = true
+            }
+        }
+
     fun clearFinished() = command(journal::clearFinished)
 
     fun consumeResult() = command(journal::seen)
@@ -147,6 +172,9 @@ internal class UploadQueue(
             val owner = account.uploadOwner
             var reachedServer = false
             val deferred = HashSet<String>()
+            // A pass that does not end normally makes the worker retry with backoff as well.
+            var retry = true
+            backoff.value = false
             try {
                 // Passes never overlap, so every claim left now is stale: a dead process, or an
                 // earlier pass here that could not release its own.
@@ -155,8 +183,9 @@ internal class UploadQueue(
                     val claim = journal.claimNext(owner, processId, deferred) ?: break
                     reachedServer = runJob(account, claim, deferred, put) || reachedServer
                 }
-                deferred.isNotEmpty()
+                deferred.isNotEmpty().also { retry = it }
             } finally {
+                backoff.value = retry
                 withContext(NonCancellable) {
                     progress.value = null
                     journal.release(owner) { it == processId }

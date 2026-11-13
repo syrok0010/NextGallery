@@ -31,6 +31,7 @@ class UploadQueueRuntimeTest {
     private var transfers = 0
     private var albumAdds = true
     private var schedules = 0
+    private var restarts = 0
     private val ids = listOf(MediaId("local-a"), MediaId("local-b"))
     private var processId = ""
 
@@ -57,7 +58,7 @@ class UploadQueueRuntimeTest {
                 link = { _, _, _, _ -> links++; true },
                 album = { _, job, _, recovered -> albums += job.album!!.name; albumRecovered += recovered; albumAdds },
             ),
-            {}, processId, { schedules++ },
+            {}, processId, { schedules++ }, { restarts++ },
         )
     }
 
@@ -304,6 +305,25 @@ class UploadQueueRuntimeTest {
         queue.drain(::transfer)
         delay(50)
         assertEquals("A deferral and finishing schedule nothing", base + 2, schedules)
+    }
+
+    @Test fun aDeferralPausesTheQueueUntilTheUserRetriesNow() = runBlocking {
+        enqueue(listOf(ids.first()))
+        waitFor { queue.entries.value.isNotEmpty() }
+        assertFalse("Nothing has failed yet", queue.paused.value)
+        assertTrue(queue.drain { _, _, _ -> throw IOException("offline") })
+        waitFor { queue.paused.value }
+
+        queue.retryNow()
+        waitFor { restarts == 1 }
+        assertFalse(queue.paused.value)
+        queue.retryNow()
+        delay(50)
+        assertEquals("No second restart while the first one is pending", 1, restarts)
+
+        // The early pass succeeds; nothing is left to retry.
+        assertFalse(queue.drain(::transfer))
+        assertFalse(queue.paused.value)
     }
 
     @Test fun batchQueuedDuringAPassExtendsItAndHistoryStartsANewOne() = runBlocking {

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -79,6 +80,7 @@ import org.koin.compose.koinInject
 @Composable
 internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
     val entries by queue.entries.collectAsStateWithLifecycle()
+    val paused by queue.paused.collectAsStateWithLifecycle()
     val moves = rememberRowMoves(entries)
     val uploading = entries.filter { it.phase == UploadPhase.Uploading || it.id in moves.finishing }
     val waiting = entries.filter { it.phase == UploadPhase.Waiting }
@@ -147,6 +149,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
                         Modifier.animateItem(placementSpec = moveSpec),
                         stringResource(R.string.uploads_cancel_all),
                         queue::cancelAll,
+                        retry = queue::retryNow.takeIf { paused },
                     )
                 }
                 items(waiting, key = { it.id }) { row(it) }
@@ -219,6 +222,7 @@ private fun SectionHeader(
     modifier: Modifier = Modifier,
     action: String? = null,
     onAction: () -> Unit = {},
+    retry: (() -> Unit)? = null,
 ) {
     Row(
         modifier
@@ -234,6 +238,11 @@ private fun SectionHeader(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (retry != null) {
+            IconButton(onClick = retry) {
+                Icon(Icons.Default.Refresh, stringResource(R.string.uploads_retry_now))
+            }
+        }
         if (action != null) TextButton(onClick = onAction) { Text(action) }
     }
 }

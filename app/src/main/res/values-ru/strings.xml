@@ -205,6 +205,7 @@
     <string name="uploads_open">Открыть загрузки</string>
     <string name="uploads_back">Назад</string>
     <string name="uploads_cancel_all">Отменить все</string>
+    <string name="uploads_retry_now">Повторить сейчас</string>
     <string name="uploads_cancel_file">Отменить</string>
     <string name="uploads_clear">Очистить</string>
     <string name="uploads_empty">Здесь появятся файлы, отправленные в облако</string>
