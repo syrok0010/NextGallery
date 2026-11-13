@@ -105,7 +105,8 @@ internal class UploadTransfer(
             // Like the Nextcloud web client: only a file larger than one part is chunked.
             if (partSize in 1 until length) {
                 // Named by the job, so a later attempt finds the parts this one stored.
-                createInParts(uploads, id, target, length, partSize, ::body)
+                // Stored parts send no bytes, so a resumed upload reaches 100 here.
+                createInParts(uploads, id, target, length, partSize, ::body) { onProgress(100) }
             } else {
                 dav.createFile(target, body(0L, length))
             }

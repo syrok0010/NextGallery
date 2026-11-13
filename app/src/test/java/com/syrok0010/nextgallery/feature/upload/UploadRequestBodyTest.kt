@@ -73,10 +73,11 @@ class UploadRequestBodyTest {
         assertTrue(closed)
     }
 
-    @Test fun `percent leaves 100 for the response and needs a known size`() {
+    @Test fun `percent reaches 100 once every byte is sent and needs a known size`() {
         assertEquals(0, sentPercent(0L, 10L))
         assertEquals(40, sentPercent(4L, 10L))
-        assertEquals(99, sentPercent(10L, 10L))
+        assertEquals(100, sentPercent(10L, 10L))
+        assertEquals(99, sentPercent(9_999L, 10_000L))
         assertEquals(0, sentPercent(0L, 0L))
         assertNull(sentPercent(5L, -1L))
         assertEquals(50, sentPercent(Long.MAX_VALUE / 2, Long.MAX_VALUE))
