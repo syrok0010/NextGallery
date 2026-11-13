@@ -13,7 +13,7 @@ android {
         applicationId = "com.syrok0010.nextgallery"
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
+        versionCode = 3
         versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
