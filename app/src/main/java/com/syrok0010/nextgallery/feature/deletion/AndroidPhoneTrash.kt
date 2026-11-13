@@ -9,12 +9,12 @@ import kotlinx.coroutines.withContext
 
 /** A row gone from MediaStore was not moved to the trash, so it is not counted as trashed. */
 internal class AndroidPhoneTrash(private val resolver: ContentResolver) : PhoneTrashCheck {
-    override suspend fun trashed(contentUris: List<String>): Int =
+    override suspend fun trashed(contentUris: List<String>): List<String> =
         withContext(Dispatchers.IO) {
             val args = Bundle().apply {
                 putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
             }
-            contentUris.count { uri ->
+            contentUris.filter { uri ->
                 resolver
                     .query(Uri.parse(uri), arrayOf(MediaStore.MediaColumns.IS_TRASHED), args, null)
                     ?.use { it.moveToFirst() && it.getInt(0) == 1 } == true

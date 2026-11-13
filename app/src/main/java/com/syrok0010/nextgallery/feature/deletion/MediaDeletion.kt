@@ -41,9 +41,16 @@ import kotlinx.serialization.Serializable
 /** Which copies of objects that exist both on the phone and in the cloud go to the trash. */
 internal enum class DeletionScope { Everywhere, PhoneOnly, CloudOnly }
 
-/** Copies to delete: local content URIs for the system trash, cloud file ids for Nextcloud. */
+/**
+ * Copies to delete: local content URIs for the system trash, cloud file ids for Nextcloud.
+ * [phoneSources] maps a trash URI to the identity of that phone copy in the media registry.
+ */
 @Serializable
-internal data class DeletionTargets(val contentUris: List<String>, val fileIds: List<Long>)
+internal data class DeletionTargets(
+    val contentUris: List<String>,
+    val fileIds: List<Long>,
+    val phoneSources: Map<String, String> = emptyMap(),
+)
 
 /** How many selected objects have only a phone copy, only a cloud copy, or both. */
 internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val merged: Int) {
@@ -63,17 +70,18 @@ internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val mer
  * stay inside the deletion module: the UI only shows [plan] and returns the user's scope.
  */
 internal class DeletionPreparation private constructor(
-    private val phoneOnly: List<String>,
+    private val phoneOnly: List<PhoneCopy>,
     private val cloudOnly: List<Long>,
     private val merged: List<MergedCopies>,
 ) {
     val plan = DeletionPlan(phoneOnly.size, cloudOnly.size, merged.size)
 
     /** Without [cloudAllowed] cloud copies stay untouched whatever the [scope]. */
-    fun confirm(scope: DeletionScope, cloudAllowed: Boolean): DeletionTargets =
-        DeletionTargets(
-            contentUris = phoneOnly +
-                if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.contentUri },
+    fun confirm(scope: DeletionScope, cloudAllowed: Boolean): DeletionTargets {
+        val phone = phoneOnly + if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.phone }
+        return DeletionTargets(
+            contentUris = phone.map { it.trashUri },
+            phoneSources = phone.associate { it.trashUri to it.sourceKey },
             fileIds = if (!cloudAllowed) {
                 emptyList()
             } else {
@@ -83,17 +91,20 @@ internal class DeletionPreparation private constructor(
                     ).distinct()
             },
         )
+    }
 
-    private class MergedCopies(val contentUri: String, val fileId: Long)
+    private class PhoneCopy(val trashUri: String, val sourceKey: String)
+
+    private class MergedCopies(val phone: PhoneCopy, val fileId: Long)
 
     companion object {
         /** Objects without any copy left are skipped; null when nothing remains to delete. */
         internal fun of(items: List<MediaItem>): DeletionPreparation? {
-            val phoneOnly = mutableListOf<String>()
+            val phoneOnly = mutableListOf<PhoneCopy>()
             val cloudOnly = mutableListOf<Long>()
             val merged = mutableListOf<MergedCopies>()
             items.forEach { item ->
-                val local = item.localCopy?.contentUri?.let { mediaStoreItemUri(it, item.isVideo) }
+                val local = item.localCopy?.contentUri?.let { PhoneCopy(mediaStoreItemUri(it, item.isVideo), it) }
                 val remote = item.remoteFileId
                 when {
                     local != null && remote != null -> merged += MergedCopies(local, remote)
@@ -152,11 +163,11 @@ internal data class DeletionState(
 )
 
 /**
- * Counts the URIs that MediaStore really marks as trashed: the system dialog answers RESULT_OK
+ * Returns the URIs that MediaStore really marks as trashed: the system dialog answers RESULT_OK
  * even when single items fail to move.
  */
 internal fun interface PhoneTrashCheck {
-    suspend fun trashed(contentUris: List<String>): Int
+    suspend fun trashed(contentUris: List<String>): List<String>
 }
 
 /**
@@ -223,10 +234,17 @@ internal class MediaDeletionRepository(
         scope.launch(operationParent) {
             deletionMutex.withLock {
                 val phoneTrashed = if (targets.contentUris.isEmpty()) {
-                0
+                    0
                 } else {
                     try {
-                        phoneTrash.trashed(targets.contentUris)
+                        val trashed = phoneTrash.trashed(targets.contentUris)
+                        // The copies are gone: their links to cloud copies go with them.
+                        identities.forget(
+                            trashed.map { uri ->
+                                MediaSourceIdentity(MediaSourceKind.Local, targets.phoneSources[uri] ?: uri)
+                            },
+                        )
+                        trashed.size
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -297,7 +315,8 @@ internal class MediaDeletionRepository(
                                 false
                             }
                             if (deleted) {
-                                // The copy is gone: a new upload of the same phone file links anew.
+                                // The copy is gone: its link goes with it, so uploading the phone
+                                // file again links the new copy.
                                 identities.forget(
                                     listOf(MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())),
                                 )
