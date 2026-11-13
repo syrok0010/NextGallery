@@ -59,6 +59,19 @@ private fun AnimatedContentTransitionScope<*>.horizontalTransition(
     slideIntoContainer(it, tween(300)) togetherWith slideOutOfContainer(it, tween(300))
 } ?: (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
 
+/**
+ * A screen opened over a tab slides in from the end and leaves the same way. During the back
+ * gesture it follows the finger and uncovers the tab.
+ */
+private val subscreenTransitions =
+    NavDisplay.transitionSpec {
+        horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Left)
+    } + NavDisplay.popTransitionSpec {
+        horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
+    } + NavDisplay.predictivePopTransitionSpec {
+        horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
+    }
+
 @Composable
 internal fun NextGalleryApp(
     links: Flow<Uri> = emptyFlow(),
@@ -138,7 +151,10 @@ internal fun NextGalleryApp(
                         )
                     },
                     entryProvider = entryProvider {
-                        entry<NextGalleryRoute.Uploads>(clazzContentKey = { it.navContentKey() }) {
+                        entry<NextGalleryRoute.Uploads>(
+                            clazzContentKey = { it.navContentKey() },
+                            metadata = subscreenTransitions,
+                        ) {
                             if (signedIn) UploadsScreen(onBack = { backStack.removeLastOrNull() })
                         }
                         entry<NextGalleryRoute.Login>(
@@ -160,10 +176,7 @@ internal fun NextGalleryApp(
                         }
                         entry<NextGalleryRoute.Album>(
                             clazzContentKey = { it.navContentKey() },
-                            metadata = NavDisplay.transitionSpec {
-                                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) togetherWith
-                                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
-                            },
+                            metadata = subscreenTransitions,
                         ) { album ->
                             if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout, onOpenUploads = openUploads)
                         }
