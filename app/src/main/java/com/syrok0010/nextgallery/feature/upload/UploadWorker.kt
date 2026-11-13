@@ -84,7 +84,8 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
                 (activity.processed + 1).coerceAtMost(activity.total),
                 activity.total,
             )
-            notifications.showProgress(message, activity.percent)
+            // The server answers without progress: the bar spins until it does.
+            notifications.showProgress(message, activity.percent.takeUnless { activity.saving })
             delay(500L)
         }
     }

@@ -10,6 +10,8 @@ internal data class UploadEntry(
     val selection: UploadSelection,
     val phase: UploadPhase,
     val percent: Int? = null,
+    /** Every byte is sent and the server has not answered yet. */
+    val saving: Boolean = false,
     /** Set while the file needs the user, also after upload when a follow-up failed. */
     val problem: UiText? = null,
     /** Unfinished work blocks logout, so the user can always cancel it. */
@@ -28,11 +30,13 @@ internal fun uploadEntries(rows: List<UploadJob>, progress: Progress?): List<Upl
             TransferState.Attention -> UploadPhase.NeedsAttention
             TransferState.Cancelled -> UploadPhase.Cancelled
         }
+        val current = progress?.takeIf { it.id == row.id && phase == UploadPhase.Uploading }
         UploadEntry(
             id = row.id,
             selection = row.selection,
             phase = phase,
-            percent = progress?.takeIf { it.id == row.id && phase == UploadPhase.Uploading }?.percent,
+            percent = current?.percent,
+            saving = current?.saving == true,
             problem = row.takeIf { it.hasAttention }?.problemText(),
             cancellable = row.unfinished,
             retryable = row.receipt != null && row.hasAttention && row.unfinished,

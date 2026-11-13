@@ -310,7 +310,10 @@ internal class UploadQueue(
 }
 
 /** Percent of the file on the wire; null while its size is unknown. */
-internal data class Progress(val id: String, val percent: Int?)
+internal data class Progress(val id: String, val percent: Int?) {
+    /** Every byte is sent; the server is storing the file, or joining its parts, before it answers. */
+    val saving: Boolean get() = percent == 100
+}
 
 /** Done or Attention; null when the step failed temporarily and should run again later. */
 private suspend fun attempt(action: suspend () -> Boolean): StepState? =

@@ -18,8 +18,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -141,9 +143,16 @@ internal fun VideoPlaybackControls(
                 maxLines = 1,
             )
             val enabled = durationMillis > 0L && state.phase in setOf(VideoPlaybackPhase.Playing, VideoPlaybackPhase.Paused)
+            val slider = remember { SliderState() }
+            val shownFraction = scrubFraction ?: sliderValue
+            // Playback moves the position too, not only the finger.
+            SideEffect { slider.value = shownFraction }
             Slider(
-                value = scrubFraction ?: sliderValue,
-                onValueChange = { scrubFraction = it },
+                state = slider,
+                onValueChange = {
+                    scrubFraction = it
+                    slider.value = it
+                },
                 onValueChangeFinished = {
                     scrubFraction?.let { onSeek((it * durationMillis).toLong()) }
                     scrubFraction = null

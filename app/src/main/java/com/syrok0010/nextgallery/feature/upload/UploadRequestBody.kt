@@ -43,12 +43,12 @@ internal class UploadRequestBody(
     }
 }
 
-/** Percent of [total] bytes [sent]; null while the size is unknown. 100 is left for the response. */
+/** Percent of [total] bytes [sent]; null while the size is unknown. 100 once every byte is sent. */
 internal fun sentPercent(sent: Long, total: Long): Int? =
     when {
         total < 0L -> null
         total == 0L -> 0
-        else -> (sent.toDouble() / total * 100).toInt().coerceIn(0, 99)
+        else -> (sent.toDouble() / total * 100).toInt().coerceIn(0, 100)
     }
 
 private const val SEGMENT = 64L * 1024

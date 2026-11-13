@@ -20,6 +20,8 @@ internal data class UploadActivity(
     val processed: Int,
     val current: String? = null,
     val percent: Int? = null,
+    /** [current] is sent and the server is storing it: no progress to show until it answers. */
+    val saving: Boolean = false,
 )
 
 /** Results the user has not looked at yet. */
@@ -44,6 +46,7 @@ internal fun uploadActivity(rows: List<UploadJob>, pass: Set<String>, progress: 
         processed = pass.size - active.size,
         current = current?.selection?.identityUri,
         percent = progress?.percent?.takeIf { current != null },
+        saving = current != null && progress.saving,
     )
 }
 
@@ -77,7 +80,10 @@ internal fun uploadOperationSnapshots(activity: UploadActivity?, result: UploadR
         if (activity != null) {
             val progress = if (activity.total == 0) null else (activity.processed + (activity.percent ?: 0) / 100f) / activity.total
             val media = buildList {
-                activity.current?.let { add(OperationMediaActivity(OperationMediaReference.LocalUri(it), activity.percent?.div(100f))) }
+                activity.current?.let {
+                    val fileProgress = activity.percent?.takeUnless { activity.saving }?.div(100f)
+                    add(OperationMediaActivity(OperationMediaReference.LocalUri(it), fileProgress))
+                }
                 activity.pending.asSequence().filterNot { it == activity.current }.mapTo(this) {
                     OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
                 }

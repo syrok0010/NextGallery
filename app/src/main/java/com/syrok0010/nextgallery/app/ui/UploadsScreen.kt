@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,9 +20,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -163,6 +166,7 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
     val percent = entry.percent
@@ -179,29 +183,36 @@ private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
         Column(Modifier.weight(1f)) {
             FileName(entry.selection)
             Row(
-                Modifier.padding(top = 6.dp),
+                // One height for both states, so the row does not jump when the bar gives way.
+                Modifier.padding(top = 4.dp).height(24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val bar = Modifier.weight(1f)
-                if (percent == null) {
-                    LinearProgressIndicator(bar)
+                if (entry.saving) {
+                    // Every byte is sent; the server answers without progress.
+                    LoadingIndicator(Modifier.size(24.dp))
+                    SizeText(stringResource(R.string.uploads_saving))
                 } else {
-                    LinearProgressIndicator({
-                        percent / 100f
-                    }, bar)
-                }
-                SizeText(
+                    val bar = Modifier.weight(1f)
                     if (percent == null) {
-                        fileSize(size)
+                        LinearProgressIndicator(bar)
                     } else {
-                        stringResource(
-                            R.string.uploads_sent,
-                            fileSize(size * percent / 100),
-                            fileSize(size),
-                        )
-                    },
-                )
+                        LinearProgressIndicator({
+                            percent / 100f
+                        }, bar)
+                    }
+                    SizeText(
+                        if (percent == null) {
+                            fileSize(size)
+                        } else {
+                            stringResource(
+                                R.string.uploads_sent,
+                                fileSize(size * percent / 100),
+                                fileSize(size),
+                            )
+                        },
+                    )
+                }
             }
         }
         CancelButton(onCancel)

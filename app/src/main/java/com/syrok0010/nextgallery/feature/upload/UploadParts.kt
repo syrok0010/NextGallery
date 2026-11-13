@@ -8,7 +8,8 @@ import okhttp3.RequestBody
 
 /**
  * Sends a file of [length] bytes to [target] in parts of [partSize] under upload [id], keeping the
- * parts an interrupted attempt already stored. [part] streams one range of the file. Stored parts
+ * parts an interrupted attempt already stored. [part] streams one range of the file; [onSent] is
+ * called once every part is on the server, before it joins them. Stored parts
  * of another size belong to another layout, so they are dropped and every part is sent again.
  *
  * An upload the server lost meanwhile is dropped and fails as temporary, so the next attempt
@@ -22,6 +23,7 @@ internal suspend fun createInParts(
     length: Long,
     partSize: Long,
     part: (offset: Long, size: Long) -> RequestBody,
+    onSent: () -> Unit = {},
 ): CreateFileResult {
     require(length > 0L && partSize > 0L)
     val count = ((length + partSize - 1) / partSize).toInt()
@@ -40,6 +42,7 @@ internal suspend fun createInParts(
         stored[number] == size(number) ||
             uploads.putPart(id, number, target, length, part((number - 1) * partSize, size(number)))
     }
+    if (sent) onSent()
     val result = if (sent) uploads.finish(id, target, length) else null
     // Lost, or a taken name: the parts were sent for it, and another name starts its own upload.
     if (result !is CreateFileResult.Created) uploads.cancel(id)

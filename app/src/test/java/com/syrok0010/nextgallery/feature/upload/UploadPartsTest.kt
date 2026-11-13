@@ -47,6 +47,25 @@ class UploadPartsTest {
             }
         }
 
+    @Test fun `a resumed upload with every part stored reports them sent before the server joins them`() =
+        runBlocking {
+            Uploads().use { uploads ->
+                uploads.parts = mutableMapOf(
+                    1 to "0123".toByteArray(),
+                    2 to "4567".toByteArray(),
+                    3 to "89".toByteArray(),
+                )
+                var callsWhenSent: List<String>? = null
+
+                createInParts(uploads = uploads.client, id = "job", target = target, length = phone.size.toLong(), partSize = 4L, part = { _, _ -> error("no part is sent again") }) {
+                    callsWhenSent = uploads.calls()
+                }
+
+                assertEquals(listOf("PROPFIND"), callsWhenSent)
+                assertEquals(listOf("PROPFIND", "MOVE .file"), uploads.calls())
+            }
+        }
+
     @Test fun `parts of another size are dropped and the upload starts over`() =
         runBlocking {
             Uploads().use { uploads ->
@@ -96,9 +115,9 @@ class UploadPartsTest {
         }
 
     private suspend fun Uploads.create(): CreateFileResult =
-        createInParts(client, "job", target, phone.size.toLong(), partSize = 4L) { offset, size ->
+        createInParts(client, "job", target, phone.size.toLong(), partSize = 4L, part = { offset, size ->
             phone.copyOfRange(offset.toInt(), (offset + size).toInt()).toRequestBody()
-        }
+        })
 
     /** `uploads/anna/job` of a server that assembles the parts in order on `MOVE .file`. */
     private class Uploads : AutoCloseable {
