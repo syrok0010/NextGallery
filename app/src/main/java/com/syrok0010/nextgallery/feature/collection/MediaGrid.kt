@@ -28,11 +28,13 @@ internal fun MediaGrid(
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
+    val drag = selection?.let { rememberGridDragSelection(it, gridState, gridItems) }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(116.dp),
         state = gridState,
         modifier = Modifier
             .fillMaxSize()
+            .then(if (drag != null) Modifier.dragSelection(drag) else Modifier)
             .testTag("media_grid"),
         contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
