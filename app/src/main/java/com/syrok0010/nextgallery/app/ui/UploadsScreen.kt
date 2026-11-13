@@ -1,6 +1,9 @@
 package com.syrok0010.nextgallery.app.ui
 
 import android.text.format.Formatter
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,7 +35,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -52,6 +62,8 @@ import com.syrok0010.nextgallery.feature.upload.UploadEntry
 import com.syrok0010.nextgallery.feature.upload.UploadPhase
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /** Files grouped by status rather than by batch: batches are how files were sent, not what the user tracks. */
@@ -59,10 +71,11 @@ import org.koin.compose.koinInject
 @Composable
 internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
     val entries by queue.entries.collectAsStateWithLifecycle()
-    val uploading = entries.filter { it.phase == UploadPhase.Uploading }
+    val finishing = rememberFinishing(entries)
+    val uploading = entries.filter { it.phase == UploadPhase.Uploading || it.id in finishing }
     val waiting = entries.filter { it.phase == UploadPhase.Waiting }
-    // Files that need attention come before ordinary outcomes.
-    val done = (entries - uploading.toSet() - waiting.toSet()).sortedBy {
+    // Files that need attention come before ordinary outcomes; the latest come first.
+    val done = (entries - uploading.toSet() - waiting.toSet()).asReversed().sortedBy {
         it.problem == null && it.phase != UploadPhase.NameConflict
     }
 
@@ -94,48 +107,83 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             }
             return@Scaffold
         }
+        // One key per file in every section: a finished upload moves to «Done» instead of reappearing.
+        val row: @Composable LazyItemScope.(UploadEntry) -> Unit = { entry ->
+            UploadRow(
+                entry,
+                { queue.cancel(entry.id) },
+                { queue.retry(entry.id) },
+                Modifier.animateItem(),
+            )
+        }
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
             if (uploading.isNotEmpty()) {
-                item(
-                    key = "uploading",
-                ) { SectionHeader(stringResource(R.string.uploads_section_uploading)) }
-                items(
-                    uploading,
-                    key = { it.id },
-                ) { UploadingRow(it) { queue.cancel(it.id) } }
+                item(key = "uploading") {
+                    SectionHeader(
+                        stringResource(R.string.uploads_section_uploading),
+                        Modifier.animateItem(),
+                    )
+                }
+                items(uploading, key = { it.id }) { row(it) }
             }
             if (waiting.isNotEmpty()) {
                 item(key = "waiting") {
                     SectionHeader(
                         sectionTitle(R.string.uploads_section_waiting, waiting),
+                        Modifier.animateItem(),
                         stringResource(R.string.uploads_cancel_all),
                         queue::cancelAll,
                     )
                 }
-                items(
-                    waiting,
-                    key = { it.id },
-                ) { UploadRow(it, { queue.cancel(it.id) }, { queue.retry(it.id) }) }
+                items(waiting, key = { it.id }) { row(it) }
             }
             if (done.isNotEmpty()) {
                 item(key = "done") {
                     SectionHeader(
                         sectionTitle(R.string.uploads_section_done, done),
+                        Modifier.animateItem(),
                         stringResource(R.string.uploads_clear),
                         queue::clearFinished,
                     )
                 }
-                items(
-                    done,
-                    key = { it.id },
-                ) { UploadRow(it, { queue.cancel(it.id) }, { queue.retry(it.id) }) }
+                items(done, key = { it.id }) { row(it) }
             }
         }
     }
 }
+
+/**
+ * Files whose transfer has just ended. They stay a moment under «Uploading» in their final state,
+ * so the user sees the outcome before the row moves on to «Done».
+ */
+@Composable
+private fun rememberFinishing(entries: List<UploadEntry>): Set<String> {
+    val scope = rememberCoroutineScope()
+    val finishing = remember { mutableStateSetOf<String>() }
+    var transferring by remember { mutableStateOf(emptySet<String>()) }
+    val now = entries.filter { it.phase == UploadPhase.Uploading }.mapTo(HashSet()) { it.id }
+    // A file sent back to waiting moves at once: it has no outcome to show.
+    val ended = entries.filter {
+        it.id in transferring && it.id !in now && it.phase != UploadPhase.Waiting
+    }
+    SideEffect {
+        transferring = now
+        ended.forEach { entry ->
+            if (finishing.add(entry.id)) {
+                scope.launch {
+                    delay(FINISHED_PAUSE_MILLIS)
+                    finishing.remove(entry.id)
+                }
+            }
+        }
+    }
+    return finishing + ended.map { it.id }
+}
+
+private const val FINISHED_PAUSE_MILLIS = 800L
 
 @Composable
 private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
@@ -147,9 +195,14 @@ private fun sectionTitle(title: Int, entries: List<UploadEntry>): String =
     )
 
 @Composable
-private fun SectionHeader(title: String, action: String? = null, onAction: () -> Unit = {}) {
+private fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    action: String? = null,
+    onAction: () -> Unit = {},
+) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .heightIn(
                 min = 40.dp,
@@ -166,13 +219,28 @@ private fun SectionHeader(title: String, action: String? = null, onAction: () ->
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+/** The same row in every section, so a file keeps its place on screen while its state changes. */
 @Composable
-private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
-    val percent = entry.percent
-    val size = entry.selection.local.sizeBytes
+private fun UploadRow(
+    entry: UploadEntry,
+    onCancel: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val phase = entry.phase
+    val uploading = phase == UploadPhase.Uploading
+    val problem = when {
+        entry.problem != null -> stringResource(R.string.uploads_failed, entry.problem.asString())
+        phase == UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
+        else -> null
+    }
+    val alpha by animateFloatAsState(if (phase == UploadPhase.Cancelled) 0.55f else 1f)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp),
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(start = 16.dp, end = 4.dp)
+            .alpha(alpha),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -182,66 +250,11 @@ private fun UploadingRow(entry: UploadEntry, onCancel: () -> Unit) {
         )
         Column(Modifier.weight(1f)) {
             FileName(entry.selection)
-            Row(
-                // One height for both states, so the row does not jump when the bar gives way.
-                Modifier.padding(top = 4.dp).height(24.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (entry.saving) {
-                    // Every byte is sent; the server answers without progress.
-                    LoadingIndicator(Modifier.size(24.dp))
-                    SizeText(stringResource(R.string.uploads_saving))
-                } else {
-                    val bar = Modifier.weight(1f)
-                    if (percent == null) {
-                        LinearProgressIndicator(bar)
-                    } else {
-                        LinearProgressIndicator({
-                            percent / 100f
-                        }, bar)
-                    }
-                    SizeText(
-                        if (percent == null) {
-                            fileSize(size)
-                        } else {
-                            stringResource(
-                                R.string.uploads_sent,
-                                fileSize(size * percent / 100),
-                                fileSize(size),
-                            )
-                        },
-                    )
-                }
-            }
-        }
-        CancelButton(onCancel)
-    }
-}
-
-@Composable
-private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit, onRetry: () -> Unit) {
-    val phase = entry.phase
-    val problem = when {
-        entry.problem != null -> stringResource(R.string.uploads_failed, entry.problem.asString())
-        phase == UploadPhase.NameConflict -> stringResource(R.string.uploads_conflict)
-        else -> null
-    }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .padding(start = 16.dp, end = 4.dp)
-            .alpha(if (phase == UploadPhase.Cancelled) 0.55f else 1f),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LocalThumbnail(
-            entry.selection.local,
-            Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
-        )
-        Column(Modifier.weight(1f)) {
-            FileName(entry.selection)
+            // The queue drops progress as the transfer ends, a moment before the journal moves
+            // the file on: until then, and while the line folds away, it keeps the last progress.
+            var transfer by remember { mutableStateOf(entry) }
+            if (uploading && (entry.percent != null || transfer.percent == null)) transfer = entry
+            AnimatedVisibility(uploading) { TransferProgress(transfer) }
             if (problem != null) {
                 Text(
                     problem,
@@ -258,8 +271,48 @@ private fun UploadRow(entry: UploadEntry, onCancel: () -> Unit, onRetry: () -> U
                 ) { Text(stringResource(R.string.uploads_retry_actions)) }
             }
         }
-        SizeText(fileSize(entry.selection.local.sizeBytes))
-        if (entry.cancellable) CancelButton(onCancel) else StatusIcon(entry)
+        // While the file is on the wire its size is part of the progress line.
+        AnimatedVisibility(!uploading) { SizeText(fileSize(entry.selection.local.sizeBytes)) }
+        Crossfade(entry.cancellable) { cancellable ->
+            if (cancellable) CancelButton(onCancel) else StatusIcon(entry)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TransferProgress(entry: UploadEntry) {
+    val percent = entry.percent
+    val size = entry.selection.local.sizeBytes
+    Row(
+        // One height for both states, so the row does not jump when the bar gives way.
+        Modifier.padding(top = 4.dp).height(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (entry.saving) {
+            // Every byte is sent; the server answers without progress.
+            LoadingIndicator(Modifier.size(24.dp))
+            SizeText(stringResource(R.string.uploads_saving))
+        } else {
+            val bar = Modifier.weight(1f)
+            if (percent == null) {
+                LinearProgressIndicator(bar)
+            } else {
+                LinearProgressIndicator({ percent / 100f }, bar)
+            }
+            SizeText(
+                if (percent == null) {
+                    fileSize(size)
+                } else {
+                    stringResource(
+                        R.string.uploads_sent,
+                        fileSize(size * percent / 100),
+                        fileSize(size),
+                    )
+                },
+            )
+        }
     }
 }
 
