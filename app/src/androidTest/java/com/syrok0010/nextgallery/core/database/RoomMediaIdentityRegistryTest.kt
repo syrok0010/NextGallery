@@ -206,6 +206,26 @@ class RoomMediaIdentityRegistryTest {
     }
 
     @Test
+    fun forgottenServerCopyLetsTheFileLinkAgain() = runBlocking {
+        database.close()
+        val generatedIds = listOf("local-id", "restored-id").map(::MediaId).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val deleted = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val reuploaded = MediaSourceIdentity(MediaSourceKind.Memories, (FILE_ID + 1).toString())
+        val localId = registry.resolveId(local)
+        assertEquals(true, registry.link(existing = local, linked = deleted))
+
+        // The app moved the server copy to the trash, and the phone file is uploaded again.
+        registry.forget(listOf(deleted))
+
+        assertEquals(true, registry.link(existing = local, linked = reuploaded))
+        assertEquals(localId, registry.resolveId(local))
+        assertEquals(localId, registry.resolveId(reuploaded))
+        assertEquals(MediaId("restored-id"), registry.resolveId(deleted))
+    }
+
+    @Test
     fun staleLinkIsNotWritten() = runBlocking {
         val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
         val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())

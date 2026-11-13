@@ -107,6 +107,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             AndroidPhoneTrash(androidContext().contentResolver),
             get(named("libraryScope")),
         ) {

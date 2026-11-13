@@ -7,7 +7,10 @@ import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
+import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -164,6 +167,7 @@ internal class MediaDeletionRepository(
     private val sessions: SessionStore,
     private val library: MediaLibraryIndex,
     private val cloud: CloudTrash,
+    private val identities: MediaIdentityRegistry,
     private val phoneTrash: PhoneTrashCheck,
     private val scope: CoroutineScope,
     private val onDeleted: () -> Unit,
@@ -291,6 +295,12 @@ internal class MediaDeletionRepository(
                                 throw cancelled
                             } catch (_: Exception) {
                                 false
+                            }
+                            if (deleted) {
+                                // The copy is gone: a new upload of the same phone file links anew.
+                                identities.forget(
+                                    listOf(MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())),
+                                )
                             }
                             mutableState.update { state ->
                                 state.copy(

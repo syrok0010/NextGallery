@@ -132,6 +132,18 @@ class RoomMediaIdentityRegistry(
         }
     }
 
+    override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
+        if (sources.isEmpty()) return
+        database.withTransaction {
+            sources.groupBy({ it.source }, { it.sourceKey }).forEach { (source, keys) ->
+                keys.distinct().chunked(QUERY_CHUNK_SIZE).forEach { chunk ->
+                    dao.deleteIdentifiers(source, chunk)
+                    dao.deleteConflicts(source, chunk)
+                }
+            }
+        }
+    }
+
     override suspend fun link(
         existing: MediaSourceIdentity,
         linked: MediaSourceIdentity,

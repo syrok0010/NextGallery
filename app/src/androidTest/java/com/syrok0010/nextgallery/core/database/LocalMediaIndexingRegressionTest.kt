@@ -142,6 +142,10 @@ class LocalMediaIndexingRegressionTest {
             delegate.removeSource(source)
         }
 
+        override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
+            delegate.forget(sources)
+        }
+
         override suspend fun link(
             existing: MediaSourceIdentity,
             linked: MediaSourceIdentity,
