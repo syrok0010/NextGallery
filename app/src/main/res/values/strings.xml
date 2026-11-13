@@ -189,6 +189,7 @@
     <string name="uploads_open">Open uploads</string>
     <string name="uploads_back">Back</string>
     <string name="uploads_cancel_all">Cancel all</string>
+    <string name="uploads_retry_now">Retry now</string>
     <string name="uploads_cancel_file">Cancel</string>
     <string name="uploads_clear">Clear</string>
     <string name="uploads_empty">Files sent to the cloud appear here</string>

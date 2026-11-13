@@ -97,8 +97,11 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
          * Makes sure a worker takes the waiting jobs. A run is appended to the existing one rather
          * than replacing it: a running transfer would restart and a worker in backoff would retry
          * at once. The appended run drains whatever the current one has missed.
+         *
+         * [now] replaces the work instead, for exactly that early retry: the user asks for it
+         * while a worker waits out its backoff and none is transferring.
          */
-        suspend fun schedule(context: Context) {
+        suspend fun schedule(context: Context, now: Boolean = false) {
             val request = OneTimeWorkRequestBuilder<UploadWorker>()
                 .setConstraints(
                     Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
@@ -106,8 +109,11 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
                 .build()
             WorkManager
                 .getInstance(context)
-                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
-                .await()
+                .enqueueUniqueWork(
+                    WORK_NAME,
+                    if (now) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.APPEND_OR_REPLACE,
+                    request,
+                ).await()
         }
     }
 }

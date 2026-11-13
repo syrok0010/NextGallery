@@ -131,6 +131,7 @@ val appModule = module {
             ),
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
             schedule = { UploadWorker.schedule(context) },
+            restart = { UploadWorker.schedule(context, now = true) },
         )
     }
     single<OperationStatusSource> { get<UploadQueue>() }
