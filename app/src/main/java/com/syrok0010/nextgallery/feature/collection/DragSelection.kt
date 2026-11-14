@@ -22,11 +22,8 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
-import androidx.compose.ui.unit.toIntRect
 import com.syrok0010.nextgallery.core.media.MediaId
 import kotlinx.coroutines.flow.collectLatest
 
@@ -42,31 +39,10 @@ internal class RangeSelection(
     private val adding: Boolean,
 ) {
     /** Null when the list no longer holds one of the ends: the selection stays as it is. */
-    fun selectedIds(items: List<MediaGridItem>, currentKey: String): Set<MediaId>? {
-        val from = items.indexOfFirst { it.key == anchorKey }
-        val to = items.indexOfFirst { it.key == currentKey }
-        if (from < 0 || to < 0) return null
-        val range = items
-            .subList(minOf(from, to), maxOf(from, to) + 1)
-            .mapNotNullTo(HashSet()) { (it as? MediaGridItem.Slot)?.slot?.mediaItem?.mediaId }
+    fun selectedIds(layout: MediaGridLayout, currentKey: String): Set<MediaId>? {
+        val range = layout.mediaIdsBetween(anchorKey, currentKey) ?: return null
         return if (adding) before + range else before - range
     }
-}
-
-/** A tile on screen that a drag can select. */
-internal data class GridCell(val index: Int, val key: String, val bounds: IntRect)
-
-/**
- * The tile under [point]. Over a header, a gap or the empty end of a row, the last tile before
- * the point in reading order stands in, so the range follows the finger without jumps.
- */
-internal fun cellAt(cells: List<GridCell>, point: IntOffset, exact: Boolean): GridCell? {
-    cells.firstOrNull { it.bounds.contains(point) }?.let { return it }
-    if (exact) return null
-    val before = cells.filter {
-        it.bounds.top <= point.y && (it.bounds.bottom <= point.y || it.bounds.left <= point.x)
-    }
-    return before.maxByOrNull { it.index } ?: cells.minByOrNull { it.index }
 }
 
 /**
@@ -88,7 +64,7 @@ internal class GridDragSelection(
     private val edge: Float,
     private val maxSpeed: Float,
 ) {
-    var grid = MediaGridSnapshot(emptyList())
+    var layout = MediaGridLayout(emptyList()) { emptyList() }
     var speed by mutableFloatStateOf(0f)
         private set
     private var range: RangeSelection? = null
@@ -96,10 +72,9 @@ internal class GridDragSelection(
 
     /** False when the press is not on a tile: the gesture is not a selection. */
     fun start(at: Offset): Boolean {
-        val cell = cellAt(cells(), at.round(), exact = true) ?: return false
-        val id = (grid[cell.key] as? MediaGridItem.Slot)?.slot?.mediaItem?.mediaId ?: return false
-        val adding = !(selection.active && selection.isSelected(id))
-        range = RangeSelection(selection.selectedIds, cell.key, adding)
+        val tile = layout.tileAt(at.round(), exact = true) ?: return false
+        val adding = !(selection.active && selection.isSelected(tile.mediaId))
+        range = RangeSelection(selection.selectedIds, tile.key, adding)
         pointer = at
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         follow()
@@ -115,8 +90,8 @@ internal class GridDragSelection(
     /** Also called while the grid scrolls under a finger that stands still. */
     fun follow() {
         val range = range ?: return
-        val cell = cellAt(cells(), pointer.round(), exact = false) ?: return
-        range.selectedIds(grid.items, cell.key)?.let(selection::replace)
+        val tile = layout.tileAt(pointer.round(), exact = false) ?: return
+        range.selectedIds(layout, tile.key)?.let(selection::replace)
     }
 
     fun end() {
@@ -127,20 +102,13 @@ internal class GridDragSelection(
     suspend fun scrollBy(pixels: Float) {
         gridState.scrollBy(pixels)
     }
-
-    private fun cells(): List<GridCell> =
-        gridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
-            val slot = grid[info.key] as? MediaGridItem.Slot
-            if (slot?.slot?.mediaItem == null) return@mapNotNull null
-            GridCell(info.index, info.key as String, info.size.toIntRect().translate(info.offset))
-        }
 }
 
 @Composable
 internal fun rememberGridDragSelection(
     selection: MediaSelection,
     gridState: LazyGridState,
-    grid: MediaGridSnapshot,
+    layout: MediaGridLayout,
 ): GridDragSelection {
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -155,7 +123,7 @@ internal fun rememberGridDragSelection(
             )
         }
     }
-    drag.grid = grid
+    drag.layout = layout
     LaunchedEffect(drag) {
         snapshotFlow { drag.speed }.collectLatest { speed ->
             if (speed == 0f) return@collectLatest
