@@ -457,8 +457,7 @@ class LocalMediaSourceTest {
         override suspend fun link(
             existing: MediaSourceIdentity,
             linked: MediaSourceIdentity,
-            isCurrent: () -> Boolean,
-        ) = delegate.link(existing, linked, isCurrent)
+        ) = delegate.link(existing, linked)
     }
 
     private fun metadata(

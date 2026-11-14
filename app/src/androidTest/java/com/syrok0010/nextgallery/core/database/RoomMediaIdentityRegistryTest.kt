@@ -270,18 +270,6 @@ class RoomMediaIdentityRegistryTest {
         assertEquals(MediaId("restored-id"), registry.resolveId(deleted))
     }
 
-    @Test
-    fun staleLinkIsNotWritten() = runBlocking {
-        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
-        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
-        registry.resolveId(local)
-
-        assertEquals(false, registry.link(existing = local, linked = remote, isCurrent = { false }))
-        assertEquals(
-            emptyList<MediaIdentifierEntity>(),
-            database.mediaIdentityDao().identifiers(MediaSourceKind.Memories, listOf(FILE_ID.toString())),
-        )
-    }
 
     @Test
     fun unknownExistingSourceIsNotLinked() = runBlocking {

@@ -54,14 +54,12 @@ interface MediaIdentityRegistry {
      * Records [linked] as the copy of the media already known as [existing] in [linked]'s source,
      * for example the server file just uploaded from a phone file. This exact link outranks
      * aliases. An object [linked] had alone may be merged, but an existing link is never replaced.
-     * [isCurrent] is checked in the same transaction, so a link cannot outlive a concurrent
-     * [removeSource]. Returns true for an existing identical link and false when the link would
+     * Returns true for an existing identical link and false when the link would
      * replace another source identity.
      */
     suspend fun link(
         existing: MediaSourceIdentity,
         linked: MediaSourceIdentity,
-        isCurrent: () -> Boolean = { true },
     ): Boolean
 }
 

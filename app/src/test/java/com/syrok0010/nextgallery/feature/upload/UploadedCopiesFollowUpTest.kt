@@ -26,7 +26,7 @@ import org.junit.Test
 class UploadedCopiesFollowUpTest {
     private val registry = InMemoryMediaIdentityRegistry()
     private val sessions = SessionStore(SignedInStore)
-    private val followUp = UploadedCopiesFollowUp(registry, sessions)
+    private val followUp = UploadedCopiesFollowUp(registry)
 
     @Test
     fun `uploaded copy joins the indexed phone file as one object`() =
@@ -34,7 +34,7 @@ class UploadedCopiesFollowUpTest {
             val localId = resolveLocal()
 
             // The upload keeps the URI the picker gave; the index keys the file by its external volume.
-            assertTrue(followUp.link(CREDENTIALS, PICKED_CONTENT_URI, FILE_ID))
+            assertTrue(followUp.link(PICKED_CONTENT_URI, FILE_ID))
             val remoteId = resolveRemote()
 
             assertEquals(localId, remoteId)
@@ -43,19 +43,6 @@ class UploadedCopiesFollowUpTest {
                 remoteItems = listOf(remoteItem(remoteId)),
             )
             assertTrue(library.items.single().assetRef is MediaAssetRef.LocalFirst)
-        }
-
-    @Test
-    fun `upload finishing after logout or account switch is not linked`() =
-        runBlocking {
-            val localId = resolveLocal()
-
-            sessions.signOut()
-            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-            sessions.signIn(CREDENTIALS.copy(serverUrl = "https://other.example"))
-            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-
-            assertNotEquals(localId, resolveRemote())
         }
 
     private suspend fun resolveLocal(): MediaId {

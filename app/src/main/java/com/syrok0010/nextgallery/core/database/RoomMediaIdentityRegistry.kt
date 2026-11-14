@@ -140,10 +140,8 @@ class RoomMediaIdentityRegistry(
     override suspend fun link(
         existing: MediaSourceIdentity,
         linked: MediaSourceIdentity,
-        isCurrent: () -> Boolean,
     ): Boolean =
         database.withTransaction {
-            if (!isCurrent()) return@withTransaction false
             val mediaId = dao
                 .identifiers(existing.source, listOf(existing.sourceKey))
                 .singleOrNull()

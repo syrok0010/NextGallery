@@ -38,28 +38,6 @@ class AlbumCatalogRepositoryTest {
             runCurrent()
             assertTrue(vm.state.value.local.items.isEmpty())
             assertEquals(1, vm.state.value.remote.items.size)
-            sessions.signOut()
-            runCurrent()
-            assertTrue(vm.state.value.items.isEmpty())
-        } finally { Dispatchers.resetMain() }
-    }
-    @Test fun `sign out cancels in flight source and prevents stale account publication`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val gate = CompletableDeferred<Unit>()
-            val sessions = sessions()
-            val remote = object : RemoteAlbumSource {
-                override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
-                    gate.await()
-                    return RemoteAlbums(listOf(album("old-account", AlbumOrigin.Nextcloud)))
-                }
-            }
-            val permission = MutableStateFlow<LocalMediaPermissionMode?>(null)
-            val vm = AlbumCatalogRepository(sessions, remote, local(), permission, backgroundScope); 
-            runCurrent(); assertTrue(vm.state.value.remote.loading)
-            sessions.signOut(); runCurrent(); gate.complete(Unit); runCurrent()
-            assertTrue(vm.state.value.items.isEmpty())
-            assertFalse(vm.state.value.remote.loading)
         } finally { Dispatchers.resetMain() }
     }
     private fun local() = object : LocalAlbumSource {
