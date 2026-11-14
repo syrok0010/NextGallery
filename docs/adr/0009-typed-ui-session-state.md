@@ -34,7 +34,7 @@ Signed-out login workflow и authenticated timeline не должны однов
 - `SessionViewModel` предоставляет session root для `NextGalleryApp`.
 - `LoginViewModel` владеет `LoginUiState` и Login Flow.
 - `AuthenticatedViewModel` владеет timeline, permission, cache и refresh workflow.
-- Login success обновляет `SessionStore`; logout очищает credentials/cloud state и переводит store в `SignedOut`.
+- Login success обновляет `SessionStore`; выход удаляет данные приложения (ADR 0010) и переводит store в `SignedOut`.
 - Session-aware infrastructure, включая media requests, получает credentials из session boundary, а не через composable parameters.
 
 ## Последствия
