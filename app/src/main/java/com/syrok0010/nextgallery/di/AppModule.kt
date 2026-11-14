@@ -4,7 +4,9 @@ import android.provider.MediaStore
 import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
+import com.syrok0010.nextgallery.app.ui.AppDataEraser
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
+import com.syrok0010.nextgallery.app.ui.SystemAppDataEraser
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
@@ -235,6 +237,7 @@ val appModule = module {
     single { VideoFramesFactory(androidContext(), get()) }
     single { MediaImageRequestFactory(androidContext(), get()) }
 
+    single<AppDataEraser> { SystemAppDataEraser(androidContext()) }
     viewModelOf(::SessionViewModel)
     viewModel { LoginViewModel(get(), get(), get<NextcloudLoginRepository>()) }
 }

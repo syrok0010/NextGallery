@@ -73,10 +73,6 @@ class MemoriesRepository(
         return items
     }
 
-    suspend fun clearCache() {
-        bestEffort { cacheRepository.clear() }
-    }
-
     private suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> {
         val candidates = map { photo ->
             mediaIdentityCandidate(

@@ -35,7 +35,4 @@ interface ThumbnailCacheDao {
         """,
     )
     suspend fun delete(fileIds: Collection<Long>, width: Int, height: Int)
-
-    @Query("DELETE FROM thumbnail_cache")
-    suspend fun deleteAll()
 }

@@ -105,18 +105,6 @@ class TimelineCacheRepository(
         }
     }
 
-    suspend fun clear() {
-        database.withTransaction {
-            thumbnailDao.deleteAll()
-            timelineDao.deleteAllLoadedDays()
-            timelineDao.deleteAllMediaItems()
-            identityRegistry.removeSource(MediaSourceKind.Memories)
-            timelineDao.deleteTimelineDays()
-            timelineDao.deleteMetadata()
-        }
-        thumbnailFileStore.clear()
-    }
-
     private suspend fun retireMissingAliasesInTransaction(items: List<MediaItem>) {
         val currentFileIds = items.map { it.remoteFileId }.toSet()
         // A day alone cannot prove disappearance: the same fileId may have moved to an unloaded day.

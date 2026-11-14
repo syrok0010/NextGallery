@@ -180,19 +180,6 @@ class RoomMediaAliasTest {
             assertEquals(localId, resolve(remote, newAuid, newBuid))
         }
 
-    @Test
-    fun removingRemoteSourceDoesNotLeaveItsAliasesOnLinkedLocalObject() =
-        runBlocking {
-            val localId = resolve(local, newBuid)
-            assertTrue(registry.link(local, remote))
-            resolve(remote, oldAuid)
-
-            registry.removeSource(MediaSourceKind.Memories)
-
-            assertNotEquals(localId, resolve(local.copy(sourceKey = "content://media/2"), oldAuid))
-            assertEquals(localId, resolve(remote.copy(sourceKey = "43"), newBuid))
-        }
-
     private fun openDatabase() {
         database = Room
             .databaseBuilder(
