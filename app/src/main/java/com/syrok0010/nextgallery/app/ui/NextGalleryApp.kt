@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -213,24 +216,32 @@ internal fun NextGalleryApp(
                         }
                     },
                 )
-                if (signedIn && !viewerVisible && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
-                    LibraryIsland(
-                        page,
-                        { destination ->
-                            val target = destinationBackStack(
-                                backStack.toList().filterIsInstance<NextGalleryRoute>(),
-                                destination.route,
-                            )
-                            if (backStack.toList() != target) {
-                                backStack.clear()
-                                backStack.addAll(target)
-                            }
-                        },
-                        Modifier
+                if (signedIn && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
+                    // It floats over the pages and so over the viewer too: it steps down out of
+                    // the way while the viewer opens, and comes back once it has closed.
+                    AnimatedVisibility(
+                        visible = !viewerVisible,
+                        enter = slideInVertically(tween(IslandMoveMillis)) { it } + fadeIn(tween(IslandMoveMillis)),
+                        exit = slideOutVertically(tween(IslandMoveMillis)) { it } + fadeOut(tween(IslandMoveMillis)),
+                        modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .safeDrawingPadding()
                             .padding(bottom = 16.dp),
-                    )
+                    ) {
+                        LibraryIsland(
+                            page,
+                            { destination ->
+                                val target = destinationBackStack(
+                                    backStack.toList().filterIsInstance<NextGalleryRoute>(),
+                                    destination.route,
+                                )
+                                if (backStack.toList() != target) {
+                                    backStack.clear()
+                                    backStack.addAll(target)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -255,3 +266,6 @@ private fun LibrarySystemBars() {
         }
     }
 }
+
+/** About as long as the viewer takes to open. */
+private const val IslandMoveMillis = 220

@@ -12,6 +12,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,7 @@ internal fun MediaDetailScreen(
         onClose = { currentItem?.let(onBack) },
         backEnabled = !videoFullscreen,
     )
+    val chromeShown by remember(motion) { derivedStateOf { motion.openness > 0f } }
     ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
     val details = rememberViewerDetailsState()
     // Registered after the viewer's own handler, so back closes the sheet before the viewer.
@@ -152,7 +154,7 @@ internal fun MediaDetailScreen(
             }
         }
 
-        if (motion.chromeAllowed && currentItem != null && items.isNotEmpty()) {
+        if (chromeShown && currentItem != null && items.isNotEmpty()) {
             ViewerChrome(
                 item = currentItem,
                 visible = chromeVisible,
@@ -176,7 +178,8 @@ internal fun MediaDetailScreen(
                         },
                     )
                 },
-                modifier = Modifier.fillMaxSize(),
+                // Part of the surface coming out: fades with the opening and the closing.
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = motion.openness },
             )
         }
         if (currentItem != null && !videoFullscreen) {
