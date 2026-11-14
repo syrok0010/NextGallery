@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -75,7 +76,7 @@ class AlbumAdditionTest {
     }
 
     @Test fun `additions create album, add files and refresh catalog`() = runBlocking {
-        MemoriesAlbumWriterTest.Fixture { request ->
+        NextcloudFixture { request ->
             when {
                 request.method == "MKCOL" -> 201 to ""
                 request.method == "SEARCH" -> 207 to found(request.searchedFileId to "Photos/a.jpg")
@@ -145,7 +146,7 @@ class AlbumAdditionTest {
 
     @Test fun `second addition is rejected while the first is running`() = runBlocking {
         val release = java.util.concurrent.CountDownLatch(1)
-        MemoriesAlbumWriterTest.Fixture { request ->
+        NextcloudFixture { request ->
             when {
                 request.method == "SEARCH" -> 207 to found(request.searchedFileId to "Photos/a.jpg")
                 request.method == "COPY" -> {

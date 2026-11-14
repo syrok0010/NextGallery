@@ -1,5 +1,7 @@
 package com.syrok0010.nextgallery.feature.deletion
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
+import com.syrok0010.nextgallery.core.network.Recorded
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
@@ -11,7 +13,7 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
+import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
@@ -101,7 +103,7 @@ class MediaDeletionTest {
     }
 
     @Test fun `repository skips objects gone from the library and keeps the prepared copies stable`() {
-        Fixture(::server).use { fixture ->
+        NextcloudFixture(::server).use { fixture ->
             val index = MediaLibraryIndex()
             index.publish(listOf(item("both", MediaAssetRef.LocalFirst(local(2), MediaAssetRef.MemoriesFile(20)))))
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -109,7 +111,7 @@ class MediaDeletionTest {
                 val repository = MediaDeletionRepository(
                     SessionStore(FixedCredentials(fixture.credentials)),
                     index,
-                    MemoriesCloudTrash(fixture.dav, fixture.files),
+                    MemoriesCloudTrash(fixture.dav, MemoriesFiles(fixture.memories)),
                     InMemoryMediaIdentityRegistry(),
                     { it },
                     scope,
@@ -134,8 +136,8 @@ class MediaDeletionTest {
     }
 
     @Test fun `deleter sends DAV DELETE to the uid path of each server file`() = runBlocking {
-        Fixture(::server).use { fixture ->
-            val trash = MemoriesCloudTrash(fixture.dav, fixture.files)
+        NextcloudFixture(::server).use { fixture ->
+            val trash = MemoriesCloudTrash(fixture.dav, MemoriesFiles(fixture.memories))
             assertEquals(
                 listOf(true, true, false, false),
                 listOf(1L, 2L, 3L, 4L).map { trash.trash(fixture.credentials, it) },
@@ -155,7 +157,7 @@ class MediaDeletionTest {
     }
 
     @Test fun `a file replaced at the same path is not deleted`() = runBlocking {
-        Fixture { request ->
+        NextcloudFixture { request ->
             when {
                 request.target.startsWith("/apps/memories/api/image/info/") ->
                     200 to """{"filename":"/Photos/a.jpg","basename":"a.jpg","etag":"old"}"""
@@ -165,13 +167,13 @@ class MediaDeletionTest {
         }.use { fixture ->
             assertEquals(
                 false,
-                MemoriesCloudTrash(fixture.dav, fixture.files).trash(fixture.credentials, 1),
+                MemoriesCloudTrash(fixture.dav, MemoriesFiles(fixture.memories)).trash(fixture.credentials, 1),
             )
         }
     }
 
     @Test fun `repository reports phone and cloud results and refreshes the library`() = runBlocking {
-        Fixture(::server).use { fixture ->
+        NextcloudFixture(::server).use { fixture ->
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val refreshed = AtomicInteger()
@@ -281,7 +283,7 @@ class MediaDeletionTest {
 
     @Test fun `progress marks queued cloud copies until the queue is done`() = runBlocking {
         val release = CountDownLatch(1)
-        Fixture { request ->
+        NextcloudFixture { request ->
             release.await()
             server(request)
         }.use { fixture ->
@@ -317,7 +319,7 @@ class MediaDeletionTest {
     }
 
     @Test fun `without a session every cloud copy counts as failed`() = runBlocking {
-        Fixture(::server).use { fixture ->
+        NextcloudFixture(::server).use { fixture ->
             // The session reset runs inside the constructor, not after the deletion.
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
             try {
@@ -359,7 +361,7 @@ class MediaDeletionTest {
             .name
     }
 
-    private fun server(request: com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Recorded) =
+    private fun server(request: Recorded) =
         when {
             request.target.startsWith("/apps/memories/api/image/info/") -> {
                 val id = request.target.substringAfterLast('/').toLong()

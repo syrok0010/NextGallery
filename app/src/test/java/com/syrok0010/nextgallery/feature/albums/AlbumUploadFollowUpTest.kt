@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavHttpException
@@ -54,7 +55,7 @@ class AlbumUploadFollowUpTest {
 
     /** Returns the step result and the DAV methods it sent, PROPFIND with its depth. */
     private fun run(recovered: Boolean, members: List<Long>, copy: Int): Pair<Boolean, List<String>> = runBlocking {
-        MemoriesAlbumWriterTest.Fixture { request ->
+        NextcloudFixture { request ->
             when (request.method) {
                 "COPY" -> copy to ""
                 "PROPFIND" -> 207 to found(*members.map { it to "Photos/$it.jpg" }.toTypedArray())
