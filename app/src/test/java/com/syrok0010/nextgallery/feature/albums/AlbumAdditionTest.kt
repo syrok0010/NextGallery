@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudFixture
+import com.syrok0010.nextgallery.core.network.Recorded
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -182,6 +183,107 @@ class AlbumAdditionTest {
             }
         }
     }
+
+    @Test fun `album of another user is not written and its photos are not uploaded`() = runBlocking {
+        val outcome = failedAddition(AlbumTarget.Existing(AlbumLocation.Remote("bob/Лето"), "Лето")) { 201 to "" }
+
+        assertEquals(AlbumAdditionFailure.NotWritable, outcome.reason)
+        assertEquals(emptyList<String>(), outcome.requests)
+        assertEquals(0, outcome.enqueued)
+    }
+
+    @Test fun `taken album name fails as such and uploads nothing`() = runBlocking {
+        val outcome = failedAddition(AlbumTarget.New("Лето")) { 405 to "" }
+
+        assertEquals(AlbumAdditionFailure.AlbumExists, outcome.reason)
+        assertEquals(listOf("MKCOL"), outcome.requests)
+        assertEquals(0, outcome.enqueued)
+    }
+
+    @Test fun `server failure is reported as a network problem and uploads nothing`() = runBlocking {
+        val outcome = failedAddition(AlbumTarget.New("Лето")) { 503 to "" }
+
+        assertEquals(AlbumAdditionFailure.Network, outcome.reason)
+        assertEquals(0, outcome.enqueued)
+    }
+
+    @Test fun `refused upload queue stops the addition before any copy`() = runBlocking {
+        val outcome = failedAddition(
+            AlbumTarget.New("Лето"),
+            enqueue = EnqueueResult.Rejected,
+        ) { if (it.method == "MKCOL") 201 to "" else 500 to "" }
+
+        assertEquals(AlbumAdditionFailure.QueueStorage, outcome.reason)
+        assertEquals(listOf("MKCOL"), outcome.requests)
+        assertEquals(1, outcome.enqueued)
+    }
+
+    private class FailedAddition(
+        val reason: AlbumAdditionFailure,
+        /** Methods the server saw, in order. */
+        val requests: List<String>,
+        val enqueued: Int,
+    )
+
+    /**
+     * Adds a server copy and a phone-only photo to [target] as anna. Waits for the failure and the
+     * album list refresh that follows it, so a failed addition still shows the albums as they are.
+     */
+    private suspend fun failedAddition(
+        target: AlbumTarget,
+        enqueue: EnqueueResult = EnqueueResult.Accepted(1),
+        respond: (Recorded) -> Pair<Int, String>,
+    ): FailedAddition =
+        NextcloudFixture(respond).use { fixture ->
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val sessions = SessionStore(FixedCredentials(fixture.credentials))
+                val refreshes = java.util.concurrent.atomic.AtomicInteger()
+                val catalog = AlbumCatalogRepository(
+                    sessions,
+                    object : RemoteAlbumSource {
+                        override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
+                            refreshes.incrementAndGet()
+                            return RemoteAlbums(emptyList())
+                        }
+                    },
+                    object : LocalAlbumSource {
+                        override suspend fun load() = emptyList<AlbumSummary>()
+                        override fun changes() = emptyFlow<Unit>()
+                    },
+                    MutableStateFlow<LocalMediaPermissionMode?>(null),
+                    scope,
+                )
+                val enqueued = java.util.concurrent.atomic.AtomicInteger()
+                val additions = AlbumAdditions(
+                    sessions,
+                    fixture.writer,
+                    catalog,
+                    { _, _ ->
+                        enqueued.incrementAndGet()
+                        enqueue
+                    },
+                    scope,
+                )
+                withTimeout(5_000) { while (refreshes.get() == 0) kotlinx.coroutines.delay(10) }
+                val before = refreshes.get()
+                fixture.requests.clear()
+
+                assertTrue(additions.add(target, AlbumAdditionRequest(listOf(1L), listOf(MediaId("phone-only")))))
+
+                val failed = withTimeout(5_000) {
+                    additions.state.first { it is AlbumAdditionState.Failed }
+                } as AlbumAdditionState.Failed
+                withTimeout(5_000) { while (refreshes.get() == before) kotlinx.coroutines.delay(10) }
+                FailedAddition(
+                    failed.reason,
+                    fixture.requests.map { it.method },
+                    enqueued.get(),
+                )
+            } finally {
+                scope.cancel()
+            }
+        }
 
     private fun emptyCatalog(sessions: SessionStore, scope: CoroutineScope) =
         AlbumCatalogRepository(
