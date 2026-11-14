@@ -133,7 +133,13 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
  * Cloud copies queued or being deleted. [total] and [processed] count files of all deletions
  * started since the queue was last empty, so a queued deletion extends the same progress.
  */
-internal data class DeletionProgress(val fileIds: Set<Long>, val total: Int, val processed: Int)
+/**
+ * [queued] holds the cloud file ids of every request still in the queue, once per request: two
+ * requests may name the same file, and the first one to finish must not end the second.
+ */
+internal data class DeletionProgress(val queued: List<Long>, val total: Int, val processed: Int) {
+    val fileIds: Set<Long> get() = queued.toSet()
+}
 
 internal data class CloudDeleteResult(val deleted: Int, val failed: Int)
 
@@ -208,7 +214,7 @@ internal class MediaDeletionRepository(
         if (fileIds.isNotEmpty()) {
             mutableState.update { state ->
                 DeletionProgress(
-                    fileIds = state.running?.fileIds.orEmpty() + fileIds,
+                    queued = state.running?.queued.orEmpty() + fileIds,
                     total = (state.running?.total ?: 0) + fileIds.size,
                     processed = state.running?.processed ?: 0,
                 )
@@ -252,8 +258,8 @@ internal class MediaDeletionRepository(
                     // The ids leave only now: the tiles stay marked until the result is in.
                     state.copy(
                         running = state.running
-                            ?.copy(fileIds = state.running.fileIds - fileIds.toSet())
-                            ?.takeIf { it.fileIds.isNotEmpty() },
+                            ?.copy(queued = state.running.queued.withoutOnce(fileIds))
+                            ?.takeIf { it.queued.isNotEmpty() },
                         unseen = state.unseen?.plus(done) ?: done,
                     )
                 }
@@ -327,6 +333,10 @@ internal class MediaDeletionRepository(
         const val PARALLEL_CLOUD_DELETES = 4
     }
 }
+
+/** Removes one occurrence of each of [ids]. */
+private fun List<Long>.withoutOnce(ids: List<Long>): List<Long> =
+    toMutableList().apply { ids.forEach { remove(it) } }
 
 private fun deletionOperationSnapshots(
     state: DeletionState,
