@@ -32,11 +32,11 @@ internal class UploadConverters {
 
 @Dao
 internal interface UploadJournalDao {
-    @Query("SELECT * FROM upload_jobs WHERE owner = :owner ORDER BY rowid")
-    suspend fun jobs(owner: String): List<UploadJob>
+    @Query("SELECT * FROM upload_jobs ORDER BY rowid")
+    suspend fun jobs(): List<UploadJob>
 
-    @Query("SELECT * FROM upload_jobs WHERE owner = :owner AND hidden = 0 ORDER BY rowid")
-    fun observe(owner: String): Flow<List<UploadJob>>
+    @Query("SELECT * FROM upload_jobs WHERE hidden = 0 ORDER BY rowid")
+    fun observe(): Flow<List<UploadJob>>
 
     @Query("SELECT * FROM upload_jobs WHERE id = :id")
     suspend fun job(id: String): UploadJob?
@@ -44,13 +44,10 @@ internal interface UploadJournalDao {
     @Insert suspend fun insert(jobs: List<UploadJob>)
 
     @Update suspend fun update(jobs: List<UploadJob>)
-
-    @Query("DELETE FROM upload_jobs")
-    suspend fun clear()
 }
 
 /** Bump [version] on every schema change: the destructive fallback runs only when it changes. */
-@Database(entities = [UploadJob::class], version = 2, exportSchema = false)
+@Database(entities = [UploadJob::class], version = 3, exportSchema = false)
 @TypeConverters(UploadConverters::class)
 internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao

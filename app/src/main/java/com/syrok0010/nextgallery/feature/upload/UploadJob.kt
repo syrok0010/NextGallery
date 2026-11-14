@@ -2,11 +2,7 @@ package com.syrok0010.nextgallery.feature.upload
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.serialization.Serializable
-
-/** Jobs belong to an account. Logout needs an empty queue and clears the journal. */
-internal val AccountCredentials.uploadOwner: String get() = "${serverUrl.trimEnd('/')}#$userId"
 
 /** Album the user picked; the file is added to it once uploaded. */
 @Serializable
@@ -26,7 +22,6 @@ internal enum class TransferState { Pending, Running, Uncertain, Accepted, Confl
 @Entity(tableName = "upload_jobs")
 internal data class UploadJob(
     @PrimaryKey val id: String,
-    val owner: String,
     val selection: UploadSelection,
     val album: UploadAlbum? = null,
     val state: TransferState = TransferState.Pending,

@@ -12,7 +12,6 @@ class DurableUploadJournalTest {
     private val name = "durable-upload-protocol-test.db"
     private lateinit var db: UploadQueueDatabase
     private lateinit var journal: UploadJournal
-    private val owner = "owner-A"
     private val file =
         UploadSelection(
             MediaAssetRef.LocalContent("content://media/external_primary/images/media/42", 1, 123),
@@ -37,12 +36,11 @@ class DurableUploadJournalTest {
     private suspend fun enqueue(): UploadJob {
         assertTrue(
             journal.enqueue(
-                owner,
                 listOf(file),
                 UploadAlbum("test", "task-album"),
             ) is EnqueueResult.Accepted,
         )
-        return journal.jobs(owner).last()
+        return journal.jobs().last()
     }
 
     /** A new process: claims of the previous one are released. */
@@ -50,30 +48,30 @@ class DurableUploadJournalTest {
         db.close()
         db = UploadQueueDatabase.open(context, name)
         journal = UploadJournal(db)
-        journal.release(owner) { it != "process-2" }
+        journal.release { it != "process-2" }
     }
 
     @Test fun cancelBeforeAcceptSurvivesReopenAndSuppressesEveryFollowUp() =
         runBlocking {
             enqueue()
-            val claim = journal.claimNext(owner, "process-1")!!
-            journal.cancel(owner, setOf(claim.id))
+            val claim = journal.claimNext("process-1")!!
+            journal.cancel(setOf(claim.id))
             assertNull(journal.accept(claim, receipt))
             reopen()
-            val restored = journal.jobs(owner).single()
+            val restored = journal.jobs().single()
             assertEquals(TransferState.Cancelled, restored.state)
             assertNull(restored.receipt)
             assertFalse(restored.runnable)
-            assertTrue(journal.clearIfFinished(owner))
+            assertFalse(journal.hasUnfinished())
         }
 
     @Test fun cancelAfterAcceptKeepsTheReceipt() =
         runBlocking {
             enqueue()
-            assertNotNull(journal.accept(journal.claimNext(owner, "process-1")!!, receipt))
-            journal.cancel(owner)
+            assertNotNull(journal.accept(journal.claimNext("process-1")!!, receipt))
+            journal.cancel()
             reopen()
-            val restored = journal.jobs(owner).single()
+            val restored = journal.jobs().single()
             assertEquals(receipt, restored.receipt)
             assertEquals(TransferState.Accepted, restored.state)
             assertEquals(
@@ -83,21 +81,21 @@ class DurableUploadJournalTest {
                 ),
                 restored.steps,
             )
-            assertTrue(journal.clearIfFinished(owner))
+            assertFalse(journal.hasUnfinished())
         }
 
     @Test fun interruptedPutKeepsDestinationAndFencesTheOldExecutor() =
         runBlocking {
             enqueue()
-            val claim = journal.claimNext(owner, "process-1")!!
+            val claim = journal.claimNext("process-1")!!
             journal.pin(claim, receipt.path)
-            assertNull(journal.claimNext(owner, "other-runner"))
+            assertNull(journal.claimNext("other-runner"))
             reopen()
-            val uncertain = journal.jobs(owner).single()
+            val uncertain = journal.jobs().single()
             assertEquals(TransferState.Uncertain, uncertain.state)
             assertEquals(receipt.path, uncertain.destination)
             assertNull(journal.accept(claim, receipt))
-            val resumed = journal.claimNext(owner, "process-2")!!
+            val resumed = journal.claimNext("process-2")!!
             assertEquals(
                 receipt.path,
                 journal.pin(resumed, listOf("wrong", "new", "path"))!!.destination,
@@ -108,37 +106,37 @@ class DurableUploadJournalTest {
     @Test fun unfinishedStepsRunAfterReopenAndAFinishedOneDoesNot() =
         runBlocking {
             enqueue()
-            val accepted = journal.accept(journal.claimNext(owner, "process-1")!!, receipt)!!
+            val accepted = journal.accept(journal.claimNext("process-1")!!, receipt)!!
             journal.step(accepted, FollowUp.Link, StepState.Done)
             reopen()
-            val restored = journal.jobs(owner).single()
+            val restored = journal.jobs().single()
             assertEquals(
                 mapOf(FollowUp.Link to StepState.Done, FollowUp.Album to StepState.Pending),
                 restored.steps,
             )
             assertNull(restored.executor)
             assertTrue(restored.runnable)
-            assertFalse(journal.clearIfFinished(owner))
-            assertNotNull(journal.claimNext(owner, "process-2"))
+            assertTrue(journal.hasUnfinished())
+            assertNotNull(journal.claimNext("process-2"))
         }
 
     @Test fun deferredJobIsSkippedForTheRestOfThePassAndFencesItsOldClaim() =
         runBlocking {
             enqueue()
-            val claim = journal.claimNext(owner, "process-1")!!
+            val claim = journal.claimNext("process-1")!!
             val deferred = journal.defer(claim)!!
             assertEquals(TransferState.Uncertain, deferred.state)
             assertNull(deferred.executor)
-            assertNull(journal.claimNext(owner, "process-1", skip = setOf(claim.id)))
+            assertNull(journal.claimNext("process-1", skip = setOf(claim.id)))
             assertNull(journal.accept(claim, receipt))
-            assertNotNull(journal.claimNext(owner, "process-1"))
+            assertNotNull(journal.claimNext("process-1"))
         }
 
     @Test fun selectionSurvivesReopen() =
         runBlocking {
             enqueue()
             reopen()
-            val restored = journal.jobs(owner).single()
+            val restored = journal.jobs().single()
             assertEquals(file, restored.selection)
             assertEquals("content://media/external/images/media/42", restored.selection.identityUri)
             assertEquals(UploadAlbum("test", "task-album"), restored.album)
@@ -147,8 +145,8 @@ class DurableUploadJournalTest {
     @Test fun rejectedStorageCommitDoesNotAcknowledgeEnqueue() =
         runBlocking {
             // Room opens lazily; a database never opened would open again on the next write.
-            journal.jobs(owner)
+            journal.jobs()
             db.close()
-            assertEquals(EnqueueResult.Rejected, journal.enqueue(owner, listOf(file), null))
+            assertEquals(EnqueueResult.Rejected, journal.enqueue(listOf(file), null))
         }
 }

@@ -13,14 +13,14 @@ internal sealed interface EnqueueResult {
 internal class UploadJournal(private val db: UploadQueueDatabase) {
     private val dao = db.journal()
 
-    fun observe(owner: String) = dao.observe(owner)
+    fun observe() = dao.observe()
 
-    suspend fun jobs(owner: String) = dao.jobs(owner)
+    suspend fun jobs() = dao.jobs()
 
-    suspend fun enqueue(owner: String, files: List<UploadSelection>, album: UploadAlbum?): EnqueueResult =
+    suspend fun enqueue(files: List<UploadSelection>, album: UploadAlbum?): EnqueueResult =
         try {
             db.withTransaction {
-                dao.insert(files.map { UploadJob(UUID.randomUUID().toString(), owner, it, album) })
+                dao.insert(files.map { UploadJob(UUID.randomUUID().toString(), it, album) })
                 EnqueueResult.Accepted(files.size)
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -30,8 +30,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
         }
 
     /** Takes the first runnable job nobody runs, except those in [skip]. */
-    suspend fun claimNext(owner: String, executor: String, skip: Set<String> = emptySet()): UploadJob? = db.withTransaction {
-        val job = dao.jobs(owner).firstOrNull { it.waiting && it.id !in skip } ?: return@withTransaction null
+    suspend fun claimNext(executor: String, skip: Set<String> = emptySet()): UploadJob? = db.withTransaction {
+        val job = dao.jobs().firstOrNull { it.waiting && it.id !in skip } ?: return@withTransaction null
         job.copy(
             state = if (job.receipt == null) TransferState.Running else job.state,
             executor = executor,
@@ -40,8 +40,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     }
 
     /** Gives up the claims of executors that match [executor]. */
-    suspend fun release(owner: String, executor: (String) -> Boolean) = db.withTransaction {
-        dao.update(dao.jobs(owner).filter { it.executor?.let(executor) == true }.map(UploadJob::released))
+    suspend fun release(executor: (String) -> Boolean) = db.withTransaction {
+        dao.update(dao.jobs().filter { it.executor?.let(executor) == true }.map(UploadJob::released))
     }
 
     /** Gives a job back after a temporary failure; it runs again on a later attempt. */
@@ -79,9 +79,9 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     }
 
     /** Retries only actions after a durable receipt; the transfer and its destination stay intact. */
-    suspend fun retry(owner: String, ids: Set<String>? = null) = db.withTransaction {
+    suspend fun retry(ids: Set<String>? = null) = db.withTransaction {
         dao.update(
-            dao.jobs(owner).filter {
+            dao.jobs().filter {
                 (ids == null || it.id in ids) && it.receipt != null && it.hasAttention && it.unfinished
             }.map { job ->
                 job.copy(
@@ -97,8 +97,8 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     suspend fun finish(claim: UploadJob) = mutate(claim) { it.copy(executor = null) }
 
     /** A transfer not accepted yet is cancelled; after the receipt only the remaining steps are. */
-    suspend fun cancel(owner: String, ids: Set<String>? = null) = db.withTransaction {
-        dao.update(dao.jobs(owner).filter { (ids == null || it.id in ids) && it.unfinished }.map {
+    suspend fun cancel(ids: Set<String>? = null) = db.withTransaction {
+        dao.update(dao.jobs().filter { (ids == null || it.id in ids) && it.unfinished }.map {
             it.copy(
                 state = if (it.receipt == null) TransferState.Cancelled else it.state,
                 steps = it.steps.mapValues { (_, state) -> if (state in unfinishedSteps) StepState.Suppressed else state },
@@ -110,20 +110,16 @@ internal class UploadJournal(private val db: UploadQueueDatabase) {
     }
 
     /** Per file: a finished file leaves the screen even while others still run. */
-    suspend fun clearFinished(owner: String) = db.withTransaction {
-        dao.update(dao.jobs(owner).filter { !it.unfinished && !it.hidden }.map { it.copy(hidden = true) })
+    suspend fun clearFinished() = db.withTransaction {
+        dao.update(dao.jobs().filter { !it.unfinished && !it.hidden }.map { it.copy(hidden = true) })
     }
 
-    suspend fun seen(owner: String) = db.withTransaction {
-        dao.update(dao.jobs(owner).filter { it.hasResult && !it.seen }.map { it.copy(seen = true) })
+    suspend fun seen() = db.withTransaction {
+        dao.update(dao.jobs().filter { it.hasResult && !it.seen }.map { it.copy(seen = true) })
     }
 
-    /** Clears the journal for logout unless some work is unfinished. */
-    suspend fun clearIfFinished(owner: String): Boolean = db.withTransaction {
-        if (dao.jobs(owner).any { it.unfinished }) return@withTransaction false
-        dao.clear()
-        true
-    }
+    /** Logout waits for this work; it erases the journal with the rest of the app data. */
+    suspend fun hasUnfinished(): Boolean = dao.jobs().any { it.unfinished }
 
     private suspend fun update(job: UploadJob) = dao.update(listOf(job))
 }
