@@ -43,7 +43,6 @@ data class MediaIdentityResolution(
 
 interface MediaIdentityRegistry {
     suspend fun resolve(candidates: List<MediaIdentityCandidate>): MediaIdentityResolution
-    suspend fun removeSource(source: MediaSourceKind)
 
     /**
      * Drops copies that no longer exist, such as cloud files the app moved to the trash, with

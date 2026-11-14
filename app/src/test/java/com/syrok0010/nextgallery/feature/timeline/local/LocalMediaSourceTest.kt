@@ -450,10 +450,6 @@ class LocalMediaSourceTest {
             return delegate.resolve(candidates)
         }
 
-        override suspend fun removeSource(source: MediaSourceKind) {
-            delegate.removeSource(source)
-        }
-
         override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
             delegate.forget(sources)
         }

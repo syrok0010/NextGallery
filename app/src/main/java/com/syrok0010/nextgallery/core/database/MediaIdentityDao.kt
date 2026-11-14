@@ -51,12 +51,6 @@ interface MediaIdentityDao {
     @Query("DELETE FROM media_identity_conflicts WHERE source = :source AND sourceKey = :sourceKey")
     suspend fun deleteConflict(source: MediaSourceKind, sourceKey: String)
 
-    @Query("DELETE FROM media_identity_conflicts WHERE source = :source")
-    suspend fun deleteConflicts(source: MediaSourceKind)
-
-    @Query("DELETE FROM media_identifiers WHERE source = :source")
-    suspend fun deleteIdentifiers(source: MediaSourceKind)
-
     @Query("DELETE FROM media_identifiers WHERE source = :source AND sourceKey IN (:keys)")
     suspend fun deleteIdentifiers(source: MediaSourceKind, keys: Collection<String>)
 

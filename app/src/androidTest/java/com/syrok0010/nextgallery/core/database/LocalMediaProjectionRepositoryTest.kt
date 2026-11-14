@@ -24,7 +24,6 @@ import org.junit.runner.RunWith
 class LocalMediaProjectionRepositoryTest {
     private lateinit var context: Context
     private lateinit var database: NextGalleryDatabase
-    private lateinit var cacheRepository: TimelineCacheRepository
     private lateinit var identityRegistry: RoomMediaIdentityRegistry
     private lateinit var repository: LocalMediaProjectionRepository
 
@@ -68,27 +67,6 @@ class LocalMediaProjectionRepositoryTest {
             assertEquals(listOf(newest), repository.loadLocalMediaProjection())
         }
 
-    @Test
-    fun clearingCloudCacheKeepsDeviceProjectionAndIdentity() =
-        runBlocking {
-            val contentUri = "content://media/external/images/media/42"
-            val persistentMediaId = resolveLocalMediaId(contentUri)
-            val item = localItem(
-                contentUri = contentUri,
-                mediaId = persistentMediaId,
-                modifiedAtEpochSeconds = 1_700_000_042L,
-            )
-            repository.saveLocalMediaBatch(listOf(item))
-
-            cacheRepository.clear()
-
-            assertEquals(listOf(item), repository.loadLocalMediaProjection())
-            assertEquals(
-                persistentMediaId,
-                resolveLocalMediaId(item.localContentUri()),
-            )
-        }
-
     private fun openRepository() {
         database = Room
             .databaseBuilder(
@@ -99,11 +77,6 @@ class LocalMediaProjectionRepositoryTest {
         identityRegistry = RoomMediaIdentityRegistry(
             database = database,
             mediaIdFactory = { MediaId("unexpected-new-id") },
-        )
-        cacheRepository = TimelineCacheRepository(
-            database = database,
-            thumbnailFileStore = ThumbnailFileStore(context),
-            identityRegistry = identityRegistry,
         )
         repository = LocalMediaProjectionRepository(database)
     }

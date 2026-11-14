@@ -62,10 +62,6 @@ class InMemoryMediaIdentityRegistry(
         return true
     }
 
-    override suspend fun removeSource(source: MediaSourceKind) {
-        remove { it.source == source }
-    }
-
     override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
         val forgotten = sources.toSet()
         remove { it in forgotten }

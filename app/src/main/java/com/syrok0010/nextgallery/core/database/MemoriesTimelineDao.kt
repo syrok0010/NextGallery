@@ -61,12 +61,6 @@ interface MemoriesTimelineDao {
     @Query("DELETE FROM memories_loaded_days WHERE dayId IN (:dayIds)")
     suspend fun deleteLoadedDays(dayIds: Collection<Int>)
 
-    @Query("DELETE FROM memories_cache_metadata")
-    suspend fun deleteMetadata()
-
     @Query("DELETE FROM memories_media")
     suspend fun deleteAllMediaItems()
-
-    @Query("DELETE FROM memories_loaded_days")
-    suspend fun deleteAllLoadedDays()
 }

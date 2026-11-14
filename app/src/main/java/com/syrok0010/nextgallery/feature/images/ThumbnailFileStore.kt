@@ -42,12 +42,6 @@ class ThumbnailFileStore(context: Context) {
         }
     }
 
-    suspend fun clear() {
-        withContext(Dispatchers.IO) {
-            root.deleteRecursively()
-        }
-    }
-
     internal fun cacheKey(key: ThumbnailKey): String {
         val etagPart = key.etag
             ?.takeIf { it.isNotBlank() }

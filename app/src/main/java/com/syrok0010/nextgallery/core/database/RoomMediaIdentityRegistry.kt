@@ -125,13 +125,6 @@ class RoomMediaIdentityRegistry(
         val mediaSources: Map<MediaId, Set<MediaSourceIdentity>>,
     )
 
-    override suspend fun removeSource(source: MediaSourceKind) {
-        database.withTransaction {
-            dao.deleteIdentifiers(source)
-            dao.deleteConflicts(source)
-        }
-    }
-
     override suspend fun forget(sources: Collection<MediaSourceIdentity>) {
         if (sources.isEmpty()) return
         database.withTransaction {
