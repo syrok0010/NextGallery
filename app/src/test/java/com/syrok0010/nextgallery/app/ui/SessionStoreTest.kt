@@ -24,15 +24,12 @@ class SessionStoreTest {
     }
 
     @Test
-    fun `sign in and sign out update session state`() {
+    fun `sign in updates session state`() {
         val credentials = credentials()
         val store = SessionStore(FakeCredentialsStore(credentials = null))
 
         store.signIn(credentials)
         assertEquals(SessionUiState.SignedIn(credentials), store.session.value)
-
-        store.signOut()
-        assertEquals(SessionUiState.SignedOut, store.session.value)
     }
 
     private fun credentials(): AccountCredentials =

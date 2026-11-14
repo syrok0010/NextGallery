@@ -115,21 +115,6 @@ class ViewerTransitionCoordinatorTest {
     }
 
     @Test
-    fun `signed out session resets viewer transition state`() {
-        val coordinator = DefaultViewerTransitionCoordinator()
-
-        coordinator.onAppBoundsChanged(appBounds)
-        coordinator.registerTimelineTile(firstMediaId) { visibleTileBounds }
-        coordinator.open(firstMediaId)
-
-        coordinator.onSessionChanged(SessionUiState.SignedOut)
-
-        assertNull(coordinator.viewerMediaId)
-        assertNull(coordinator.revealMediaId)
-        assertNull(coordinator.timelineTileBounds(firstMediaId))
-    }
-
-    @Test
     fun `saver restores viewer state across recreation`() {
         val coordinator = DefaultViewerTransitionCoordinator()
         coordinator.onAppBoundsChanged(appBounds)

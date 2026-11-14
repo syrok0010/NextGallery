@@ -9,13 +9,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import com.syrok0010.nextgallery.core.media.MediaId
-import com.syrok0010.nextgallery.core.session.SessionUiState
 
 internal interface ViewerTransitionCoordinator {
     val viewerMediaId: MediaId?
     val revealMediaId: MediaId?
-
-    fun onSessionChanged(session: SessionUiState)
 
     fun open(mediaId: MediaId)
 
@@ -53,18 +50,6 @@ internal class DefaultViewerTransitionCoordinator(
     internal var currentTimelineTargetAvailable = initialCurrentTimelineTargetAvailable
         private set
     private val timelineTileBoundsProvidersByMediaId = mutableMapOf<MediaId, () -> Rect?>()
-
-    override fun onSessionChanged(session: SessionUiState) {
-        if (session is SessionUiState.SignedIn) {
-            return
-        }
-
-        viewerMediaId = null
-        revealMediaId = null
-        appBounds = null
-        currentTimelineTargetAvailable = false
-        timelineTileBoundsProvidersByMediaId.clear()
-    }
 
     override fun open(mediaId: MediaId) {
         viewerMediaId = mediaId

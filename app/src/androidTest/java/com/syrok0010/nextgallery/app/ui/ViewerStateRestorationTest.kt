@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.core.media.MediaId
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.collection.ViewerTransitionCoordinator
 import com.syrok0010.nextgallery.feature.collection.rememberViewerTransitionCoordinator
 import org.junit.Assert.assertEquals
@@ -22,7 +21,7 @@ class ViewerStateRestorationTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun currentPhotoSurvivesRestorationAndLogoutClearsRestoredState() {
+    fun currentPhotoSurvivesRestoration() {
         val restoration = StateRestorationTester(composeRule)
         lateinit var coordinator: ViewerTransitionCoordinator
         restoration.setContent {
@@ -46,12 +45,6 @@ class ViewerStateRestorationTest {
             assertEquals(photo, coordinator.viewerMediaId)
             assertEquals(photo, coordinator.revealMediaId)
             assertNull(coordinator.timelineTileBounds(photo))
-            coordinator.onSessionChanged(SessionUiState.SignedOut)
-        }
-        restoration.emulateSavedInstanceStateRestore()
-        composeRule.runOnIdle {
-            assertNull(coordinator.viewerMediaId)
-            assertNull(coordinator.revealMediaId)
         }
     }
 }

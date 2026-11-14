@@ -92,21 +92,6 @@ internal class AlbumAdditions(
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private var job: Job? = null
 
-    init {
-        scope.launch {
-            var owner: AccountCredentials? = null
-            sessions.session.collect { session ->
-                val current = (session as? SessionUiState.SignedIn)?.credentials
-                // The first emission only records the owner; results never cross accounts.
-                if (current == null || (owner != null && current != owner)) {
-                    job?.cancel()
-                    mutableState.value = AlbumAdditionState.Idle
-                }
-                owner = current
-            }
-        }
-    }
-
     /**
      * Returns false when the request is not accepted: another addition is running or nobody is
      * signed in. The caller keeps the selection in that case.

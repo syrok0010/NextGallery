@@ -128,7 +128,7 @@ val appModule = module {
             get(),
             get<UploadSource>()::snapshot,
             UploadFollowUps(
-                link = UploadedCopiesFollowUp(get(), get()),
+                link = UploadedCopiesFollowUp(get()),
                 album = AlbumUploadFollowUp(get(), get()),
             ),
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },

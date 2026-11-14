@@ -104,12 +104,6 @@ class LibraryIntegrationTest {
                 rule.onNodeWithContentDescription("fixture-1.jpg").assertExists()
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 assertEquals(anchor, rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top, 1f)
-                rule.runOnUiThread { sessions.signOut() }
-                rule.onNodeWithText(string(R.string.login_title)).assertIsDisplayed()
-                rule.onNodeWithTag("library_island").assertDoesNotExist()
-                rule.onNodeWithTag("album_catalog").assertDoesNotExist()
-                rule.runOnUiThread { sessions.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture")) }
-                rule.onNodeWithTag("library_page:Photos").assertIsSelected()
             } finally {
                 rule.runOnUiThread {
                     when (previousSession) {

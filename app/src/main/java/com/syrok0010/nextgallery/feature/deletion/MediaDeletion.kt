@@ -190,24 +190,8 @@ internal class MediaDeletionRepository(
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
     private val deletionMutex = Mutex()
 
-    /** Parent of every queued deletion, so a session change cancels the whole queue. */
-    private var operationParent = SupervisorJob(scope.coroutineContext[Job])
-
-    init {
-        scope.launch {
-            var owner: AccountCredentials? = null
-            sessions.session.collect { session ->
-                val current = (session as? SessionUiState.SignedIn)?.credentials
-                // The first emission only records the owner; results never cross accounts.
-                if (current == null || (owner != null && current != owner)) {
-                    operationParent.cancel()
-                    operationParent = SupervisorJob(scope.coroutineContext[Job])
-                    mutableState.value = DeletionState()
-                }
-                owner = current
-            }
-        }
-    }
+    /** Parent of every queued deletion, so one failed deletion does not cancel the others. */
+    private val operationParent = SupervisorJob(scope.coroutineContext[Job])
 
     /**
      * Resolves the selected objects before the UI asks the user for a scope. Objects that left the

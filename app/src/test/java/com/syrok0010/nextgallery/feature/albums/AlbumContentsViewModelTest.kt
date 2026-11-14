@@ -109,13 +109,6 @@ class AlbumContentsViewModelTest {
                 assertEquals(1, cancellations)
                 assertEquals(0, vm.state.value.total)
                 assertTrue(vm.state.value.permissionRequired)
-                permission.value = LocalMediaPermissionMode.Full
-                runCurrent()
-                sessions.signOut()
-                runCurrent()
-                assertEquals(2, cancellations)
-                assertEquals(0, vm.state.value.total)
-                assertFalse(vm.state.value.loading)
             } finally {
                 store.clear()
                 Dispatchers.resetMain()

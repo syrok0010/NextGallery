@@ -126,11 +126,8 @@ class LocalMediaIndexingRegressionTest {
             delegate.forget(sources)
         }
 
-        override suspend fun link(
-            existing: MediaSourceIdentity,
-            linked: MediaSourceIdentity,
-            isCurrent: () -> Boolean,
-        ) = delegate.link(existing, linked, isCurrent)
+        override suspend fun link(existing: MediaSourceIdentity, linked: MediaSourceIdentity) =
+            delegate.link(existing, linked)
     }
 
     private companion object {

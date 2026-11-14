@@ -38,9 +38,7 @@ class InMemoryMediaIdentityRegistry(
     override suspend fun link(
         existing: MediaSourceIdentity,
         linked: MediaSourceIdentity,
-        isCurrent: () -> Boolean,
     ): Boolean {
-        if (!isCurrent()) return false
         val mediaId = sourceMediaIds[existing] ?: return false
         val previous = sourceMediaIds[linked]
         if (previous == mediaId) return true
