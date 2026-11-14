@@ -1,15 +1,9 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import java.io.IOException
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import org.junit.Assert.*
 import org.junit.Test
@@ -28,18 +22,14 @@ class MemoriesAlbumSourceTest {
                 assertEquals(7, result.albums.first().count)
                 assertEquals(
                     listOf(
-                        "GET /nextcloud/apps/memories/api/config HTTP/1.1",
-                        "GET /nextcloud/apps/memories/api/clusters/albums HTTP/1.1",
+                        "GET /nextcloud/apps/memories/api/config",
+                        "GET /nextcloud/apps/memories/api/clusters/albums",
                     ),
-                    fixture.requests.map {
-                        it.first()
-                    },
+                    fixture.requests.map { "${it.method} ${it.target}" },
                 )
                 assertTrue(
-                    fixture.requests.all { lines ->
-                        lines.any {
-                            it == "Authorization: ${Credentials.basic("fixture", "password")}"
-                        }
+                    fixture.requests.all {
+                        it.headers["authorization"] == Credentials.basic("fixture", "password")
                     },
                 )
             }
@@ -66,60 +56,21 @@ class MemoriesAlbumSourceTest {
                 }
             }
         }
-    private class Fixture(val config: String, val albums: String, val code: Int = 200) :
-        AutoCloseable {
-        val server = ServerSocket(0, 10, InetAddress.getLoopbackAddress())
-        val executor = Executors.newSingleThreadExecutor()
-        val requests = CopyOnWriteArrayList<List<String>>()
-        init {
-            executor.execute {
-                while (!server.isClosed) {
-                    val socket = try {
-                        server.accept()
-                    } catch (_: IOException) {
-                        break
-                    }
-                    socket.use {
-                        val reader = it.getInputStream().bufferedReader()
-                        val lines = generateSequence {
-                            reader.readLine()?.takeIf(
-                                String::isNotEmpty,
-                            )
-                        }.toList()
-                        requests += lines
-                        val isConfig = lines.first().contains("/config ")
-                        val bytes = (if (isConfig) config else albums).toByteArray()
-                        it.getOutputStream().apply {
-                            write(
-                                "HTTP/1.1 ${if (isConfig) 200 else code} Fixture\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                                    .toByteArray(),
-                            )
-                            write(bytes)
-                            flush()
-                        }
-                    }
-                }
-            }
+    private class Fixture(config: String, albums: String, code: Int = 200) : AutoCloseable {
+        private val server = NextcloudFixture { request ->
+            if (request.target.endsWith("/config")) 200 to config else code to albums
         }
-        private val credentials = AccountCredentials(
-            "http://127.0.0.1:${server.localPort}/nextcloud",
-            "fixture",
-            "password",
-            "fixture",
-        )
+        val requests get() = server.requests
+        private val credentials =
+            AccountCredentials("${server.origin}/nextcloud", "fixture", "password", "fixture")
+
         suspend fun load() =
             MemoriesAlbumSource(
-                MemoriesApiClient(
-                    NextcloudTransport(
-                        Json {
-                            ignoreUnknownKeys = true
-                        },
-                    ),
-                ) { credentials },
+                MemoriesApiClient(server.transport) { credentials },
             ).load(credentials)
+
         override fun close() {
             server.close()
-            executor.shutdownNow()
         }
     }
 }

@@ -1,10 +1,10 @@
 package com.syrok0010.nextgallery.core.network.capabilities
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.loopbackServer
+import com.syrok0010.nextgallery.core.network.origin
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
-import java.net.InetAddress
-import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -15,10 +15,13 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import mockwebserver3.MockResponse
+import mockwebserver3.MockResponseBody
 import okhttp3.Call
 import okhttp3.Credentials
 import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okio.BufferedSink
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -29,9 +32,9 @@ class NextcloudCapabilitiesClientTest {
     @Test fun `capabilities request is authenticated and HTTP errors fail`() =
         runBlocking {
             var status = 200
-            Fixture { status to capabilities }.use { fixture ->
+            NextcloudFixture { status to capabilities }.use { fixture ->
                 val client =
-                    NextcloudCapabilitiesClient(fixture.writerTransport) { fixture.credentials }
+                    NextcloudCapabilitiesClient(fixture.transport) { fixture.credentials }
                 assertEquals(
                     NextcloudCapabilitiesDto(FilesCapabilitiesDto(undelete = true)),
                     client.capabilities(),
@@ -97,13 +100,29 @@ class NextcloudCapabilitiesClientTest {
     private val capabilities =
         """{"ocs":{"meta":{"statuscode":200},"data":{"capabilities":{"files":{"undelete":true}}}}}"""
 
-    /** Real HTTP headers arrive immediately; the test controls when socket body bytes arrive. */
+    /** Real HTTP headers arrive immediately; the test controls when the body bytes arrive. */
     private class DelayedBody(body: String) : AutoCloseable {
-        private val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
-        private val worker = Executors.newSingleThreadExecutor()
         val bodyReadStarted = CompletableDeferred<Unit>()
         val callCancelled = CompletableDeferred<Unit>()
         val releaseBody = CountDownLatch(1)
+        private val bytes = body.toByteArray()
+        private val server = loopbackServer {
+            MockResponse
+                .Builder()
+                .addHeader("Content-Type", "application/json")
+                .body(object : MockResponseBody {
+                    override val contentLength = bytes.size.toLong()
+
+                    override fun writeTo(sink: BufferedSink) {
+                        sink.write(bytes, 0, 1).flush()
+                        check(releaseBody.await(10, TimeUnit.SECONDS)) {
+                            "Test did not release response body"
+                        }
+                        sink.write(bytes, 1, bytes.size - 1).flush()
+                    }
+                })
+                .build()
+        }
         private val client = OkHttpClient
             .Builder()
             .eventListener(object : EventListener() {
@@ -116,41 +135,15 @@ class NextcloudCapabilitiesClientTest {
                 }
             })
             .build()
-        val credentials =
-            AccountCredentials("http://127.0.0.1:${server.localPort}/", "test", "password", "test")
+        val credentials = AccountCredentials("${server.origin}/", "test", "password", "test")
         val source =
             NextcloudCapabilitiesClient(
                 NextcloudTransport(Json { ignoreUnknownKeys = true }, client),
             ) { credentials }
 
-        init {
-            worker.submit {
-                server.accept().use { socket ->
-                    val reader = socket.getInputStream().bufferedReader()
-                    while (!reader.readLine().isNullOrEmpty()) Unit
-                    val bytes = body.toByteArray()
-                    val output = socket.getOutputStream()
-                    output.write(
-                        (
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" +
-                                "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                            ).toByteArray(),
-                    )
-                    output.write(bytes, 0, 1)
-                    output.flush()
-                    check(
-                        releaseBody.await(10, TimeUnit.SECONDS),
-                    ) { "Test did not release response body" }
-                    output.write(bytes, 1, bytes.size - 1)
-                    output.flush()
-                }
-            }
-        }
-
         override fun close() {
             releaseBody.countDown()
             server.close()
-            worker.shutdownNow()
             client.dispatcher.executorService.shutdown()
             client.connectionPool.evictAll()
         }

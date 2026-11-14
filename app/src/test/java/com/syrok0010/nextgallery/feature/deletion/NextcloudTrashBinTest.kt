@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery.feature.deletion
 
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriterTest.Fixture
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,9 +12,9 @@ class NextcloudTrashBinTest {
     @Test fun `only an answer from the server allows deleting cloud copies`() =
         runBlocking {
             var response = 200 to ""
-            Fixture { response }.use { fixture ->
+            NextcloudFixture { response }.use { fixture ->
                 val trashBin = NextcloudTrashBin(
-                    NextcloudCapabilitiesClient(fixture.writerTransport) { fixture.credentials },
+                    NextcloudCapabilitiesClient(fixture.transport) { fixture.credentials },
                 )
 
                 suspend fun status(code: Int, body: String): CloudTrashStatus {

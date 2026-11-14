@@ -2,17 +2,11 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import java.io.IOException
-import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.URLDecoder
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import org.junit.Assert.*
 import org.junit.Test
@@ -30,10 +24,10 @@ class MemoriesAlbumContentsTest {
             assertEquals(3, batches.last().total)
             assertEquals(2, fixture.requests.size)
             fixture.requests.forEach { request ->
-                assertTrue(URLDecoder.decode(request.first(), "UTF-8").contains("albums=anna/Лето & море"))
-                assertTrue(request.any { it == "Authorization: ${Credentials.basic("fixture", "password")}" })
+                assertTrue(URLDecoder.decode(request.target, "UTF-8").contains("albums=anna/Лето & море"))
+                assertEquals(Credentials.basic("fixture", "password"), request.headers["authorization"])
             }
-            assertTrue(fixture.requests.last().first().contains("/days/20?"))
+            assertTrue(fixture.requests.last().target.contains("/days/20?"))
         }
     }
     @Test fun `failed day request propagates failure after initial progress`() = runBlocking {
@@ -42,33 +36,26 @@ class MemoriesAlbumContentsTest {
             catch (error: HttpException) { assertEquals(503, error.code()) }
         }
     }
-    private class Fixture(val fail: Boolean = false) : AutoCloseable {
-        private val server = ServerSocket(0, 8, InetAddress.getLoopbackAddress())
-        private val executor = Executors.newSingleThreadExecutor()
-        val requests = CopyOnWriteArrayList<List<String>>()
-        init { executor.execute {
-            while (!server.isClosed) {
-                val socket = try { server.accept() } catch (_: IOException) { break }
-                socket.use {
-                    val reader = it.getInputStream().bufferedReader()
-                    val lines = generateSequence { reader.readLine()?.takeIf(String::isNotEmpty) }.toList()
-                    requests += lines
-                    val index = lines.first().contains("/days?")
-                    val body = if (index) """[{"dayid":20,"count":3,"detail":[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048}]}]"""
-                        else """[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":2,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":3,"dayid":20,"epoch":1716768000,"isvideo":1}]"""
-                    val bytes = body.toByteArray()
-                    it.getOutputStream().apply {
-                        write("HTTP/1.1 ${if (fail && !index) 503 else 200} Fixture\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                        write(bytes); flush()
-                    }
-                }
+    private class Fixture(fail: Boolean = false) : AutoCloseable {
+        private val server = NextcloudFixture { request ->
+            if (request.target.contains("/days?")) {
+                200 to """[{"dayid":20,"count":3,"detail":[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048}]}]"""
+            } else {
+                val day = """[{"fileid":1,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":2,"dayid":20,"epoch":1716768000,"size":2048},{"fileid":3,"dayid":20,"epoch":1716768000,"isvideo":1}]"""
+                (if (fail) 503 else 200) to day
             }
-        } }
-        private val credentials = AccountCredentials("http://127.0.0.1:${server.localPort}/nextcloud", "fixture", "password", "fixture")
+        }
+        val requests get() = server.requests
+        private val credentials =
+            AccountCredentials("${server.origin}/nextcloud", "fixture", "password", "fixture")
+
         suspend fun load() = MemoriesAlbumContents(
-            MemoriesApiClient(NextcloudTransport(Json { ignoreUnknownKeys = true })) { credentials },
+            MemoriesApiClient(server.transport) { credentials },
             InMemoryMediaIdentityRegistry(),
         ).load(AlbumLocation.Remote("anna/Лето & море")).toList()
-        override fun close() { server.close(); executor.shutdownNow() }
+
+        override fun close() {
+            server.close()
+        }
     }
 }
