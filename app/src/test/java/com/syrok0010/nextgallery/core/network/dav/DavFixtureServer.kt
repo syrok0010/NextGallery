@@ -41,8 +41,9 @@ internal class DavFixtureServer(private val respond: (DavRequest) -> DavResponse
         MockResponse
             .Builder()
             .code(response.code)
-            .apply { response.headers.forEach { (name, value) -> setHeader(name, value) } }
             .body(Buffer().write(response.body))
+            // After the body, so that a stub can still override the computed `Content-Length`.
+            .apply { response.headers.forEach { (name, value) -> setHeader(name, value) } }
             .build()
     }
     val credentials = AccountCredentials(server.origin, "fixture", "password", userId = "anna")

@@ -248,7 +248,8 @@ class FilesDavClientTest {
             val server = loopbackServer {
                 MockResponse
                     .Builder()
-                    .addHeader("Content-Length", 10)
+                    // The builder starts with `Content-Length: 0`; the body is cut short at one byte.
+                    .setHeader("Content-Length", 10)
                     .socketHandler(object : SocketHandler {
                         override fun handle(socket: Socket) {
                             socket.sink.buffer().writeUtf8("x").flush()
@@ -270,7 +271,7 @@ class FilesDavClientTest {
                         body.readBytes()
                     }
                 }
-                started.await()
+                withTimeout(5_000) { started.await() }
                 read.cancel()
                 // Well below the 30 s read timeout of the transport.
                 withTimeout(5_000) { read.join() }
