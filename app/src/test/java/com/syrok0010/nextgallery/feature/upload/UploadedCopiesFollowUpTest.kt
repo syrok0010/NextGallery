@@ -6,11 +6,9 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlinx.coroutines.runBlocking
@@ -20,19 +18,23 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * The follow-up only turns a finished upload into a link request; the linking rules themselves
+ * (no replacing, no taking a copy from another phone file) are tested on Room in
+ * RoomMediaIdentityRegistryTest.
+ */
 class UploadedCopiesFollowUpTest {
     private val registry = InMemoryMediaIdentityRegistry()
-    private var refreshes = 0
     private val sessions = SessionStore(SignedInStore)
     private val followUp = UploadedCopiesFollowUp(registry, sessions)
 
     @Test
-    fun `linked server copy joins the phone file as one object`() =
+    fun `uploaded copy joins the indexed phone file as one object`() =
         runBlocking {
             val localId = resolveLocal()
 
-            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
+            // The upload keeps the URI the picker gave; the index keys the file by its external volume.
+            assertTrue(followUp.link(CREDENTIALS, PICKED_CONTENT_URI, FILE_ID))
             val remoteId = resolveRemote()
 
             assertEquals(localId, remoteId)
@@ -40,80 +42,7 @@ class UploadedCopiesFollowUpTest {
                 localItems = listOf(localItem(localId)),
                 remoteItems = listOf(remoteItem(remoteId)),
             )
-            val item = library.items.single()
-            assertTrue(item.assetRef is MediaAssetRef.LocalFirst)
-        }
-
-    @Test
-    fun `without the link Memories 10_1 copies stay separate`() =
-        runBlocking {
-            val localId = resolveLocal()
-            val remoteId = resolveRemote()
-
-            assertNotEquals(localId, remoteId)
-            val library = projectMediaLibrary(
-                localItems = listOf(localItem(localId)),
-                remoteItems = listOf(remoteItem(remoteId)),
-            )
-            assertEquals(2, library.items.size)
-        }
-
-    @Test
-    fun `link merges an already indexed remote-only object`() =
-        runBlocking {
-            val localId = resolveLocal()
-            val earlyRemoteId = resolveRemote()
-
-            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-
-            assertNotEquals(localId, earlyRemoteId)
-            assertEquals(localId, resolveRemote())
-        }
-
-    @Test
-    fun `exact link outranks the aliases of an early server object`() =
-        runBlocking {
-            val localId = resolveLocal()
-            val earlyRemoteId = resolveRemote(auid = "server-auid", buid = "server-buid")
-
-            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-
-            assertNotEquals(localId, earlyRemoteId)
-            assertEquals(localId, resolveRemote(auid = "server-auid", buid = "server-buid"))
-        }
-
-    @Test
-    fun `link does not replace an existing server copy`() =
-        runBlocking {
-            val localId = resolveLocal()
-            assertTrue(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-
-            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, SECOND_FILE_ID))
-
-            val secondId = resolveRemote(SECOND_FILE_ID)
-            val firstId = resolveRemote()
-            assertNotEquals(localId, secondId)
-            assertEquals(localId, firstId)
-            val library = projectMediaLibrary(
-                localItems = listOf(localItem(localId)),
-                remoteItems = listOf(remoteItem(firstId), remoteItem(secondId, SECOND_FILE_ID)),
-            )
-            assertEquals(2, library.items.size)
-            assertEquals(1, library.items.count { it.assetRef is MediaAssetRef.LocalFirst })
-        }
-
-    @Test
-    fun `link does not steal a server copy from another local object`() =
-        runBlocking {
-            val otherLocalId =
-                resolveLocal(OTHER_CONTENT_URI, "other-local-auid", "other-local-buid")
-            assertTrue(followUp.link(CREDENTIALS, OTHER_CONTENT_URI, FILE_ID))
-
-            val localId = resolveLocal()
-            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-
-            assertEquals(otherLocalId, resolveRemote())
-            assertNotEquals(localId, otherLocalId)
+            assertTrue(library.items.single().assetRef is MediaAssetRef.LocalFirst)
         }
 
     @Test
@@ -129,39 +58,24 @@ class UploadedCopiesFollowUpTest {
             assertNotEquals(localId, resolveRemote())
         }
 
-    @Test
-    fun `unknown phone file is not linked`() =
-        runBlocking {
-            assertFalse(followUp.link(CREDENTIALS, CONTENT_URI, FILE_ID))
-            assertEquals(0, refreshes)
-        }
-
-    private suspend fun resolveLocal(
-        contentUri: String = CONTENT_URI,
-        auid: String = LOCAL_AUID,
-        buid: String = LOCAL_BUID,
-    ): MediaId {
-        val source = MediaSourceIdentity(MediaSourceKind.Local, contentUri)
-        val candidate = mediaIdentityCandidate(source, auid = auid, buid = buid)
+    private suspend fun resolveLocal(): MediaId {
+        val source = MediaSourceIdentity(MediaSourceKind.Local, CONTENT_URI)
+        val candidate = mediaIdentityCandidate(source, auid = LOCAL_AUID, buid = LOCAL_BUID)
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
     /** Memories 10.1 returns neither AUID nor BUID. */
-    private suspend fun resolveRemote(
-        fileId: Long = FILE_ID,
-        auid: String? = null,
-        buid: String? = null,
-    ): MediaId {
-        val source = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
-        val candidate = mediaIdentityCandidate(source, auid = auid, buid = buid)
+    private suspend fun resolveRemote(): MediaId {
+        val source = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val candidate = mediaIdentityCandidate(source, auid = null, buid = null)
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
     private fun localItem(mediaId: MediaId) =
         item(mediaId, LOCAL_AUID, LOCAL_BUID, MediaAssetRef.LocalContent(CONTENT_URI, TAKEN_AT, 1))
 
-    private fun remoteItem(mediaId: MediaId, fileId: Long = FILE_ID) =
-        item(mediaId, auid = null, buid = null, MediaAssetRef.MemoriesFile(fileId))
+    private fun remoteItem(mediaId: MediaId) =
+        item(mediaId, auid = null, buid = null, MediaAssetRef.MemoriesFile(FILE_ID))
 
     private fun item(mediaId: MediaId, auid: String?, buid: String?, assetRef: MediaAssetRef) =
         MediaItem(
@@ -186,11 +100,8 @@ class UploadedCopiesFollowUpTest {
 
     private companion object {
         const val CONTENT_URI = "content://media/external/images/media/42"
-        const val OTHER_CONTENT_URI = "content://media/external/images/media/43"
-        val SELECTION =
-            UploadSelection(MediaAssetRef.LocalContent(CONTENT_URI, 1, 1), "a.jpg", "image/jpeg")
+        const val PICKED_CONTENT_URI = "content://media/external_primary/images/media/42"
         const val FILE_ID = 183L
-        const val SECOND_FILE_ID = 190L
         const val TAKEN_AT = 1_716_900_000L
         const val LOCAL_AUID = "local-auid"
         const val LOCAL_BUID = "local-buid"

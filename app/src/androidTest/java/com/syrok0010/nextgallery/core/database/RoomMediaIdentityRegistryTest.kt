@@ -206,6 +206,51 @@ class RoomMediaIdentityRegistryTest {
     }
 
     @Test
+    fun linkedServerCopyStaysWithThePhoneFileWhenItsAliasesComeBack() = runBlocking {
+        database.close()
+        val generatedIds = listOf("local-id", "early-remote-id").map(::MediaId).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val serverAliases = setOf(
+            MediaAlias(MediaAliasKind.Auid, "server-auid"),
+            MediaAlias(MediaAliasKind.Buid, "server-buid"),
+        )
+        val localId = registry.resolveId(local)
+        val earlyRemote = registry.resolve(listOf(MediaIdentityCandidate(remote, aliases = serverAliases)))
+
+        assertEquals(true, registry.link(existing = local, linked = remote))
+
+        assertEquals(MediaId("early-remote-id"), earlyRemote.mediaIds.getValue(remote))
+        assertEquals(
+            localId,
+            registry
+                .resolve(listOf(MediaIdentityCandidate(remote, aliases = serverAliases)))
+                .mediaIds
+                .getValue(remote),
+        )
+    }
+
+    @Test
+    fun linkDoesNotTakeAServerCopyFromAnotherPhoneFile() = runBlocking {
+        database.close()
+        val generatedIds = listOf("other-local-id", "local-id").map(::MediaId).iterator()
+        openDatabase(mediaIdFactory = generatedIds::next)
+        val other = MediaSourceIdentity(MediaSourceKind.Local, OTHER_CONTENT_URI)
+        val local = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val otherId = registry.resolveId(other)
+        assertEquals(true, registry.link(existing = other, linked = remote))
+        val localId = registry.resolveId(local)
+
+        assertEquals(false, registry.link(existing = local, linked = remote))
+
+        assertEquals(MediaId("local-id"), localId)
+        assertEquals(otherId, registry.resolveId(remote))
+        assertEquals(localId, registry.resolveId(local))
+    }
+
+    @Test
     fun forgottenServerCopyLetsTheFileLinkAgain() = runBlocking {
         database.close()
         val generatedIds = listOf("local-id", "restored-id").map(::MediaId).iterator()
@@ -319,6 +364,7 @@ class RoomMediaIdentityRegistryTest {
 
     private companion object {
         const val LOCAL_CONTENT_URI = "content://media/external/images/media/42"
+        const val OTHER_CONTENT_URI = "content://media/external/images/media/43"
         const val DATABASE_NAME = "room-media-identity-registry-test.db"
         const val DAY_ID = 19_870
         const val FILE_ID = 42L
