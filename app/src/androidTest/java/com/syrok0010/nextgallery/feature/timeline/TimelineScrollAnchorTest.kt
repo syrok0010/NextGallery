@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -19,9 +20,11 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.collection.MediaGridItem
+import com.syrok0010.nextgallery.feature.collection.MediaGridLayout
 import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.PreserveMediaScrollAnchor
+import com.syrok0010.nextgallery.feature.collection.measuredItems
 import com.syrok0010.nextgallery.feature.collection.toMediaGridItems
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
@@ -44,15 +47,18 @@ class TimelineScrollAnchorTest {
             dayId = 20_001,
             takenAtEpochSeconds = 1_728_086_400L,
         )
-        val gridItemsState = mutableStateOf(gridItems(listOf(local)))
+        val slotsState = mutableStateOf(slots(listOf(local)))
         val gridStateRef = AtomicReference<LazyGridState>()
 
         composeRule.setContent {
             val gridState = rememberLazyGridState()
-            val gridItems = gridItemsState.value
+            val slots = slotsState.value
+            val layout = remember(slots, gridState) {
+                MediaGridLayout(slots) { gridState.measuredItems() }
+            }
             SideEffect { gridStateRef.set(gridState) }
             PreserveMediaScrollAnchor(
-                gridItems = gridItems,
+                layout = layout,
                 gridState = gridState,
                 isScrollNavigationActive = false,
             )
@@ -61,7 +67,7 @@ class TimelineScrollAnchorTest {
                 state = gridState,
                 modifier = Modifier.size(width = 320.dp, height = 400.dp),
             ) {
-                items(items = gridItems, key = MediaGridItem::key) { item ->
+                items(items = layout.items, key = MediaGridItem::key) { item ->
                     Box(
                         modifier = Modifier.height(
                             if (item is MediaGridItem.DayHeader) 32.dp else 96.dp,
@@ -73,7 +79,7 @@ class TimelineScrollAnchorTest {
         composeRule.waitForIdle()
 
         composeRule.runOnIdle {
-            gridItemsState.value = gridItems(listOf(remoteOnly, local))
+            slotsState.value = slots(listOf(remoteOnly, local))
         }
         composeRule.waitUntil {
             gridStateRef.get().layoutInfo.visibleItemsInfo.firstOrNull()?.key ==
@@ -170,20 +176,23 @@ class TimelineScrollAnchorTest {
         anchorMediaId: MediaId,
         expectedMediaId: MediaId,
     ) {
-        val gridItemsState = mutableStateOf(gridItems(initialMedia))
+        val slotsState = mutableStateOf(slots(initialMedia))
         val gridStateRef = AtomicReference<LazyGridState>()
         val scopeRef = AtomicReference<CoroutineScope>()
 
         composeRule.setContent {
             val gridState = rememberLazyGridState()
             val scope = rememberCoroutineScope()
-            val gridItems = gridItemsState.value
+            val slots = slotsState.value
+            val layout = remember(slots, gridState) {
+                MediaGridLayout(slots) { gridState.measuredItems() }
+            }
             SideEffect {
                 gridStateRef.set(gridState)
                 scopeRef.set(scope)
             }
             PreserveMediaScrollAnchor(
-                gridItems = gridItems,
+                layout = layout,
                 gridState = gridState,
                 isScrollNavigationActive = false,
             )
@@ -192,7 +201,7 @@ class TimelineScrollAnchorTest {
                 state = gridState,
                 modifier = Modifier.size(width = 320.dp, height = 400.dp),
             ) {
-                items(items = gridItems, key = MediaGridItem::key) { item ->
+                items(items = layout.items, key = MediaGridItem::key) { item ->
                     Box(
                         modifier = Modifier.height(
                             if (item is MediaGridItem.DayHeader) 32.dp else 96.dp,
@@ -203,7 +212,7 @@ class TimelineScrollAnchorTest {
         }
         composeRule.waitForIdle()
 
-        val initialGridItems = gridItemsState.value
+        val initialGridItems = slotsState.value.toMediaGridItems()
         val anchorGridIndex = initialGridItems.indexOfMedia(anchorMediaId)
         composeRule.runOnIdle {
             scopeRef.get().launch {
@@ -218,13 +227,13 @@ class TimelineScrollAnchorTest {
         val offsetBefore = anchorViewportOffset(gridStateRef.get(), anchorMediaId)
 
         composeRule.runOnIdle {
-            gridItemsState.value = gridItems(updatedMedia)
+            slotsState.value = slots(updatedMedia)
         }
         composeRule.waitUntil {
             val state = gridStateRef.get()
             state.layoutInfo.visibleItemsInfo.any { item ->
                 item.key == "media:${expectedMediaId.value}" &&
-                    item.index == gridItemsState.value.indexOfMedia(expectedMediaId)
+                    item.index == slotsState.value.toMediaGridItems().indexOfMedia(expectedMediaId)
             }
         }
 
@@ -247,16 +256,15 @@ class TimelineScrollAnchorTest {
         return item.offset.y - gridState.layoutInfo.viewportStartOffset
     }
 
-    private fun gridItems(mediaItems: List<MediaItem>): List<MediaGridItem> =
-        mediaItems
-            .mapIndexed { index, item ->
-                MediaSlot(
-                    key = MediaSlotKey(dayId = item.dayId, indexInDay = index),
-                    dayId = item.dayId,
-                    indexInDay = index,
-                    mediaItem = item,
-                )
-            }.toMediaGridItems()
+    private fun slots(mediaItems: List<MediaItem>): List<MediaSlot> =
+        mediaItems.mapIndexed { index, item ->
+            MediaSlot(
+                key = MediaSlotKey(dayId = item.dayId, indexInDay = index),
+                dayId = item.dayId,
+                indexInDay = index,
+                mediaItem = item,
+            )
+        }
 
     private fun List<MediaGridItem>.indexOfMedia(mediaId: MediaId): Int =
         indexOfFirst { item ->

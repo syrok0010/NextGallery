@@ -34,7 +34,7 @@ internal fun MediaGridPanel(
     val layout = remember(slots, gridState) { MediaGridLayout(slots) { gridState.measuredItems() } }
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
     PreserveMediaScrollAnchor(
-        gridItems = layout.items,
+        layout = layout,
         gridState = gridState,
         isScrollNavigationActive = isDraggingScrollIndicator || revealMediaId != null,
     )

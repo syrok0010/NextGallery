@@ -5,12 +5,27 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.toIntRect
 import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
+import kotlin.math.abs
 
-/** A grid item the lazy grid has measured on screen. */
-internal data class MeasuredGridItem(val key: String, val bounds: IntRect)
+/**
+ * A grid item the lazy grid has measured on screen: its [key], its [index] in the list the grid
+ * measured, which may be an earlier one, and its [bounds] from the top of the screen.
+ */
+internal data class MeasuredGridItem(val key: String, val index: Int, val bounds: IntRect)
 
 /** A media tile under the finger. */
 internal data class MediaGridTile(val key: String, val mediaId: MediaId)
+
+/**
+ * Where the lazy grid scrolls so that it shows [mediaId], or the top of the list when null, with
+ * its top [scrollOffsetPx] above the top of the screen.
+ */
+internal data class MediaScrollRestoration(
+    val mediaId: MediaId?,
+    val gridIndex: Int,
+    val scrollOffsetPx: Int,
+)
 
 /** How far down the list the screen is, and the day at its top. */
 internal data class MediaScrollPosition(val dayId: Int?, val fraction: Float)
@@ -18,12 +33,13 @@ internal data class MediaScrollPosition(val dayId: Int?, val fraction: Float)
 /**
  * The media grid as it is shown: the list of [slots] and what the lazy grid has [measured] of it.
  *
- * Every answer about the screen is given in objects and days, never in grid positions. For a frame
- * after the list changes, the measurement still describes the earlier list; only keys mean the
- * same in both, so during that frame the answers describe what is still drawn.
+ * Answers about the screen are given in objects and days. Grid indexes come out only as places for
+ * the lazy grid to scroll to. For a frame after the list changes, the measurement still describes
+ * the earlier list; only keys mean the same in both, so during that frame the answers describe
+ * what is still drawn.
  */
 internal class MediaGridLayout(
-    val slots: List<MediaSlot>,
+    private val slots: List<MediaSlot>,
     private val measured: () -> List<MeasuredGridItem>,
 ) {
     /** What the lazy grid draws, in order: a header before every day, then its slots. */
@@ -90,6 +106,35 @@ internal class MediaGridLayout(
             .mapNotNullTo(HashSet()) { (it as? MediaGridItem.Slot)?.slot?.mediaItem?.mediaId }
     }
 
+    /** Whether the lazy grid has measured this list yet, not an earlier one. */
+    fun isMeasured(): Boolean = measured().all { items.getOrNull(it.index)?.key == it.key }
+
+    /**
+     * Where the lazy grid scrolls to keep the screen as it was in [previous], the list it last
+     * measured: the object at the top at the same height, or, when it is gone, the object nearest
+     * to it in time. At the very top of the list the screen stays at the top.
+     */
+    fun restorationFrom(previous: MediaGridLayout): MediaScrollRestoration? {
+        val shown = previous.measured()
+        val first = previous.items.firstOrNull()?.key
+        if (shown.any { it.key == first && it.bounds.top >= 0 }) {
+            return MediaScrollRestoration(mediaId = null, gridIndex = 0, scrollOffsetPx = 0)
+        }
+        val (anchor, top) = shown.firstNotNullOfOrNull { measuredItem ->
+            previous.mediaAt(measuredItem.key)?.let { it to measuredItem.bounds.top }
+        } ?: return null
+        val candidates = items.withIndex().mapNotNull { (index, item) ->
+            (item as? MediaGridItem.Slot)?.slot?.mediaItem?.let { index to it }
+        }
+        val (gridIndex, target) = candidates.firstOrNull { it.second.mediaId == anchor.mediaId }
+            ?: candidates.minByOrNull { abs(it.second.canonicalTime - anchor.canonicalTime) }
+            ?: return null
+        return MediaScrollRestoration(target.mediaId, gridIndex, scrollOffsetPx = -top)
+    }
+
+    private fun mediaAt(key: String): MediaItem? =
+        (gridIndexes[key]?.let(items::get) as? MediaGridItem.Slot)?.slot?.mediaItem
+
     private fun measuredSlots(): List<MediaGridItem.Slot> =
         measured().mapNotNull { gridIndexes[it.key]?.let(items::get) as? MediaGridItem.Slot }
 
@@ -100,5 +145,12 @@ internal class MediaGridLayout(
 /** What [this] grid has measured; read inside a snapshot observer, it follows scrolling. */
 internal fun LazyGridState.measuredItems(): List<MeasuredGridItem> =
     layoutInfo.visibleItemsInfo.map {
-        MeasuredGridItem(it.key as String, it.size.toIntRect().translate(it.offset))
+        // The grid has no padding above, so its offsets start at the top of the screen.
+        MeasuredGridItem(it.key as String, it.index, it.size.toIntRect().translate(it.offset))
     }
+
+/** When the object was taken; an object without a time counts from the start of its day. */
+private val MediaItem.canonicalTime: Long
+    get() = takenAtEpochSeconds ?: (dayId.toLong() * SECONDS_PER_DAY)
+
+private const val SECONDS_PER_DAY = 86_400L
