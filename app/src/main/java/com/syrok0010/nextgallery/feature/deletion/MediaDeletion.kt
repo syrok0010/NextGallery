@@ -134,10 +134,16 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
  * started since the queue was last empty, so a queued deletion extends the same progress.
  */
 /**
- * [queued] holds the cloud file ids of every request still in the queue, once per request: two
- * requests may name the same file, and the first one to finish must not end the second.
+ * [requests] still in the queue, phone-only ones included. [queued] holds their cloud file ids,
+ * once per request: two requests may name the same file, and the first one to finish must not
+ * unmark it for the second. [total] and [processed] count cloud copies.
  */
-internal data class DeletionProgress(val queued: List<Long>, val total: Int, val processed: Int) {
+internal data class DeletionProgress(
+    val queued: List<Long>,
+    val total: Int,
+    val processed: Int,
+    val requests: Int = 1,
+) {
     val fileIds: Set<Long> get() = queued.toSet()
 }
 
@@ -211,15 +217,15 @@ internal class MediaDeletionRepository(
     /** Requests run one after another; a new one never cancels a deletion already started. */
     fun delete(targets: DeletionTargets) {
         val fileIds = targets.fileIds
-        if (fileIds.isNotEmpty()) {
-            mutableState.update { state ->
-                DeletionProgress(
-                    queued = state.running?.queued.orEmpty() + fileIds,
-                    total = (state.running?.total ?: 0) + fileIds.size,
-                    processed = state.running?.processed ?: 0,
-                )
-                    .let { running -> state.copy(running = running) }
-            }
+        // Every request counts, so even a phone-only one keeps logout from ending the process.
+        mutableState.update { state ->
+            DeletionProgress(
+                queued = state.running?.queued.orEmpty() + fileIds,
+                total = (state.running?.total ?: 0) + fileIds.size,
+                processed = state.running?.processed ?: 0,
+                requests = (state.running?.requests ?: 0) + 1,
+            )
+                .let { running -> state.copy(running = running) }
         }
         scope.launch(operationParent) {
             deletionMutex.withLock {
@@ -258,8 +264,11 @@ internal class MediaDeletionRepository(
                     // The ids leave only now: the tiles stay marked until the result is in.
                     state.copy(
                         running = state.running
-                            ?.copy(queued = state.running.queued.withoutOnce(fileIds))
-                            ?.takeIf { it.queued.isNotEmpty() },
+                            ?.copy(
+                                queued = state.running.queued.withoutOnce(fileIds),
+                                requests = state.running.requests - 1,
+                            )
+                            ?.takeIf { it.requests > 0 },
                         unseen = state.unseen?.plus(done) ?: done,
                     )
                 }
@@ -345,11 +354,15 @@ private fun deletionOperationSnapshots(
         add(
             OperationStatusSnapshot(
                 kind = OperationKind.Delete,
-                title = com.syrok0010.nextgallery.core.ui.uiText(
-                    R.string.delete_progress,
-                    it.processed,
-                    it.total,
-                ),
+                title = if (it.total == 0) {
+                    com.syrok0010.nextgallery.core.ui.uiText(R.string.delete_progress_phone)
+                } else {
+                    com.syrok0010.nextgallery.core.ui.uiText(
+                        R.string.delete_progress,
+                        it.processed,
+                        it.total,
+                    )
+                },
                 running = true,
                 progress = if (it.total == 0) null else it.processed.toFloat() / it.total,
                 media = it.fileIds.map {
