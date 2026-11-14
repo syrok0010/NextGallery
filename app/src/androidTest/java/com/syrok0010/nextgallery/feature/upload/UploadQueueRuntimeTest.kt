@@ -181,7 +181,8 @@ class UploadQueueRuntimeTest {
         waitFor { phases().all { it == UploadPhase.NeedsAttention } }
         assertFalse(queue.logout { error("Unfinished jobs must block logout") })
         settled { queue.clearFinished() }
-        assertEquals(2, journal.jobs(owner).size)
+        // Clearing hides finished rows; both jobs that need attention stay visible.
+        assertEquals(2, journal.jobs(owner).count { !it.hidden })
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
         assertTrue(queue.logout { sessions.signOut() })
