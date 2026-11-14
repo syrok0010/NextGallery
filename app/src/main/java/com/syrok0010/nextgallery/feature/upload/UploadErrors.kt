@@ -15,7 +15,7 @@ internal class UploadException(val problem: UploadProblem, val httpStatus: Int? 
 
 /**
  * No connection, a timeout, a server that is busy or down, or a lock (423) still held by an
- * interrupted request; another attempt may succeed.
+ * interrupted request; another attempt may succeed. A full server (507) is not: it needs the user.
  */
 internal val Exception.temporary: Boolean
     get() = when (this) {
@@ -25,7 +25,10 @@ internal val Exception.temporary: Boolean
         else -> false
     }
 
-private fun temporaryStatus(code: Int) = code == 408 || code == 423 || code == 429 || code >= 500
+private fun temporaryStatus(code: Int) =
+    code == 408 || code == 423 || code == 429 || (code >= 500 && code != INSUFFICIENT_STORAGE)
+
+private const val INSUFFICIENT_STORAGE = 507
 
 /** A failed step is named first: the transfer itself succeeded. */
 internal fun UploadJob.problemText(): UiText {

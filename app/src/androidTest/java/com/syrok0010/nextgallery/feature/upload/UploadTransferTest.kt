@@ -171,6 +171,7 @@ class UploadTransferTest {
             for ((code, temporary) in listOf(
                 400 to false,
                 403 to false,
+                507 to false,
                 500 to true,
                 503 to true,
                 423 to true,
