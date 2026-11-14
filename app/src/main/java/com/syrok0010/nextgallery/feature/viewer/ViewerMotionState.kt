@@ -32,6 +32,7 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -94,6 +95,12 @@ internal class ViewerMotionState(
     private val settleProgress = Animatable(0f)
     private val backgroundOpacity = Animatable(if (enterPending) 0f else 1f)
 
+    /** Set once [close] starts: the viewer is leaving, and nothing moves the surface any more. */
+    private var closing = false
+
+    /** The surface going back to rest after a drag; a new drag or [close] takes over from it. */
+    private var dragReturn: Job? = null
+
     val trackSurfaceBounds: Boolean
         get() = dragOffset.value == Offset.Zero &&
             predictiveBackProgress == 0f &&
@@ -144,34 +151,51 @@ internal class ViewerMotionState(
         )
     }
 
+    /**
+     * Runs the opening from the tile. Called again when the current object or the measured surface
+     * changes: an opening cut short this way does not leave its target behind, which would keep
+     * the chrome hidden and the surface unmeasured.
+     */
     suspend fun enter(mediaId: MediaId?) {
-        if (!enterPending || mediaId == null) return
-        if (mediaId != openingMediaId) {
+        if (!enterPending || mediaId == null || closing) return
+        val target = if (mediaId == openingMediaId) {
+            val bounds = surfaceBounds ?: return
+            bounds.enterTarget(tileBounds())
+        } else {
+            // The user moved on before the opening ended: the other object just shows.
+            null
+        }
+        try {
+            if (target != null) {
+                enterProgress.snapTo(0f)
+                enterTarget = target
+                enterProgress.animateTo(1f, tween(durationMillis = ViewerEnterDurationMillis))
+            }
             enterProgress.snapTo(1f)
             enterPending = false
-            return
+        } finally {
+            enterTarget = null
         }
-        val bounds = surfaceBounds ?: return
-        val target = bounds.enterTarget(tileBounds())
-        if (target == null) {
-            enterProgress.snapTo(1f)
-            enterPending = false
-            return
-        }
-        enterProgress.snapTo(0f)
-        enterTarget = target
-        enterProgress.animateTo(1f, tween(durationMillis = ViewerEnterDurationMillis))
-        enterTarget = null
-        enterPending = false
     }
 
+    /** Settles the surface on its tile, then calls [onClosed]; only the first call does. */
     fun close(onClosed: () -> Unit = onClose.value, initialVelocity: Velocity = Velocity.Zero) {
+        if (closing) return
+        closing = true
+        dragReturn?.cancel()
         // Capture the destination and callback before starting the animation.
-        val target = surfaceBounds?.settleTarget(
-            tileBounds(),
-            dragOffset.value,
-            predictiveBackProgress,
-        )
+        val opening = enterTarget
+        val target = surfaceBounds
+            ?.settleTarget(tileBounds(), dragOffset.value, predictiveBackProgress)
+            // Back during the opening: the surface leaves from where the opening has brought it.
+            ?.let { settle ->
+                opening?.let {
+                    settle.startingFrom(
+                        it,
+                        enterProgress.value,
+                    )
+                } ?: settle
+            }
         scope.launch {
             if (target != null) {
                 settleProgress.snapTo(0f)
@@ -211,14 +235,17 @@ internal class ViewerMotionState(
     }
 
     fun onBackProgress(progress: Float) {
+        if (closing) return
         predictiveBackProgress = progress
     }
 
     fun cancelBack() {
+        if (closing) return
         predictiveBackProgress = 0f
     }
 
     fun dragBy(amount: Offset): Boolean {
+        if (closing) return false
         val nextOffset = dragOffset.value + amount
         if (nextOffset.y < 0f ||
             kotlin.math.abs(
@@ -227,13 +254,16 @@ internal class ViewerMotionState(
         ) {
             return false
         }
+        // Only a move the viewer takes stops the surface going back to rest.
+        dragReturn?.cancel()
         scope.launch { dragOffset.snapTo(nextOffset) }
         return true
     }
 
     fun cancelDrag() {
+        if (closing) return
         predictiveBackProgress = 0f
-        scope.launch { dragOffset.animateTo(Offset.Zero) }
+        dragReturn = scope.launch { dragOffset.animateTo(Offset.Zero) }
     }
 
     fun endDrag(
@@ -242,11 +272,12 @@ internal class ViewerMotionState(
         flingVelocityPx: Float = Float.MAX_VALUE,
         velocity: Velocity = Velocity.Zero,
     ) {
+        if (closing) return
         val isFlingClose = velocity.y > flingVelocityPx && dragOffset.value.y > 0f
         if (canClose && (dragOffset.value.y > thresholdPx || isFlingClose)) {
             close(initialVelocity = velocity)
         } else {
-            scope.launch {
+            dragReturn = scope.launch {
                 dragOffset.animateTo(
                     targetValue = Offset.Zero,
                     animationSpec = spring(

@@ -53,6 +53,93 @@ class ViewerMotionStateTest {
     }
 
     @Test
+    fun movingOnDuringTheOpeningLeavesTheNextObjectAtRestWithChrome() {
+        showViewer(measure = false)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.onSurfaceBoundsChange(surface) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(32)
+        rule.runOnIdle {
+            assertTrue(motion.surfaceTransform(firstId).scale < 1f)
+            currentId.value = MediaId("second")
+        }
+        finishAnimations()
+        rule.runOnIdle { assertResting() }
+    }
+
+    @Test
+    fun backAfterTheViewerClosedDoesNotCloseItAgain() {
+        showViewer()
+        rule.runOnIdle { motion.close() }
+        finishAnimations()
+        // The screen may stay a moment longer while navigation leaves it.
+        rule.runOnIdle {
+            motion.close()
+            assertFalse(motion.dragBy(Offset(0f, 60f)))
+        }
+        finishAnimations()
+        rule.runOnIdle { assertEquals(listOf(firstId), closedIds) }
+    }
+
+    @Test
+    fun backDuringTheOpeningLeavesFromWhereTheSurfaceIs() {
+        showViewer(measure = false)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.onSurfaceBoundsChange(surface) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(64)
+        lateinit var opening: ViewerSurfaceTransform
+        rule.runOnIdle {
+            opening = motion.surfaceTransform(firstId)
+            assertTrue(opening.scale < 1f)
+            motion.close()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle {
+            // Not back to full size first: the closing starts no bigger than the opening was.
+            assertTrue(motion.surfaceTransform(firstId).scale <= opening.scale + 0.05f)
+        }
+        finishAnimations()
+        rule.runOnIdle {
+            assertEquals(listOf(firstId), closedIds)
+            assertEquals(tile.center - surface.center, motion.surfaceTransform(firstId).offset)
+        }
+    }
+
+    @Test
+    fun aSidewaysMoveDoesNotStopTheReturnAfterADrag() {
+        showViewer()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.dragBy(Offset(0f, 60f)) }
+        rule.runOnIdle { motion.endDrag(canClose = true, thresholdPx = 112f) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle { assertFalse(motion.dragBy(Offset(500f, 0f))) }
+        finishAnimations()
+        rule.runOnIdle {
+            assertResting()
+            assertTrue(closedIds.isEmpty())
+        }
+    }
+
+    @Test
+    fun closingDuringTheReturnAfterADragSettlesOnTheTile() {
+        showViewer()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.dragBy(Offset(20f, 80f)) }
+        rule.runOnIdle { motion.endDrag(canClose = true, thresholdPx = 112f) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.runOnIdle {
+            assertTrue(closedIds.isEmpty())
+            motion.close()
+        }
+        finishAnimations()
+        rule.runOnIdle {
+            assertEquals(listOf(firstId), closedIds)
+            assertEquals(tile.center - surface.center, motion.surfaceTransform(firstId).offset)
+        }
+    }
+
+    @Test
     fun shortDragReturnsToRestWithoutClosing() {
         showViewer()
         rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
