@@ -39,7 +39,8 @@ class LocalMediaRequestInterceptorTest {
 
     private fun checkCancellation(blockInDecoder: Boolean) = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val entered = CountDownLatch(5)
+        val permits = LocalMediaRequestInterceptor.PERMITS
+        val entered = CountDownLatch(permits)
         val release = CountDownLatch(1)
         val opens = AtomicInteger()
         val blocks = AtomicInteger()
@@ -74,15 +75,15 @@ class LocalMediaRequestInterceptorTest {
             .data("content://media/external/images/media/$id")
             .size(1, 1)
             .build()
-        val first = (1..5).map { async(Dispatchers.Default) { loader.execute(request(it)) } }
+        val first = (1..permits).map { async(Dispatchers.Default) { loader.execute(request(it)) } }
         try {
             assertTrue(withContext(Dispatchers.IO) { entered.await(5, TimeUnit.SECONDS) })
             first.forEach { it.cancel() }
-            val queued = (6..35).map { async(Dispatchers.Default) { loader.execute(request(it)) } }
+            val queued = (permits + 1..permits + 30).map { async(Dispatchers.Default) { loader.execute(request(it)) } }
             try {
                 delay(400)
-                assertEquals("Cancelled blocking work must still occupy all five permits", 5, opens.get())
-                assertEquals(5, blocks.get())
+                assertEquals("Cancelled blocking work must still occupy every permit", permits, opens.get())
+                assertEquals(permits, blocks.get())
                 queued.forEach { it.cancel() }
             } finally {
                 queued.forEach { it.cancel() }
@@ -90,9 +91,9 @@ class LocalMediaRequestInterceptorTest {
                 withTimeout(5_000) { queued.forEach { it.join() } }
             }
             withTimeout(5_000) { first.forEach { it.join() } }
-            assertEquals("Cancelled queued requests must never open a file", 5, opens.get())
-            withTimeout(5_000) { loader.execute(request(36)) }
-            assertEquals("Permits must be reusable after cleanup", 6, opens.get())
+            assertEquals("Cancelled queued requests must never open a file", permits, opens.get())
+            withTimeout(5_000) { loader.execute(request(permits + 31)) }
+            assertEquals("Permits must be reusable after cleanup", permits + 1, opens.get())
         } finally {
             release.countDown()
             first.forEach { it.cancel() }
