@@ -16,12 +16,12 @@ class MediaGridLayoutTest {
 
     // Two columns of 100 px. Header 1, then a b / c _, then header 2, then d.
     private val screen = listOf(
-        MeasuredGridItem(headerKey(1), IntRect(0, 0, 200, 40)),
-        MeasuredGridItem(gridKey("a"), IntRect(0, 40, 100, 140)),
-        MeasuredGridItem(gridKey("b"), IntRect(100, 40, 200, 140)),
-        MeasuredGridItem(gridKey("c"), IntRect(0, 140, 100, 240)),
-        MeasuredGridItem(headerKey(2), IntRect(0, 240, 200, 280)),
-        MeasuredGridItem(gridKey("d"), IntRect(0, 280, 100, 380)),
+        MeasuredGridItem(headerKey(1), 0, IntRect(0, 0, 200, 40)),
+        MeasuredGridItem(gridKey("a"), 1, IntRect(0, 40, 100, 140)),
+        MeasuredGridItem(gridKey("b"), 2, IntRect(100, 40, 200, 140)),
+        MeasuredGridItem(gridKey("c"), 3, IntRect(0, 140, 100, 240)),
+        MeasuredGridItem(headerKey(2), 4, IntRect(0, 240, 200, 280)),
+        MeasuredGridItem(gridKey("d"), 5, IntRect(0, 280, 100, 380)),
     )
 
     private fun layout(slots: List<MediaSlot>) = MediaGridLayout(slots) { measured }
@@ -49,9 +49,9 @@ class MediaGridLayoutTest {
         // Day 2 is on screen; day 1 has just been loaded above it, and the grid has not
         // measured the new list yet.
         measured = listOf(
-            MeasuredGridItem(headerKey(2), IntRect(0, 0, 200, 40)),
-            MeasuredGridItem(gridKey("d"), IntRect(0, 40, 100, 140)),
-            MeasuredGridItem(gridKey("e"), IntRect(100, 40, 200, 140)),
+            MeasuredGridItem(headerKey(2), 0, IntRect(0, 0, 200, 40)),
+            MeasuredGridItem(gridKey("d"), 1, IntRect(0, 40, 100, 140)),
+            MeasuredGridItem(gridKey("e"), 2, IntRect(100, 40, 200, 140)),
         )
         val grid = layout(day1 + day2)
 
@@ -62,8 +62,8 @@ class MediaGridLayoutTest {
 
     @Test fun `a measured placeholder that has been loaded since is left out`() {
         measured = listOf(
-            MeasuredGridItem("slot:1:0", IntRect(0, 0, 100, 100)),
-            MeasuredGridItem(gridKey("b"), IntRect(100, 0, 200, 100)),
+            MeasuredGridItem("slot:1:0", 1, IntRect(0, 0, 100, 100)),
+            MeasuredGridItem(gridKey("b"), 2, IntRect(100, 0, 200, 100)),
         )
         val grid = layout(day1)
 
@@ -72,7 +72,7 @@ class MediaGridLayoutTest {
     }
 
     @Test fun `nothing measured from the list gives no visible slots`() {
-        measured = listOf(MeasuredGridItem(gridKey("gone"), IntRect(0, 0, 100, 100)))
+        measured = listOf(MeasuredGridItem(gridKey("gone"), 1, IntRect(0, 0, 100, 100)))
         val grid = layout(day1)
 
         assertNull(grid.visibleSlots())

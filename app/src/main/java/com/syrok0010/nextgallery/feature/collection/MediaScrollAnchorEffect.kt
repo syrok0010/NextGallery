@@ -7,47 +7,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 
+/**
+ * Keeps the screen on the same objects when the list changes under it, unless the user is moving
+ * through the list themselves.
+ */
 @Composable
 internal fun PreserveMediaScrollAnchor(
-    gridItems: List<MediaGridItem>,
+    layout: MediaGridLayout,
     gridState: LazyGridState,
     isScrollNavigationActive: Boolean,
 ) {
-    val controller = remember { MediaScrollAnchorController() }
-    val baseline = remember { TimelineScrollAnchorBaseline() }
-    val restoration = remember(gridItems, isScrollNavigationActive) {
-        baseline.gridItems
-            ?.takeIf { previousGridItems -> previousGridItems != gridItems }
-            ?.let { previousGridItems ->
-                val viewportStartOffset = gridState.layoutInfo.viewportStartOffset
-                controller.restorationForUpdate(
-                    previousGridItems = previousGridItems,
-                    newGridItems = gridItems,
-                    visibleItems = gridState.layoutInfo.visibleItemsInfo.map { item ->
-                        MediaVisibleGridItem(
-                            gridIndex = item.index,
-                            key = item.key.toString(),
-                            viewportOffsetPx = item.offset.y - viewportStartOffset,
-                        )
-                    },
-                    isRestorationAllowed = !isScrollNavigationActive && !gridState.isScrollInProgress,
-                )
-            }
-    }
-    LaunchedEffect(gridItems) {
-        snapshotFlow {
-            gridState.layoutInfo.visibleItemsInfo.map { item ->
-                item.index to item.key.toString()
-            }
-        }.first { measuredItems ->
-            measuredItems.isEmpty() || measuredItems.all { (index, key) ->
-                gridItems.getOrNull(index)?.key == key
-            }
+    val lastMeasured = remember { LastMeasuredLayout() }
+    val restoration = remember(layout, isScrollNavigationActive) {
+        val previous = lastMeasured.layout?.takeIf { it.items != layout.items }
+        if (previous == null || isScrollNavigationActive || gridState.isScrollInProgress) {
+            null
+        } else {
+            layout.restorationFrom(previous)
         }
-        baseline.gridItems = gridItems
+    }
+    LaunchedEffect(layout) {
+        snapshotFlow { layout.isMeasured() }.first { it }
+        lastMeasured.layout = layout
     }
 
-    LaunchedEffect(gridItems, restoration, isScrollNavigationActive) {
+    LaunchedEffect(layout, restoration, isScrollNavigationActive) {
         restoration?.takeIf { !isScrollNavigationActive }?.let { target ->
             gridState.scrollToItem(
                 index = target.gridIndex,
@@ -57,6 +41,7 @@ internal fun PreserveMediaScrollAnchor(
     }
 }
 
-private class TimelineScrollAnchorBaseline {
-    var gridItems: List<MediaGridItem>? = null
+/** The list the grid last measured: what the screen showed before the list changed. */
+private class LastMeasuredLayout {
+    var layout: MediaGridLayout? = null
 }
