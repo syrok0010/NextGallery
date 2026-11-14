@@ -30,8 +30,6 @@ class KeystoreCredentialsStore(context: Context, json: Json) : CredentialsStore 
 
     override fun save(credentials: AccountCredentials) = encryptedStore.save(credentials)
 
-    override fun clear() = encryptedStore.clear()
-
     private companion object {
         const val KEY_ALIAS = "nextgallery.credentials.v1"
         const val PREFERENCES_NAME = "nextgallery.credentials"

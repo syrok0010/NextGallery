@@ -145,7 +145,6 @@ class ViewerActionsTest {
                         SessionStore(object : CredentialsStore {
                             override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
                             override fun save(credentials: AccountCredentials) = Unit
-                            override fun clear() = Unit
                         }),
                     )
                 }

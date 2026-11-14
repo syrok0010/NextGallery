@@ -46,6 +46,4 @@ private class FakeCredentialsStore(private val credentials: AccountCredentials?)
     override fun load(): AccountCredentials? = credentials
 
     override fun save(credentials: AccountCredentials) = Unit
-
-    override fun clear() = Unit
 }

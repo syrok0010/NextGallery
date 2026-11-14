@@ -191,7 +191,6 @@ class TimelineSlotTileTest {
                             object : CredentialsStore {
                                 override fun load(): AccountCredentials = CREDENTIALS
                                 override fun save(credentials: AccountCredentials) = Unit
-                                override fun clear() = Unit
                             },
                         ),
                     ),

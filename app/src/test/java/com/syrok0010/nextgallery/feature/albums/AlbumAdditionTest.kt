@@ -200,7 +200,6 @@ class AlbumAdditionTest {
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials
         override fun save(credentials: AccountCredentials) = Unit
-        override fun clear() = Unit
     }
 
     private fun local(id: String) = MediaAssetRef.LocalContent("content://media/$id", 1, 1)
