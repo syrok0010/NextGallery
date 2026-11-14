@@ -10,6 +10,8 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 data class MemoriesCacheMetadataEntity(
     @PrimaryKey val id: Int = CACHE_METADATA_ID,
     val serverUrl: String,
+    /** The cached timeline is this user's view of [serverUrl]; another account must not see it. */
+    val userId: String,
     val memoriesVersion: String,
     val timelinePath: String?,
     val albumsEnabled: Boolean,

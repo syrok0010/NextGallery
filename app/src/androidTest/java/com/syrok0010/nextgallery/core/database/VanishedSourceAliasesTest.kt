@@ -314,9 +314,10 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun partialInitialResponseAndSeparateDayResponsesKeepAliases() = runBlocking {
-        val id = saveLinkedRemote()
         CloudResponses().use { server ->
             val onlineCredentials = credentials.copy(serverUrl = server.origin)
+            // The cache belongs to the account that later goes online; another account's is dropped.
+            val id = saveLinkedRemote(account = onlineCredentials)
             val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
             val repository = MemoriesRepository(
                 MemoriesApiClient(transport) { onlineCredentials }, cloudCache, registry,
@@ -363,17 +364,25 @@ class VanishedSourceAliasesTest {
         return id
     }
 
-    private suspend fun saveLinkedRemote(localAliases: Set<MediaAlias> = emptySet()): MediaId {
+    private suspend fun saveLinkedRemote(
+        localAliases: Set<MediaAlias> = emptySet(),
+        account: AccountCredentials = credentials,
+    ): MediaId {
         val id = resolve(local, localAliases)
         assertTrue(registry.link(local, remote))
         resolve(remote)
-        saveSnapshot(listOf(TimelineDay(DAY, 1)), listOf(item(remote, id)), setOf(DAY))
+        saveSnapshot(listOf(TimelineDay(DAY, 1)), listOf(item(remote, id)), setOf(DAY), account)
         return id
     }
 
-    private suspend fun saveSnapshot(days: List<TimelineDay>, items: List<MediaItem>, loaded: Set<Int>) {
+    private suspend fun saveSnapshot(
+        days: List<TimelineDay>,
+        items: List<MediaItem>,
+        loaded: Set<Int>,
+        account: AccountCredentials = credentials,
+    ) {
         cloudCache.saveTimelineSnapshot(
-            credentials,
+            account,
             TimelineSnapshotAssembler.assemble(
                 config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false),
                 days = days,

@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.timeline.persistence
 
 import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.LoadedDayEntity
+import com.syrok0010.nextgallery.core.database.MemoriesCacheMetadataEntity
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.ThumbnailCacheEntity
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
@@ -24,9 +25,7 @@ class TimelineCacheRepository(
     suspend fun loadTimelineSnapshot(credentials: AccountCredentials): TimelineSnapshot? =
         database.withTransaction {
             val metadata = timelineDao.metadata() ?: return@withTransaction null
-            if (metadata.serverUrl != credentials.normalizedServerUrl()) {
-                return@withTransaction null
-            }
+            if (!metadata.belongsTo(credentials)) return@withTransaction null
 
             val loadedDayIds = timelineDao.loadedDayIds().toSet()
             val mediaItems = timelineDao
@@ -46,7 +45,13 @@ class TimelineCacheRepository(
         val newCounts = snapshot.days.associate { it.dayId to it.count }
         val now = System.currentTimeMillis()
 
+        var accountChanged = false
         val staleThumbnailRows = database.withTransaction {
+            // Another account's rows must not survive under matching day counts.
+            if (timelineDao.metadata()?.belongsTo(credentials) == false) {
+                clearInTransaction()
+                accountChanged = true
+            }
             val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
             val invalidatedDayIds = oldCounts
                 .filter { (dayId, oldCount) -> newCounts[dayId] != oldCount }
@@ -54,7 +59,7 @@ class TimelineCacheRepository(
             val staleThumbnails = thumbnailRowsForDays(invalidatedDayIds)
             timelineDao.upsertMetadata(
                 requireNotNull(snapshot.config) { "Only a Memories timeline can be cached" }
-                    .toCacheMetadataEntity(normalizedServerUrl, now),
+                    .toCacheMetadataEntity(normalizedServerUrl, credentials.userId, now),
             )
             timelineDao.deleteTimelineDays()
             timelineDao.upsertTimelineDays(
@@ -87,7 +92,11 @@ class TimelineCacheRepository(
             saveSnapshotDetailsInTransaction(snapshot, now)
             staleThumbnails
         }
-        thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
+        if (accountChanged) {
+            thumbnailFileStore.clear()
+        } else {
+            thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
+        }
     }
 
     suspend fun saveDayDetails(items: List<MediaItem>, loadedDayIds: Set<Int>) {
@@ -106,16 +115,21 @@ class TimelineCacheRepository(
     }
 
     suspend fun clear() {
-        database.withTransaction {
-            thumbnailDao.deleteAll()
-            timelineDao.deleteAllLoadedDays()
-            timelineDao.deleteAllMediaItems()
-            identityRegistry.removeSource(MediaSourceKind.Memories)
-            timelineDao.deleteTimelineDays()
-            timelineDao.deleteMetadata()
-        }
+        database.withTransaction { clearInTransaction() }
         thumbnailFileStore.clear()
     }
+
+    private suspend fun clearInTransaction() {
+        thumbnailDao.deleteAll()
+        timelineDao.deleteAllLoadedDays()
+        timelineDao.deleteAllMediaItems()
+        identityRegistry.removeSource(MediaSourceKind.Memories)
+        timelineDao.deleteTimelineDays()
+        timelineDao.deleteMetadata()
+    }
+
+    private fun MemoriesCacheMetadataEntity.belongsTo(credentials: AccountCredentials): Boolean =
+        serverUrl == credentials.normalizedServerUrl() && userId == credentials.userId
 
     private suspend fun retireMissingAliasesInTransaction(items: List<MediaItem>) {
         val currentFileIds = items.map { it.remoteFileId }.toSet()

@@ -113,9 +113,18 @@ class UploadQueueRuntimeTest {
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
         var loggedOut = false
-        assertTrue(queue.logout { loggedOut = true; sessions.signOut() })
+        assertNull(queue.logout { loggedOut = true; sessions.signOut() })
         assertTrue(loggedOut)
         assertTrue(journal.jobs(owner).isEmpty())
+    }
+
+    @Test fun failingToClearTheSessionIsNotReportedAsUnfinishedUploads() = runBlocking {
+        enqueue()
+        queue.cancelAll()
+        waitFor { phases().all { it == UploadPhase.Cancelled } }
+
+        assertEquals(LogoutRefusal.Failed, queue.logout { throw IOException("credentials not cleared") })
+        assertTrue(sessions.session.value is SessionUiState.SignedIn)
     }
 
     @Test fun cancelCommittedBeforeTheResponseFencesAcceptAndEveryFollowUp() = runBlocking {
@@ -179,13 +188,13 @@ class UploadQueueRuntimeTest {
         queue.drain(::transfer)
         assertEquals(0, transfers)
         waitFor { phases().all { it == UploadPhase.NeedsAttention } }
-        assertFalse(queue.logout { error("Unfinished jobs must block logout") })
+        assertEquals(LogoutRefusal.UnfinishedWork, queue.logout { error("Unfinished jobs must block logout") })
         settled { queue.clearFinished() }
         // Clearing hides finished rows; both jobs that need attention stay visible.
         assertEquals(2, journal.jobs(owner).count { !it.hidden })
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
-        assertTrue(queue.logout { sessions.signOut() })
+        assertNull(queue.logout { sessions.signOut() })
     }
 
     @Test fun albumStepAfterReopenIsRecoveredAndNeverPutsAgain() = runBlocking {
@@ -204,7 +213,7 @@ class UploadQueueRuntimeTest {
         albumAdds = false
         queue.drain(::transfer)
         waitFor { queue.entries.value.single().retryable }
-        assertFalse(queue.logout { error("The album step is unresolved") })
+        assertEquals(LogoutRefusal.UnfinishedWork, queue.logout { error("The album step is unresolved") })
         albumAdds = true
         val scheduled = schedules
         queue.retry(queue.entries.value.single().id)
@@ -425,13 +434,13 @@ class UploadQueueRuntimeTest {
         queue.consumeResult()
         waitFor { queue.result.value == null }
         assertEquals(listOf(UploadPhase.NeedsAttention), phases())
-        assertFalse(queue.logout { error("Viewing a result does not finish the job") })
+        assertEquals(LogoutRefusal.UnfinishedWork, queue.logout { error("Viewing a result does not finish the job") })
         reopen()
         waitFor { queue.entries.value.isNotEmpty() }
         assertNull(queue.result.value)
         queue.cancelAll()
         waitFor { queue.result.value?.cancelled == 1 }
-        assertTrue(queue.logout { sessions.signOut() })
+        assertNull(queue.logout { sessions.signOut() })
     }
 
     @Test fun emptySelectionIsNotAStorageFailureAndARejectedJournalPublishesNothing() = runBlocking {

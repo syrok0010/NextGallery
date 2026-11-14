@@ -150,18 +150,18 @@ internal class UploadQueue(
 
     override fun consumeAll() = consumeResult()
 
-    /** Signs out through [clearSession] unless some upload work is unfinished. */
-    suspend fun logout(clearSession: () -> Unit): Boolean =
+    /** Signs out through [clearSession] unless some upload work is unfinished; null once signed out. */
+    suspend fun logout(clearSession: () -> Unit): LogoutRefusal? =
         commands.withLock {
-            val owner = owner() ?: return@withLock false
+            val owner = owner() ?: return@withLock null
             try {
-                if (!journal.clearIfFinished(owner)) return@withLock false
+                if (!journal.clearIfFinished(owner)) return@withLock LogoutRefusal.UnfinishedWork
                 clearSession()
-                true
+                null
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                false
+                LogoutRefusal.Failed
             }
         }
 
@@ -359,3 +359,12 @@ private suspend fun attempt(action: suspend () -> Boolean): StepState? =
     } catch (error: Exception) {
         if (error.temporary) null else StepState.Attention
     }
+
+/** Why [UploadQueue.logout] kept the session. */
+internal enum class LogoutRefusal {
+    /** Uploads or their follow-up actions are not finished or cancelled yet. */
+    UnfinishedWork,
+
+    /** The journal or the stored credentials could not be cleared; signing out can be repeated. */
+    Failed,
+}
