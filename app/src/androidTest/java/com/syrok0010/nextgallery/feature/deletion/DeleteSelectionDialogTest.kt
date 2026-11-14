@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.deletion
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -62,6 +65,23 @@ class DeleteSelectionDialogTest {
         // Only cloud copies are chosen, and they cannot be deleted before the answer.
         rule.onNodeWithText(string(R.string.delete_scope_cloud)).performClick()
         rule.onNodeWithText(string(R.string.delete_confirm)).assertIsNotEnabled()
+    }
+
+    @Test fun answeredServerAllowsCloudOnlySelection() {
+        var status by mutableStateOf(CloudTrashStatus.Available)
+        rule.setContent {
+            NextGalleryTheme {
+                DeleteSelectionDialog(
+                    DeletionPlan(phoneOnly = 0, cloudOnly = 2, merged = 0),
+                    cloudTrash = status,
+                    onDismiss = {},
+                    onConfirm = {},
+                )
+            }
+        }
+        rule.onNodeWithText(string(R.string.delete_confirm)).assertIsEnabled()
+        status = CloudTrashStatus.Missing
+        rule.onNodeWithText(string(R.string.delete_confirm)).assertIsEnabled()
     }
 
     @Test fun unreachableServerBlocksCloudOnlySelection() {

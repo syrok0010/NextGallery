@@ -6,6 +6,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -47,11 +48,11 @@ class UploadsBackTest {
             }
             rule.mainClock.advanceTimeBy(500)
             val dragged = rule.onNodeWithText(title).getBoundsInRoot()
-            val photosShown = rule
-                .onAllNodesWithText(
-                    string(R.string.library_photos),
-                ).fetchSemanticsNodes()
-                .size
+            val photoNodes = rule.onAllNodesWithText(string(R.string.library_photos))
+            val photos = photoNodes.fetchSemanticsNodes().indices.map {
+                photoNodes[it]
+                    .getBoundsInRoot()
+            }
             rule.runOnUiThread { back.dispatchOnBackCancelled() }
             rule.mainClock.autoAdvance = true
 
@@ -59,7 +60,11 @@ class UploadsBackTest {
                 "resting=$resting dragged=$dragged",
                 dragged.left > resting.left,
             )
-            assertTrue("Photos stays hidden behind the dragged Uploads", photosShown > 0)
+            // Photos fills the strip that the dragged Uploads uncovers on the left.
+            assertTrue(
+                "photos=$photos dragged=$dragged",
+                photos.any { it.right > 0.dp && it.left < dragged.left },
+            )
         } finally {
             rule.runOnUiThread {
                 when (previousSession) {
