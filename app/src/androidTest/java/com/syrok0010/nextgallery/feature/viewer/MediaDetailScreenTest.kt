@@ -52,7 +52,6 @@ class MediaDetailScreenTest {
         rule.runOnIdle {
             assertEquals(items[1], current)
         }
-        saveScreenshot("photo")
         rule
             .onNodeWithContentDescription(
                 rule.activity.getString(R.string.action_back),
@@ -68,7 +67,6 @@ class MediaDetailScreenTest {
         showViewer(listOf(item), tileBounds = null, onClose = { closed = it })
 
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
-        saveScreenshot("video")
         rule.onRoot().performTouchInput { swipeDown() }
         rule.waitForIdle()
         rule.runOnIdle { assertEquals(item, closed) }
@@ -179,7 +177,6 @@ class MediaDetailScreenTest {
         rule.onNodeWithText("zoomed.jpg").assertIsDisplayed()
         rule.onRoot().performTouchInput { swipeDown() }
         rule.runOnIdle { assertNull(closed) }
-        saveScreenshot("zoom-after-reorder")
 
         rule.onRoot().performTouchInput { doubleClick() }
         rule.waitForIdle()
@@ -280,16 +277,5 @@ class MediaDetailScreenTest {
             isVideo = isVideo, videoDurationSeconds = null, isFavorite = false, isHidden = false,
             assetRef = MediaAssetRef.LocalContent(file.toURI().toString(), 123, 1),
         )
-    }
-
-    private fun saveScreenshot(name: String) {
-        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
-        val directory = File(
-            rule.activity.getExternalFilesDir(null),
-            "detail-refactor",
-        ).apply { mkdirs() }
-        File(directory, "$name.png").outputStream().use {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-        }
     }
 }

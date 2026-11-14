@@ -23,6 +23,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.MediaSlotTile
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.string
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -152,15 +153,24 @@ class TimelineSlotTileTest {
             .fetchSemanticsNode()
             .boundsInRoot
 
-        assertTrue(localBounds.right <= cloudBounds.left)
-        assertTrue(localBounds.top == cloudBounds.top)
-        composeRule
+        val tile = composeRule
             .onNode(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.StateDescription,
                     "$LOCAL_COPY_DESCRIPTION, $CLOUD_COPY_DESCRIPTION",
                 ) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick),
             ).assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+
+        // Phone then cloud, side by side on one row.
+        assertTrue("local=$localBounds cloud=$cloudBounds", localBounds.right <= cloudBounds.left)
+        assertEquals(localBounds.center.y, cloudBounds.center.y, 1f)
+        // Both sit in the tile's top-right quarter.
+        listOf(localBounds, cloudBounds).forEach { indicator ->
+            assertTrue("tile=$tile indicator=$indicator", indicator.left >= tile.center.x)
+            assertTrue("tile=$tile indicator=$indicator", indicator.bottom <= tile.center.y)
+        }
     }
 
     private fun showSlot(mediaItem: MediaItem?) {
