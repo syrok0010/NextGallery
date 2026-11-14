@@ -196,6 +196,7 @@
     <string name="uploads_section_uploading">Uploading</string>
     <string name="uploads_section_waiting">Queued</string>
     <string name="uploads_section_done">Done</string>
+    <string name="uploads_section_attention">Needs attention</string>
     <string name="uploads_section_count_size">%1$s · %2$d · %3$s</string>
     <string name="uploads_sent">%1$s / %2$s</string>
     <string name="uploads_saving">Assembling the file</string>
