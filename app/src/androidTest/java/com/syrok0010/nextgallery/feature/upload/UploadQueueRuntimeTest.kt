@@ -88,6 +88,14 @@ class UploadQueueRuntimeTest {
 
     private suspend fun waitFor(predicate: suspend () -> Boolean) = withTimeout(5_000) { while (!predicate()) delay(10) }
 
+    /** Runs [block] and waits for every coroutine it launched in the queue's scope, such as a command. */
+    private suspend fun settled(block: suspend () -> Unit) {
+        val job = scope.coroutineContext[Job]!!
+        val before = job.children.toSet()
+        block()
+        withTimeout(5_000) { (job.children.toSet() - before).forEach { it.join() } }
+    }
+
     /** Runnable jobs nobody holds, read from the journal. */
     private suspend fun waiting() = journal.jobs(owner).count { it.waiting }
 
@@ -172,9 +180,8 @@ class UploadQueueRuntimeTest {
         assertEquals(0, transfers)
         waitFor { phases().all { it == UploadPhase.NeedsAttention } }
         assertFalse(queue.logout { error("Unfinished jobs must block logout") })
-        queue.clearFinished()
-        delay(50)
-        assertEquals(2, queue.entries.value.size)
+        settled { queue.clearFinished() }
+        assertEquals(2, journal.jobs(owner).size)
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
         assertTrue(queue.logout { sessions.signOut() })
@@ -280,6 +287,8 @@ class UploadQueueRuntimeTest {
         stopped.cancel()
         val next = async(Dispatchers.Default) { queue.drain(put) }
         try {
+            // A pass that does not wait would start its transfer within this window; one that
+            // waits is blocked until the response below, so this can only miss a bug, never flake.
             delay(200)
             assertEquals("The next pass waits for the stopped one", 1, transfers)
         } finally {
@@ -301,9 +310,10 @@ class UploadQueueRuntimeTest {
         assertEquals(base + 1, schedules)
         reopen()
         waitFor { schedules == base + 2 }
-        assertTrue(queue.drain { _, _, _ -> throw IOException("offline") })
-        queue.drain(::transfer)
-        delay(50)
+        settled {
+            assertTrue(queue.drain { _, _, _ -> throw IOException("offline") })
+            queue.drain(::transfer)
+        }
         assertEquals("A deferral and finishing schedule nothing", base + 2, schedules)
     }
 
@@ -317,8 +327,7 @@ class UploadQueueRuntimeTest {
         queue.retryNow()
         waitFor { restarts == 1 }
         assertFalse(queue.paused.value)
-        queue.retryNow()
-        delay(50)
+        settled { queue.retryNow() }
         assertEquals("No second restart while the first one is pending", 1, restarts)
 
         // The early pass succeeds; nothing is left to retry.

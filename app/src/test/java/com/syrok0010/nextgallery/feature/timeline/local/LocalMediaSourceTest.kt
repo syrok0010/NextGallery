@@ -11,7 +11,6 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -26,9 +25,9 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -151,9 +150,8 @@ class LocalMediaSourceTest {
     }
 
     @Test
-    fun `burst of MediaStore changes publishes one reconciled projection after debounce`() = runBlocking {
+    fun `burst of MediaStore changes publishes one reconciled projection after debounce`() = runTest {
         val changes = Channel<Unit>(Channel.UNLIMITED)
-        val store = InMemoryLocalMediaProjectionStore()
         var scanNumber = 0
         val source = LocalMediaSource(
             reader = LocalMediaReader {
@@ -165,30 +163,30 @@ class LocalMediaSourceTest {
                     ),
                 )
             },
-            projectionStore = store,
+            projectionStore = InMemoryLocalMediaProjectionStore(),
             identityRegistry = InMemoryMediaIdentityRegistry(),
             changeObserver = LocalMediaChangeObserver(changes::receiveAsFlow),
-            changeDebounce = 25.milliseconds,
+            computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+            changeDebounce = DEBOUNCE,
         )
-        val firstScan = CompletableDeferred<Unit>()
-        val secondScan = CompletableDeferred<Unit>()
         val publishedNames = mutableListOf<String>()
-        val collection = launch {
+        backgroundScope.launch {
             source.updates(emptyFlow()).collect { state ->
-                state.items.singleOrNull()?.displayName?.let { name ->
-                    publishedNames += name
-                    when (name) {
-                        "scan-1" -> firstScan.complete(Unit)
-                        "scan-2" -> secondScan.complete(Unit)
-                    }
-                }
+                state.items.singleOrNull()?.displayName?.let { publishedNames += it }
             }
         }
-        withTimeout(1_000) { firstScan.await() }
+        runCurrent()
+        assertEquals(listOf("scan-1"), publishedNames.distinct())
 
-        repeat(3) { changes.send(Unit) }
-        withTimeout(1_000) { secondScan.await() }
-        collection.cancelAndJoin()
+        // Each change comes before the previous one's quiet period ends.
+        repeat(3) {
+            changes.send(Unit)
+            advanceTimeBy(DEBOUNCE / 2)
+        }
+        runCurrent()
+        assertEquals(1, scanNumber)
+        advanceTimeBy(DEBOUNCE)
+        runCurrent()
 
         assertEquals(2, scanNumber)
         assertEquals(listOf("scan-1", "scan-2"), publishedNames.distinct())
@@ -508,6 +506,10 @@ class LocalMediaSourceTest {
         isHidden = false,
         assetRef = MediaAssetRef.LocalContent(uri, timestamp, 1),
     )
+
+    private companion object {
+        val DEBOUNCE = 1_000.milliseconds
+    }
 }
 
 private fun MediaItem.localContentUri(): String =

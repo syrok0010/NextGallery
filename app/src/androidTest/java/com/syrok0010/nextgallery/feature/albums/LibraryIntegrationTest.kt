@@ -7,7 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -24,7 +23,6 @@ import com.syrok0010.nextgallery.feature.images.thumbnailRequest
 import com.syrok0010.nextgallery.core.network.loopbackServer
 import com.syrok0010.nextgallery.core.network.origin
 import java.io.ByteArrayOutputStream
-import java.io.File
 import mockwebserver3.MockResponse
 import okio.Buffer
 import kotlinx.coroutines.Dispatchers
@@ -66,11 +64,11 @@ class LibraryIntegrationTest {
                         .size(300, 300).build())
                 }
                 assertTrue((imageResult as? ErrorResult)?.throwable?.stackTraceToString().orEmpty(), imageResult is SuccessResult)
+                // The tile shows the decoded thumbnail, not its placeholder: the fixture's centre is dark green.
                 rule.waitUntil(15_000) {
                     val pixels = rule.onNodeWithContentDescription("fixture-1.jpg").captureToImage().toPixelMap()
                     pixels[pixels.width / 2, pixels.height / 2].green > pixels[pixels.width / 2, pixels.height / 2].red * 1.2f
                 }
-                screenshot("photos")
                 rule.onNodeWithContentDescription("fixture-1.jpg").performClick()
                 rule.onNodeWithTag("library_island").assertDoesNotExist()
                 rule.onNodeWithContentDescription(string(R.string.action_back)).performClick()
@@ -86,7 +84,6 @@ class LibraryIntegrationTest {
                 val albumAnchor = rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top
                 restoration.emulateSavedInstanceStateRestore()
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
-                screenshot("album-contents")
                 rule.onNodeWithContentDescription("album-120.jpg").performClick()
                 restoration.emulateSavedInstanceStateRestore()
                 rule.onNodeWithText("album-120.jpg").assertIsDisplayed()
@@ -95,7 +92,6 @@ class LibraryIntegrationTest {
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
                 Espresso.pressBack()
                 rule.onNodeWithTag("album_catalog").assertIsDisplayed()
-                screenshot("albums")
                 rule.onNodeWithTag("album_catalog").performScrollToIndex(5)
                 val anchor = rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top
                 restoration.emulateSavedInstanceStateRestore()
@@ -122,15 +118,6 @@ class LibraryIntegrationTest {
                     }
                 }
             }
-        }
-    }
-    private fun screenshot(name: String) {
-        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
-        val directory = (output?.let(::File)
-            ?: File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "redesign-81"))
-            .apply { mkdirs() }
-        rule.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
-            File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
     }
 }

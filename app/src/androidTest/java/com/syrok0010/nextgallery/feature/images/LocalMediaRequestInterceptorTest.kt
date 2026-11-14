@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import coil3.ImageLoader
+import coil3.intercept.Interceptor
 import coil3.Uri
 import coil3.asImage
 import coil3.decode.DataSource
@@ -44,6 +45,9 @@ class LocalMediaRequestInterceptorTest {
         val release = CountDownLatch(1)
         val opens = AtomicInteger()
         val blocks = AtomicInteger()
+        val queuedCount = 30
+        // Counts requests that reached the permit gate; the interceptor added first runs first.
+        val arrived = CountDownLatch(permits + queuedCount)
         fun block() {
             blocks.incrementAndGet()
             entered.countDown()
@@ -51,6 +55,7 @@ class LocalMediaRequestInterceptorTest {
         }
         val loader = ImageLoader.Builder(context)
             .components {
+                add(Interceptor { chain -> arrived.countDown(); chain.proceed() })
                 add(LocalMediaRequestInterceptor())
                 add(Fetcher.Factory<Uri> { _, options, _ ->
                     Fetcher {
@@ -79,9 +84,14 @@ class LocalMediaRequestInterceptorTest {
         try {
             assertTrue(withContext(Dispatchers.IO) { entered.await(5, TimeUnit.SECONDS) })
             first.forEach { it.cancel() }
-            val queued = (permits + 1..permits + 30).map { async(Dispatchers.Default) { loader.execute(request(it)) } }
+            val queued = (permits + 1..permits + queuedCount).map {
+                async(Dispatchers.Default) { loader.execute(request(it)) }
+            }
             try {
-                delay(400)
+                assertTrue(withContext(Dispatchers.IO) { arrived.await(5, TimeUnit.SECONDS) })
+                // Every queued request is at the gate now. One let through would open its file within
+                // this window; the check can only miss such a bug, never fail a correct gate.
+                delay(200)
                 assertEquals("Cancelled blocking work must still occupy every permit", permits, opens.get())
                 assertEquals(permits, blocks.get())
                 queued.forEach { it.cancel() }
@@ -92,7 +102,7 @@ class LocalMediaRequestInterceptorTest {
             }
             withTimeout(5_000) { first.forEach { it.join() } }
             assertEquals("Cancelled queued requests must never open a file", permits, opens.get())
-            withTimeout(5_000) { loader.execute(request(permits + 31)) }
+            withTimeout(5_000) { loader.execute(request(permits + queuedCount + 1)) }
             assertEquals("Permits must be reusable after cleanup", permits + 1, opens.get())
         } finally {
             release.countDown()
