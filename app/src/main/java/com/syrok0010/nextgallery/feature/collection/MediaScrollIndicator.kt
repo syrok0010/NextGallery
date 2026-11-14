@@ -157,7 +157,7 @@ private fun TimelineScrollTooltip(
 
 @Composable
 internal fun MediaScrollIndicatorHost(
-    grid: MediaGridSnapshot,
+    layout: MediaGridLayout,
     gridState: LazyGridState,
     isDragging: Boolean,
     onDragStateChange: (Boolean) -> Unit,
@@ -167,36 +167,18 @@ internal fun MediaScrollIndicatorHost(
     val scrollDispatcher = remember(coroutineScope, gridState) {
         TimelineHandleScrollDispatcher(scope = coroutineScope, gridState = gridState)
     }
-    scrollDispatcher.slotGridIndexes = grid.slotGridIndexes
+    scrollDispatcher.layout = layout
     var dragFraction by remember { mutableStateOf<Float?>(null) }
-    val scrollInfo = remember(grid, gridState) {
-        derivedStateOf {
-            val visibleSlot = grid
-                .measuredSlots(gridState.layoutInfo.visibleItemsInfo.map { it.key })
-                .map { it.slotIndex to it.slot.dayId }
-                .minByOrNull { it.first }
-            val totalSlots = grid.slots.size
-            val fraction = if (visibleSlot == null || totalSlots <= 1) {
-                0f
-            } else {
-                visibleSlot.first.toFloat() / (totalSlots - 1).toFloat()
-            }
-
-            TimelineScrollInfo(
-                dayId = visibleSlot?.second,
-                fraction = fraction.coerceIn(0f, 1f),
-            )
-        }
-    }
+    val scrollInfo = remember(layout) { derivedStateOf { layout.scrollPosition() } }
     val displayFraction = remember(scrollInfo) {
         {
             dragFraction ?: scrollInfo.value.fraction
         }
     }
-    val displayDayIdState = remember(grid, scrollInfo) {
+    val displayDayIdState = remember(layout, scrollInfo) {
         derivedStateOf {
             dragFraction
-                ?.let { grid.slots.dayIdAtFraction(it) }
+                ?.let(layout::dayAt)
                 ?: scrollInfo.value.dayId
         }
     }
@@ -238,17 +220,6 @@ internal fun MediaScrollIndicatorHost(
     )
 }
 
-private data class TimelineScrollInfo(val dayId: Int?, val fraction: Float)
-
-private fun List<MediaSlot>.dayIdAtFraction(fraction: Float): Int? {
-    if (isEmpty()) {
-        return null
-    }
-
-    val slotIndex = ((size - 1) * fraction.coerceIn(0f, 1f)).toInt()
-    return getOrNull(slotIndex)?.dayId
-}
-
 /**
  * Scrolls after the handle, one jump at a time. One dispatcher lives as long as the grid: a jump
  * still pending when the list changes lands by the list it scrolls in, not the one it was asked in.
@@ -257,7 +228,7 @@ private class TimelineHandleScrollDispatcher(
     private val scope: CoroutineScope,
     private val gridState: LazyGridState,
 ) {
-    var slotGridIndexes = IntArray(0)
+    var layout = MediaGridLayout(emptyList()) { emptyList() }
     private var activeJob: Job? = null
     private var pendingFraction: Float? = null
 
@@ -270,7 +241,7 @@ private class TimelineHandleScrollDispatcher(
             while (true) {
                 val next = pendingFraction ?: break
                 pendingFraction = null
-                val gridIndex = slotGridIndexes.gridIndexAtFraction(next) ?: break
+                val gridIndex = layout.gridIndexAt(next) ?: break
                 if (gridIndex == lastGridIndex) continue
                 lastGridIndex = gridIndex
                 gridState.scrollToItem(gridIndex)

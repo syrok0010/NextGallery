@@ -31,67 +31,38 @@ internal fun MediaGridPanel(
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
-    val grid = remember(slots) { MediaGridSnapshot(slots) }
-    val gridItems = grid.items
+    val layout = remember(slots, gridState) { MediaGridLayout(slots) { gridState.measuredItems() } }
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
     PreserveMediaScrollAnchor(
-        gridItems = gridItems,
+        gridItems = layout.items,
         gridState = gridState,
         isScrollNavigationActive = isDraggingScrollIndicator || revealMediaId != null,
     )
 
-    LaunchedEffect(grid) {
-        snapshotFlow {
-            val visibleSlotIndexes = grid
-                .measuredSlots(gridState.layoutInfo.visibleItemsInfo.map { it.key })
-                .map { it.slotIndex }
-            val firstSlotIndex = visibleSlotIndexes.minOrNull()
-            val lastSlotIndex = visibleSlotIndexes.maxOrNull()
-            TimelineVisibleRange(
-                firstSlotIndex = firstSlotIndex,
-                lastSlotIndex = lastSlotIndex,
-                loadingMode = if (isDraggingScrollIndicator) {
-                    TimelineVisibleRangeLoadingMode.Debounced
-                } else {
-                    TimelineVisibleRangeLoadingMode.Immediate
-                },
-            )
-        }.collect {
-            val visibleRange = it.takeIfReady() ?: return@collect
-
-            when (visibleRange.loadingMode) {
-                TimelineVisibleRangeLoadingMode.Immediate -> {
-                    onViewportObservation(
-                        MediaViewportObservation(
-                            firstVisibleSlotIndex = visibleRange.firstSlotIndex,
-                            lastVisibleSlotIndex = visibleRange.lastSlotIndex,
-                            loadingMode = MediaViewportLoadingMode.Immediate,
-                        ),
-                    )
-                }
-
-                TimelineVisibleRangeLoadingMode.Debounced -> {
-                    onViewportObservation(
-                        MediaViewportObservation(
-                            firstVisibleSlotIndex = visibleRange.firstSlotIndex,
-                            lastVisibleSlotIndex = visibleRange.lastSlotIndex,
-                            loadingMode = MediaViewportLoadingMode.Debounced,
-                        ),
-                    )
-                }
+    LaunchedEffect(layout) {
+        snapshotFlow { layout.visibleSlots()?.let { it to isDraggingScrollIndicator } }
+            .collect { visible ->
+                val (slotRange, dragging) = visible ?: return@collect
+                onViewportObservation(
+                    MediaViewportObservation(
+                        firstVisibleSlotIndex = slotRange.first,
+                        lastVisibleSlotIndex = slotRange.last,
+                        // Fast scrolling passes many days: only where it stops is loaded.
+                        loadingMode = if (dragging) {
+                            MediaViewportLoadingMode.Debounced
+                        } else {
+                            MediaViewportLoadingMode.Immediate
+                        },
+                    ),
+                )
             }
-        }
     }
 
-    LaunchedEffect(revealMediaId, gridItems) {
+    LaunchedEffect(revealMediaId, layout) {
         val mediaId = revealMediaId ?: return@LaunchedEffect
-        val targetGridIndex = gridItems.indexOfFirst { item ->
-            item is MediaGridItem.Slot && item.slot.mediaItem?.mediaId == mediaId
-        }
-        if (targetGridIndex >= 0) {
-            gridState.scrollToItem(targetGridIndex)
-            onMediaRevealed()
-        }
+        val gridIndex = layout.gridIndexOf(mediaId) ?: return@LaunchedEffect
+        gridState.scrollToItem(gridIndex)
+        onMediaRevealed()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -102,7 +73,7 @@ internal fun MediaGridPanel(
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
                 MediaGrid(
-                    grid = grid,
+                    layout = layout,
                     gridState = gridState,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
@@ -111,7 +82,7 @@ internal fun MediaGridPanel(
                 )
 
                 MediaScrollIndicatorHost(
-                    grid = grid,
+                    layout = layout,
                     gridState = gridState,
                     isDragging = isDraggingScrollIndicator,
                     onDragStateChange = { isDraggingScrollIndicator = it },
@@ -120,32 +91,4 @@ internal fun MediaGridPanel(
             }
         }
     }
-}
-
-private data class TimelineVisibleRange(
-    val firstSlotIndex: Int?,
-    val lastSlotIndex: Int?,
-    val loadingMode: TimelineVisibleRangeLoadingMode,
-)
-
-private data class ReadyTimelineVisibleRange(
-    val firstSlotIndex: Int,
-    val lastSlotIndex: Int,
-    val loadingMode: TimelineVisibleRangeLoadingMode,
-)
-
-private enum class TimelineVisibleRangeLoadingMode {
-    Immediate,
-    Debounced,
-}
-
-private fun TimelineVisibleRange.takeIfReady(): ReadyTimelineVisibleRange? {
-    val firstSlotIndex = firstSlotIndex ?: return null
-    val lastSlotIndex = lastSlotIndex ?: return null
-
-    return ReadyTimelineVisibleRange(
-        firstSlotIndex = firstSlotIndex,
-        lastSlotIndex = lastSlotIndex,
-        loadingMode = loadingMode,
-    )
 }
