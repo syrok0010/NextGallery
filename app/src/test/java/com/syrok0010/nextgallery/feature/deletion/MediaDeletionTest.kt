@@ -303,7 +303,7 @@ class MediaDeletionTest {
                 repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
                 repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
                 assertEquals(
-                    DeletionProgress(fileIds = setOf(1, 2, 3), total = 3, processed = 0),
+                    DeletionProgress(queued = listOf(1, 3, 2), total = 3, processed = 0),
                     repository.state.value.running,
                 )
                 release.countDown()
@@ -318,9 +318,67 @@ class MediaDeletionTest {
         }
     }
 
+    @Test fun `a file named again by a queued deletion stays marked until that one ends too`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val release = CountDownLatch(1)
+        try {
+            val calls = AtomicInteger()
+            val finished = AtomicInteger()
+            val repository = MediaDeletionRepository(
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                MediaLibraryIndex(),
+                // The first request deletes at once; the second waits for the server.
+                CloudTrash { _, _ ->
+                    if (calls.incrementAndGet() > 1) release.await()
+                    true
+                },
+                InMemoryMediaIdentityRegistry(),
+                { it },
+                scope,
+            ) { finished.incrementAndGet() }
+
+            repository.delete(DeletionTargets(emptyList(), listOf(1)))
+            repository.delete(DeletionTargets(emptyList(), listOf(1)))
+            withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
+
+            assertEquals(setOf(1L), repository.state.value.running?.fileIds)
+            release.countDown()
+            withTimeout(5_000) { repository.state.first { it.running == null } }
+            assertEquals(2, finished.get())
+        } finally {
+            release.countDown()
+            scope.cancel()
+        }
+    }
+
+    @Test fun `an unreadable phone trash check counts the confirmed copies as trashed`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val repository = MediaDeletionRepository(
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                MediaLibraryIndex(),
+                CloudTrash { _, _ -> true },
+                InMemoryMediaIdentityRegistry(),
+                { error("MediaStore did not answer") },
+                scope,
+            ) {}
+
+            repository.delete(
+                targets(listOf("content://media/external/images/media/5", "content://media/external/images/media/7"), listOf(1)),
+            )
+
+            // The user confirmed the system dialog, so the phone half is not reported as failed.
+            assertEquals(
+                DeletionResult(phoneTrashed = 2, cloud = CloudDeleteResult(deleted = 1, failed = 0), phoneFailed = 0),
+                withTimeout(5_000) { repository.state.map { it.unseen }.filterNotNull().first() },
+            )
+        } finally {
+            scope.cancel()
+        }
+    }
+
     @Test fun `without a session every cloud copy counts as failed`() = runBlocking {
         NextcloudFixture(::server).use { fixture ->
-            // The session reset runs inside the constructor, not after the deletion.
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
             try {
                 val repository = MediaDeletionRepository(
