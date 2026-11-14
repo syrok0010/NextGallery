@@ -19,19 +19,19 @@ class ViewerSurfaceTransformTest {
 
             assertRectEquals(
                 tile,
-                screenBounds(surface, resolve(enter = opening, enterProgress = 0f)),
+                screenBounds(surface, opening.opening(0f)),
             )
             assertRectEquals(
                 surface,
-                screenBounds(surface, resolve(enter = opening, enterProgress = 1f)),
+                screenBounds(surface, opening.opening(1f)),
             )
             assertRectEquals(
                 surface,
-                screenBounds(surface, resolve(settle = closing, settleProgress = 0f)),
+                screenBounds(surface, closing.closing(0f)),
             )
             assertRectEquals(
                 tile,
-                screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+                screenBounds(surface, closing.closing(1f)),
             )
         }
     }
@@ -40,15 +40,15 @@ class ViewerSurfaceTransformTest {
     fun `committing predictive back continues from the current offset and scale`() {
         val surface = Rect(0f, 200f, 800f, 800f)
         val predictive = requireNotNull(surface.settleTarget(tile, Offset.Zero, 0f))
-        val before = resolve(predictive = predictive, backProgress = 0.4f)
+        val before = predictive.predictiveBack(0.4f)
         val closing = requireNotNull(surface.settleTarget(tile, Offset.Zero, 0.4f))
-        val after = resolve(settle = closing, settleProgress = 0f, backProgress = 0.4f)
+        val after = closing.closing(0f)
 
         assertEquals(before.offset, after.offset)
         assertEquals(before.scale, after.scale, 0.0001f)
         assertRectEquals(
             tile,
-            screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+            screenBounds(surface, closing.closing(1f)),
         )
     }
 
@@ -56,15 +56,15 @@ class ViewerSurfaceTransformTest {
     fun `closing after drag preserves initial offset and scale`() {
         val surface = Rect(0f, 200f, 800f, 800f)
         val drag = Offset(30f, 180f)
-        val before = resolve(drag = drag)
+        val before = draggedSurface(drag)
         val closing = requireNotNull(surface.settleTarget(tile, drag, 0f))
-        val after = resolve(settle = closing)
+        val after = closing.closing(0f)
 
         assertEquals(before.offset, after.offset)
         assertEquals(before.scale, after.scale, 0.0001f)
         assertRectEquals(
             tile,
-            screenBounds(surface, resolve(settle = closing, settleProgress = 1f)),
+            screenBounds(surface, closing.closing(1f)),
         )
     }
 
@@ -76,25 +76,6 @@ class ViewerSurfaceTransformTest {
         assertNull(Rect.Zero.enterTarget(tile))
         assertNull(Rect.Zero.settleTarget(tile, Offset.Zero, 0f))
     }
-
-    private fun resolve(
-        drag: Offset = Offset.Zero,
-        enter: ViewerBoundsTransform? = null,
-        enterProgress: Float = 0f,
-        settle: ViewerBoundsTransform? = null,
-        settleProgress: Float = 0f,
-        predictive: ViewerBoundsTransform? = null,
-        backProgress: Float = 0f,
-    ) = resolveViewerSurfaceTransform(
-        dragOffset = drag,
-        predictiveBackProgress = backProgress,
-        enterPending = false,
-        enterTarget = enter,
-        enterProgress = enterProgress,
-        settleTarget = settle,
-        settleProgress = settleProgress,
-        predictiveTarget = predictive,
-    )
 
     private fun screenBounds(surface: Rect, transform: ViewerSurfaceTransform): Rect {
         val local = (
