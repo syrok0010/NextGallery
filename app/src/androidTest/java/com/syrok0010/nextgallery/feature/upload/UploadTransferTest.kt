@@ -83,8 +83,13 @@ class UploadTransferTest {
         journal = UploadJournal(db)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         queue = UploadQueue(
-            sessions, MediaLibraryIndex(), scope, journal, { SourceStamp(1, 1, 1) },
-            UploadFollowUps(link = { _, _, _, _ -> true }, album = { _, _, _, _ -> true }), {},
+            sessions,
+            MediaLibraryIndex(),
+            scope,
+            journal,
+            { SourceStamp(1, 1, 1) },
+            UploadFollowUps(link = { _, _, _, _ -> true }, album = { _, _, _, _ -> true }),
+            {},
         )
         transfer = newTransfer()
     }
@@ -100,105 +105,176 @@ class UploadTransferTest {
         )
     }
 
-    @After fun cleanup() = runBlocking {
-        scope.coroutineContext[Job]!!.cancelAndJoin()
-        db.close()
-        context.deleteDatabase(dbName)
-        server.close()
-        photo.delete()
-        Unit
-    }
+    @After fun cleanup() =
+        runBlocking {
+            scope.coroutineContext[Job]!!.cancelAndJoin()
+            db.close()
+            context.deleteDatabase(dbName)
+            server.close()
+            photo.delete()
+            Unit
+        }
 
-    @Test fun phoneFileThatCannotBeReadIsAProblemWithTheSourceNotARetry() = runBlocking {
-        for (refusal in listOf(FileNotFoundException("deleted"), SecurityException("permission revoked"))) {
-            phoneRefuses = refusal
+    @Test fun phoneFileThatCannotBeReadIsAProblemWithTheSourceNotARetry() =
+        runBlocking {
+            for (refusal in listOf(
+                FileNotFoundException("deleted"),
+                SecurityException("permission revoked"),
+            )) {
+                phoneRefuses = refusal
+
+                val error = failure()
+
+                assertEquals(
+                    refusal.toString(),
+                    UploadProblem.Source,
+                    (error as UploadException).problem,
+                )
+                assertFalse(error.temporary)
+            }
+        }
+
+    @Test fun lostConnectionIsTemporary() =
+        runBlocking {
+            server.close()
 
             val error = failure()
 
-            assertEquals(refusal.toString(), UploadProblem.Source, (error as UploadException).problem)
-            assertFalse(error.temporary)
+            assertFalse(error.toString(), error is UploadException)
+            assertTrue(error.temporary)
         }
-    }
 
-    @Test fun lostConnectionIsTemporary() = runBlocking {
-        server.close()
+    @Test fun missingTimelineFolderIsAFolderProblem() =
+        runBlocking {
+            for (code in listOf(404, 409)) {
+                override = {
+                    if (it.method == "PUT") {
+                        MockResponse
+                            .Builder()
+                            .code(
+                                code,
+                            ).build()
+                    } else {
+                        null
+                    }
+                }
 
-        val error = failure()
+                val error = failure() as UploadException
 
-        assertFalse(error.toString(), error is UploadException)
-        assertTrue(error.temporary)
-    }
+                assertEquals(UploadProblem.Directory to code, error.problem to error.httpStatus)
+                assertFalse(error.temporary)
+            }
+        }
 
-    @Test fun missingTimelineFolderIsAFolderProblem() = runBlocking {
-        for (code in listOf(404, 409)) {
-            override = { if (it.method == "PUT") MockResponse.Builder().code(code).build() else null }
+    @Test fun otherServerAnswersKeepTheirStatusAndOnlyBusyOnesAreRetried() =
+        runBlocking {
+            for ((code, temporary) in listOf(
+                400 to false,
+                403 to false,
+                500 to true,
+                503 to true,
+                423 to true,
+            )) {
+                override = {
+                    if (it.method == "PUT") {
+                        MockResponse
+                            .Builder()
+                            .code(
+                                code,
+                            ).build()
+                    } else {
+                        null
+                    }
+                }
+
+                val error = failure() as UploadException
+
+                assertEquals(UploadProblem.Http to code, error.problem to error.httpStatus)
+                assertEquals("HTTP $code", temporary, error.temporary)
+            }
+        }
+
+    @Test fun memoriesFailureAndATimelineWithoutAFolderAreReportedAsSuch() =
+        runBlocking {
+            override = {
+                if ("memories" in it.target) {
+                    MockResponse
+                        .Builder()
+                        .code(
+                            500,
+                        ).build()
+                } else {
+                    null
+                }
+            }
+            val memories = failure() as UploadException
+            assertEquals(UploadProblem.Memories to 500, memories.problem to memories.httpStatus)
+
+            override = { null }
+            timelinePath = " ; "
+            val timeline = failure() as UploadException
+            assertEquals(UploadProblem.Timeline, timeline.problem)
+            assertFalse(requests.any { it.startsWith("PUT") })
+        }
+
+    @Test fun capabilitiesFailureKeepsItsStatus() =
+        runBlocking {
+            override = {
+                if ("capabilities" in it.target) {
+                    MockResponse
+                        .Builder()
+                        .code(
+                            503,
+                        ).build()
+                } else {
+                    null
+                }
+            }
 
             val error = failure() as UploadException
 
-            assertEquals(UploadProblem.Directory to code, error.problem to error.httpStatus)
-            assertFalse(error.temporary)
+            assertEquals(UploadProblem.Http to 503, error.problem to error.httpStatus)
+            assertTrue(error.temporary)
         }
-    }
 
-    @Test fun otherServerAnswersKeepTheirStatusAndOnlyBusyOnesAreRetried() = runBlocking {
-        for ((code, temporary) in listOf(507 to false, 403 to false, 503 to true, 423 to true)) {
-            override = { if (it.method == "PUT") MockResponse.Builder().code(code).build() else null }
+    @Test fun onlyAFileLargerThanOnePartIsSentInParts() =
+        runBlocking {
+            for (size in listOf(0L, PHOTO_SIZE.toLong(), PHOTO_SIZE + 1L)) {
+                partSize = size
+                transfer = newTransfer()
+                requests.clear()
 
-            val error = failure() as UploadException
+                assertNotNull(transfer.upload(credentials, claim()) {})
 
-            assertEquals(UploadProblem.Http to code, error.problem to error.httpStatus)
-            assertEquals("HTTP $code", temporary, error.temporary)
-        }
-    }
+                assertEquals("part size $size", listOf("PUT $PHOTO_PATH"), uploads())
+            }
 
-    @Test fun memoriesFailureAndATimelineWithoutAFolderAreReportedAsSuch() = runBlocking {
-        override = { if ("memories" in it.target) MockResponse.Builder().code(500).build() else null }
-        val memories = failure() as UploadException
-        assertEquals(UploadProblem.Memories to 500, memories.problem to memories.httpStatus)
-
-        override = { null }
-        timelinePath = " ; "
-        val timeline = failure() as UploadException
-        assertEquals(UploadProblem.Timeline, timeline.problem)
-        assertFalse(requests.any { it.startsWith("PUT") })
-    }
-
-    @Test fun capabilitiesFailureKeepsItsStatus() = runBlocking {
-        override = { if ("capabilities" in it.target) MockResponse.Builder().code(503).build() else null }
-
-        val error = failure() as UploadException
-
-        assertEquals(UploadProblem.Http to 503, error.problem to error.httpStatus)
-        assertTrue(error.temporary)
-    }
-
-    @Test fun onlyAFileLargerThanOnePartIsSentInParts() = runBlocking {
-        for (size in listOf(0L, PHOTO_SIZE.toLong(), PHOTO_SIZE + 1L)) {
-            partSize = size
+            partSize = 4
             transfer = newTransfer()
             requests.clear()
+            val uploaded = transfer.upload(credentials, claim()) {}
 
-            assertNotNull(transfer.upload(credentials, claim()) {})
-
-            assertEquals("part size $size", listOf("PUT $PHOTO_PATH"), uploads())
+            assertEquals(
+                PHOTO_PATH,
+                "/remote.php/dav/files/test/" + uploaded!!.path.segments.joinToString("/"),
+            )
+            val upload = uploads().first().substringAfter("MKCOL ")
+            assertTrue(upload, upload.startsWith("/remote.php/dav/uploads/test/"))
+            assertEquals(
+                listOf(
+                    "MKCOL $upload",
+                    "PUT $upload/1",
+                    "PUT $upload/2",
+                    "PUT $upload/3",
+                    "MOVE $upload/.file",
+                ),
+                uploads(),
+            )
         }
 
-        partSize = 4
-        transfer = newTransfer()
-        requests.clear()
-        val uploaded = transfer.upload(credentials, claim()) {}
-
-        assertEquals(PHOTO_PATH, "/remote.php/dav/files/test/" + uploaded!!.path.segments.joinToString("/"))
-        val upload = uploads().first().substringAfter(' ').substringBeforeLast('/')
-        assertTrue(upload, upload.startsWith("/remote.php/dav/uploads/test/"))
-        assertEquals(
-            listOf("MKCOL $upload", "PUT $upload/1", "PUT $upload/2", "PUT $upload/3", "MOVE $upload/.file"),
-            uploads(),
-        )
-    }
-
     /** Requests that create something on the server, without the reads around them. */
-    private fun uploads() = requests.filter { it.substringBefore(' ') in setOf("PUT", "MKCOL", "MOVE") }
+    private fun uploads() =
+        requests.filter { it.substringBefore(' ') in setOf("PUT", "MKCOL", "MOVE") }
 
     private suspend fun failure(): Exception {
         try {
@@ -226,7 +302,9 @@ class UploadTransferTest {
                 json("""{"version":"10.1.0","timeline_path":"$timelinePath"}""")
 
             "cloud/capabilities" in request.target ->
-                json("""{"ocs":{"data":{"capabilities":{"files":{"chunked_upload":{"max_size":$partSize}}}}}}""")
+                json(
+                    """{"ocs":{"data":{"capabilities":{"files":{"chunked_upload":{"max_size":$partSize}}}}}}""",
+                )
 
             request.method == "PROPFIND" -> MockResponse.Builder().code(404).build()
 
@@ -262,7 +340,12 @@ class UploadTransferTest {
 
         override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
 
-        override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+        override fun update(
+            uri: Uri,
+            values: ContentValues?,
+            selection: String?,
+            selectionArgs: Array<out String>?,
+        ) = 0
     }
 
     private companion object {
