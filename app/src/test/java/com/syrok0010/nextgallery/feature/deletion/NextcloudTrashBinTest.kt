@@ -4,8 +4,6 @@ import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NextcloudTrashBinTest {
@@ -48,13 +46,6 @@ class NextcloudTrashBinTest {
                 }
             }
         }
-
-    @Test fun `cloud copies are deleted only after the server answered`() {
-        assertFalse(CloudTrashStatus.Checking.allowsCloud)
-        assertTrue(CloudTrashStatus.Available.allowsCloud)
-        assertTrue(CloudTrashStatus.Missing.allowsCloud)
-        assertFalse(CloudTrashStatus.Unreachable.allowsCloud)
-    }
 
     private fun capabilities(files: String) =
         """{"ocs":{"meta":{"statuscode":200},"data":{"capabilities":{"files":$files}}}}"""

@@ -73,7 +73,7 @@ internal class UploadTransfer(
         } catch (error: HttpException) {
             throw UploadException(UploadProblem.Memories, error.code())
         }
-        return timelinePaths(config.timelinePath).firstOrNull() ?: throw UploadException(UploadProblem.Timeline)
+        return uploadDestination(config.timelinePath) ?: throw UploadException(UploadProblem.Timeline)
     }
 
     private suspend fun put(

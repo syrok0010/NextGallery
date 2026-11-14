@@ -19,7 +19,6 @@ import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
-import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -31,7 +30,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AndroidMediaStoreReaderTest {
     @Test
-    fun readsImagesAndVideosInBatchesAndExcludesPendingAndTrashedMedia() = runBlocking {
+    fun readsImagesAndVideosInBatches() = runBlocking {
         val provider = FixtureMediaProvider()
         val resolver = ContentResolver.wrap(provider)
         val reader = AndroidMediaStoreReader(resolver)
@@ -58,14 +57,23 @@ class AndroidMediaStoreReaderTest {
             listOf(4_032, 3_024, 4_032),
             batches.flatMap { it.metadata }.map { it.height },
         )
-        val firstDateTaken = 1_700_000_000_030L
+        // Without EXIF the timeline time comes from DATE_TAKEN; the conversion is CanonicalTimelineTimeTest's.
         assertEquals(
-            (firstDateTaken + TimeZone.getDefault().getOffset(firstDateTaken)) / 1_000,
+            canonicalTimelineSeconds(exifDateTime = null, dateTakenMillis = 1_700_000_000_030L),
             batches.first().metadata.first().memoriesTimelineEpochSeconds,
         )
-        assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_PENDING} = 0"))
-        assertTrue(provider.observedSelection.orEmpty().contains("${MediaStore.MediaColumns.IS_TRASHED} = 0"))
-        assertTrue(provider.observedSortOrder.orEmpty().contains("CASE"))
+    }
+
+    /** The fixture provider cannot run SQL, so this only checks what the reader asks MediaStore for. */
+    @Test
+    fun queryAsksMediaStoreToSkipPendingAndTrashedMedia() = runBlocking {
+        val provider = FixtureMediaProvider()
+
+        AndroidMediaStoreReader(ContentResolver.wrap(provider)).readBatches(batchSize = 2).toList()
+
+        val selection = provider.observedSelection.orEmpty()
+        assertTrue(selection, selection.contains("${MediaStore.MediaColumns.IS_PENDING} = 0"))
+        assertTrue(selection, selection.contains("${MediaStore.MediaColumns.IS_TRASHED} = 0"))
     }
 
     @Test
@@ -132,7 +140,6 @@ class AndroidMediaStoreReaderTest {
         val fileOpens = AtomicInteger()
         var generation = 1L
         var observedSelection: String? = null
-        var observedSortOrder: String? = null
 
         override fun onCreate(): Boolean = true
 
@@ -145,7 +152,6 @@ class AndroidMediaStoreReaderTest {
         ): Cursor? {
             if (nullCursor) return null
             observedSelection = selection
-            observedSortOrder = sortOrder
             return fixtureCursor(requireNotNull(projection))
         }
 

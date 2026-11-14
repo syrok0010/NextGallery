@@ -59,6 +59,7 @@ class UploadsBackTest {
                 "resting=$resting dragged=$dragged",
                 dragged.left > resting.left,
             )
+            assertTrue("Photos stays hidden behind the dragged Uploads", photosShown > 0)
         } finally {
             rule.runOnUiThread {
                 when (previousSession) {
