@@ -4,7 +4,6 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.R
@@ -33,11 +32,8 @@ internal fun LibraryScreenScaffold(
             .fillMaxSize()
             .safeDrawingPadding(),
     ) {
-        Box(
-            Modifier
-                .alpha(if (viewerVisible) 0f else 1f)
-                .then(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier),
-        ) {
+        // Stays as it is under the viewer, which covers it like the rest of the page.
+        Box(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier) {
             LibraryHeader(
                 destination = destination,
                 onRefresh = {
@@ -62,7 +58,7 @@ internal fun LibraryScreenScaffold(
                 status = {
                     OperationStatusPill(
                         operations,
-                        visible = !viewerVisible,
+                        visible = true,
                         onOpenUploads,
                     )
                 },

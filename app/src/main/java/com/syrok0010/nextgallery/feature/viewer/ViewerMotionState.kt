@@ -91,10 +91,14 @@ private sealed interface ViewerPhase {
     data class PredictiveBack(val progress: Float) : ViewerPhase
 
     /**
-     * Settling onto the tile, then gone; nothing leads out of here. [dim] is how much the
-     * background was dimmed when the closing started.
+     * Settling onto the tile, then gone; nothing leads out of here. [dim] and [openness] are as
+     * they were when the closing started.
      */
-    data class Closing(val target: ViewerBoundsTransform?, val dim: Float) : ViewerPhase
+    data class Closing(
+        val target: ViewerBoundsTransform?,
+        val dim: Float,
+        val openness: Float,
+    ) : ViewerPhase
 }
 
 /**
@@ -134,8 +138,18 @@ internal class ViewerMotionState(
             else -> false
         }
 
-    val chromeAllowed: Boolean
-        get() = phase == ViewerPhase.Shown && dragOffset == Offset.Zero
+    /**
+     * How far the viewer has come out of its tile, from 0 at the tile to 1 at rest. The chrome
+     * fades in with the opening, and out as the viewer is pulled away or closes.
+     */
+    val openness: Float
+        get() = when (val phase = phase) {
+            ViewerPhase.Hidden -> 0f
+            is ViewerPhase.Opening -> progress
+            ViewerPhase.Shown, is ViewerPhase.PredictiveBack -> 1f - dim()
+            // Without a tile to settle on, the viewer leaves with its background.
+            is ViewerPhase.Closing -> phase.openness * if (phase.target != null) 1f - progress else background
+        }.coerceIn(0f, 1f)
 
     val backgroundAlpha: Float
         get() = background * (1f - dim() * 0.55f).coerceIn(0.45f, 1f)
@@ -218,8 +232,9 @@ internal class ViewerMotionState(
             }
         }
         val dim = dim()
+        val openness = openness
         progress = 0f
-        phase = ViewerPhase.Closing(settle, dim)
+        phase = ViewerPhase.Closing(settle, dim, openness)
         backgroundAnimation?.cancel()
         animateSurface {
             val fade = launch {
