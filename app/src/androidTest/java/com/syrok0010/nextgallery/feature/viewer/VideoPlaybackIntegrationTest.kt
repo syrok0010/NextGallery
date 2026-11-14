@@ -35,9 +35,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -151,6 +153,14 @@ class VideoPlaybackIntegrationTest {
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_exit_fullscreen)).assertIsDisplayed()
         screenshot("fullscreen")
+        // Chrome hidden in fullscreen comes back once fullscreen ends.
+        // Off the centre, where the play button takes the tap.
+        rule.onNodeWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true)
+            .performTouchInput { click(Offset(width * 0.15f, height * 0.3f)) }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithContentDescription(rule.activity.getString(R.string.video_playback_exit_fullscreen))
+                .fetchSemanticsNodes().isEmpty()
+        }
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitUntil(10_000) { rule.activity.requestedOrientation == initialOrientation }
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT }
