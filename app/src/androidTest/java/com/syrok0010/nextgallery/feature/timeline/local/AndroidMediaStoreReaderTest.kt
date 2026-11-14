@@ -4,7 +4,7 @@ import android.content.ContentProvider
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.database.Cursor
-import android.database.MatrixCursor
+import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
@@ -64,16 +64,29 @@ class AndroidMediaStoreReaderTest {
         )
     }
 
-    /** The fixture provider cannot run SQL, so this only checks what the reader asks MediaStore for. */
     @Test
-    fun queryAsksMediaStoreToSkipPendingAndTrashedMedia() = runBlocking {
-        val provider = FixtureMediaProvider()
+    fun readsNewestFirstAndSkipsPendingTrashedAndNonMediaFiles() = runBlocking {
+        val provider = FixtureMediaProvider(
+            rows = listOf(
+                FixtureRow(id = 5, mediaType = VIDEO),
+                FixtureRow(id = 10),
+                FixtureRow(id = 20, pending = true),
+                FixtureRow(id = 30, trashed = true),
+                // Without DATE_TAKEN the modification time orders the file.
+                FixtureRow(id = 40, dateTakenMillis = 0, dateModifiedSeconds = 1_800_000_000),
+                FixtureRow(id = 50, dateTakenMillis = 1_600_000_000_000),
+                FixtureRow(id = 60, mediaType = MediaStore.Files.FileColumns.MEDIA_TYPE_NONE),
+            ),
+        )
 
-        AndroidMediaStoreReader(ContentResolver.wrap(provider)).readBatches(batchSize = 2).toList()
+        val batches = AndroidMediaStoreReader(ContentResolver.wrap(provider)).readBatches(batchSize = 10).toList()
 
-        val selection = provider.observedSelection.orEmpty()
-        assertTrue(selection, selection.contains("${MediaStore.MediaColumns.IS_PENDING} = 0"))
-        assertTrue(selection, selection.contains("${MediaStore.MediaColumns.IS_TRASHED} = 0"))
+        // 5 and 10 were taken in the same second; the newer row comes first.
+        assertEquals(
+            listOf(40L, 10L, 5L, 50L),
+            batches.flatMap { it.metadata }.map { it.contentUri.substringAfterLast('/').toLong() },
+        )
+        assertEquals(4, batches.last().progress.totalCount)
     }
 
     @Test
@@ -133,13 +146,48 @@ class AndroidMediaStoreReaderTest {
         assertTrue(failed)
     }
 
+    private data class FixtureRow(
+        val id: Long,
+        val mediaType: Int = IMAGE,
+        val dateTakenMillis: Long = 1_700_000_000_000L + id,
+        val dateModifiedSeconds: Long = 1_700_000_000L + id,
+        val pending: Boolean = false,
+        val trashed: Boolean = false,
+    )
+
+    /** MediaStore files table in in-memory SQLite, so the reader's selection and sort order really run. */
     private class FixtureMediaProvider(
         private val mediaFile: File? = null,
         private val nullCursor: Boolean = false,
+        rows: List<FixtureRow> = listOf(FixtureRow(30), FixtureRow(20, mediaType = VIDEO), FixtureRow(10)),
     ) : ContentProvider() {
         val fileOpens = AtomicInteger()
         var generation = 1L
-        var observedSelection: String? = null
+        private val database = SQLiteDatabase.create(null).apply {
+            execSQL(
+                """
+                CREATE TABLE files (
+                    ${MediaStore.Files.FileColumns._ID} INTEGER PRIMARY KEY,
+                    ${MediaStore.MediaColumns.VOLUME_NAME} TEXT,
+                    ${MediaStore.MediaColumns.GENERATION_MODIFIED} INTEGER,
+                    ${MediaStore.Files.FileColumns.MEDIA_TYPE} INTEGER,
+                    ${MediaStore.MediaColumns.DISPLAY_NAME} TEXT,
+                    ${MediaStore.MediaColumns.MIME_TYPE} TEXT,
+                    ${MediaStore.MediaColumns.WIDTH} INTEGER,
+                    ${MediaStore.MediaColumns.HEIGHT} INTEGER,
+                    ${MediaStore.MediaColumns.ORIENTATION} INTEGER,
+                    ${MediaStore.MediaColumns.SIZE} INTEGER,
+                    ${MediaStore.Images.ImageColumns.DATE_TAKEN} INTEGER,
+                    ${MediaStore.MediaColumns.DATE_MODIFIED} INTEGER,
+                    ${MediaStore.MediaColumns.DATE_ADDED} INTEGER,
+                    ${MediaStore.Video.VideoColumns.DURATION} INTEGER,
+                    ${MediaStore.MediaColumns.IS_PENDING} INTEGER,
+                    ${MediaStore.MediaColumns.IS_TRASHED} INTEGER
+                )
+                """.trimIndent(),
+            )
+            rows.forEach { insert("files", null, it.values()) }
+        }
 
         override fun onCreate(): Boolean = true
 
@@ -151,8 +199,8 @@ class AndroidMediaStoreReaderTest {
             sortOrder: String?,
         ): Cursor? {
             if (nullCursor) return null
-            observedSelection = selection
-            return fixtureCursor(requireNotNull(projection))
+            database.execSQL("UPDATE files SET ${MediaStore.MediaColumns.GENERATION_MODIFIED} = $generation")
+            return database.query("files", projection, selection, selectionArgs, null, null, sortOrder)
         }
 
         override fun query(
@@ -178,49 +226,35 @@ class AndroidMediaStoreReaderTest {
         override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
         override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 
-        private fun fixtureCursor(projection: Array<out String>) = MatrixCursor(projection).apply {
-            addMediaRow(projection, id = 30, mediaType = MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE)
-            addMediaRow(projection, id = 20, mediaType = MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
-            addMediaRow(projection, id = 10, mediaType = MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE)
+        private fun FixtureRow.values() = ContentValues().apply {
+            val video = mediaType == VIDEO
+            put(MediaStore.Files.FileColumns._ID, id)
+            put(MediaStore.MediaColumns.VOLUME_NAME, "external_primary")
+            put(MediaStore.Files.FileColumns.MEDIA_TYPE, mediaType)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "media-$id")
+            put(MediaStore.MediaColumns.MIME_TYPE, if (video) "video/mp4" else "image/jpeg")
+            put(MediaStore.MediaColumns.WIDTH, 4_032)
+            put(MediaStore.MediaColumns.HEIGHT, 3_024)
+            put(
+                MediaStore.MediaColumns.ORIENTATION,
+                when (id) {
+                    30L -> 90
+                    10L -> 270
+                    else -> 0
+                },
+            )
+            put(MediaStore.MediaColumns.SIZE, 1_000L + id)
+            put(MediaStore.Images.ImageColumns.DATE_TAKEN, dateTakenMillis)
+            put(MediaStore.MediaColumns.DATE_MODIFIED, dateModifiedSeconds)
+            put(MediaStore.MediaColumns.DATE_ADDED, 1_600_000_000L + id)
+            if (video) put(MediaStore.Video.VideoColumns.DURATION, 2_500L)
+            put(MediaStore.MediaColumns.IS_PENDING, if (pending) 1 else 0)
+            put(MediaStore.MediaColumns.IS_TRASHED, if (trashed) 1 else 0)
         }
+    }
 
-        private fun MatrixCursor.addMediaRow(
-            projection: Array<out String>,
-            id: Long,
-            mediaType: Int,
-        ) {
-            val values = projection.map { column ->
-                when (column) {
-                    MediaStore.MediaColumns.VOLUME_NAME -> "external_primary"
-                    MediaStore.MediaColumns.GENERATION_MODIFIED -> generation
-                    MediaStore.Files.FileColumns._ID -> id
-                    MediaStore.Files.FileColumns.MEDIA_TYPE -> mediaType
-                    MediaStore.MediaColumns.DISPLAY_NAME -> "media-$id"
-                    MediaStore.MediaColumns.MIME_TYPE -> if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) {
-                        "video/mp4"
-                    } else {
-                        "image/jpeg"
-                    }
-                    MediaStore.MediaColumns.WIDTH -> 4_032
-                    MediaStore.MediaColumns.HEIGHT -> 3_024
-                    MediaStore.MediaColumns.ORIENTATION -> when (id) {
-                        30L -> 90
-                        10L -> 270
-                        else -> 0
-                    }
-                    MediaStore.MediaColumns.SIZE -> 1_000L + id
-                    MediaStore.Images.ImageColumns.DATE_TAKEN -> 1_700_000_000_000L + id
-                    MediaStore.MediaColumns.DATE_MODIFIED -> 1_700_000_000L + id
-                    MediaStore.MediaColumns.DATE_ADDED -> 1_600_000_000L + id
-                    MediaStore.Video.VideoColumns.DURATION -> if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) {
-                        2_500L
-                    } else {
-                        null
-                    }
-                    else -> null
-                }
-            }
-            addRow(values)
-        }
+    private companion object {
+        const val IMAGE = MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE
+        const val VIDEO = MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
     }
 }
