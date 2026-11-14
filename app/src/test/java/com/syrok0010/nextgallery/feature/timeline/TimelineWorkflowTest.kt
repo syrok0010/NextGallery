@@ -48,6 +48,8 @@ class TimelineWorkflowTest {
         val workflow = TimelineWorkflow(credentials(), source, backgroundScope, debounceMillis = DEBOUNCE)
         runCurrent()
         val initial = workflow.state.value.snapshot!!.loadedDayIds
+        // Lazy loading: the first screen is hydrated, the rest of the archive waits.
+        assertTrue(initial.none { it in 76..100 })
         workflow.requestDays((78..100).toList(), debounced = true)
         advanceTimeBy(DEBOUNCE / 2)
         val before = source.requests.size
@@ -69,6 +71,7 @@ class TimelineWorkflowTest {
         val failed = workflow.state.value.failedDayIds
         assertEquals((10 until 10 + failed.size).toSet(), failed)
         assertTrue(failed.size > 1 && source.requests.all { it.size < failed.size })
+        assertTrue(failed.size < source.days.size)
         val count = source.requests.size
         workflow.requestDays(failed.toList())
         runCurrent()
