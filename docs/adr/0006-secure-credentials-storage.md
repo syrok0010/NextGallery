@@ -6,7 +6,7 @@
 
 ## Контекст
 
-Nextcloud Login Flow v2 возвращает долгоживущий app password для Basic Auth. NextGallery — single-account приложение, поэтому хранит один набор `AccountCredentials`; logout заменяет аккаунт только через полную очистку текущей cloud session.
+Nextcloud Login Flow v2 возвращает долгоживущий app password для Basic Auth. NextGallery — single-account приложение, поэтому хранит один набор `AccountCredentials`; выход удаляет все данные приложения, и следующий вход начинается как после свежей установки.
 
 ## Критерии выбора
 
@@ -42,7 +42,7 @@ Nextcloud Login Flow v2 возвращает долгоживущий app passwo
 
 - `SessionStore`, repositories и image loading не знают формат credentials.
 - При старте наличие расшифрованных credentials определяет signed-in session.
-- Logout очищает encrypted payload; список аккаунтов и account switcher не создаются.
+- Выход очищает encrypted payload вместе с остальными данными приложения; список аккаунтов и account switcher не создаются.
 - Keystore adapter требует Android runtime проверки, а JSON contract тестируется отдельно.
 - Повреждённый payload не восстанавливается автоматически.
 

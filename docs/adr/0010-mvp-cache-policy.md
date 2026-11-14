@@ -2,7 +2,7 @@
 
 ## Статус
 
-Принято и расширено для unified timeline.
+Принято и расширено для unified timeline. Политика выхода изменена: выход удаляет все данные приложения, включая локальный индекс (решение в #53).
 
 ## Контекст
 
@@ -14,7 +14,7 @@
 - MediaStore и Nextcloud/Memories остаются sources of truth.
 - Cache loss не уничтожает пользовательские оригиналы.
 - Credentials хранятся отдельно.
-- Logout удаляет всё cloud-состояние и сохраняет device-scoped local index.
+- Выход удаляет все данные приложения; данные двух аккаунтов не сосуществуют.
 - Local thumbnails не дублируются в собственном файловом cache.
 - Room schema можно разрушительно сбрасывать на текущем dev-этапе.
 
@@ -54,9 +54,9 @@ Offline remote timeline включает только materialized objects с д
 - albums, people, tags и places;
 - полный remote archive.
 
-Logout очищает credentials, Memories metadata, remote thumbnails и remote identity bindings. Device-scoped MediaStore projection и local `MediaId` сохраняются, но signed-out UI их не показывает.
+Выход очищает все данные приложения: credentials, Memories metadata, remote thumbnails, identity bindings, MediaStore projection и local `MediaId`. После выхода приложение в состоянии свежей установки. Раньше local index переживал выход; от этого отказались: сохранять его ради следующего входа незачем, а частичная очистка оставляла гонки с поздними записями.
 
-Single-account граница описана в product vision: cache обслуживает одно подключение и очищается целиком перед новым Login Flow.
+Single-account граница описана в product vision: cache обслуживает одно подключение, привязывать его записи к аккаунту не нужно.
 
 ## Последствия
 
@@ -64,10 +64,12 @@ Single-account граница описана в product vision: cache обслу
 - Offline timeline может быть неполным и не является обещанием offline mode.
 - Room служит durable projection, но migrations пока не гарантируются.
 - Remote thumbnail cache требует отдельной eviction policy.
-- Возврат media permission позволяет повторно связать local copies с прежними `MediaId`.
+- Возврат media permission в той же сессии позволяет повторно связать local copies с прежними `MediaId`.
+- После выхода local `MediaId` создаются заново.
 
 ## Открытые вопросы
 
 - Когда ввести Room migrations вместо destructive reset.
 - Какая eviction policy нужна remote thumbnails.
 - Какие данные должны получить явную offline pin/download policy.
+- Механизм очистки при выходе: `ActivityManager.clearApplicationUserData()` (завершает процесс) или ручная очистка с перезапуском Activity (#53).
