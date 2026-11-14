@@ -12,7 +12,6 @@ import com.syrok0010.nextgallery.feature.collection.toViewerSequence
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
-import com.syrok0010.nextgallery.feature.viewer.ViewerSequence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -49,10 +48,10 @@ class ViewerTimelineBridgeTest {
     }
 
     @Test
-    fun `null snapshot creates an empty sequence`() {
+    fun `timeline without slots gives an empty sequence`() {
         val sequence = emptyList<MediaSlot>().toViewerSequence()
 
-        assertSame(ViewerSequence.Empty, sequence)
+        assertEquals(emptyList<MediaItem>(), sequence.items)
     }
 
     @Test

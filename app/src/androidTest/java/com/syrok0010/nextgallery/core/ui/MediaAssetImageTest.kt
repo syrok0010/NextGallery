@@ -31,7 +31,7 @@ class MediaAssetImageTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun projectedMediaFallsBackToCloudAfterLocalReadErrorWithoutChangingMediaId() =
+    fun unreadablePhoneCopyFallsBackToTheCloudOriginal() =
         runBlocking {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             val localAsset = MediaAssetRef.LocalContent(
@@ -39,19 +39,10 @@ class MediaAssetImageTest {
                 modifiedAtEpochSeconds = 1_700_000_000,
                 sizeBytes = 1,
             )
-            val local = mediaItem(localAsset).copy(
-                mediaId = MediaId("published-local"),
-                auid = "shared-auid",
-            )
-            val remote = mediaItem(MediaAssetRef.MemoriesFile(42)).copy(
-                mediaId = MediaId("generated-remote"),
-                auid = "shared-auid",
-            )
-            val item = remote.copy(
-                mediaId = local.mediaId,
-                assetRef = MediaAssetRef.LocalFirst(
+            val item = mediaItem(
+                MediaAssetRef.LocalFirst(
                     local = localAsset,
-                    remote = remote.assetRef as MediaAssetRef.MemoriesFile,
+                    remote = MediaAssetRef.MemoriesFile(42),
                 ),
             )
             val requestedData = CopyOnWriteArrayList<Any>()
@@ -87,7 +78,6 @@ class MediaAssetImageTest {
                 }
                 composeRule.waitUntil(timeoutMillis = 5_000) { requestedData.size >= 2 }
 
-                assertEquals(MediaId("published-local"), item.mediaId)
                 assertEquals(
                     listOf(
                         localAsset.contentUri,

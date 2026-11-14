@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.upload
 
-/** Memories config contains a semicolon-separated list, not a single DAV directory. */
-internal fun timelinePaths(value: String?): List<String> =
-    value?.split(';')?.map(String::trim)?.filter(String::isNotEmpty).orEmpty()
+/**
+ * The folder uploads go to: the first entry of Memories' `timeline_path`, which is a
+ * semicolon-separated list rather than a single DAV directory (ADR 0014). Null without one.
+ */
+internal fun uploadDestination(timelinePath: String?): String? =
+    timelinePath?.split(';')?.map(String::trim)?.firstOrNull(String::isNotEmpty)

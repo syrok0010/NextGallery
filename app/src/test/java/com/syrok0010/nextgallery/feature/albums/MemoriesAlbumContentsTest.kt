@@ -32,8 +32,17 @@ class MemoriesAlbumContentsTest {
     }
     @Test fun `failed day request propagates failure after initial progress`() = runBlocking {
         Fixture(fail = true).use { fixture ->
-            try { fixture.load(); fail("Expected HTTP failure") }
-            catch (error: HttpException) { assertEquals(503, error.code()) }
+            val shown = mutableListOf<AlbumContentsBatch>()
+            try {
+                fixture.contents().collect { shown += it }
+                fail("Expected HTTP failure")
+            } catch (error: HttpException) {
+                assertEquals(503, error.code())
+            }
+            // The photos the day index already listed are on screen before the day request fails.
+            assertEquals(listOf(1L), shown.single().items.map { it.remoteFileId })
+            assertEquals(1, shown.single().loaded)
+            assertEquals(3, shown.single().total)
         }
     }
     private class Fixture(fail: Boolean = false) : AutoCloseable {
@@ -49,10 +58,12 @@ class MemoriesAlbumContentsTest {
         private val credentials =
             AccountCredentials("${server.origin}/nextcloud", "fixture", "password", "fixture")
 
-        suspend fun load() = MemoriesAlbumContents(
+        fun contents() = MemoriesAlbumContents(
             MemoriesApiClient(server.transport) { credentials },
             InMemoryMediaIdentityRegistry(),
-        ).load(AlbumLocation.Remote("anna/Лето & море")).toList()
+        ).load(AlbumLocation.Remote("anna/Лето & море"))
+
+        suspend fun load() = contents().toList()
 
         override fun close() {
             server.close()
