@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.core.media.MediaAlias
-import com.syrok0010.nextgallery.core.media.MediaAliasKind
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
@@ -15,8 +13,6 @@ import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPreviewDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
-import com.syrok0010.nextgallery.feature.images.ThumbnailKey
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
@@ -134,6 +130,68 @@ class TimelineCacheRepositoryOfflineTest {
             )
         }
 
+    @Test
+    fun dayWhoseCountChangedLosesItsLoadedMarkAndThumbnails() =
+        runBlocking {
+            val changed = remoteItem()
+            val unchanged = remoteItem().copy(
+                mediaId = MediaId("remote-43"),
+                dayId = INDEX_ONLY_DAY_ID,
+                etag = "etag-43",
+                auid = "auid-43",
+                buid = "buid-43",
+                assetRef = MediaAssetRef.MemoriesFile(OTHER_FILE_ID),
+            )
+            identityRegistry.resolve(
+                listOf(changed, unchanged).map {
+                    MediaIdentityCandidate(
+                        source = it.sourceIdentity(),
+                        publishedMediaId = it.mediaId,
+                        aliases = emptySet(),
+                    )
+                },
+            )
+            repository.saveTimelineSnapshot(
+                credentials,
+                TimelineSnapshotAssembler.assemble(
+                    config = memoriesConfig(),
+                    days = listOf(TimelineDay(changed.dayId, 1), TimelineDay(unchanged.dayId, 1)),
+                    mediaItems = listOf(changed, unchanged),
+                    loadedDayIds = setOf(changed.dayId, unchanged.dayId),
+                ),
+            )
+            imageCache.saveThumbnails(
+                previews = listOf(changed, unchanged).map {
+                    MemoriesPreviewDto(it.remoteFileId!!, "image/jpeg", byteArrayOf(1))
+                },
+                width = THUMBNAIL_SIZE,
+                height = THUMBNAIL_SIZE,
+                etagsByFileId = listOf(
+                    changed,
+                    unchanged,
+                ).associate { it.remoteFileId!! to it.etag },
+            )
+            assertEquals(
+                listOf(FILE_ID, OTHER_FILE_ID),
+                cachedThumbnails(changed, unchanged).sorted(),
+            )
+
+            // The server now counts one more photo on the first day; its details are not loaded yet.
+            repository.saveTimelineSnapshot(
+                credentials,
+                TimelineSnapshotAssembler.assemble(
+                    config = memoriesConfig(),
+                    days = listOf(TimelineDay(changed.dayId, 2), TimelineDay(unchanged.dayId, 1)),
+                ),
+            )
+
+            assertEquals(
+                setOf(unchanged.dayId),
+                repository.loadTimelineSnapshot(credentials)?.loadedDayIds,
+            )
+            assertEquals(listOf(OTHER_FILE_ID), cachedThumbnails(changed, unchanged))
+        }
+
     private fun remoteItem() =
         MediaItem(
             mediaId = MediaId("remote-42"),
@@ -155,18 +213,6 @@ class TimelineCacheRepositoryOfflineTest {
             assetRef = MediaAssetRef.MemoriesFile(FILE_ID),
         )
 
-    private fun localItem() =
-        remoteItem().copy(
-            mediaId = MediaId("local-42"),
-            auid = "shared-auid",
-            buid = "local-buid-42",
-            assetRef = MediaAssetRef.LocalContent(
-                contentUri = LOCAL_CONTENT_URI,
-                modifiedAtEpochSeconds = 1_717_100_000L,
-                sizeBytes = 1,
-            ),
-        )
-
     private fun MediaItem.sourceIdentity(): MediaSourceIdentity =
         when (val asset = assetRef) {
             is MediaAssetRef.MemoriesFile -> MediaSourceIdentity(
@@ -182,21 +228,15 @@ class TimelineCacheRepositoryOfflineTest {
             is MediaAssetRef.LocalFirst -> error("Cache integration test expects source copies")
         }
 
-    private suspend fun loadThumbnailKeys(item: MediaItem) =
-        imageCache.loadThumbnailKeys(
-            fileIds = listOf(FILE_ID),
-            width = THUMBNAIL_SIZE,
-            height = THUMBNAIL_SIZE,
-            etagsByFileId = mapOf(FILE_ID to item.etag),
-        )
-
-    private fun thumbnailKey(item: MediaItem) =
-        ThumbnailKey(
-            fileId = FILE_ID,
-            width = THUMBNAIL_SIZE,
-            height = THUMBNAIL_SIZE,
-            etag = item.etag,
-        )
+    /** Thumbnails the cache still serves for [items], in their order. */
+    private suspend fun cachedThumbnails(vararg items: MediaItem) =
+        imageCache
+            .loadThumbnailKeys(
+                fileIds = items.map { it.remoteFileId!! },
+                width = THUMBNAIL_SIZE,
+                height = THUMBNAIL_SIZE,
+                etagsByFileId = items.associate { it.remoteFileId!! to it.etag },
+            ).map { it.fileId }
 
     private fun memoriesConfig() =
         MemoriesConfig(
@@ -215,8 +255,7 @@ class TimelineCacheRepositoryOfflineTest {
         const val MATERIALIZED_DAY_ID = 19_870
         const val INDEX_ONLY_DAY_ID = 19_869
         const val FILE_ID = 42L
-        const val REMOTE_ONLY_FILE_ID = 43L
-        const val LOCAL_CONTENT_URI = "content://media/external/images/media/42"
+        const val OTHER_FILE_ID = 43L
         const val THUMBNAIL_SIZE = 512
 
         val credentials = AccountCredentials(
