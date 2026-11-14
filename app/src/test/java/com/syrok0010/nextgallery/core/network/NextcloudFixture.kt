@@ -3,56 +3,10 @@ package com.syrok0010.nextgallery.core.network
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.ServerSocket
-import java.net.Socket
 import java.net.URLDecoder
 import java.util.concurrent.CopyOnWriteArrayList
-import javax.net.ServerSocketFactory
 import kotlinx.serialization.json.Json
-import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
-import mockwebserver3.MockWebServer
-import mockwebserver3.RecordedRequest
-
-/** A [MockWebServer] on loopback that answers every request with [respond]. */
-internal fun loopbackServer(respond: (RecordedRequest) -> MockResponse): MockWebServer =
-    MockWebServer().apply {
-        serverSocketFactory = NoDelayServerSocketFactory
-        dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = respond(request)
-        }
-        start(InetAddress.getLoopbackAddress(), 0)
-    }
-
-/**
- * MockWebServer writes a response's headers and body separately and keeps the connection, so with
- * Nagle's algorithm each response waits for the client's delayed ACK: about 40 ms a request.
- */
-private object NoDelayServerSocketFactory : ServerSocketFactory() {
-    override fun createServerSocket(): ServerSocket = NoDelayServerSocket()
-
-    override fun createServerSocket(port: Int): ServerSocket =
-        NoDelayServerSocket().apply { bind(InetSocketAddress(port)) }
-
-    override fun createServerSocket(port: Int, backlog: Int): ServerSocket =
-        NoDelayServerSocket().apply { bind(InetSocketAddress(port), backlog) }
-
-    override fun createServerSocket(port: Int, backlog: Int, address: InetAddress): ServerSocket =
-        NoDelayServerSocket().apply { bind(InetSocketAddress(address, port), backlog) }
-}
-
-private class NoDelayServerSocket : ServerSocket() {
-    override fun accept(): Socket = super.accept().apply { tcpNoDelay = true }
-}
-
-/** The origin a test account points at: an address, so it never resolves to IPv6. */
-internal val MockWebServer.origin: String get() = "http://127.0.0.1:$port"
-
-/** Header names in lower case, as tests look them up. */
-internal val RecordedRequest.headerMap: Map<String, String>
-    get() = headers.associate { (name, value) -> name.lowercase() to value }
 
 internal data class Recorded(
     val method: String,

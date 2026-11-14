@@ -268,7 +268,7 @@ class VideoPlaybackIntegrationTest {
         rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         waitForPlayer { !players.single().isPlaying }
         screenshot("remote-playing")
-        assertTrue(fixture.requests.any { it[":request"] == "GET /apps/memories/api/stream/42 HTTP/1.1" && it["authorization"] == fixture.authorization })
+        assertTrue(fixture.requests.any { it[":request"] == "GET /apps/memories/api/stream/42" && it["authorization"] == fixture.authorization })
         rule.onNodeWithTag("remote-pager").performTouchInput { swipeLeft() }
         rule.waitForIdle()
         rule.runOnIdle {

@@ -42,10 +42,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import retrofit2.HttpException
-import java.io.IOException
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.util.concurrent.Executors
+import com.syrok0010.nextgallery.core.network.loopbackServer
+import com.syrok0010.nextgallery.core.network.origin
+import mockwebserver3.MockResponse
 
 @RunWith(AndroidJUnit4::class)
 class VanishedSourceAliasesTest {
@@ -430,44 +429,21 @@ class VanishedSourceAliasesTest {
     }
 
     private class CloudResponses : AutoCloseable {
-        private val server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
-        private val executor = Executors.newSingleThreadExecutor()
-        val origin = "http://127.0.0.1:${server.localPort}"
         @Volatile var failDetails = true
-
-        init {
-            executor.execute {
-                while (!server.isClosed) {
-                    val socket = try {
-                        server.accept()
-                    } catch (_: IOException) {
-                        break
-                    }
-                    socket.use {
-                        val reader = it.getInputStream().bufferedReader()
-                        val request = requireNotNull(reader.readLine())
-                        while (!reader.readLine().isNullOrEmpty()) { /* consume headers */ }
-                        val photo = """{"fileid":43,"dayid":20000,"epoch":1728000000,"size":2048}"""
-                        val (status, body) = when {
-                            request.contains("/config ") -> 200 to """{"version":"10.1.0"}"""
-                            request.contains("/days ") -> 200 to """[{"dayid":20000,"count":2,"detail":[$photo]}]"""
-                            failDetails -> 503 to "{}"
-                            else -> 200 to "[$photo]"
-                        }
-                        val bytes = body.toByteArray()
-                        it.getOutputStream().apply {
-                            write("HTTP/1.1 $status Fixture\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                            write(bytes)
-                            flush()
-                        }
-                    }
-                }
+        private val server = loopbackServer { request ->
+            val photo = """{"fileid":43,"dayid":20000,"epoch":1728000000,"size":2048}"""
+            val (status, body) = when {
+                request.target.endsWith("/config") -> 200 to """{"version":"10.1.0"}"""
+                request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":2,"detail":[$photo]}]"""
+                failDetails -> 503 to "{}"
+                else -> 200 to "[$photo]"
             }
+            MockResponse.Builder().code(status).addHeader("Content-Type", "application/json").body(body).build()
         }
+        val origin = server.origin
 
         override fun close() {
             server.close()
-            executor.shutdownNow()
         }
     }
 

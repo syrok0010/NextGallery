@@ -21,12 +21,12 @@ import coil3.request.SuccessResult
 import com.syrok0010.nextgallery.app.ui.NextGalleryApp
 import com.syrok0010.nextgallery.core.session.*
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
+import com.syrok0010.nextgallery.core.network.loopbackServer
+import com.syrok0010.nextgallery.core.network.origin
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.IOException
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.util.concurrent.Executors
+import mockwebserver3.MockResponse
+import okio.Buffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -136,9 +136,6 @@ class LibraryIntegrationTest {
 }
 
 private class LibraryFixture : AutoCloseable {
-    private val server = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
-    private val executor = Executors.newCachedThreadPool()
-    val url = "http://127.0.0.1:${server.localPort}"
     private val jpeg = ByteArrayOutputStream().apply {
         val bitmap = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -148,48 +145,31 @@ private class LibraryFixture : AutoCloseable {
         canvas.drawPath(Path().apply { moveTo(80f, 300f); lineTo(220f, 135f); lineTo(300f, 260f); lineTo(300f, 300f); close() }, Paint().apply { color = Color.rgb(35, 69, 68) })
         bitmap.compress(Bitmap.CompressFormat.JPEG, 90, this); bitmap.recycle()
     }.toByteArray()
-    init {
-        executor.execute {
-            while (!server.isClosed) {
-                val socket = try { server.accept() } catch (_: IOException) { break }
-                executor.execute {
-                    socket.use {
-                        val reader = it.getInputStream().bufferedReader()
-                        val first = reader.readLine() ?: return@use
-                        val headers = generateSequence { reader.readLine()?.takeIf(String::isNotEmpty) }.toList()
-                        val path = first.split(' ')[1]
-                        val length = headers.firstOrNull { h -> h.startsWith("Content-Length:", true) }?.substringAfter(':')?.trim()?.toInt() ?: 0
-                        val requestBody = CharArray(length)
-                        var offset = 0
-                        while (offset < length) { val count = reader.read(requestBody, offset, length - offset); if (count < 0) break; offset += count }
-                        val body = when {
-                            path.endsWith("/config") -> """{"version":"fixture","albums_enabled":true,"timeline_path":"/Photos/Fixture"}""".toByteArray()
-                            path.endsWith("/clusters/albums") -> (1..16).joinToString(prefix = "[", postfix = "]") {
-                                """{"album_id":$it,"name":"${it.toString().padStart(2,'0')} ${if(it==2) "Отпуск с длинным названием" else "Альбом"}","count":24,"cover":$it,"cover_etag":"v1","user":"anna","user_display":"Анна"}"""
-                            }.toByteArray()
-                            path.contains("/days?albums=") -> """[{"dayid":20709,"count":60,"detail":[${(101..160).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"album-$it.jpg","etag":"v1","epoch":${1789257600 + it},"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
-                            path.endsWith("/days") -> """[{"dayid":20709,"count":24,"detail":[${(1..24).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"fixture-$it.jpg","etag":"v1","epoch":1789257600,"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
-                            path.contains("multipreview") -> ByteArrayOutputStream().apply {
-                                val json = Json.parseToJsonElement(String(requestBody)) as JsonObject
-                                val files = json["files"] as JsonArray
-                                // fixture-1 has no generated preview yet, like a just uploaded file:
-                                // multipreview skips it and the app asks image/preview for it.
-                                files.filter { (it as JsonObject)["fileid"].toString() != "1" }.forEach { file ->
-                                    val obj = file as JsonObject
-                                    val header = """{"reqid":${obj["reqid"]},"len":${jpeg.size},"type":"image/jpeg"}""".toByteArray()
-                                    write(header.size); write(header); write(jpeg)
-                                }
-                            }.toByteArray()
-                            else -> jpeg
-                        }
-                        it.getOutputStream().apply {
-                            write("HTTP/1.1 200 OK\r\nContent-Type: ${if (path.contains("image/preview") || path.contains("stream/")) "image/jpeg" else "application/json"}\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                            write(body); flush()
-                        }
-                    }
+    private val server = loopbackServer { request ->
+        val path = request.target
+        val body = when {
+            path.endsWith("/config") -> """{"version":"fixture","albums_enabled":true,"timeline_path":"/Photos/Fixture"}""".toByteArray()
+            path.endsWith("/clusters/albums") -> (1..16).joinToString(prefix = "[", postfix = "]") {
+                """{"album_id":$it,"name":"${it.toString().padStart(2,'0')} ${if(it==2) "Отпуск с длинным названием" else "Альбом"}","count":24,"cover":$it,"cover_etag":"v1","user":"anna","user_display":"Анна"}"""
+            }.toByteArray()
+            path.contains("/days?albums=") -> """[{"dayid":20709,"count":60,"detail":[${(101..160).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"album-$it.jpg","etag":"v1","epoch":${1789257600 + it},"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
+            path.endsWith("/days") -> """[{"dayid":20709,"count":24,"detail":[${(1..24).joinToString { """{"fileid":$it,"dayid":20709,"w":300,"h":300,"basename":"fixture-$it.jpg","etag":"v1","epoch":1789257600,"mimetype":"image/jpeg"}""" }}]}]""".toByteArray()
+            path.contains("multipreview") -> ByteArrayOutputStream().apply {
+                val json = Json.parseToJsonElement(request.body?.utf8().orEmpty()) as JsonObject
+                val files = json["files"] as JsonArray
+                // fixture-1 has no generated preview yet, like a just uploaded file:
+                // multipreview skips it and the app asks image/preview for it.
+                files.filter { (it as JsonObject)["fileid"].toString() != "1" }.forEach { file ->
+                    val obj = file as JsonObject
+                    val header = """{"reqid":${obj["reqid"]},"len":${jpeg.size},"type":"image/jpeg"}""".toByteArray()
+                    write(header.size); write(header); write(jpeg)
                 }
-            }
+            }.toByteArray()
+            else -> jpeg
         }
+        val type = if (path.contains("image/preview") || path.contains("stream/")) "image/jpeg" else "application/json"
+        MockResponse.Builder().addHeader("Content-Type", type).body(Buffer().write(body)).build()
     }
-    override fun close() { server.close(); executor.shutdownNow() }
+    val url = server.origin
+    override fun close() { server.close() }
 }
