@@ -337,6 +337,19 @@ class UploadQueueRuntimeTest {
         assertEquals(0, queue.activity.value!!.processed)
     }
 
+    @Test fun aFileThatRunsAgainStartsWithoutItsEarlierPercent() = runBlocking {
+        val (id) = enqueue(listOf(ids.first()))
+        assertTrue(queue.drain { _, _, progress -> progress(100); throw IOException("offline") })
+        var shown: Int? = -1
+        queue.drain { account, job, progress ->
+            waitFor { queue.entries.value.single().phase == UploadPhase.Uploading }
+            shown = queue.entries.value.single { it.id == id }.percent
+            transfer(account, job, progress)
+        }
+        assertNull("The earlier attempt's percent must not show", shown)
+        assertNull(queue.entries.value.single().percent)
+    }
+
     @Test fun finishedAndCancelledFilesDoNotKeepProgress() = runBlocking {
         val (first, second) = enqueue()
         val (third) = enqueue(listOf(ids.first()))

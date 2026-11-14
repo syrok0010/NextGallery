@@ -288,10 +288,9 @@ private fun UploadRow(
         )
         Column(Modifier.weight(1f)) {
             FileName(entry.selection)
-            // The queue drops progress as the transfer ends, a moment before the journal moves
-            // the file on: until then, and while the line folds away, it keeps the last progress.
+            // The line folds away in its last transfer state, not in the finished one.
             var transfer by remember { mutableStateOf(entry) }
-            if (uploading && (entry.percent != null || transfer.percent == null)) transfer = entry
+            if (uploading) transfer = entry
             AnimatedVisibility(uploading) { TransferProgress(transfer) }
             if (problem != null) {
                 Text(
