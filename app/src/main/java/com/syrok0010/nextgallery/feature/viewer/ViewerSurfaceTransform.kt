@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Velocity
 
 internal data class ViewerSurfaceTransform(
     val offset: Offset = Offset.Zero,
@@ -29,70 +30,52 @@ internal fun Modifier.viewerSurfaceTransform(transform: ViewerSurfaceTransform):
         shape = transform.clipShape ?: RectangleShape
     }
 
-internal fun resolveViewerSurfaceTransform(
-    dragOffset: Offset,
-    predictiveBackProgress: Float,
-    enterPending: Boolean,
-    enterTarget: ViewerBoundsTransform?,
-    enterProgress: Float,
-    settleTarget: ViewerBoundsTransform?,
-    settleProgress: Float,
-    predictiveTarget: ViewerBoundsTransform?,
-): ViewerSurfaceTransform {
-    val dragScale = viewerDragScale(dragOffset)
-    val predictiveProgress = predictiveBackProgress.coerceIn(0f, 1f)
-    val clipShape = when {
-        settleTarget != null -> ViewerTransitionClipShape(
-            transform = settleTarget,
-            progress = settleProgress,
-            opening = false,
-        )
+/** The surface [progress] of the way from its tile into the viewer. */
+internal fun ViewerBoundsTransform.opening(progress: Float): ViewerSurfaceTransform =
+    transition(progress, opening = true)
 
-        predictiveProgress > 0f && predictiveTarget != null -> ViewerTransitionClipShape(
-            transform = predictiveTarget,
-            progress = predictiveProgress,
+/** The surface [progress] of the way from where the closing started onto its tile. */
+internal fun ViewerBoundsTransform.closing(progress: Float): ViewerSurfaceTransform =
+    transition(progress, opening = false)
+
+/** The surface pulled [progress] of the way from rest towards its tile by a back gesture. */
+internal fun ViewerBoundsTransform.predictiveBack(progress: Float): ViewerSurfaceTransform {
+    val fraction = progress.coerceIn(0f, 1f)
+    return ViewerSurfaceTransform(
+        offset = lerpOffset(Offset.Zero, targetOffset, fraction),
+        scale = lerpFloat(1f, targetScale, fraction),
+        clipShape = ViewerTransitionClipShape(
+            transform = this,
+            progress = fraction,
             opening = false,
             startScaleOverride = 1f,
-        )
+        ),
+    )
+}
 
-        enterTarget != null -> ViewerTransitionClipShape(
-            transform = enterTarget,
-            progress = enterProgress,
-            opening = true,
-        )
+/** The open surface dragged down by [offset]. */
+internal fun draggedSurface(offset: Offset): ViewerSurfaceTransform =
+    ViewerSurfaceTransform(offset = offset, scale = viewerDragScale(offset))
 
-        else -> null
-    }
+/** How fast, in transitions per second, [velocity] already carries the surface along the way. */
+internal fun ViewerBoundsTransform.velocityAlongPath(velocity: Velocity): Float {
+    val displacement = targetOffset - startOffset
+    val distanceSquared = displacement.getDistanceSquared()
+    if (distanceSquared <= 1f) return 0f
+    val along = (velocity.x * displacement.x + velocity.y * displacement.y) / distanceSquared
+    return along.coerceIn(-10f, 10f)
+}
 
-    return when {
-        settleTarget != null -> {
-            val progress = settleProgress.coerceIn(0f, 1f)
-            ViewerSurfaceTransform(
-                offset = lerpOffset(settleTarget.startOffset, settleTarget.targetOffset, progress),
-                scale = lerpFloat(settleTarget.startScale, settleTarget.targetScale, progress),
-                clipShape = clipShape,
-            )
-        }
-
-        predictiveProgress > 0f && predictiveTarget != null -> ViewerSurfaceTransform(
-            offset = lerpOffset(Offset.Zero, predictiveTarget.targetOffset, predictiveProgress),
-            scale = lerpFloat(1f, predictiveTarget.targetScale, predictiveProgress),
-            clipShape = clipShape,
-        )
-
-        enterTarget != null -> {
-            val progress = enterProgress.coerceIn(0f, 1f)
-            ViewerSurfaceTransform(
-                offset = lerpOffset(enterTarget.startOffset, enterTarget.targetOffset, progress),
-                scale = lerpFloat(enterTarget.startScale, enterTarget.targetScale, progress),
-                clipShape = clipShape,
-            )
-        }
-
-        enterPending -> ViewerSurfaceTransform(alpha = 0f)
-
-        else -> ViewerSurfaceTransform(offset = dragOffset, scale = dragScale)
-    }
+private fun ViewerBoundsTransform.transition(
+    progress: Float,
+    opening: Boolean,
+): ViewerSurfaceTransform {
+    val fraction = progress.coerceIn(0f, 1f)
+    return ViewerSurfaceTransform(
+        offset = lerpOffset(startOffset, targetOffset, fraction),
+        scale = lerpFloat(startScale, targetScale, fraction),
+        clipShape = ViewerTransitionClipShape(this, progress, opening),
+    )
 }
 
 private fun animatedLocalClipSize(

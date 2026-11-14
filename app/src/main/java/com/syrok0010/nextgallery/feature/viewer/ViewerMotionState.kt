@@ -1,9 +1,10 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -44,14 +45,14 @@ internal fun rememberViewerMotionState(
     backEnabled: Boolean = true,
 ): ViewerMotionState {
     val openingMediaId = rememberSaveable(saver = MediaIdSaver) { initialMediaId }
-    val enterPending = rememberSaveable { mutableStateOf(true) }
+    val opened = rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val currentTileBounds by rememberUpdatedState { currentMediaId?.let(tileBoundsForMediaId) }
     val closeViewer = rememberUpdatedState(onClose)
     val motion = remember {
         ViewerMotionState(
             openingMediaId = openingMediaId,
-            enterPendingState = enterPending,
+            openedState = opened,
             scope = scope,
             tileBounds = { currentTileBounds() },
             onClose = closeViewer,
@@ -61,8 +62,8 @@ internal fun rememberViewerMotionState(
     LaunchedEffect(motion) {
         motion.showBackground()
     }
-    LaunchedEffect(currentMediaId, motion.surfaceBounds) {
-        motion.enter(currentMediaId)
+    LaunchedEffect(currentMediaId) {
+        motion.onCurrentMediaChange(currentMediaId)
     }
     PredictiveBackHandler(enabled = backEnabled && currentMediaId != null) { progress ->
         val closed = closeViewer.value
@@ -77,193 +78,196 @@ internal fun rememberViewerMotionState(
     return motion
 }
 
+/** Where the viewer is between the tile it opened from and the tile it closes onto. */
+private sealed interface ViewerPhase {
+    /** Waiting for the surface to be measured, to grow it out of its tile. */
+    data object Hidden : ViewerPhase
+
+    data class Opening(val target: ViewerBoundsTransform) : ViewerPhase
+
+    /** Open; the user may be dragging it down, or it may be going back to rest after a drag. */
+    data object Shown : ViewerPhase
+
+    data class PredictiveBack(val progress: Float) : ViewerPhase
+
+    /**
+     * Settling onto the tile, then gone; nothing leads out of here. [dim] is how much the
+     * background was dimmed when the closing started.
+     */
+    data class Closing(val target: ViewerBoundsTransform?, val dim: Float) : ViewerPhase
+}
+
+/**
+ * The surface's way from its tile into the viewer and back. One [phase] says where it is; every
+ * event is a transition from it, and each new animation replaces the one before, so a cut-short
+ * animation leaves nothing behind.
+ */
 internal class ViewerMotionState(
     private val openingMediaId: MediaId,
     private val scope: CoroutineScope,
     private val tileBounds: () -> Rect?,
     private val onClose: State<() -> Unit>,
-    private val enterPendingState: MutableState<Boolean>,
+    openedState: MutableState<Boolean>,
 ) {
+    /** Survives recreation, so a rotated viewer does not open again. */
+    private var opened by openedState
+    private var phase by mutableStateOf<ViewerPhase>(
+        if (opened) ViewerPhase.Shown else ViewerPhase.Hidden,
+    )
+    private var currentMediaId: MediaId? = null
     var surfaceBounds by mutableStateOf<Rect?>(null)
         private set
-    private var predictiveBackProgress by mutableFloatStateOf(0f)
-    private var enterPending by enterPendingState
-    private var enterTarget by mutableStateOf<ViewerBoundsTransform?>(null)
-    private var settleTarget by mutableStateOf<ViewerBoundsTransform?>(null)
-    private val dragOffset = Animatable(Offset.Zero, Offset.VectorConverter)
-    private val enterProgress = Animatable(if (enterPending) 0f else 1f)
-    private val settleProgress = Animatable(0f)
-    private val backgroundOpacity = Animatable(if (enterPending) 0f else 1f)
 
-    /** Set once [close] starts: the viewer is leaving, and nothing moves the surface any more. */
-    private var closing = false
+    /** How far the opening or the closing is. */
+    private var progress by mutableFloatStateOf(0f)
+    private var dragOffset by mutableStateOf(Offset.Zero)
+    private var background by mutableFloatStateOf(if (opened) 1f else 0f)
 
-    /** The surface going back to rest after a drag; a new drag or [close] takes over from it. */
-    private var dragReturn: Job? = null
+    /** The surface's running animation; the next one cancels it. */
+    private var surfaceAnimation: Job? = null
+    private var backgroundAnimation: Job? = null
 
     val trackSurfaceBounds: Boolean
-        get() = dragOffset.value == Offset.Zero &&
-            predictiveBackProgress == 0f &&
-            enterTarget == null &&
-            settleTarget == null
-
-    val chromeAllowed: Boolean
-        get() = !enterPending && trackSurfaceBounds
-
-    val backgroundAlpha: Float
-        get() {
-            val dragProgress = (dragOffset.value.y / ViewerDismissBackgroundDistancePx).coerceIn(
-                0f,
-                1f,
-            )
-            val progress = maxOf(dragProgress, predictiveBackProgress.coerceIn(0f, 1f))
-            return backgroundOpacity.value * (1f - progress * 0.55f).coerceIn(0.45f, 1f)
+        get() = when (phase) {
+            ViewerPhase.Hidden -> true
+            ViewerPhase.Shown -> dragOffset == Offset.Zero
+            else -> false
         }
 
+    val chromeAllowed: Boolean
+        get() = phase == ViewerPhase.Shown && dragOffset == Offset.Zero
+
+    val backgroundAlpha: Float
+        get() = background * (1f - dim() * 0.55f).coerceIn(0.45f, 1f)
+
     fun surfaceTransform(mediaId: MediaId): ViewerSurfaceTransform =
-        resolveViewerSurfaceTransform(
-            dragOffset = dragOffset.value,
-            predictiveBackProgress = predictiveBackProgress,
-            enterPending = enterPending && mediaId == openingMediaId,
-            enterTarget = enterTarget,
-            enterProgress = enterProgress.value,
-            settleTarget = settleTarget,
-            settleProgress = settleProgress.value,
-            predictiveTarget = surfaceBounds?.settleTarget(tileBounds(), Offset.Zero, 0f),
-        )
+        when (val phase = phase) {
+            ViewerPhase.Hidden -> if (mediaId == openingMediaId) {
+                ViewerSurfaceTransform(alpha = 0f)
+            } else {
+                ViewerSurfaceTransform()
+            }
+
+            is ViewerPhase.Opening -> phase.target.opening(progress)
+
+            ViewerPhase.Shown -> draggedSurface(dragOffset)
+
+            is ViewerPhase.PredictiveBack -> restingTarget()?.predictiveBack(phase.progress)
+                ?: ViewerSurfaceTransform()
+
+            is ViewerPhase.Closing -> phase.target?.closing(progress)
+                ?: draggedSurface(dragOffset)
+        }
 
     fun onSurfaceBoundsChange(bounds: Rect?) {
         surfaceBounds = bounds
+        if (phase == ViewerPhase.Hidden) open()
     }
 
-    suspend fun showBackground() {
-        if (!enterPending) {
-            backgroundOpacity.snapTo(1f)
-            return
-        }
-        backgroundOpacity.snapTo(0f)
-        backgroundOpacity.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = ViewerBackgroundEnterDurationMillis,
-                delayMillis = ViewerBackgroundEnterDelayMillis,
-            ),
-        )
-    }
+    fun onCurrentMediaChange(mediaId: MediaId?) {
+        currentMediaId = mediaId
+        when (phase) {
+            ViewerPhase.Hidden -> open()
 
-    /**
-     * Runs the opening from the tile. Called again when the current object or the measured surface
-     * changes: an opening cut short this way does not leave its target behind, which would keep
-     * the chrome hidden and the surface unmeasured.
-     */
-    suspend fun enter(mediaId: MediaId?) {
-        if (!enterPending || mediaId == null || closing) return
-        val target = if (mediaId == openingMediaId) {
-            val bounds = surfaceBounds ?: return
-            bounds.enterTarget(tileBounds())
-        } else {
             // The user moved on before the opening ended: the other object just shows.
-            null
-        }
-        try {
-            if (target != null) {
-                enterProgress.snapTo(0f)
-                enterTarget = target
-                enterProgress.animateTo(1f, tween(durationMillis = ViewerEnterDurationMillis))
+            is ViewerPhase.Opening -> if (mediaId != null && mediaId != openingMediaId) {
+                surfaceAnimation?.cancel()
+                rest()
             }
-            enterProgress.snapTo(1f)
-            enterPending = false
-        } finally {
-            enterTarget = null
+
+            else -> Unit
+        }
+    }
+
+    fun showBackground() {
+        if (opened) return
+        backgroundAnimation = scope.launch {
+            animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = ViewerBackgroundEnterDurationMillis,
+                    delayMillis = ViewerBackgroundEnterDelayMillis,
+                ),
+            ) { value, _ -> background = value }
         }
     }
 
     /** Settles the surface on its tile, then calls [onClosed]; only the first call does. */
     fun close(onClosed: () -> Unit = onClose.value, initialVelocity: Velocity = Velocity.Zero) {
-        if (closing) return
-        closing = true
-        dragReturn?.cancel()
-        // Capture the destination and callback before starting the animation.
-        val opening = enterTarget
-        val target = surfaceBounds
-            ?.settleTarget(tileBounds(), dragOffset.value, predictiveBackProgress)
-            // Back during the opening: the surface leaves from where the opening has brought it.
-            ?.let { settle ->
-                opening?.let {
-                    settle.startingFrom(
-                        it,
-                        enterProgress.value,
-                    )
-                } ?: settle
+        val from = phase
+        if (from is ViewerPhase.Closing) return
+        val settle = surfaceBounds?.let { bounds ->
+            val tile = tileBounds()
+            when (from) {
+                ViewerPhase.Hidden, is ViewerPhase.Closing -> null
+
+                // The surface leaves from where the opening has brought it.
+                is ViewerPhase.Opening ->
+                    bounds
+                        .settleTarget(tile, Offset.Zero, 0f)
+                        ?.startingFrom(from.target, progress)
+
+                ViewerPhase.Shown -> bounds.settleTarget(tile, dragOffset, 0f)
+
+                is ViewerPhase.PredictiveBack -> bounds.settleTarget(
+                    tile,
+                    Offset.Zero,
+                    from.progress,
+                )
             }
-        scope.launch {
-            if (target != null) {
-                settleProgress.snapTo(0f)
-                settleTarget = target
-                launch {
-                    backgroundOpacity.animateTo(
-                        targetValue = 0f,
-                        animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
-                    )
-                }
-                val displacement = target.targetOffset - target.startOffset
-                val distanceSquared = displacement.getDistanceSquared()
-                val normalizedVelocity = if (distanceSquared > 1f) {
-                    val velocityAlongPath =
-                        (initialVelocity.x * displacement.x + initialVelocity.y * displacement.y) /
-                            distanceSquared
-                    velocityAlongPath.coerceIn(-10f, 10f)
-                } else {
-                    0f
-                }
-                settleProgress.animateTo(
+        }
+        val dim = dim()
+        progress = 0f
+        phase = ViewerPhase.Closing(settle, dim)
+        backgroundAnimation?.cancel()
+        animateSurface {
+            val fade = launch {
+                animate(
+                    initialValue = background,
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
+                ) { value, _ -> background = value }
+            }
+            if (settle == null) {
+                fade.join()
+            } else {
+                animate(
+                    initialValue = 0f,
                     targetValue = 1f,
+                    initialVelocity = settle.velocityAlongPath(initialVelocity),
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioNoBouncy,
                         stiffness = Spring.StiffnessMedium,
                     ),
-                    initialVelocity = normalizedVelocity,
-                )
-            } else {
-                backgroundOpacity.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
-                )
+                ) { value, _ -> progress = value }
             }
             onClosed()
         }
     }
 
     fun onBackProgress(progress: Float) {
-        if (closing) return
-        predictiveBackProgress = progress
+        if (phase == ViewerPhase.Shown || phase is ViewerPhase.PredictiveBack) {
+            phase = ViewerPhase.PredictiveBack(progress)
+        }
     }
 
     fun cancelBack() {
-        if (closing) return
-        predictiveBackProgress = 0f
+        if (phase is ViewerPhase.PredictiveBack) phase = ViewerPhase.Shown
     }
 
     fun dragBy(amount: Offset): Boolean {
-        if (closing) return false
-        val nextOffset = dragOffset.value + amount
-        if (nextOffset.y < 0f ||
-            kotlin.math.abs(
-                nextOffset.y,
-            ) < kotlin.math.abs(nextOffset.x)
-        ) {
-            return false
-        }
-        // Only a move the viewer takes stops the surface going back to rest.
-        dragReturn?.cancel()
-        scope.launch { dragOffset.snapTo(nextOffset) }
+        if (phase != ViewerPhase.Shown) return false
+        val next = dragOffset + amount
+        if (next.y < 0f || abs(next.y) < abs(next.x)) return false
+        // A drag the viewer takes stops the surface going back to rest.
+        surfaceAnimation?.cancel()
+        dragOffset = next
         return true
     }
 
     fun cancelDrag() {
-        if (closing) return
-        predictiveBackProgress = 0f
-        dragReturn = scope.launch { dragOffset.animateTo(Offset.Zero) }
+        if (phase == ViewerPhase.Shown) returnToRest(spring())
     }
 
     fun endDrag(
@@ -272,23 +276,73 @@ internal class ViewerMotionState(
         flingVelocityPx: Float = Float.MAX_VALUE,
         velocity: Velocity = Velocity.Zero,
     ) {
-        if (closing) return
-        val isFlingClose = velocity.y > flingVelocityPx && dragOffset.value.y > 0f
-        if (canClose && (dragOffset.value.y > thresholdPx || isFlingClose)) {
+        if (phase != ViewerPhase.Shown) return
+        val isFlingClose = velocity.y > flingVelocityPx && dragOffset.y > 0f
+        if (canClose && (dragOffset.y > thresholdPx || isFlingClose)) {
             close(initialVelocity = velocity)
         } else {
-            dragReturn = scope.launch {
-                dragOffset.animateTo(
-                    targetValue = Offset.Zero,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium,
-                    ),
-                    initialVelocity = Offset(velocity.x, velocity.y),
-                )
-            }
+            returnToRest(
+                spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                ),
+                Offset(velocity.x, velocity.y),
+            )
         }
     }
+
+    /** Opens once the object it opened on is current and its surface is measured. */
+    private fun open() {
+        val mediaId = currentMediaId ?: return
+        if (mediaId != openingMediaId) return rest()
+        val bounds = surfaceBounds ?: return
+        val target = bounds.enterTarget(tileBounds()) ?: return rest()
+        progress = 0f
+        phase = ViewerPhase.Opening(target)
+        animateSurface {
+            animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = ViewerEnterDurationMillis),
+            ) { value, _ -> progress = value }
+            rest()
+        }
+    }
+
+    private fun rest() {
+        phase = ViewerPhase.Shown
+        opened = true
+    }
+
+    private fun returnToRest(spec: AnimationSpec<Offset>, velocity: Offset = Offset.Zero) {
+        animateSurface {
+            animate(
+                typeConverter = Offset.VectorConverter,
+                initialValue = dragOffset,
+                targetValue = Offset.Zero,
+                initialVelocity = velocity,
+                animationSpec = spec,
+            ) { value, _ -> dragOffset = value }
+        }
+    }
+
+    private fun animateSurface(block: suspend CoroutineScope.() -> Unit) {
+        surfaceAnimation?.cancel()
+        surfaceAnimation = scope.launch(block = block)
+    }
+
+    /** The surface settled on its tile from rest, where a predictive back leads it. */
+    private fun restingTarget(): ViewerBoundsTransform? =
+        surfaceBounds?.settleTarget(tileBounds(), Offset.Zero, 0f)
+
+    /** How much the user has pulled the viewer away, from 0 to 1. */
+    private fun dim(): Float =
+        when (val phase = phase) {
+            ViewerPhase.Shown -> dragOffset.y / ViewerDismissBackgroundDistancePx
+            is ViewerPhase.PredictiveBack -> phase.progress
+            is ViewerPhase.Closing -> phase.dim
+            else -> 0f
+        }.coerceIn(0f, 1f)
 }
 
 @Composable
