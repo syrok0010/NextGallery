@@ -348,6 +348,23 @@ class VanishedSourceAliasesTest {
         }
     }
 
+    @Test
+    fun anotherAccountGoingOnlineKeepsItsOwnPhotosForOffline() = runBlocking {
+        CloudResponses(dayCount = 1).use { server ->
+            saveLinkedRemote(account = credentials)
+            val newAccount = credentials.copy(serverUrl = server.origin)
+            val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
+            val repository = MemoriesRepository(MemoriesApiClient(transport) { newAccount }, cloudCache, registry)
+
+            val online = repository.loadInitialTimeline(newAccount)
+
+            assertEquals(setOf(DAY), online.loadedDayIds)
+            reopenDatabase()
+            assertEquals(listOf(43L), cloudCache.loadTimelineSnapshot(newAccount)?.items?.map { it.remoteFileId })
+            assertEquals(0, storedAliasCount(remote))
+        }
+    }
+
     private suspend fun storedAliasCount(source: MediaSourceIdentity): Int =
         database
             .mediaIdentityDao()
@@ -437,13 +454,14 @@ class VanishedSourceAliasesTest {
         cloudCache = TimelineCacheRepository(database, ThumbnailFileStore(context), registry)
     }
 
-    private class CloudResponses : AutoCloseable {
+    /** Memories with one photo on [DAY]; with [dayCount] 1 the initial response loads the whole day. */
+    private class CloudResponses(dayCount: Int = 2) : AutoCloseable {
         @Volatile var failDetails = true
         private val server = loopbackServer { request ->
             val photo = """{"fileid":43,"dayid":20000,"epoch":1728000000,"size":2048}"""
             val (status, body) = when {
                 request.target.endsWith("/config") -> 200 to """{"version":"10.1.0"}"""
-                request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":2,"detail":[$photo]}]"""
+                request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":$dayCount,"detail":[$photo]}]"""
                 failDetails -> 503 to "{}"
                 else -> 200 to "[$photo]"
             }

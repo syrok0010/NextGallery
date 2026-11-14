@@ -121,7 +121,7 @@ class UploadQueueRuntimeTest {
     @Test fun failingToClearTheSessionIsNotReportedAsUnfinishedUploads() = runBlocking {
         enqueue()
         queue.cancelAll()
-        waitFor { phases().all { it == UploadPhase.Cancelled } }
+        waitFor { phases() == ids.map { UploadPhase.Cancelled } }
 
         assertEquals(LogoutRefusal.Failed, queue.logout { throw IOException("credentials not cleared") })
         assertTrue(sessions.session.value is SessionUiState.SignedIn)
