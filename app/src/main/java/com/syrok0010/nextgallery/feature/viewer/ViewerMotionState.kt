@@ -2,6 +2,8 @@ package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animate
@@ -59,9 +61,6 @@ internal fun rememberViewerMotionState(
         )
     }
 
-    LaunchedEffect(motion) {
-        motion.showBackground()
-    }
     LaunchedEffect(currentMediaId) {
         motion.onCurrentMediaChange(currentMediaId)
     }
@@ -83,7 +82,8 @@ private sealed interface ViewerPhase {
     /** Waiting for the surface to be measured, to grow it out of its tile. */
     data object Hidden : ViewerPhase
 
-    data class Opening(val target: ViewerBoundsTransform) : ViewerPhase
+    /** Coming in; without a [target] the surface is already at rest and only the rest fades in. */
+    data class Opening(val target: ViewerBoundsTransform?) : ViewerPhase
 
     /** Open; the user may be dragging it down, or it may be going back to rest after a drag. */
     data object Shown : ViewerPhase
@@ -91,13 +91,13 @@ private sealed interface ViewerPhase {
     data class PredictiveBack(val progress: Float) : ViewerPhase
 
     /**
-     * Settling onto the tile, then gone; nothing leads out of here. [dim] and [openness] are as
-     * they were when the closing started.
+     * Settling onto the tile, then gone; nothing leads out of here. [background] and [chrome] are
+     * the alphas the closing started from.
      */
     data class Closing(
         val target: ViewerBoundsTransform?,
-        val dim: Float,
-        val openness: Float,
+        val background: Float,
+        val chrome: Float,
     ) : ViewerPhase
 }
 
@@ -105,6 +105,10 @@ private sealed interface ViewerPhase {
  * The surface's way from its tile into the viewer and back. One [phase] says where it is; every
  * event is a transition from it, and each new animation replaces the one before, so a cut-short
  * animation leaves nothing behind.
+ *
+ * The surface, the background and the chrome follow one animation, each over its own part of it,
+ * so they come in one after another: the background darkens while the surface grows, and the
+ * chrome shows over the background. Closing runs the other way round.
  */
 internal class ViewerMotionState(
     private val openingMediaId: MediaId,
@@ -122,14 +126,15 @@ internal class ViewerMotionState(
     var surfaceBounds by mutableStateOf<Rect?>(null)
         private set
 
-    /** How far the opening or the closing is. */
+    /**
+     * How far the opening or the closing is, from 0 to 1: the share of the opening's time, or of
+     * the closing surface's way onto its tile.
+     */
     private var progress by mutableFloatStateOf(0f)
     private var dragOffset by mutableStateOf(Offset.Zero)
-    private var background by mutableFloatStateOf(if (opened) 1f else 0f)
 
     /** The surface's running animation; the next one cancels it. */
     private var surfaceAnimation: Job? = null
-    private var backgroundAnimation: Job? = null
 
     val trackSurfaceBounds: Boolean
         get() = when (phase) {
@@ -138,21 +143,37 @@ internal class ViewerMotionState(
             else -> false
         }
 
-    /**
-     * How far the viewer has come out of its tile, from 0 at the tile to 1 at rest. The chrome
-     * fades in with the opening, and out as the viewer is pulled away or closes.
-     */
-    val openness: Float
+    val backgroundAlpha: Float
         get() = when (val phase = phase) {
             ViewerPhase.Hidden -> 0f
-            is ViewerPhase.Opening -> progress
-            ViewerPhase.Shown, is ViewerPhase.PredictiveBack -> 1f - dim()
-            // Without a tile to settle on, the viewer leaves with its background.
-            is ViewerPhase.Closing -> phase.openness * if (phase.target != null) 1f - progress else background
+
+            is ViewerPhase.Opening -> ViewerTimeline.backgroundOpening.of(progress)
+
+            ViewerPhase.Shown, is ViewerPhase.PredictiveBack ->
+                1f - pull() * ViewerTimeline.PulledBackgroundDim
+
+            is ViewerPhase.Closing -> phase.background * (1f - progress)
         }.coerceIn(0f, 1f)
 
-    val backgroundAlpha: Float
-        get() = background * (1f - dim() * 0.55f).coerceIn(0.45f, 1f)
+    /** The header, the filmstrip and the actions: part of the surface, they come and go with it. */
+    val chromeAlpha: Float
+        get() = when (val phase = phase) {
+            ViewerPhase.Hidden -> 0f
+
+            is ViewerPhase.Opening -> ViewerTimeline.chromeOpening.of(progress)
+
+            ViewerPhase.Shown, is ViewerPhase.PredictiveBack ->
+                1f - ViewerTimeline.chromePull.of(pull())
+
+            is ViewerPhase.Closing ->
+                phase.chrome *
+                    (
+                        1f -
+                            ViewerTimeline.chromeClosing.of(
+                                progress,
+                            )
+                        )
+        }.coerceIn(0f, 1f)
 
     fun surfaceTransform(mediaId: MediaId): ViewerSurfaceTransform =
         when (val phase = phase) {
@@ -162,7 +183,8 @@ internal class ViewerMotionState(
                 ViewerSurfaceTransform()
             }
 
-            is ViewerPhase.Opening -> phase.target.opening(progress)
+            is ViewerPhase.Opening -> phase.target?.opening(openedSurface())
+                ?: ViewerSurfaceTransform()
 
             ViewerPhase.Shown -> draggedSurface(dragOffset)
 
@@ -183,27 +205,13 @@ internal class ViewerMotionState(
         when (phase) {
             ViewerPhase.Hidden -> open()
 
-            // The user moved on before the opening ended: the other object just shows.
+            // The user moved on before the opening ended: the other object just shows, while the
+            // background and the chrome keep coming in.
             is ViewerPhase.Opening -> if (mediaId != null && mediaId != openingMediaId) {
-                surfaceAnimation?.cancel()
-                rest()
+                phase = ViewerPhase.Opening(target = null)
             }
 
             else -> Unit
-        }
-    }
-
-    fun showBackground() {
-        if (opened) return
-        backgroundAnimation = scope.launch {
-            animate(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = ViewerBackgroundEnterDurationMillis,
-                    delayMillis = ViewerBackgroundEnterDelayMillis,
-                ),
-            ) { value, _ -> background = value }
         }
     }
 
@@ -220,7 +228,9 @@ internal class ViewerMotionState(
                 is ViewerPhase.Opening ->
                     bounds
                         .settleTarget(tile, Offset.Zero, 0f)
-                        ?.startingFrom(from.target, progress)
+                        ?.let { settle ->
+                            from.target?.let { settle.startingFrom(it, openedSurface()) } ?: settle
+                        }
 
                 ViewerPhase.Shown -> bounds.settleTarget(tile, dragOffset, 0f)
 
@@ -231,21 +241,21 @@ internal class ViewerMotionState(
                 )
             }
         }
-        val dim = dim()
-        val openness = openness
+        val background = backgroundAlpha
+        val chrome = chromeAlpha
         progress = 0f
-        phase = ViewerPhase.Closing(settle, dim, openness)
-        backgroundAnimation?.cancel()
+        phase = ViewerPhase.Closing(settle, background, chrome)
         animateSurface {
-            val fade = launch {
-                animate(
-                    initialValue = background,
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = ViewerBackgroundExitDurationMillis),
-                ) { value, _ -> background = value }
-            }
             if (settle == null) {
-                fade.join()
+                // Without a tile to settle on, the viewer just fades out.
+                animate(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = ViewerTimeline.FadeOutMillis,
+                        easing = LinearEasing,
+                    ),
+                ) { value, _ -> progress = value }
             } else {
                 animate(
                     initialValue = 0f,
@@ -306,19 +316,24 @@ internal class ViewerMotionState(
         }
     }
 
-    /** Opens once the object it opened on is current and its surface is measured. */
+    /**
+     * Opens once the object it opened on is current and its surface is measured. The surface
+     * grows out of its tile only if it is the object the viewer opened on and the tile is known.
+     */
     private fun open() {
         val mediaId = currentMediaId ?: return
-        if (mediaId != openingMediaId) return rest()
         val bounds = surfaceBounds ?: return
-        val target = bounds.enterTarget(tileBounds()) ?: return rest()
+        val target = if (mediaId == openingMediaId) bounds.enterTarget(tileBounds()) else null
         progress = 0f
         phase = ViewerPhase.Opening(target)
         animateSurface {
             animate(
                 initialValue = 0f,
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = ViewerEnterDurationMillis),
+                animationSpec = tween(
+                    durationMillis = ViewerTimeline.OpeningMillis,
+                    easing = LinearEasing,
+                ),
             ) { value, _ -> progress = value }
             rest()
         }
@@ -346,18 +361,57 @@ internal class ViewerMotionState(
         surfaceAnimation = scope.launch(block = block)
     }
 
+    /** How far the opening has brought the surface out of its tile. */
+    private fun openedSurface(): Float =
+        FastOutSlowInEasing.transform(ViewerTimeline.surfaceOpening.of(progress))
+
     /** The surface settled on its tile from rest, where a predictive back leads it. */
     private fun restingTarget(): ViewerBoundsTransform? =
         surfaceBounds?.settleTarget(tileBounds(), Offset.Zero, 0f)
 
-    /** How much the user has pulled the viewer away, from 0 to 1. */
-    private fun dim(): Float =
+    /** How much the user has pulled the open viewer away, from 0 to 1. */
+    private fun pull(): Float =
         when (val phase = phase) {
             ViewerPhase.Shown -> dragOffset.y / ViewerDismissBackgroundDistancePx
             is ViewerPhase.PredictiveBack -> phase.progress
-            is ViewerPhase.Closing -> phase.dim
             else -> 0f
         }.coerceIn(0f, 1f)
+}
+
+/**
+ * When each part of the viewer comes and goes. The opening is one linear clock; the surface,
+ * the background and the chrome each take their own window of it. The closing and a pull take
+ * windows of how far the surface has gone.
+ */
+private object ViewerTimeline {
+    const val OpeningMillis = 300
+
+    /** The surface grows out of its tile over the first 220 ms, as it always has. */
+    val surfaceOpening = window(0, 220)
+
+    /** The background is dark before the chrome starts to show over it. */
+    val backgroundOpening = window(0, 150)
+    val chromeOpening = window(150, OpeningMillis)
+
+    /** The chrome is gone in the first part of the closing; the background goes with all of it. */
+    val chromeClosing = ProgressWindow(0f, 0.7f)
+
+    /** The chrome is gone halfway to a closing pull. */
+    val chromePull = ProgressWindow(0f, 0.5f)
+
+    /** How much a full pull lightens the background. */
+    const val PulledBackgroundDim = 0.55f
+
+    /** The closing without a tile to settle on. */
+    const val FadeOutMillis = 150
+
+    private fun window(fromMillis: Int, toMillis: Int) =
+        ProgressWindow(fromMillis / OpeningMillis.toFloat(), toMillis / OpeningMillis.toFloat())
+}
+
+/** A part of an animation, from [start] to [end] of it, that runs from 0 to 1 on its own. */
+private class ProgressWindow(private val start: Float, private val end: Float) {
+    fun of(progress: Float): Float = ((progress - start) / (end - start)).coerceIn(0f, 1f)
 }
 
 @Composable
@@ -429,10 +483,6 @@ private val MediaIdSaver = Saver<MediaId, String>(
 )
 
 private const val ViewerDismissBackgroundDistancePx = 420f
-private const val ViewerBackgroundEnterDelayMillis = 210
-private const val ViewerBackgroundEnterDurationMillis = 90
-private const val ViewerBackgroundExitDurationMillis = 90
-private const val ViewerEnterDurationMillis = 220
 private val ViewerDismissThreshold = 112.dp
 private val ViewerDismissFlingVelocity = 800.dp
 internal val ViewerDetailsFlingVelocity = 400.dp

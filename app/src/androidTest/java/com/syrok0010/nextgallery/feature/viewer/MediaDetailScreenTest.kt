@@ -73,13 +73,18 @@ class MediaDetailScreenTest {
     }
 
     @Test
-    fun dismissHidesAllVideoControlsAndCancellationRestoresThem() {
+    fun dragFadesOutAllVideoControlsAndCancellationRestoresThem() {
         showViewer(listOf(mediaItem("video", isVideo = true)), tileBounds = null, onClose = {})
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertIsDisplayed()
         rule.onRoot().performTouchInput {
             down(Offset(center.x, height * 0.3f))
             moveBy(Offset(0f, 100f), delayMillis = 200)
         }
+        // A short pull only fades the chrome.
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag).assertExists()
+        rule.onNodeWithTag(filmstripTileTestTag(0)).assertExists()
+        rule.onRoot().performTouchInput { moveBy(Offset(0f, 200f), delayMillis = 200) }
+        // Past halfway it is gone, every control with it.
         rule.onNodeWithTag(filmstripTileTestTag(0)).assertDoesNotExist()
         rule
             .onNodeWithContentDescription(

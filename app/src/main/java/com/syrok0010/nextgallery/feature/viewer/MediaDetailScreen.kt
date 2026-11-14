@@ -70,7 +70,7 @@ internal fun MediaDetailScreen(
         onClose = { currentItem?.let(onBack) },
         backEnabled = !videoFullscreen,
     )
-    val chromeShown by remember(motion) { derivedStateOf { motion.openness > 0f } }
+    val chromeShown by remember(motion) { derivedStateOf { motion.chromeAlpha > 0f } }
     ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
     val details = rememberViewerDetailsState()
     // Registered after the viewer's own handler, so back closes the sheet before the viewer.
@@ -178,8 +178,8 @@ internal fun MediaDetailScreen(
                         },
                     )
                 },
-                // Part of the surface coming out: fades with the opening and the closing.
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = motion.openness },
+                // Part of the surface: shows over the darkened background, and leaves before it.
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = motion.chromeAlpha },
             )
         }
         if (currentItem != null && !videoFullscreen) {

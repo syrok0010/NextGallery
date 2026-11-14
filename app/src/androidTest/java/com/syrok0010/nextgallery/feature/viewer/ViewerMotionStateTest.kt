@@ -53,6 +53,43 @@ class ViewerMotionStateTest {
     }
 
     @Test
+    fun theBackgroundDarkensBeforeTheChromeShows() {
+        showViewer(measure = false)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.onSurfaceBoundsChange(surface) }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(96)
+        rule.runOnIdle {
+            assertTrue(motion.backgroundAlpha > 0.3f)
+            assertEquals(0f, motion.chromeAlpha, 0f)
+        }
+        rule.mainClock.advanceTimeBy(112)
+        rule.runOnIdle {
+            assertEquals(1f, motion.backgroundAlpha, 0f)
+            assertTrue(motion.chromeAlpha > 0f)
+            assertTrue(motion.chromeAlpha < 1f)
+        }
+        finishAnimations()
+        rule.runOnIdle { assertResting() }
+    }
+
+    @Test
+    fun theChromeLeavesBeforeTheBackground() {
+        showViewer()
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { motion.close() }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(64)
+        rule.runOnIdle {
+            assertEquals(0f, motion.chromeAlpha, 0f)
+            assertTrue(motion.backgroundAlpha > 0f)
+            assertTrue(closedIds.isEmpty())
+        }
+        finishAnimations()
+        rule.runOnIdle { assertEquals(listOf(firstId), closedIds) }
+    }
+
+    @Test
     fun movingOnDuringTheOpeningLeavesTheNextObjectAtRestWithChrome() {
         showViewer(measure = false)
         rule.mainClock.autoAdvance = false
@@ -144,7 +181,7 @@ class ViewerMotionStateTest {
         showViewer()
         rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
         rule.runOnIdle {
-            assertTrue(motion.openness < 1f)
+            assertTrue(motion.chromeAlpha < 1f)
             motion.endDrag(canClose = true, thresholdPx = 112f)
         }
         finishAnimations()
@@ -159,7 +196,7 @@ class ViewerMotionStateTest {
         showViewer()
         rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
         rule.runOnIdle {
-            assertTrue(motion.openness < 1f)
+            assertTrue(motion.chromeAlpha < 1f)
             motion.endDrag(
                 canClose = true,
                 thresholdPx = 112f,
@@ -179,7 +216,7 @@ class ViewerMotionStateTest {
         showViewer()
         rule.runOnIdle { assertTrue(motion.dragBy(Offset(10f, 60f))) }
         rule.runOnIdle {
-            assertTrue(motion.openness < 1f)
+            assertTrue(motion.chromeAlpha < 1f)
             motion.endDrag(
                 canClose = true,
                 thresholdPx = 112f,
@@ -229,7 +266,7 @@ class ViewerMotionStateTest {
         showViewer()
         startBack()
         rule.runOnIdle {
-            assertTrue(motion.openness < 1f)
+            assertTrue(motion.chromeAlpha < 1f)
             assertTrue(motion.surfaceTransform(firstId).scale < 1f)
             rule.activity.onBackPressedDispatcher.dispatchOnBackCancelled()
         }
@@ -310,7 +347,7 @@ class ViewerMotionStateTest {
         assertEquals(1f, transform.scale, 0f)
         assertEquals(1f, transform.alpha, 0f)
         assertEquals(1f, motion.backgroundAlpha, 0f)
-        assertEquals(1f, motion.openness, 0f)
+        assertEquals(1f, motion.chromeAlpha, 0f)
         assertTrue(motion.trackSurfaceBounds)
     }
 }
