@@ -84,10 +84,12 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
     val moves = rememberRowMoves(entries)
     val uploading = entries.filter { it.phase == UploadPhase.Uploading || it.id in moves.finishing }
     val waiting = entries.filter { it.phase == UploadPhase.Waiting }
-    // Files that need attention come before ordinary outcomes; the latest come first.
-    val done = (entries - uploading.toSet() - waiting.toSet()).asReversed().sortedBy {
-        it.problem == null && it.phase != UploadPhase.NameConflict
-    }
+    val rest = (entries - uploading.toSet() - waiting.toSet()).asReversed()
+    // Unfinished work the user has to retry or cancel; «Clear» does not reach it, so it is not
+    // mixed with the outcomes. A taken name is an outcome: nothing is left to do about it.
+    val attention = rest.filter { it.problem != null }
+    // The latest come first, so a file that has just moved here stays in sight.
+    val done = rest - attention.toSet()
 
     Scaffold(
         topBar = {
@@ -133,6 +135,15 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
+            if (attention.isNotEmpty()) {
+                item(key = "attention") {
+                    SectionHeader(
+                        sectionTitle(R.string.uploads_section_attention, attention),
+                        Modifier.animateItem(placementSpec = moveSpec),
+                    )
+                }
+                items(attention, key = { it.id }) { row(it) }
+            }
             if (uploading.isNotEmpty()) {
                 item(key = "uploading") {
                     SectionHeader(
