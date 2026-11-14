@@ -314,10 +314,9 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun partialInitialResponseAndSeparateDayResponsesKeepAliases() = runBlocking {
+        val id = saveLinkedRemote()
         CloudResponses().use { server ->
             val onlineCredentials = credentials.copy(serverUrl = server.origin)
-            // The cache belongs to the account that later goes online; another account's is dropped.
-            val id = saveLinkedRemote(account = onlineCredentials)
             val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
             val repository = MemoriesRepository(
                 MemoriesApiClient(transport) { onlineCredentials }, cloudCache, registry,
@@ -348,23 +347,6 @@ class VanishedSourceAliasesTest {
         }
     }
 
-    @Test
-    fun anotherAccountGoingOnlineKeepsItsOwnPhotosForOffline() = runBlocking {
-        CloudResponses(dayCount = 1).use { server ->
-            saveLinkedRemote(account = credentials)
-            val newAccount = credentials.copy(serverUrl = server.origin)
-            val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
-            val repository = MemoriesRepository(MemoriesApiClient(transport) { newAccount }, cloudCache, registry)
-
-            val online = repository.loadInitialTimeline(newAccount)
-
-            assertEquals(setOf(DAY), online.loadedDayIds)
-            reopenDatabase()
-            assertEquals(listOf(43L), cloudCache.loadTimelineSnapshot(newAccount)?.items?.map { it.remoteFileId })
-            assertEquals(0, storedAliasCount(remote))
-        }
-    }
-
     private suspend fun storedAliasCount(source: MediaSourceIdentity): Int =
         database
             .mediaIdentityDao()
@@ -381,25 +363,17 @@ class VanishedSourceAliasesTest {
         return id
     }
 
-    private suspend fun saveLinkedRemote(
-        localAliases: Set<MediaAlias> = emptySet(),
-        account: AccountCredentials = credentials,
-    ): MediaId {
+    private suspend fun saveLinkedRemote(localAliases: Set<MediaAlias> = emptySet()): MediaId {
         val id = resolve(local, localAliases)
         assertTrue(registry.link(local, remote))
         resolve(remote)
-        saveSnapshot(listOf(TimelineDay(DAY, 1)), listOf(item(remote, id)), setOf(DAY), account)
+        saveSnapshot(listOf(TimelineDay(DAY, 1)), listOf(item(remote, id)), setOf(DAY))
         return id
     }
 
-    private suspend fun saveSnapshot(
-        days: List<TimelineDay>,
-        items: List<MediaItem>,
-        loaded: Set<Int>,
-        account: AccountCredentials = credentials,
-    ) {
+    private suspend fun saveSnapshot(days: List<TimelineDay>, items: List<MediaItem>, loaded: Set<Int>) {
         cloudCache.saveTimelineSnapshot(
-            account,
+            credentials,
             TimelineSnapshotAssembler.assemble(
                 config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false),
                 days = days,
@@ -454,14 +428,13 @@ class VanishedSourceAliasesTest {
         cloudCache = TimelineCacheRepository(database, ThumbnailFileStore(context), registry)
     }
 
-    /** Memories with one photo on [DAY]; with [dayCount] 1 the initial response loads the whole day. */
-    private class CloudResponses(dayCount: Int = 2) : AutoCloseable {
+    private class CloudResponses : AutoCloseable {
         @Volatile var failDetails = true
         private val server = loopbackServer { request ->
             val photo = """{"fileid":43,"dayid":20000,"epoch":1728000000,"size":2048}"""
             val (status, body) = when {
                 request.target.endsWith("/config") -> 200 to """{"version":"10.1.0"}"""
-                request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":$dayCount,"detail":[$photo]}]"""
+                request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":2,"detail":[$photo]}]"""
                 failDetails -> 503 to "{}"
                 else -> 200 to "[$photo]"
             }

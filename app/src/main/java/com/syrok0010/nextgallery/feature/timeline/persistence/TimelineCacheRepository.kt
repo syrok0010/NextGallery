@@ -2,7 +2,6 @@ package com.syrok0010.nextgallery.feature.timeline.persistence
 
 import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.LoadedDayEntity
-import com.syrok0010.nextgallery.core.database.MemoriesCacheMetadataEntity
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.ThumbnailCacheEntity
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
@@ -25,7 +24,9 @@ class TimelineCacheRepository(
     suspend fun loadTimelineSnapshot(credentials: AccountCredentials): TimelineSnapshot? =
         database.withTransaction {
             val metadata = timelineDao.metadata() ?: return@withTransaction null
-            if (!metadata.belongsTo(credentials)) return@withTransaction null
+            if (metadata.serverUrl != credentials.normalizedServerUrl()) {
+                return@withTransaction null
+            }
 
             val loadedDayIds = timelineDao.loadedDayIds().toSet()
             val mediaItems = timelineDao
@@ -45,14 +46,7 @@ class TimelineCacheRepository(
         val newCounts = snapshot.days.associate { it.dayId to it.count }
         val now = System.currentTimeMillis()
 
-        var accountChanged = false
         val staleThumbnailRows = database.withTransaction {
-            // Fallback when forgetOtherAccount failed: another account's rows must not survive
-            // under matching day counts.
-            if (timelineDao.metadata()?.belongsTo(credentials) == false) {
-                clearInTransaction()
-                accountChanged = true
-            }
             val oldCounts = timelineDao.timelineDayCounts().associate { it.dayId to it.count }
             val invalidatedDayIds = oldCounts
                 .filter { (dayId, oldCount) -> newCounts[dayId] != oldCount }
@@ -60,7 +54,7 @@ class TimelineCacheRepository(
             val staleThumbnails = thumbnailRowsForDays(invalidatedDayIds)
             timelineDao.upsertMetadata(
                 requireNotNull(snapshot.config) { "Only a Memories timeline can be cached" }
-                    .toCacheMetadataEntity(normalizedServerUrl, credentials.userId, now),
+                    .toCacheMetadataEntity(normalizedServerUrl, now),
             )
             timelineDao.deleteTimelineDays()
             timelineDao.upsertTimelineDays(
@@ -93,11 +87,7 @@ class TimelineCacheRepository(
             saveSnapshotDetailsInTransaction(snapshot, now)
             staleThumbnails
         }
-        if (accountChanged) {
-            thumbnailFileStore.clear()
-        } else {
-            thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
-        }
+        thumbnailFileStore.delete(staleThumbnailRows.map { it.relativePath })
     }
 
     suspend fun saveDayDetails(items: List<MediaItem>, loadedDayIds: Set<Int>) {
@@ -115,35 +105,17 @@ class TimelineCacheRepository(
         }
     }
 
-    /**
-     * Drops the cache of another account. Clearing removes every Memories alias, so call it before
-     * the new account's photos are resolved in the registry, or their identities go with it.
-     */
-    suspend fun forgetOtherAccount(credentials: AccountCredentials) {
-        val dropped = database.withTransaction {
-            val other = timelineDao.metadata()?.belongsTo(credentials) == false
-            if (other) clearInTransaction()
-            other
-        }
-        if (dropped) thumbnailFileStore.clear()
-    }
-
     suspend fun clear() {
-        database.withTransaction { clearInTransaction() }
+        database.withTransaction {
+            thumbnailDao.deleteAll()
+            timelineDao.deleteAllLoadedDays()
+            timelineDao.deleteAllMediaItems()
+            identityRegistry.removeSource(MediaSourceKind.Memories)
+            timelineDao.deleteTimelineDays()
+            timelineDao.deleteMetadata()
+        }
         thumbnailFileStore.clear()
     }
-
-    private suspend fun clearInTransaction() {
-        thumbnailDao.deleteAll()
-        timelineDao.deleteAllLoadedDays()
-        timelineDao.deleteAllMediaItems()
-        identityRegistry.removeSource(MediaSourceKind.Memories)
-        timelineDao.deleteTimelineDays()
-        timelineDao.deleteMetadata()
-    }
-
-    private fun MemoriesCacheMetadataEntity.belongsTo(credentials: AccountCredentials): Boolean =
-        serverUrl == credentials.normalizedServerUrl() && userId == credentials.userId
 
     private suspend fun retireMissingAliasesInTransaction(items: List<MediaItem>) {
         val currentFileIds = items.map { it.remoteFileId }.toSet()
