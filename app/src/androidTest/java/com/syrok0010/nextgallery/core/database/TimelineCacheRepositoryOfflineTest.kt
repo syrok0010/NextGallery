@@ -106,52 +106,6 @@ class TimelineCacheRepositoryOfflineTest {
         }
 
     @Test
-    fun anotherUserOfTheSameServerDoesNotGetTheCachedTimeline() =
-        runBlocking {
-            repository.saveTimelineSnapshot(credentials, loadedDay(identified(remoteItem())))
-
-            assertEquals(null, repository.loadTimelineSnapshot(otherUser))
-            assertEquals(listOf(remoteItem()), repository.loadTimelineSnapshot(credentials)?.items)
-        }
-
-    @Test
-    fun anotherAccountsIndexDropsThePreviousAccountsPhotos() =
-        runBlocking {
-            repository.saveTimelineSnapshot(credentials, loadedDay(identified(remoteItem())))
-
-            // Same day and count, but the details of that day are not loaded for the new account yet.
-            repository.saveTimelineSnapshot(
-                otherUser,
-                TimelineSnapshotAssembler.assemble(
-                    config = memoriesConfig(),
-                    days = listOf(TimelineDay(dayId = MATERIALIZED_DAY_ID, count = 1)),
-                ),
-            )
-
-            val cached = requireNotNull(repository.loadTimelineSnapshot(otherUser))
-            assertEquals(emptyList<MediaItem>(), cached.items)
-            assertEquals(emptySet<Int>(), cached.loadedDayIds)
-        }
-
-    /** The registry knows the cloud copy, as after a Memories load; the cache only keeps such items. */
-    private suspend fun identified(item: MediaItem): MediaItem {
-        identityRegistry.resolve(
-            listOf(
-                MediaIdentityCandidate(item.sourceIdentity(), item.mediaId, aliases = emptySet()),
-            ),
-        )
-        return item
-    }
-
-    private fun loadedDay(item: MediaItem) =
-        TimelineSnapshotAssembler.assemble(
-            config = memoriesConfig(),
-            days = listOf(TimelineDay(dayId = item.dayId, count = 1)),
-            mediaItems = listOf(item),
-            loadedDayIds = setOf(item.dayId),
-        )
-
-    @Test
     fun cloudObjectWithoutAliasesSurvivesOfflineRestore() =
         runBlocking {
             val withoutAliases = remoteItem().copy(auid = null, buid = null)
@@ -369,8 +323,5 @@ class TimelineCacheRepositoryOfflineTest {
             appPassword = "test-password",
             userId = "test-user",
         )
-
-        /** Same server, another Nextcloud user. */
-        val otherUser = credentials.copy(loginName = "other-user", userId = "other-user")
     }
 }

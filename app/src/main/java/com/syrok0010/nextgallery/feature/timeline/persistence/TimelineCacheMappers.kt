@@ -15,12 +15,10 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 
 fun MemoriesConfig.toCacheMetadataEntity(
     serverUrl: String,
-    userId: String,
     cachedAtEpochMillis: Long,
 ): MemoriesCacheMetadataEntity =
     MemoriesCacheMetadataEntity(
         serverUrl = serverUrl,
-        userId = userId,
         memoriesVersion = version,
         timelinePath = timelinePath,
         albumsEnabled = albumsEnabled,
