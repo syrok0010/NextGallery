@@ -3,12 +3,15 @@ package com.syrok0010.nextgallery.feature.upload
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.ui.UploadsScreen
@@ -106,34 +109,47 @@ class UploadsScreenSectionsTest {
                 }
             }
 
-            rule.waitUntil(5_000) {
-                visible(
-                    R.string.uploads_section_attention,
-                ) &&
-                    visible(R.string.uploads_section_done)
-            }
-            section(R.string.uploads_section_waiting).assertIsDisplayed()
+            // The sections follow the journal, the button follows the backoff: both must arrive.
+            rule.waitUntil(
+                5_000,
+            ) { queue.paused.value && queue.entries.value.any { it.problem != null } }
+            showSection(R.string.uploads_section_attention)
+            showSection(R.string.uploads_section_done)
+            showSection(R.string.uploads_section_waiting)
+            rule.waitUntil(5_000) { retryNowCount() == 1 }
             rule
                 .onNodeWithContentDescription(
                     string(R.string.uploads_retry_now),
                 ).assertIsDisplayed()
 
+            list().performScrollToNode(hasText(string(R.string.uploads_clear)))
             rule.onNodeWithText(string(R.string.uploads_clear)).performClick()
 
-            rule.waitUntil(5_000) { !visible(R.string.uploads_section_done) }
+            rule.waitUntil(5_000) {
+                queue.entries.value.none { it.selection.displayName == "$UPLOADED.jpg" } &&
+                    !visible(R.string.uploads_section_done)
+            }
             rule.onAllNodesWithText("$UPLOADED.jpg").assertCountEquals(0)
-            section(R.string.uploads_section_attention).assertIsDisplayed()
+            showSection(R.string.uploads_section_attention)
+            list().performScrollToNode(hasText("$REFUSED.jpg"))
             rule.onNodeWithText("$REFUSED.jpg").assertIsDisplayed()
 
+            showSection(R.string.uploads_section_waiting)
             rule.onNodeWithContentDescription(string(R.string.uploads_retry_now)).performClick()
 
             rule.waitUntil(5_000) { restarts.get() == 1 }
             rule.waitUntil(5_000) { retryNowCount() == 0 }
-            section(R.string.uploads_section_waiting).assertIsDisplayed()
+            showSection(R.string.uploads_section_waiting)
             assertEquals(1, restarts.get())
         }
 
-    private fun section(title: Int) = rule.onNodeWithText(string(title), substring = true)
+    private fun list() = rule.onNode(hasScrollToNodeAction())
+
+    /** Scrolls the section into view: on a short screen a lazy list composes only what fits. */
+    private fun showSection(title: Int) {
+        list().performScrollToNode(hasText(string(title), substring = true))
+        rule.onNodeWithText(string(title), substring = true).assertIsDisplayed()
+    }
 
     private fun visible(title: Int) =
         rule.onAllNodesWithText(string(title), substring = true).fetchSemanticsNodes().isNotEmpty()
