@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -52,14 +51,14 @@ internal fun MediaDetailScreen(
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
-    var chromeVisible by rememberSaveable { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
     // Right after the last page is removed the pager still points past the end for a frame.
     val currentPage = pagerState.currentPage.coerceAtMost(items.lastIndex)
     val currentItem = items.getOrNull(currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
     val videoFullscreen = playback.current?.state?.isFullscreen == true
-    LaunchedEffect(videoFullscreen) { chromeVisible = true }
+    // Entering and leaving fullscreen video shows the chrome again, in the same frame.
+    var chromeVisible by rememberSaveable(videoFullscreen) { mutableStateOf(true) }
     var activePageState by remember(currentItem?.mediaId) {
         mutableStateOf(ActiveViewerPageState())
     }
