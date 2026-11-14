@@ -31,12 +31,8 @@ internal fun MediaGridPanel(
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
-    val gridItems = remember(slots) {
-        slots.toMediaGridItems()
-    }
-    val slotGridIndexes = remember(gridItems) {
-        gridItems.toSlotGridIndexes()
-    }
+    val grid = remember(slots) { MediaGridSnapshot(slots) }
+    val gridItems = grid.items
     var isDraggingScrollIndicator by remember { mutableStateOf(false) }
     PreserveMediaScrollAnchor(
         gridItems = gridItems,
@@ -44,12 +40,11 @@ internal fun MediaGridPanel(
         isScrollNavigationActive = isDraggingScrollIndicator || revealMediaId != null,
     )
 
-    LaunchedEffect(gridItems) {
+    LaunchedEffect(grid) {
         snapshotFlow {
-            val visibleItems = gridState.layoutInfo.visibleItemsInfo
-            val visibleSlotIndexes = visibleItems.mapNotNull { visibleItem ->
-                (gridItems.getOrNull(visibleItem.index) as? MediaGridItem.Slot)?.slotIndex
-            }
+            val visibleSlotIndexes = grid
+                .measuredSlots(gridState.layoutInfo.visibleItemsInfo.map { it.key })
+                .map { it.slotIndex }
             val firstSlotIndex = visibleSlotIndexes.minOrNull()
             val lastSlotIndex = visibleSlotIndexes.maxOrNull()
             TimelineVisibleRange(
@@ -107,7 +102,7 @@ internal fun MediaGridPanel(
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
                 MediaGrid(
-                    gridItems = gridItems,
+                    grid = grid,
                     gridState = gridState,
                     registerTimelineTile = registerTimelineTile,
                     onSelect = onSelect,
@@ -116,9 +111,7 @@ internal fun MediaGridPanel(
                 )
 
                 MediaScrollIndicatorHost(
-                    slots = slots,
-                    gridItems = gridItems,
-                    slotGridIndexes = slotGridIndexes,
+                    grid = grid,
                     gridState = gridState,
                     isDragging = isDraggingScrollIndicator,
                     onDragStateChange = { isDraggingScrollIndicator = it },
