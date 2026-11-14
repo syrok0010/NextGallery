@@ -88,7 +88,7 @@ internal class GridDragSelection(
     private val edge: Float,
     private val maxSpeed: Float,
 ) {
-    var items: List<MediaGridItem> = emptyList()
+    var grid = MediaGridSnapshot(emptyList())
     var speed by mutableFloatStateOf(0f)
         private set
     private var range: RangeSelection? = null
@@ -97,8 +97,7 @@ internal class GridDragSelection(
     /** False when the press is not on a tile: the gesture is not a selection. */
     fun start(at: Offset): Boolean {
         val cell = cellAt(cells(), at.round(), exact = true) ?: return false
-        val id = (items.getOrNull(cell.index) as? MediaGridItem.Slot)?.slot?.mediaItem?.mediaId
-            ?: return false
+        val id = (grid[cell.key] as? MediaGridItem.Slot)?.slot?.mediaItem?.mediaId ?: return false
         val adding = !(selection.active && selection.isSelected(id))
         range = RangeSelection(selection.selectedIds, cell.key, adding)
         pointer = at
@@ -117,7 +116,7 @@ internal class GridDragSelection(
     fun follow() {
         val range = range ?: return
         val cell = cellAt(cells(), pointer.round(), exact = false) ?: return
-        range.selectedIds(items, cell.key)?.let(selection::replace)
+        range.selectedIds(grid.items, cell.key)?.let(selection::replace)
     }
 
     fun end() {
@@ -131,7 +130,7 @@ internal class GridDragSelection(
 
     private fun cells(): List<GridCell> =
         gridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
-            val slot = items.getOrNull(info.index) as? MediaGridItem.Slot
+            val slot = grid[info.key] as? MediaGridItem.Slot
             if (slot?.slot?.mediaItem == null) return@mapNotNull null
             GridCell(info.index, info.key as String, info.size.toIntRect().translate(info.offset))
         }
@@ -141,7 +140,7 @@ internal class GridDragSelection(
 internal fun rememberGridDragSelection(
     selection: MediaSelection,
     gridState: LazyGridState,
-    items: List<MediaGridItem>,
+    grid: MediaGridSnapshot,
 ): GridDragSelection {
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -156,7 +155,7 @@ internal fun rememberGridDragSelection(
             )
         }
     }
-    drag.items = items
+    drag.grid = grid
     LaunchedEffect(drag) {
         snapshotFlow { drag.speed }.collectLatest { speed ->
             if (speed == 0f) return@collectLatest

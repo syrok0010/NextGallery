@@ -20,7 +20,7 @@ import org.koin.compose.koinInject
 
 @Composable
 internal fun MediaGrid(
-    gridItems: List<MediaGridItem>,
+    grid: MediaGridSnapshot,
     gridState: LazyGridState,
     registerTimelineTile: (mediaId: MediaId, boundsProvider: () -> Rect?) -> () -> Unit,
     onSelect: (MediaItem) -> Unit,
@@ -28,7 +28,7 @@ internal fun MediaGrid(
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
-    val drag = selection?.let { rememberGridDragSelection(it, gridState, gridItems) }
+    val drag = selection?.let { rememberGridDragSelection(it, gridState, grid) }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(116.dp),
         state = gridState,
@@ -41,7 +41,7 @@ internal fun MediaGrid(
         horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         itemsIndexed(
-            items = gridItems,
+            items = grid.items,
             key = { _, item -> item.key },
             span = { _, item ->
                 when (item) {
