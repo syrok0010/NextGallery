@@ -14,7 +14,6 @@ internal class RemoteImageCache(
         width: Int,
         height: Int,
         etagsByFileId: Map<Long, String?>,
-        accountScope: String,
     ): List<ThumbnailKey> {
         if (fileIds.isEmpty()) {
             return emptyList()
@@ -24,7 +23,6 @@ internal class RemoteImageCache(
         val staleRows = mutableListOf<ThumbnailCacheEntity>()
         val keys = rows.mapNotNull { row ->
             val thumbnailKey = ThumbnailKey(
-                accountScope = accountScope,
                 fileId = row.fileId,
                 width = width,
                 height = height,
@@ -57,7 +55,6 @@ internal class RemoteImageCache(
         width: Int,
         height: Int,
         etagsByFileId: Map<Long, String?>,
-        accountScope: String,
     ) {
         if (previews.isEmpty()) {
             return
@@ -66,7 +63,6 @@ internal class RemoteImageCache(
         val now = System.currentTimeMillis()
         val rows = previews.map { preview ->
             val thumbnailKey = ThumbnailKey(
-                accountScope = accountScope,
                 fileId = preview.fileId,
                 width = width,
                 height = height,

@@ -1,21 +1,13 @@
 package com.syrok0010.nextgallery.feature.images
 
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
-import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 
-data class ThumbnailKey(
-    val accountScope: String,
-    val fileId: Long,
-    val width: Int,
-    val height: Int,
-    val etag: String?,
-) {
+/** One cached preview. The cache holds one account only: logout erases it (ADR 0010). */
+data class ThumbnailKey(val fileId: Long, val width: Int, val height: Int, val etag: String?) {
     internal fun coilMemoryCacheKey(): String =
         buildString {
             append("nextgallery-thumbnail:")
-            append(accountScope)
-            append(':')
             append(fileId)
             append(':')
             append(width)
@@ -37,7 +29,6 @@ fun thumbnailRequest(
 ): ThumbnailRequest =
     ThumbnailRequest(
         key = ThumbnailKey(
-            accountScope = credentials.thumbnailAccountScope(),
             fileId = fileId,
             width = width,
             height = height,
@@ -45,9 +36,6 @@ fun thumbnailRequest(
         ),
         credentials = credentials,
     )
-
-internal fun AccountCredentials.thumbnailAccountScope(): String =
-    "${NextcloudTransport.normalizeServerOrigin(serverUrl)}|$loginName"
 
 const val DEFAULT_THUMBNAIL_SIZE = 512
 

@@ -188,12 +188,10 @@ class TimelineCacheRepositoryOfflineTest {
             width = THUMBNAIL_SIZE,
             height = THUMBNAIL_SIZE,
             etagsByFileId = mapOf(FILE_ID to item.etag),
-            accountScope = ACCOUNT_SCOPE,
         )
 
     private fun thumbnailKey(item: MediaItem) =
         ThumbnailKey(
-            accountScope = ACCOUNT_SCOPE,
             fileId = FILE_ID,
             width = THUMBNAIL_SIZE,
             height = THUMBNAIL_SIZE,
@@ -220,7 +218,6 @@ class TimelineCacheRepositoryOfflineTest {
         const val REMOTE_ONLY_FILE_ID = 43L
         const val LOCAL_CONTENT_URI = "content://media/external/images/media/42"
         const val THUMBNAIL_SIZE = 512
-        const val ACCOUNT_SCOPE = "https://cloud.example.test|test-user"
 
         val credentials = AccountCredentials(
             serverUrl = "https://cloud.example.test",
