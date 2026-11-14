@@ -37,10 +37,14 @@ class ViewerMotionStateTest {
     @Test
     fun opensOnlyAfterMeasuredSurfaceIsReported() {
         showViewer(measure = false)
+        // Without a paused clock, waiting for idle would run the whole opening animation.
+        rule.mainClock.autoAdvance = false
         rule.runOnIdle {
             assertEquals(1f, motion.surfaceTransform(firstId).scale, 0f)
             motion.onSurfaceBoundsChange(surface)
         }
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(32)
         rule.runOnIdle {
             assertTrue(motion.surfaceTransform(firstId).scale < 1f)
         }

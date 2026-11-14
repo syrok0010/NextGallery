@@ -140,6 +140,8 @@ class FilmstripTest {
                 playback = playback,
                 frameProvider = provider,
                 lazyListState = listState,
+                // Seeks are paced by time; the test clock, not the wall clock, decides it here.
+                uptimeMillis = { composeRule.mainClock.currentTime },
             )
         }
         composeRule.waitForIdle()

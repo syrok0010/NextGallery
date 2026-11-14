@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
@@ -56,6 +57,8 @@ internal fun Filmstrip(
     playback: FilmstripPlayback = FilmstripPlayback.None,
     frameProvider: VideoFrameProvider? = null,
     lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
+    /** Paces seeks while scrubbing; a test passes its own clock, which it advances by hand. */
+    uptimeMillis: () -> Long = SystemClock::uptimeMillis,
 ) {
     if (items.isEmpty()) return
 
@@ -175,6 +178,7 @@ internal fun Filmstrip(
                             }
                         },
                         frameProvider = frameProvider,
+                        uptimeMillis = uptimeMillis,
                         modifier = itemModifier,
                     )
                 } else {

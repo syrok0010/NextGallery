@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import android.os.SystemClock
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -34,13 +35,14 @@ internal fun VideoFilmstripItem(
     onSeekFraction: (Float) -> Unit,
     modifier: Modifier = Modifier,
     frameProvider: VideoFrameProvider? = null,
+    uptimeMillis: () -> Long = SystemClock::uptimeMillis,
 ) {
     val factory: VideoFramesFactory? = if (frameProvider == null) koinInject() else null
     val scope = rememberCoroutineScope()
     val state = remember(item.mediaId, item.assetRef, factory, frameProvider, playback) {
         val sources = factory?.sources(item.assetRef) ?: VideoSources.from(item.assetRef)
         val provider = frameProvider ?: checkNotNull(factory).create(sources)
-        VideoFilmstripItemState(item, provider, playback, scope, sources)
+        VideoFilmstripItemState(item, provider, playback, scope, sources, uptimeMillis)
     }
     val activeSource = playback.sourceFor(item.mediaId)
     LaunchedEffect(state, placement, activeSource) { state.update(placement) }

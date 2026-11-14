@@ -8,6 +8,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import org.koin.core.context.GlobalContext
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
+import com.syrok0010.nextgallery.feature.viewer.playback.newVodClientId
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -489,7 +490,7 @@ class VideoPlaybackIntegrationTest {
         val provider = RemoteVideoFrames(rule.activity) { factory.mediaSourceFactory(rule.activity) }
         val original = checkNotNull(factory.sources(remote.assetRef).remoteOriginal)
         val originalUri = original.uri
-        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(original, "framesclient") }
+        val qualities = kotlinx.coroutines.runBlocking { factory.qualities(original, newVodClientId()) }
         val hlsUri = qualities.first { it.label == "Auto" }.uri
         for (uri in listOf(originalUri, hlsUri)) {
             val frames = kotlinx.coroutines.runBlocking { provider.frames(uri).toList() }

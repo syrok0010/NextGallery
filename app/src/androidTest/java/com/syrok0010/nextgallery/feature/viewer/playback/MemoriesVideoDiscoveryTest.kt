@@ -68,7 +68,7 @@ class MemoriesVideoDiscoveryTest {
                 requests,
                 false,
                 303,
-            ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "client123")
+            ).qualities(RemoteVideoOriginal(42, "https://cloud.example/nextcloud"), "c0ffee123")
             assertTrue(result.isEmpty())
             assertEquals(2, requests.size)
         }

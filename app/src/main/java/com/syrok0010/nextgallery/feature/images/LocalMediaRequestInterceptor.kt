@@ -6,7 +6,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 internal class LocalMediaRequestInterceptor : Interceptor {
-    private val permits = Semaphore(8)
+    private val permits = Semaphore(PERMITS)
 
     override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
         if (chain.request.data is LocalThumbnailRequest) {
@@ -22,5 +22,10 @@ internal class LocalMediaRequestInterceptor : Interceptor {
         if (!uri.startsWith("content://media/")) return chain.proceed()
 
         return permits.withPermit { chain.proceed() }
+    }
+
+    companion object {
+        /** Local opens and decodes at once; the rest wait without touching the file. */
+        const val PERMITS = 8
     }
 }
