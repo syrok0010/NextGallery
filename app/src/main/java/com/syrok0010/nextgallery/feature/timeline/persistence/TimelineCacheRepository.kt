@@ -47,7 +47,8 @@ class TimelineCacheRepository(
 
         var accountChanged = false
         val staleThumbnailRows = database.withTransaction {
-            // Another account's rows must not survive under matching day counts.
+            // Fallback when forgetOtherAccount failed: another account's rows must not survive
+            // under matching day counts.
             if (timelineDao.metadata()?.belongsTo(credentials) == false) {
                 clearInTransaction()
                 accountChanged = true
@@ -112,6 +113,19 @@ class TimelineCacheRepository(
                 )
             }
         }
+    }
+
+    /**
+     * Drops the cache of another account. Clearing removes every Memories alias, so call it before
+     * the new account's photos are resolved in the registry, or their identities go with it.
+     */
+    suspend fun forgetOtherAccount(credentials: AccountCredentials) {
+        val dropped = database.withTransaction {
+            val other = timelineDao.metadata()?.belongsTo(credentials) == false
+            if (other) clearInTransaction()
+            other
+        }
+        if (dropped) thumbnailFileStore.clear()
     }
 
     suspend fun clear() {

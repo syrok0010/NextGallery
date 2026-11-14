@@ -35,6 +35,8 @@ class MemoriesRepository(
         val preloadedPhotoDtos = dayDtos
             .flatMap { it.detail }
             .distinctBy { it.fileid }
+        // Before resolving: dropping another account's cache also drops identities resolved now.
+        bestEffort { cacheRepository.forgetOtherAccount(credentials) }
         val preloadedItems = preloadedPhotoDtos.toIdentifiedMediaItems()
         val loadedDayIds = dayDtos
             .filter { it.detail.size == it.count }
