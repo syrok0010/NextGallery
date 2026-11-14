@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaDeletionTest {
@@ -303,7 +304,7 @@ class MediaDeletionTest {
                 repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
                 repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
                 assertEquals(
-                    DeletionProgress(queued = listOf(1, 3, 2), total = 3, processed = 0),
+                    DeletionProgress(queued = listOf(1, 3, 2), total = 3, processed = 0, requests = 2),
                     repository.state.value.running,
                 )
                 release.countDown()
@@ -320,16 +321,16 @@ class MediaDeletionTest {
 
     @Test fun `a file named again by a queued deletion stays marked until that one ends too`() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val release = CountDownLatch(1)
+        val gates = listOf(CountDownLatch(1), CountDownLatch(1))
         try {
             val calls = AtomicInteger()
             val finished = AtomicInteger()
             val repository = MediaDeletionRepository(
                 SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
                 MediaLibraryIndex(),
-                // The first request deletes at once; the second waits for the server.
+                // Each request waits for its own gate, so the second is queued while the first runs.
                 CloudTrash { _, _ ->
-                    if (calls.incrementAndGet() > 1) release.await()
+                    gates[calls.getAndIncrement()].await()
                     true
                 },
                 InMemoryMediaIdentityRegistry(),
@@ -339,14 +340,48 @@ class MediaDeletionTest {
 
             repository.delete(DeletionTargets(emptyList(), listOf(1)))
             repository.delete(DeletionTargets(emptyList(), listOf(1)))
+            gates[0].countDown()
             withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
 
             assertEquals(setOf(1L), repository.state.value.running?.fileIds)
-            release.countDown()
-            withTimeout(5_000) { repository.state.first { it.running == null } }
-            assertEquals(2, finished.get())
+            gates[1].countDown()
+            // The result is published before the callback, so the queue is empty by now.
+            withTimeout(5_000) { while (finished.get() < 2) kotlinx.coroutines.delay(10) }
+            assertEquals(null, repository.state.value.running)
         } finally {
-            release.countDown()
+            gates.forEach { it.countDown() }
+            scope.cancel()
+        }
+    }
+
+    @Test fun `a phone-only deletion counts as running until the trash is checked`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val checked = CountDownLatch(1)
+        try {
+            val finished = AtomicInteger()
+            val repository = MediaDeletionRepository(
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                MediaLibraryIndex(),
+                CloudTrash { _, _ -> error("no cloud copy to delete") },
+                InMemoryMediaIdentityRegistry(),
+                { uris ->
+                    checked.await()
+                    uris
+                },
+                scope,
+            ) { finished.incrementAndGet() }
+
+            repository.delete(targets(listOf("content://media/external/images/media/5"), emptyList()))
+
+            // A running operation keeps logout, which ends the process, disabled.
+            val shown = withTimeout(5_000) { repository.operations.first { it.isNotEmpty() } }.single()
+            assertTrue(shown.running)
+            assertEquals("delete_progress_phone", resourceName(shown.title))
+            checked.countDown()
+            withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
+            assertEquals(null, repository.state.value.running)
+        } finally {
+            checked.countDown()
             scope.cancel()
         }
     }

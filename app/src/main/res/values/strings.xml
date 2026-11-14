@@ -160,6 +160,7 @@
     <string name="delete_confirm">Delete</string>
     <string name="delete_phone_failed">Couldn\'t move the phone files to the trash</string>
     <string name="delete_progress">Deleting from the cloud: %1$d of %2$d</string>
+    <string name="delete_progress_phone">Moving to the phone trash</string>
     <string name="delete_done">Deletion finished</string>
     <string name="delete_done_with_errors">Not everything was deleted</string>
     <string name="delete_done_phone">In the phone trash: %1$d</string>

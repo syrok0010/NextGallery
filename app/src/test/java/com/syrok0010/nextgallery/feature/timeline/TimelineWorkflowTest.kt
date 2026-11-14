@@ -116,6 +116,8 @@ class TimelineWorkflowTest {
 
         assertEquals(source.cached, workflow.state.value.snapshot)
         // Days the cache already holds are not requested again.
+        workflow.requestDays(listOf(10))
+        runCurrent()
         assertEquals(emptyList<List<Int>>(), source.requests)
 
         source.initialFailure = false

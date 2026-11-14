@@ -90,6 +90,8 @@ class UploadTransferTest {
             { SourceStamp(1, 1, 1) },
             UploadFollowUps(link = { _, _, _, _ -> true }, album = { _, _, _, _ -> true }),
             {},
+            // The queue releases claims of other processes on start; the test claims as this one.
+            processId = EXECUTOR,
         )
         transfer = newTransfer()
     }
@@ -294,7 +296,7 @@ class UploadTransferTest {
             "image/jpeg",
         )
         journal.enqueue(listOf(selection), album = null)
-        return journal.claimNext("test")!!
+        return journal.claimNext(EXECUTOR)!!
     }
 
     private fun happyPath(request: RecordedRequest): MockResponse =
@@ -350,6 +352,7 @@ class UploadTransferTest {
     }
 
     private companion object {
+        const val EXECUTOR = "test-process"
         const val PHOTO_SIZE = 10
         const val PHOTO_PATH = "/remote.php/dav/files/test/Photos/photo.jpg"
     }
