@@ -32,6 +32,7 @@ class UnifiedTimelineProjectionTest {
         assertEquals(remote.displayName, item.displayName)
         assertEquals(remote.dayId, item.dayId)
         assertEquals(remote.takenAtEpochSeconds, item.takenAtEpochSeconds)
+        assertEquals(remote.etag, item.etag)
         val assets = item.assetRef as MediaAssetRef.LocalFirst
         assertEquals(local.assetRef, assets.local)
         assertEquals(remote.assetRef, assets.remote)
