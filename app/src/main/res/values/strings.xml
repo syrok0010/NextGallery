@@ -4,6 +4,7 @@
     <string name="action_back">Back</string>
     <string name="action_cancel_login">Cancel sign-in</string>
     <string name="action_logout">Sign out</string>
+    <string name="logout_failed">Could not sign out. Try again.</string>
     <string name="logout_wait_for_operations">Wait for the operations to finish</string>
     <string name="action_allow_local_media">Continue</string>
     <string name="action_not_now">Not now</string>

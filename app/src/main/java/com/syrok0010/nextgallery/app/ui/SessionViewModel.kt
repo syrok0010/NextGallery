@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
+import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,15 +18,17 @@ internal class SessionViewModel(
     private val memories: MemoriesRepository,
     private val uploads: UploadQueue,
 ) : ViewModel() {
-    val logoutBlocked = MutableStateFlow(false)
+    /** Why the last logout kept the session; the screen explains it and resets it to null. */
+    val logoutRefusal = MutableStateFlow<LogoutRefusal?>(null)
+
     fun logout() {
         viewModelScope.launch {
-            val allowed = uploads.logout {
+            val refusal = uploads.logout {
                 credentials.clear()
                 sessionStore.signOut()
             }
-            logoutBlocked.value = !allowed
-            if (allowed) memories.clearCache()
+            logoutRefusal.value = refusal
+            if (refusal == null) memories.clearCache()
         }
     }
     val session: StateFlow<SessionUiState> = sessionStore.session

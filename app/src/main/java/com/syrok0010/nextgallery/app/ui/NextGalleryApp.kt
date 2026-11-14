@@ -33,6 +33,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import kotlinx.coroutines.flow.Flow
@@ -78,16 +79,27 @@ internal fun NextGalleryApp(
     sessionViewModel: SessionViewModel = koinViewModel(),
 ) {
     val session by sessionViewModel.session.collectAsState()
-    val logoutBlocked by sessionViewModel.logoutBlocked.collectAsState()
-    if (logoutBlocked) AlertDialog(
-        onDismissRequest = { sessionViewModel.logoutBlocked.value = false },
-        text = { Text(stringResource(R.string.uploads_logout_blocked)) },
-        confirmButton = {
-            TextButton(onClick = { sessionViewModel.logoutBlocked.value = false }) {
-                Text(stringResource(android.R.string.ok))
-            }
-        },
-    )
+    val logoutRefusal by sessionViewModel.logoutRefusal.collectAsState()
+    logoutRefusal?.let { refusal ->
+        AlertDialog(
+            onDismissRequest = { sessionViewModel.logoutRefusal.value = null },
+            text = {
+                Text(
+                    stringResource(
+                        when (refusal) {
+                            LogoutRefusal.UnfinishedWork -> R.string.uploads_logout_blocked
+                            LogoutRefusal.Failed -> R.string.logout_failed
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { sessionViewModel.logoutRefusal.value = null }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
     val backStack = rememberNavBackStack(session.rootRoute())
     val routes = syncedBackStack(backStack.toList(), session)
     val page = routes.last()
