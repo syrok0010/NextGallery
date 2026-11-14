@@ -48,7 +48,7 @@ class ViewerTimelineBridgeTest {
             )
         val around = requireNotNull(index.prefetchRange(current.mediaId))
         assertEquals(1001, (around.first + around.last) / 2)
-        assertTrue(around.first > 0)
+        assertTrue(around.first in 1 until 1001 && around.last > 1001)
         // At the start the window is cut at slot 0 rather than shifted.
         assertEquals(0, requireNotNull(index.prefetchRange(first.mediaId)).first)
         assertEquals(null, index.prefetchRange(orphan.mediaId))

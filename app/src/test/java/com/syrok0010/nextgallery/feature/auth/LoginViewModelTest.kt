@@ -91,7 +91,7 @@ class LoginViewModelTest {
             vm.startLogin()
             // A recoverable failure is retried, not reported; the poll interval is not the contract.
             runCurrent()
-            while (polls < 2 && vm.state.value.login.isPolling) advanceTimeBy(100)
+            repeat(600) { if (polls < 2) advanceTimeBy(100) }
             runCurrent()
             assertEquals(2, polls)
             assertTrue(vm.state.value.login.isPolling)
