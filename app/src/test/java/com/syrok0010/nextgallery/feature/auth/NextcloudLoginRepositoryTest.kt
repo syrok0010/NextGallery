@@ -30,6 +30,35 @@ class NextcloudLoginRepositoryTest {
         }
     }
 
+    @Test fun `poll waits while the browser login is unfinished and fails on other answers`() = runBlocking {
+        val cases = listOf(
+            404 to LoginPollResult.Pending,
+            403 to LoginPollResult.Failed(LoginPollFailure.Http(403)),
+            500 to LoginPollResult.Failed(LoginPollFailure.Http(500)),
+        )
+        for ((code, expected) in cases) {
+            NextcloudFixture { code to "" }.use { fixture ->
+                assertEquals("HTTP $code", expected, repository().pollLogin(session(fixture.origin)))
+                val poll = fixture.requests.single()
+                assertEquals("POST" to "/poll", poll.method to poll.target)
+                assertEquals("token=token", poll.body)
+            }
+        }
+    }
+
+    @Test fun `unreadable poll answer fails and a lost connection may be retried`() = runBlocking {
+        NextcloudFixture { 200 to "{}" }.use { fixture ->
+            assertEquals(LoginPollResult.Failed(LoginPollFailure.Unknown), repository().pollLogin(session(fixture.origin)))
+        }
+        val client = okhttp3.OkHttpClient.Builder().addInterceptor { throw java.io.IOException("offline") }.build()
+        val transport = NextcloudTransport(Json, client)
+        val repository = NextcloudLoginRepository(NextcloudAuthClient(transport), transport)
+        assertEquals(
+            LoginPollResult.Failed(LoginPollFailure.Network, isRecoverable = true),
+            repository.pollLogin(session("https://cloud.example")),
+        )
+    }
+
     @Test fun `missing uid fails the login instead of polling a spent token`() = runBlocking {
         NextcloudFixture { request ->
             if (request.target == "/poll") 200 to credentialsJson(request) else 500 to ""
