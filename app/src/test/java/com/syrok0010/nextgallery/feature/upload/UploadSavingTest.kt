@@ -10,7 +10,6 @@ import org.junit.Test
 class UploadSavingTest {
     private val job = UploadJob(
         id = "job",
-        owner = "owner",
         selection = UploadSelection(
             MediaAssetRef.LocalContent("content://media/external/file/1", 1, 1),
             "a.jpg",

@@ -77,16 +77,15 @@ internal class UploadQueue(
     init {
         scope.launch {
             sessions.session
-                .map { (it as? SessionUiState.SignedIn)?.credentials?.uploadOwner }
+                .map { it is SessionUiState.SignedIn }
                 .distinctUntilChanged()
-                .collectLatest { owner ->
-                    rows.value = emptyList()
-                    if (owner == null) return@collectLatest
+                .collectLatest { signedIn ->
+                    if (!signedIn) return@collectLatest
                     // Claims of an earlier process died with it.
-                    journal.release(owner) { it != processId }
+                    journal.release { it != processId }
                     // Covers a process that died between accepting jobs and scheduling them.
-                    if (journal.jobs(owner).any { it.waiting }) scheduleWorker()
-                    journal.observe(owner).collect { rows.value = it }
+                    if (journal.jobs().any { it.waiting }) scheduleWorker()
+                    journal.observe().collect { rows.value = it }
                 }
         }
     }
@@ -94,34 +93,34 @@ internal class UploadQueue(
     /** Queues the phone-only objects among [mediaIds]; [album] gets them once they are uploaded. */
     suspend fun submit(mediaIds: Collection<MediaId>, album: UploadAlbum? = null): EnqueueResult =
         commands.withLock {
-            val owner = owner() ?: return@withLock EnqueueResult.Rejected
+            credentials() ?: return@withLock EnqueueResult.Rejected
             val index = library.state.value
             val files = mediaIds.distinct().mapNotNull { id -> index[id]?.let(::uploadSelection) }
             if (files.isEmpty()) return@withLock EnqueueResult.NothingToUpload
             // A file that cannot be read now is still queued and then needs attention.
             val stamped = withContext(Dispatchers.IO) { files.map { it.copy(stamp = stamp(it)) } }
-            journal.enqueue(owner, stamped, album).also {
+            journal.enqueue(stamped, album).also {
                 if (it is EnqueueResult.Accepted) scheduleWorker()
             }
         }
 
     fun cancelAll() =
-        command { owner ->
-            journal.cancel(owner)
+        command {
+            journal.cancel()
             running.values.forEach(Job::cancel)
         }
 
     fun cancel(id: String) =
-        command { owner ->
+        command {
             // The journal decides first, so a response arriving meanwhile cannot be accepted.
-            journal.cancel(owner, setOf(id))
+            journal.cancel(setOf(id))
             running[id]?.cancel()
         }
 
     /** Re-runs link/album reconciliation without reading the source or issuing another PUT. */
     fun retry(id: String) =
-        command { owner ->
-            journal.retry(owner, setOf(id))
+        command {
+            journal.retry(setOf(id))
             scheduleWorker()
         }
 
@@ -140,9 +139,9 @@ internal class UploadQueue(
             }
         }
 
-    fun clearFinished() = command(journal::clearFinished)
+    fun clearFinished() = command { journal.clearFinished() }
 
-    fun consumeResult() = command(journal::seen)
+    fun consumeResult() = command { journal.seen() }
 
     override fun consumeSucceeded() {
         if (result.value?.failed == false) consumeResult()
@@ -150,12 +149,12 @@ internal class UploadQueue(
 
     override fun consumeAll() = consumeResult()
 
-    /** Signs out through [clearSession] unless some upload work is unfinished; null once signed out. */
+    /** Runs [clearSession] unless some upload work is unfinished; null once it ran. */
     suspend fun logout(clearSession: () -> Unit): LogoutRefusal? =
         commands.withLock {
-            val owner = owner() ?: return@withLock null
+            credentials() ?: return@withLock null
             try {
-                if (!journal.clearIfFinished(owner)) return@withLock LogoutRefusal.UnfinishedWork
+                if (journal.hasUnfinished()) return@withLock LogoutRefusal.UnfinishedWork
                 clearSession()
                 null
             } catch (cancelled: CancellationException) {
@@ -175,7 +174,6 @@ internal class UploadQueue(
     ): Boolean =
         passes.withLock {
             val account = credentials() ?: return@withLock false
-            val owner = account.uploadOwner
             var reachedServer = false
             val deferred = HashSet<String>()
             // A pass that does not end normally makes the worker retry with backoff as well.
@@ -184,16 +182,16 @@ internal class UploadQueue(
             try {
                 // Passes never overlap, so every claim left now is stale: a dead process, or an
                 // earlier pass here that could not release its own.
-                journal.release(owner) { true }
-                while (credentials() == account) {
-                    val claim = journal.claimNext(owner, processId, deferred) ?: break
+                journal.release { true }
+                while (true) {
+                    val claim = journal.claimNext(processId, deferred) ?: break
                     reachedServer = runJob(account, claim, deferred, put) || reachedServer
                 }
                 deferred.isNotEmpty().also { retry = it }
             } finally {
                 backoff.value = retry
                 withContext(NonCancellable) {
-                    journal.release(owner) { it == processId }
+                    journal.release { it == processId }
                 }
                 if (reachedServer) refreshLibrary()
             }
@@ -201,7 +199,7 @@ internal class UploadQueue(
 
     /** Read from the journal, so it already counts the job [drain] finished last. */
     suspend fun unseenResult(): UploadResult? =
-        owner()?.let { owner -> uploadResult(journal.jobs(owner).filterNot { it.hidden }) }
+        credentials()?.let { uploadResult(journal.jobs().filterNot { it.hidden }) }
 
     /** The original name the job keeps across restarts, pinned on its first attempt. */
     suspend fun pin(claim: UploadJob, path: DavFilePath): DavFilePath =
@@ -306,11 +304,11 @@ internal class UploadQueue(
         return null
     }
 
-    private fun command(action: suspend (String) -> Unit) {
+    private fun command(action: suspend () -> Unit) {
         scope.launch {
-            val owner = owner() ?: return@launch
+            credentials() ?: return@launch
             try {
-                action(owner)
+                action()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -340,8 +338,6 @@ internal class UploadQueue(
         file.stamp != null && withContext(Dispatchers.IO) { stamp(file) } == file.stamp
 
     private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
-
-    private fun owner() = credentials()?.uploadOwner
 }
 
 /** Percent of the file on the wire; null while its size is unknown. */

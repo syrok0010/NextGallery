@@ -17,7 +17,6 @@ class UploadQueueRuntimeTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val dbName = "runtime-upload-test.db"
     private val credentials = AccountCredentials("http://test.syrok", "test", "fixture", "test")
-    private val owner = credentials.uploadOwner
     private lateinit var db: UploadQueueDatabase
     private lateinit var journal: UploadJournal
     private lateinit var scope: CoroutineScope
@@ -77,7 +76,7 @@ class UploadQueueRuntimeTest {
 
     private suspend fun enqueue(ids: List<MediaId> = this.ids, album: String? = null): List<String> {
         assertTrue(queue.submit(ids, album?.let { UploadAlbum("test", it) }) is EnqueueResult.Accepted)
-        return journal.jobs(owner).takeLast(ids.size).map { it.id }
+        return journal.jobs().takeLast(ids.size).map { it.id }
     }
 
     private suspend fun transfer(account: AccountCredentials, job: UploadJob, onProgress: (Int?) -> Unit): UploadedFile {
@@ -97,12 +96,12 @@ class UploadQueueRuntimeTest {
     }
 
     /** Runnable jobs nobody holds, read from the journal. */
-    private suspend fun waiting() = journal.jobs(owner).count { it.waiting }
+    private suspend fun waiting() = journal.jobs().count { it.waiting }
 
     private fun phases() = queue.entries.value.map { it.phase }
 
     /** A job claimed by a process that died; a reopened queue releases it. */
-    private suspend fun deadClaim() = journal.claimNext(owner, "dead-process")!!
+    private suspend fun deadClaim() = journal.claimNext("dead-process")!!
 
     @Test fun cancellationOfOneFileAndOfAllSurvivesReopen() = runBlocking {
         val (first) = enqueue()
@@ -115,7 +114,6 @@ class UploadQueueRuntimeTest {
         var loggedOut = false
         assertNull(queue.logout { loggedOut = true; sessions.signOut() })
         assertTrue(loggedOut)
-        assertTrue(journal.jobs(owner).isEmpty())
     }
 
     @Test fun failingToClearTheSessionIsNotReportedAsUnfinishedUploads() = runBlocking {
@@ -191,7 +189,7 @@ class UploadQueueRuntimeTest {
         assertEquals(LogoutRefusal.UnfinishedWork, queue.logout { error("Unfinished jobs must block logout") })
         settled { queue.clearFinished() }
         // Clearing hides finished rows; both jobs that need attention stay visible.
-        assertEquals(2, journal.jobs(owner).count { !it.hidden })
+        assertEquals(2, journal.jobs().count { !it.hidden })
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
         assertNull(queue.logout { sessions.signOut() })
@@ -235,13 +233,13 @@ class UploadQueueRuntimeTest {
         }
         assertTrue(retry)
         assertEquals("A deferred job is not taken again in the same pass", 2, transfers)
-        val jobs = journal.jobs(owner).associateBy { it.id }
+        val jobs = journal.jobs().associateBy { it.id }
         assertEquals(TransferState.Uncertain, jobs.getValue(first).state)
         assertNull(jobs.getValue(first).problem)
         assertEquals(TransferState.Attention, jobs.getValue(second).state)
         // The server still holds the lock of a PUT interrupted by process death.
         assertTrue(queue.drain { _, _, _ -> throw UploadException(UploadProblem.Http, 423) })
-        assertEquals(TransferState.Uncertain, journal.jobs(owner).first { it.id == first }.state)
+        assertEquals(TransferState.Uncertain, journal.jobs().first { it.id == first }.state)
         assertFalse(queue.drain(::transfer))
         waitFor { phases() == listOf(UploadPhase.Uploaded, UploadPhase.NeedsAttention) }
     }
@@ -262,7 +260,7 @@ class UploadQueueRuntimeTest {
             {}, UUID.randomUUID().toString(),
         )
         assertTrue(queue.drain(::transfer))
-        assertEquals(StepState.Pending, journal.jobs(owner).single().steps[FollowUp.Album])
+        assertEquals(StepState.Pending, journal.jobs().single().steps[FollowUp.Album])
         assertFalse(queue.drain { _, _, _ -> error("No second PUT") })
         assertEquals(listOf(false, true), albumRecovered)
         assertEquals(1, transfers)
@@ -271,10 +269,10 @@ class UploadQueueRuntimeTest {
 
     @Test fun aClaimAnEarlierPassHereCouldNotReleaseRunsInTheNextPass() = runBlocking {
         enqueue(listOf(ids.first()))
-        journal.claimNext(owner, processId)!!
+        journal.claimNext(processId)!!
         assertFalse(queue.drain(::transfer))
         assertEquals(1, transfers)
-        assertFalse(journal.jobs(owner).single().unfinished)
+        assertFalse(journal.jobs().single().unfinished)
     }
 
     @Test fun aPassStartedWhileAStoppedOneStillCleansUpWaitsForIt() = runBlocking {
@@ -307,7 +305,7 @@ class UploadQueueRuntimeTest {
         stopped.join()
         assertFalse(next.await())
         assertEquals(2, transfers)
-        assertFalse("The next pass keeps its claim", journal.jobs(owner).single().unfinished)
+        assertFalse("The next pass keeps its claim", journal.jobs().single().unfinished)
     }
 
     @Test fun acceptingAndReopeningScheduleTheWorkerButADeferralLeavesItToBackoff() = runBlocking {
@@ -417,7 +415,7 @@ class UploadQueueRuntimeTest {
         }
         sending.await()
         runner.cancelAndJoin()
-        assertEquals(listOf(TransferState.Uncertain, TransferState.Pending), journal.jobs(owner).map { it.state })
+        assertEquals(listOf(TransferState.Uncertain, TransferState.Pending), journal.jobs().map { it.state })
         waitFor { waiting() == 2 }
         reopen()
         waitFor { waiting() == 2 }

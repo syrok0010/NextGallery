@@ -77,7 +77,7 @@ class AlbumUploadFollowUpTest {
                     scope,
                 )
                 val selection = UploadSelection(MediaAssetRef.LocalContent("content://media/a", 1, 1), "a.jpg", "image/jpeg")
-                val job = UploadJob("job", "owner", selection, UploadAlbum("anna", "Лето"))
+                val job = UploadJob("job", selection, UploadAlbum("anna", "Лето"))
                 val file = UploadedFile(selection, DavFilePath.of("anna", "/Photos/a.jpg"), created = true, fileId = FILE_ID)
                 val added = AlbumUploadFollowUp(fixture.writer, catalog).run(fixture.credentials, job, file, recovered)
                 added to fixture.requests.map { if (it.method == "PROPFIND") "PROPFIND ${it.headers["depth"]}" else it.method }
