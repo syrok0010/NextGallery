@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.MediaAlias
 import com.syrok0010.nextgallery.core.media.MediaAliasKind
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
@@ -12,10 +13,10 @@ import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -62,12 +63,14 @@ class UnifiedTimelineProjectionPersistenceTest {
             val identifiedRemote = remote.copy(
                 mediaId = resolvedRemote.mediaIds.getValue(remote.sourceIdentity()),
             )
-            val afterRestart = UnifiedTimelineProjection()
-                .replaceRemoteSnapshot(remoteSnapshot(identifiedRemote))
+            val afterRestart = TimelineSnapshotProjection.project(
+                remoteSnapshot(identifiedRemote),
+                projectMediaLibrary(emptyList(), listOf(identifiedRemote)),
+            )
 
             assertEquals(
                 MediaId("published-local"),
-                requireNotNull(afterRestart.snapshot).items.single().mediaId,
+                requireNotNull(afterRestart).items.single().mediaId,
             )
         }
 

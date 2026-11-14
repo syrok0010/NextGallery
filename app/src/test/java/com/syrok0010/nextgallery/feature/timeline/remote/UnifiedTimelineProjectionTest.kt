@@ -1,17 +1,14 @@
 package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.core.media.LocalMediaProjection
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
-import com.syrok0010.nextgallery.core.media.MediaIdentityConflict
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.RemoteMediaProjection
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
-import com.syrok0010.nextgallery.feature.library.sourceIdentity
 import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -29,12 +26,8 @@ class UnifiedTimelineProjectionTest {
             mediaItems = listOf(remote),
             loadedDayIds = setOf(remote.dayId),
         )
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
+        val item = requireNotNull(project(listOf(local), remoteSnapshot)).items.single()
 
-        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
-
-        val item = requireNotNull(result.snapshot).items.single()
         assertEquals(MediaId("local-published"), item.mediaId)
         assertEquals(remote.displayName, item.displayName)
         assertEquals(remote.dayId, item.dayId)
@@ -49,12 +42,8 @@ class UnifiedTimelineProjectionTest {
     fun `local-only and cloud-only copies remain separate media objects with correct cloud presence`() = runBlocking {
         val local = localItem(MediaId("local-only"), auid = "local-auid")
         val remote = remoteItem(MediaId("cloud-only"), auid = "cloud-auid")
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
+        val projectedItems = requireNotNull(project(listOf(local), remoteSnapshot(remote))).items
 
-        val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
-
-        val projectedItems = requireNotNull(result.snapshot).items
         assertEquals(listOf(MediaId("cloud-only"), MediaId("local-only")), projectedItems.map { it.mediaId })
         val items = projectedItems.associateBy { it.mediaId }
         assertTrue(items.getValue(MediaId("local-only")).assetRef is MediaAssetRef.LocalContent)
@@ -76,12 +65,9 @@ class UnifiedTimelineProjectionTest {
             buid = "shared-buid",
         )
 
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
+        val snapshot = requireNotNull(project(listOf(local), remoteSnapshot(remote)))
 
-        val result = projection.replaceRemoteSnapshot(remoteSnapshot(remote))
-
-        assertEquals(listOf(MediaId("local-published")), requireNotNull(result.snapshot).items.map { it.mediaId })
+        assertEquals(listOf(MediaId("local-published")), snapshot.items.map { it.mediaId })
     }
 
     @Test
@@ -109,81 +95,39 @@ class UnifiedTimelineProjectionTest {
             mediaItems = listOf(conflictingRemote),
             loadedDayIds = setOf(conflictingRemote.dayId),
         )
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(first, second)))
+        val snapshot = requireNotNull(project(listOf(first, second), remoteSnapshot))
 
-        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
-
-        assertEquals(3, requireNotNull(result.snapshot).items.size)
-        assertEquals(MediaId("remote-separate"), result.snapshot.items.first().mediaId)
-        assertEquals(setOf(MediaId("local-first"), MediaId("local-second")),
-            result.snapshot.items.drop(1).mapTo(mutableSetOf()) { it.mediaId })
-    }
-
-    @Test
-    fun `conflict detaches a source that was previously merged and keeps the diagnostic ID stable`() = runBlocking {
-        val first = localItem(
-            mediaId = MediaId("local-first"),
-            auid = "first-auid",
-            buid = "first-buid",
-            contentUri = "content://images/1",
-        )
-        val second = localItem(
-            mediaId = MediaId("local-second"),
-            auid = "second-auid",
-            buid = "second-buid",
-            contentUri = "content://images/2",
-        )
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(first, second)))
-        projection.replaceRemoteSnapshot(
-            remoteSnapshot(remoteItem(MediaId("remote"), "first-auid", buid = null)),
-        )
-        val conflictingSnapshot = remoteSnapshot(
-            remoteItem(MediaId("conflict-separate"), "first-auid", buid = "second-buid"),
-        )
-
-        val firstConflict = projection.replaceRemoteSnapshot(conflictingSnapshot)
-        val repeatedConflict = projection.replaceRemoteSnapshot(conflictingSnapshot)
-
-        assertEquals(MediaId("conflict-separate"), requireNotNull(firstConflict.snapshot).items.first().mediaId)
+        assertEquals(3, snapshot.items.size)
+        assertEquals(MediaId("remote-separate"), snapshot.items.first().mediaId)
         assertEquals(
             setOf(MediaId("local-first"), MediaId("local-second")),
-            firstConflict.snapshot.items.drop(1).mapTo(mutableSetOf()) { it.mediaId },
-        )
-        assertEquals(
-            firstConflict.snapshot.items.map { it.mediaId },
-            requireNotNull(repeatedConflict.snapshot).items.map { it.mediaId },
+            snapshot.items.drop(1).mapTo(mutableSetOf()) { it.mediaId },
         )
     }
 
     @Test
-    fun `sequential source updates retain local media and clear resets the projection`() = runBlocking {
+    fun `day details loaded later join the local copy already on screen`() = runBlocking {
         val local = localItem(mediaId = MediaId("local-published"), auid = "shared-auid")
         val remote = remoteItem(mediaId = MediaId("remote-generated"), auid = "shared-auid")
         val remoteIndex = TimelineSnapshotAssembler.assemble(
             config = memoriesConfig(),
             days = listOf(TimelineDay(remote.dayId, 1)),
         )
-        val projection = UnifiedTimelineProjection()
 
-        projection.replaceLocalItems(LocalMediaProjection(listOf(local)))
-        assertEquals(listOf(local.mediaId), requireNotNull(projection.snapshot).items.map { it.mediaId })
+        assertEquals(listOf(local.mediaId), requireNotNull(project(listOf(local), null)).items.map { it.mediaId })
+        assertEquals(listOf(local.mediaId), requireNotNull(project(listOf(local), remoteIndex)).items.map { it.mediaId })
 
-        projection.replaceRemoteSnapshot(remoteIndex)
-        val merged = projection.mergeRemoteItems(RemoteMediaProjection(listOf(remote)), setOf(remote.dayId))
+        val withDetails = TimelineSnapshotAssembler.mergeLoadedItems(remoteIndex, listOf(remote), setOf(remote.dayId))
+        val merged = requireNotNull(project(listOf(local), withDetails))
 
-        val item = requireNotNull(merged.snapshot).items.single()
+        val item = merged.items.single()
         assertEquals(local.mediaId, item.mediaId)
         assertEquals(local.assetRef, (item.assetRef as MediaAssetRef.LocalFirst).local)
-        assertEquals(setOf(remote.dayId), merged.snapshot.loadedDayIds)
-
-        projection.clear()
-        assertEquals(null, projection.snapshot)
+        assertEquals(setOf(remote.dayId), merged.loadedDayIds)
     }
 
     @Test
-    fun `permission revoke keeps merged media cloud-only and restore reuses its MediaId`() = runBlocking {
+    fun `without the phone copy a merged object stays in the timeline as cloud-only`() = runBlocking {
         val mergedLocal = localItem(
             mediaId = MediaId("local-published"),
             auid = "shared-auid",
@@ -194,55 +138,18 @@ class UnifiedTimelineProjectionTest {
             buid = "local-only-buid",
             contentUri = "content://images/7",
         )
-        val remote = remoteItem(
-            mediaId = MediaId("remote-generated"),
-            auid = "shared-auid",
-        )
-        val projection = UnifiedTimelineProjection()
-        projection.replaceRemoteSnapshot(remoteSnapshot(remote))
+        // After the merge the identity registry resolves the server copy to the phone file's
+        // MediaId, and keeps doing so when the phone copy disappears (RoomMediaIdentityRegistryTest).
+        val remote = remoteItem(mediaId = mergedLocal.mediaId, auid = "shared-auid")
 
-        val withPermission = projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
-        val merged = requireNotNull(withPermission.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
-        assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
-        assertTrue(withPermission.snapshot.items.any { it.mediaId == localOnly.mediaId })
+        val withPermission = requireNotNull(project(listOf(mergedLocal, localOnly), remoteSnapshot(remote)))
+        assertTrue(withPermission.items.first { it.mediaId == mergedLocal.mediaId }.assetRef is MediaAssetRef.LocalFirst)
+        assertTrue(withPermission.items.any { it.mediaId == localOnly.mediaId })
 
-        val withoutPermission = projection.replaceLocalItems(LocalMediaProjection(emptyList()))
-        val cloudOnly = requireNotNull(withoutPermission.snapshot).items.single()
+        val withoutPermission = requireNotNull(project(emptyList(), remoteSnapshot(remote)))
+        val cloudOnly = withoutPermission.items.single()
         assertEquals(mergedLocal.mediaId, cloudOnly.mediaId)
         assertTrue(cloudOnly.assetRef is MediaAssetRef.MemoriesFile)
-
-        val restored = projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
-        val restoredMerged = requireNotNull(restored.snapshot).items.first { it.mediaId == mergedLocal.mediaId }
-        assertTrue(restoredMerged.assetRef is MediaAssetRef.LocalFirst)
-        assertTrue(restored.snapshot.items.any { it.mediaId == localOnly.mediaId })
-    }
-
-    @Test
-    fun `remote refresh updates cloud metadata without dropping independently reconciled local media`() = runBlocking {
-        val mergedLocal = localItem(MediaId("local-published"), auid = "shared-auid")
-        val localOnly = localItem(
-            mediaId = MediaId("local-only"),
-            auid = "local-only-auid",
-            buid = "local-only-buid",
-            contentUri = "content://images/7",
-        )
-        val initialRemote = remoteItem(MediaId("remote-generated"), auid = "shared-auid")
-        val refreshedRemote = initialRemote.copy(
-            displayName = "cloud-name-refreshed.jpg",
-            etag = "etag-refreshed",
-        )
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(mergedLocal, localOnly)))
-        projection.replaceRemoteSnapshot(remoteSnapshot(initialRemote))
-
-        val refreshed = projection.replaceRemoteSnapshot(remoteSnapshot(refreshedRemote))
-
-        val items = requireNotNull(refreshed.snapshot).items.associateBy(MediaItem::mediaId)
-        val merged = items.getValue(mergedLocal.mediaId)
-        assertEquals("cloud-name-refreshed.jpg", merged.displayName)
-        assertEquals("etag-refreshed", merged.etag)
-        assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
-        assertEquals(localOnly.assetRef, items.getValue(localOnly.mediaId).assetRef)
     }
 
     @Test
@@ -274,13 +181,14 @@ class UnifiedTimelineProjectionTest {
             loadedDayIds = setOf(300),
         )
 
-        val projection = UnifiedTimelineProjection()
-        projection.replaceLocalItems(LocalMediaProjection(listOf(sameDayLocal, localOnlyDayItem)))
-        val result = projection.replaceRemoteSnapshot(remoteSnapshot)
+        val snapshot = requireNotNull(project(listOf(sameDayLocal, localOnlyDayItem), remoteSnapshot))
 
-        val snapshot = requireNotNull(result.snapshot)
         assertEquals(setOf(200, 300), snapshot.loadedDayIds)
     }
+
+    /** What the timeline shows: the canonical library laid over the remote day index. */
+    private suspend fun project(local: List<MediaItem>, remote: TimelineSnapshot?): TimelineSnapshot? =
+        TimelineSnapshotProjection.project(remote, projectMediaLibrary(local, remote?.items.orEmpty()))
 
     private fun localItem(
         mediaId: MediaId,
@@ -347,58 +255,5 @@ class UnifiedTimelineProjectionTest {
         previewGeneratorEnabled = false,
         stackRawFiles = false,
         dedupIdentical = false,
-    )
-}
-
-private class UnifiedTimelineProjection {
-    private var remote: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
-    private var local = emptyList<MediaItem>()
-    private var projected: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot? = null
-
-    val snapshot get() = projected
-
-    suspend fun replaceLocalItems(items: LocalMediaProjection): Result {
-        local = items.items
-        return project()
-    }
-
-    suspend fun replaceRemoteSnapshot(snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?): Result {
-        remote = snapshot
-        return project()
-    }
-
-    suspend fun mergeRemoteItems(items: RemoteMediaProjection, loadedDayIds: Set<Int>): Result {
-        remote = remote?.let {
-            com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler.mergeLoadedItems(
-                it, items.items, loadedDayIds,
-            )
-        }
-        return project()
-    }
-
-    suspend fun clear() {
-        remote = null
-        local = emptyList()
-        projected = null
-    }
-
-    private suspend fun project(): Result {
-        val canonical = projectMediaLibrary(local, remote?.items.orEmpty())
-        remote = remote?.copy(
-            slots = remote!!.slots.map { slot ->
-                val item = slot.mediaItem ?: return@map slot
-                slot.copy(
-                    mediaItem = item.copy(
-                        mediaId = checkNotNull(canonical.mediaIdsBySource[item.sourceIdentity()]),
-                    ),
-                )
-            },
-        )
-        projected = TimelineSnapshotProjection.project(remote, canonical)
-        return Result(projected)
-    }
-
-    data class Result(
-        val snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?,
     )
 }

@@ -5,7 +5,7 @@ import android.util.Log
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.core.media.LocalMediaProjection
+import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
@@ -19,7 +19,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaMetadata
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
-import com.syrok0010.nextgallery.feature.timeline.UnifiedTimelineProjection
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import kotlin.system.measureNanoTime
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
@@ -81,7 +81,6 @@ class LocalMediaIndexingRegressionTest {
                 changeObserver = LocalMediaChangeObserver { emptyFlow() },
                 batchSize = BATCH_SIZE,
             )
-            val projection = UnifiedTimelineProjection()
 
             suspend fun scan(): Int {
                 var previous: List<MediaItem>? = null
@@ -91,7 +90,10 @@ class LocalMediaIndexingRegressionTest {
                     source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
                         if (previous !== state.items) {
                             projectionNanos += measureNanoTime {
-                                projection.replaceLocalItems(LocalMediaProjection(state.items))
+                                TimelineSnapshotProjection.project(
+                                    null,
+                                    projectMediaLibrary(state.items, emptyList()),
+                                )
                             }
                             builds++
                             previous = state.items
