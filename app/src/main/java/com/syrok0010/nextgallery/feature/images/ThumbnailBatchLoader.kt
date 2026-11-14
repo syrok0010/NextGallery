@@ -186,9 +186,8 @@ internal class ThumbnailBatchLoader(
         data class BatchCompleted(val batchId: Long, val keys: List<ThumbnailKey>) : Command
     }
 
-    private data class BatchIdentity(val accountScope: String, val width: Int, val height: Int) {
+    private data class BatchIdentity(val width: Int, val height: Int) {
         constructor(key: ThumbnailKey) : this(
-            accountScope = key.accountScope,
             width = key.width,
             height = key.height,
         )

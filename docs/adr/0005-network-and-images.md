@@ -48,7 +48,7 @@ Memories сочетает обычные JSON endpoints, бинарный `image
 - `MediaImageRequestFactory` наблюдает единственный `SessionStore` и строит local, remote и fallback plans без передачи credentials через screen parameters.
 - Local assets читаются по `content://`; cache key включает URI, `DATE_MODIFIED` и purpose.
 - Remote thumbnails используют `ThumbnailRequest`: `Keyer` задаёт memory identity, `Fetcher` проверяет `ThumbnailFileStore`, затем обращается к общему `ThumbnailBatchLoader`.
-- Batch loader дедуплицирует запросы, группирует одинаковые account scope/size в окно 60 мс, ограничивает batch 20 элементами и выполняет не более четырёх batches одновременно.
+- Batch loader дедуплицирует запросы, группирует одинаковые размеры в окно 60 мс, ограничивает batch 20 элементами и выполняет не более четырёх batches одновременно.
 - Memories пишет ответ multipreview потоково, поэтому клиент отдаёт preview по мере прихода. Каждая миниатюра сохраняется в кэш и завершает ожидание своего ключа сразу, не дожидаясь остальной пачки.
 
 Версии библиотек определяет version catalog.
@@ -67,9 +67,9 @@ Memories сочетает обычные JSON endpoints, бинарный `image
 - Remote preview bytes кешируются отдельно от Room; UI state их не удерживает.
 - Local thumbnails не копируются в `ThumbnailFileStore`.
 - В проекте остаются два network style: typed Retrofit и raw OkHttp.
-- Single-account не отменяет account scope в cache keys: scope защищает от stale bytes при смене подключения.
+- Ключи кэша превью не содержат аккаунта: аккаунт не меняется, а выход стирает кэш вместе с остальными данными приложения (ADR 0010).
 - Запрос, начатый после logout, не уходит со старыми credentials, а завершается ошибкой; классифицирует её срез.
-- Порты срезов по-прежнему принимают `AccountCredentials`: срезам нужны account scope кэша и `userId` для DAV-путей. Пока аккаунт один, это та же сессия, из которой читают клиенты; при нескольких аккаунтах решение нужно пересмотреть.
+- Порты срезов по-прежнему принимают `AccountCredentials`: срезам нужны адрес сервера и `userId` для DAV-путей. Пока аккаунт один, это та же сессия, из которой читают клиенты; при нескольких аккаунтах решение нужно пересмотреть.
 
 ## Открытые вопросы
 

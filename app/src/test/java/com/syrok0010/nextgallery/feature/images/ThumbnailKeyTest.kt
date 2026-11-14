@@ -16,15 +16,9 @@ class ThumbnailKeyTest {
     }
 
     @Test
-    fun `coil cache key separates accounts etags and sizes`() {
+    fun `coil cache key separates etags and sizes`() {
         val original = thumbnailKey()
 
-        assertNotEquals(
-            original.coilMemoryCacheKey(),
-            thumbnailKey(
-                accountScope = "https://cloud.example.com|other-user",
-            ).coilMemoryCacheKey(),
-        )
         assertNotEquals(
             original.coilMemoryCacheKey(),
             thumbnailKey(etag = "new-etag").coilMemoryCacheKey(),
@@ -36,26 +30,13 @@ class ThumbnailKeyTest {
     }
 
     @Test
-    fun `thumbnail request keys by account file and etag`() {
-        fun key(
-            serverUrl: String = "https://cloud.example.com",
-            userId: String = "user",
-            fileId: Long = 42,
-            etag: String = "etag",
-        ) = thumbnailRequest(
-            credentials = AccountCredentials(
-                serverUrl,
-                loginName = userId,
-                appPassword = "secret",
-                userId = userId,
-            ),
+    fun `thumbnail request keys by file and etag`() {
+        fun key(fileId: Long = 42, etag: String = "etag") = thumbnailRequest(
+            credentials = AccountCredentials("https://cloud.example.com", "user", "secret", "user"),
             fileId = fileId,
             etag = etag,
         ).key.coilMemoryCacheKey()
 
-        assertEquals(key(), key(serverUrl = "https://cloud.example.com/"))
-        assertNotEquals(key(), key(userId = "other"))
-        assertNotEquals(key(), key(serverUrl = "https://other.example.com"))
         assertNotEquals(key(), key(fileId = 43))
         assertNotEquals(key(), key(etag = "new-etag"))
     }
@@ -74,13 +55,11 @@ class ThumbnailKeyTest {
     }
 
     private fun thumbnailKey(
-        accountScope: String = "https://cloud.example.com|user",
         width: Int = 512,
         height: Int = 512,
         etag: String? = "etag",
     ): ThumbnailKey =
         ThumbnailKey(
-            accountScope = accountScope,
             fileId = 42,
             width = width,
             height = height,

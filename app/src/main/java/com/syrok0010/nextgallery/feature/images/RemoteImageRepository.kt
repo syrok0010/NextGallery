@@ -23,16 +23,11 @@ internal class RemoteImageRepository(
         flow {
             if (requestedKeys.isEmpty()) return@flow
 
-            val accountScope = credentials.thumbnailAccountScope()
             val firstKey = requestedKeys.first()
             require(
-                requestedKeys.all { key ->
-                    key.accountScope == accountScope &&
-                        key.width == firstKey.width &&
-                        key.height == firstKey.height
-                },
+                requestedKeys.all { it.width == firstKey.width && it.height == firstKey.height },
             ) {
-                "A thumbnail batch must belong to one account and use one size"
+                "A thumbnail batch must use one size"
             }
             val keysByFileId = requestedKeys.distinctBy { it.fileId }.associateBy { it.fileId }
             val distinctFileIds = keysByFileId.keys.toList()
@@ -43,7 +38,6 @@ internal class RemoteImageRepository(
                     width = firstKey.width,
                     height = firstKey.height,
                     etagsByFileId = etagsByFileId,
-                    accountScope = accountScope,
                 )
             }.getOrDefault(emptyList())
             cachedKeys.forEach { emit(it) }
@@ -58,7 +52,6 @@ internal class RemoteImageRepository(
                         width = firstKey.width,
                         height = firstKey.height,
                         etagsByFileId = etagsByFileId,
-                        accountScope = accountScope,
                     )
                 }.isSuccess
 
