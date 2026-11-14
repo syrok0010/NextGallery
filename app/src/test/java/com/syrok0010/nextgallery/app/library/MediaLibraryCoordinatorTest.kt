@@ -32,15 +32,19 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class MediaLibraryCoordinatorTest {
     private val sessions = SessionStore(NoStoredCredentials)
     private val remote = Remote()
     private val reads = AtomicInteger()
+
+    @Volatile private var phoneFiles = listOf(phoneFile(PHONE_FILE))
+    private val phoneIds = ArrayDeque(listOf(PHONE_FILE, LATER_PHONE_FILE))
     private val permissions =
         MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Full)
     private val index = MediaLibraryIndex()
@@ -51,10 +55,11 @@ class MediaLibraryCoordinatorTest {
         localMedia = LocalMediaSource(
             reader = LocalMediaReader {
                 reads.incrementAndGet()
-                flowOf(LocalMediaBatch(listOf(phoneFile), LocalMediaIndexProgress(1, 1)))
+                val files = phoneFiles
+                flowOf(LocalMediaBatch(files, LocalMediaIndexProgress(files.size, files.size)))
             },
             projectionStore = InMemoryProjection(),
-            identityRegistry = InMemoryMediaIdentityRegistry { MediaId(PHONE_FILE) },
+            identityRegistry = InMemoryMediaIdentityRegistry { MediaId(phoneIds.removeFirst()) },
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
         ),
         permissions = permissions,
@@ -63,8 +68,8 @@ class MediaLibraryCoordinatorTest {
 
     @Test fun signingInJoinsPhoneFilesAndTheAccountsCloud() =
         running {
-            sessions.signIn(first)
-            waitFor { shown() == setOf(PHONE_FILE, cloudPhoto(first)) }
+            sessions.signIn(account)
+            waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
             assertEquals(shown(), index.state.value.keys.map(MediaId::value).toSet())
         }
 
@@ -82,22 +87,24 @@ class MediaLibraryCoordinatorTest {
     @Test fun withoutPhoneAccessOnlyCloudPhotosAreShown() =
         running {
             permissions.value = LocalMediaPermissionMode.Denied
-            sessions.signIn(first)
-            waitFor { shown() == setOf(cloudPhoto(first)) }
+            sessions.signIn(account)
+            waitFor { shown() == setOf(CLOUD_PHOTO) }
 
             permissions.value = LocalMediaPermissionMode.Full
-            waitFor { shown() == setOf(PHONE_FILE, cloudPhoto(first)) }
+            waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
         }
 
     @Test fun refreshReloadsTheCloudAndRescansThePhone() =
         running {
-            sessions.signIn(first)
-            waitFor { shown() == setOf(PHONE_FILE, cloudPhoto(first)) && reads.get() == 1 }
-            assertEquals(1, remote.initialLoads.get())
+            sessions.signIn(account)
+            waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
 
+            phoneFiles = listOf(phoneFile(PHONE_FILE), phoneFile(LATER_PHONE_FILE))
+            remote.photo = cloudItem(LATER_CLOUD_PHOTO)
             coordinator.refresh()
 
-            waitFor { remote.initialLoads.get() == 2 && reads.get() == 2 }
+            waitFor { shown() == setOf(PHONE_FILE, LATER_PHONE_FILE, LATER_CLOUD_PHOTO) }
+            assertEquals(shown(), index.state.value.keys.map(MediaId::value).toSet())
         }
 
     private fun running(block: suspend CoroutineScope.() -> Unit) =
@@ -117,11 +124,15 @@ class MediaLibraryCoordinatorTest {
             it.mediaId.value
         }
 
-    private suspend fun waitFor(condition: () -> Boolean) =
-        withTimeout(5_000) { while (!condition()) delay(10) }
+    private suspend fun waitFor(condition: () -> Boolean) {
+        val met = withTimeoutOrNull(5_000) { while (!condition()) delay(10) }
+        if (met == null) fail("Library shows ${shown()}, index holds ${index.state.value.keys}")
+    }
 
     private inner class Remote : RemoteTimelineSource {
         val initialLoads = AtomicInteger()
+
+        @Volatile var photo = cloudItem(CLOUD_PHOTO)
 
         override suspend fun loadCachedTimeline(
             credentials: AccountCredentials,
@@ -131,7 +142,7 @@ class MediaLibraryCoordinatorTest {
             credentials: AccountCredentials,
         ): TimelineSnapshot {
             initialLoads.incrementAndGet()
-            val photo = cloudItem(credentials)
+            val photo = this.photo
             return TimelineSnapshotAssembler.assemble(
                 config = config,
                 days = listOf(TimelineDay(photo.dayId, 1)),
@@ -166,54 +177,60 @@ class MediaLibraryCoordinatorTest {
     private object NoStoredCredentials : CredentialsStore {
         override fun load(): AccountCredentials? = null
         override fun save(credentials: AccountCredentials) = Unit
-        override fun clear() = Unit
     }
 
     private companion object {
         const val PHONE_FILE = "content://media/external/images/media/1"
+        const val LATER_PHONE_FILE = "content://media/external/images/media/2"
+        const val CLOUD_PHOTO = "cloud:1"
+        const val LATER_CLOUD_PHOTO = "cloud:2"
         const val SETTLE_MS = 300L
 
-        val first = AccountCredentials("https://cloud.example.test", "first", "password", "first")
+        val account = AccountCredentials("https://cloud.example.test", "user", "password", "user")
 
-        /** The only phone file; the registry publishes it as [PHONE_FILE]. */
-        val phoneFile = LocalMediaMetadata(
-            contentUri = PHONE_FILE,
-            displayName = "phone.jpg",
-            mimeType = "image/jpeg",
-            width = 100,
-            height = 100,
-            sizeBytes = 1,
-            dateTakenMillis = 1_700_000_000_000,
-            memoriesTimelineEpochSeconds = null,
-            dateModifiedSeconds = null,
-            dateAddedSeconds = null,
-            durationMillis = null,
-            isVideo = false,
-        )
+        /** Phone files differ in time so the registry never takes them for one photo (AUID is time + size). */
+        fun phoneFile(contentUri: String) =
+            LocalMediaMetadata(
+                contentUri = contentUri,
+                displayName = "${contentUri.substringAfterLast('/')}.jpg",
+                mimeType = "image/jpeg",
+                width = 100,
+                height = 100,
+                sizeBytes = 1,
+                dateTakenMillis = 1_700_000_000_000 +
+                    contentUri
+                        .substringAfterLast(
+                            '/',
+                        ).toLong() *
+                    1_000,
+                memoriesTimelineEpochSeconds = null,
+                dateModifiedSeconds = null,
+                dateAddedSeconds = null,
+                durationMillis = null,
+                isVideo = false,
+            )
 
         val config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false)
 
-        fun cloudPhoto(account: AccountCredentials) = "cloud:${account.userId}"
-
-        fun cloudItem(account: AccountCredentials) =
+        fun cloudItem(id: String) =
             MediaItem(
-                mediaId = MediaId(cloudPhoto(account)),
+                mediaId = MediaId(id),
                 dayId = 19_700,
-                displayName = "${account.userId}.jpg",
+                displayName = "$id.jpg",
                 mimeType = "image/jpeg",
                 width = 100,
                 height = 100,
                 etag = "etag",
                 livePhotoId = null,
-                auid = "auid-${account.userId}",
-                buid = "buid-${account.userId}",
+                auid = "auid-$id",
+                buid = "buid-$id",
                 sharedBy = null,
                 takenAtEpochSeconds = 19_700 * 86_400L,
                 isVideo = false,
                 videoDurationSeconds = null,
                 isFavorite = false,
                 isHidden = false,
-                assetRef = MediaAssetRef.MemoriesFile(account.userId.length.toLong()),
+                assetRef = MediaAssetRef.MemoriesFile(id.substringAfter(':').toLong()),
             )
     }
 }
