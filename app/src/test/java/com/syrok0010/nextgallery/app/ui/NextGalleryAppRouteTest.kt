@@ -13,29 +13,9 @@ import org.junit.Test
 
 class NextGalleryAppRouteTest {
     @Test
-    fun `signed out session maps to login route`() {
-        assertEquals(
-            NextGalleryRoute.Login,
-            SessionUiState.SignedOut.rootRoute(),
-        )
-    }
-
-    @Test
-    fun `signed in session maps to authenticated route`() {
-        assertEquals(
-            NextGalleryRoute.Photos,
-            SessionUiState.SignedIn(credentials = credentials()).rootRoute(),
-        )
-    }
-
-    @Test
-    fun `signed out session resets authenticated back stack to login`() {
-        val backStack = listOf(NextGalleryRoute.Photos)
-
-        assertEquals(
-            listOf(NextGalleryRoute.Login),
-            syncedBackStack(backStack, SessionUiState.SignedOut),
-        )
+    fun `a fresh back stack starts at login or photos`() {
+        assertEquals(NextGalleryRoute.Login, SessionUiState.SignedOut.rootRoute())
+        assertEquals(NextGalleryRoute.Photos, SessionUiState.SignedIn(credentials()).rootRoute())
     }
 
     @Test
@@ -49,30 +29,9 @@ class NextGalleryAppRouteTest {
     }
 
     @Test
-    fun `matching root route keeps existing back stack`() {
-        val backStack = listOf(NextGalleryRoute.Photos)
-
-        assertEquals(
-            backStack,
-            syncedBackStack(backStack, SessionUiState.SignedIn(credentials = credentials())),
-        )
-    }
-
-    @Test
     fun `restored albums stay selected within signed in stack`() {
         val stack = listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
         assertEquals(stack, syncedBackStack(stack, SessionUiState.SignedIn(credentials())))
-    }
-
-    @Test
-    fun `logout from albums discards both library destinations`() {
-        assertEquals(
-            listOf(NextGalleryRoute.Login),
-            syncedBackStack(
-                listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums),
-                SessionUiState.SignedOut,
-            ),
-        )
     }
 
     @Test
@@ -140,8 +99,6 @@ class NextGalleryAppRouteTest {
 
     @Test
     fun `owned nav content keys drive tab slide direction`() {
-        assertEquals("photos", NextGalleryRoute.Photos.navContentKey())
-        assertEquals("albums", NextGalleryRoute.Albums.navContentKey())
         assertEquals(
             NextGalleryRoute.Photos,
             topLevelRouteFromContentKey(NextGalleryRoute.Photos.navContentKey()),

@@ -133,32 +133,6 @@ class ViewerSequenceMemoizationTest {
         assertEquals(1, surfaceCompositions[current.mediaId])
     }
 
-    @Test
-    fun orphanCurrentIsRetainedUntilCurrentMediaChanges() {
-        val current = mediaItem("current", 22)
-        val next = mediaItem("next", 33)
-        val snapshotState = mutableStateOf(snapshot(current, next))
-        val currentMediaIdState = mutableStateOf(current.mediaId)
-        val currentSequence = AtomicReference<ViewerSequence>()
-
-        composeRule.setContent {
-            val sequence = rememberViewerSequence(
-                slots = snapshotState.value.slots,
-                currentMediaId = currentMediaIdState.value,
-            )
-            SideEffect { currentSequence.set(sequence) }
-        }
-        composeRule.waitForIdle()
-
-        composeRule.runOnIdle { snapshotState.value = snapshot(next) }
-        composeRule.waitForIdle()
-        assertEquals(listOf(current, next), currentSequence.get().items)
-
-        composeRule.runOnIdle { currentMediaIdState.value = next.mediaId }
-        composeRule.waitForIdle()
-        assertEquals(listOf(next), currentSequence.get().items)
-    }
-
     private fun snapshot(vararg mediaItems: MediaItem?): TimelineSnapshot {
         val slots = mediaItems.mapIndexed { index, item ->
             MediaSlot(

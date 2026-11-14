@@ -36,22 +36,28 @@ class ThumbnailKeyTest {
     }
 
     @Test
-    fun `thumbnail request creates its cache identity immediately`() {
-        val request = thumbnailRequest(
+    fun `thumbnail request keys by account file and etag`() {
+        fun key(
+            serverUrl: String = "https://cloud.example.com",
+            userId: String = "user",
+            fileId: Long = 42,
+            etag: String = "etag",
+        ) = thumbnailRequest(
             credentials = AccountCredentials(
-                serverUrl = "https://cloud.example.com/",
-                loginName = "user",
+                serverUrl,
+                loginName = userId,
                 appPassword = "secret",
-                userId = "user",
+                userId = userId,
             ),
-            fileId = 42,
-            etag = "etag",
-        )
+            fileId = fileId,
+            etag = etag,
+        ).key.coilMemoryCacheKey()
 
-        assertEquals("https://cloud.example.com|user", request.key.accountScope)
-        assertEquals(42L, request.key.fileId)
-        assertEquals(512, request.key.width)
-        assertEquals("etag", request.key.etag)
+        assertEquals(key(), key(serverUrl = "https://cloud.example.com/"))
+        assertNotEquals(key(), key(userId = "other"))
+        assertNotEquals(key(), key(serverUrl = "https://other.example.com"))
+        assertNotEquals(key(), key(fileId = 43))
+        assertNotEquals(key(), key(etag = "new-etag"))
     }
 
     @Test
