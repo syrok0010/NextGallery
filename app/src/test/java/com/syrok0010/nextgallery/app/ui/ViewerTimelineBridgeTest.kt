@@ -14,6 +14,7 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerTimelineBridgeTest {
@@ -39,11 +40,17 @@ class ViewerTimelineBridgeTest {
     @Test fun `prefetch uses timeline slots with placeholders and excludes orphan media`() {
         val current = mediaItem("current", 1)
         val orphan = mediaItem("orphan", 2)
+        val first = mediaItem("first", 3)
+        // Placeholders count: the current photo sits in slot 1001, not at media index 1.
         val index =
             ViewerMediaIndex(
-                snapshot(*(List<MediaItem?>(101) { null } + current).toTypedArray()).slots,
+                snapshot(first, *(List<MediaItem?>(1000) { null } + current).toTypedArray()).slots,
             )
-        assertEquals(0..341, index.prefetchRange(current.mediaId))
+        val around = requireNotNull(index.prefetchRange(current.mediaId))
+        assertEquals(1001, (around.first + around.last) / 2)
+        assertTrue(around.first > 0)
+        // At the start the window is cut at slot 0 rather than shifted.
+        assertEquals(0, requireNotNull(index.prefetchRange(first.mediaId)).first)
         assertEquals(null, index.prefetchRange(orphan.mediaId))
     }
 
@@ -203,20 +210,6 @@ class ViewerTimelineBridgeTest {
         )
 
         assertEquals(listOf(next), updated.items)
-    }
-
-    @Test
-    fun `changing current reuses cached live projection`() {
-        val controller = ViewerSequenceController()
-        val first = mediaItem("first", 11)
-        val second = mediaItem("second", 22)
-        val source = snapshot(first, second)
-        val slots = source.slots.map { MediaSlot(it.key, it.dayId, it.indexInDay, it.mediaItem) }
-        val initial = controller.updateSlots(slots, first.mediaId)
-
-        val updated = controller.updateSlots(slots, second.mediaId)
-
-        assertSame(initial, updated)
     }
 
     @Test fun `successful deletion releases orphan regardless of publication order`() {

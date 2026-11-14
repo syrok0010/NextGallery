@@ -65,11 +65,12 @@ class VideoFilmstripLoaderTest {
             val seeks = mutableListOf<Pair<Long, Boolean>>()
             var finished = 0
             val seek: (Long, Boolean) -> Unit = { position, final -> seeks += position to final }
+            // Far apart in time: the seek throttle is VideoFilmstripProjectionTest's.
             loader.scroll(0.2f, true, 0, seek) { finished++ }
-            loader.scroll(0.3f, true, 50, seek) { finished++ }
-            loader.scroll(0.4f, false, 60, seek) { finished++ }
-            loader.scroll(0.4f, false, 70, seek) { finished++ }
-            assertEquals(listOf(2000L to false, 4000L to true), seeks)
+            loader.scroll(0.3f, true, 500, seek) { finished++ }
+            loader.scroll(0.4f, false, 1_000, seek) { finished++ }
+            loader.scroll(0.5f, false, 1_500, seek) { finished++ }
+            assertEquals(listOf(2000L to false, 3000L to false, 4000L to true), seeks)
             assertEquals(1, finished)
             loader.close()
         }

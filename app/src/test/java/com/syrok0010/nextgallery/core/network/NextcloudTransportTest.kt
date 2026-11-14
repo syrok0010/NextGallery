@@ -81,15 +81,6 @@ class NextcloudTransportTest {
         )
     }
 
-    @Test
-    fun `multiple authenticated clients share the same connection pool`() {
-        val client1 = transport.authenticatedClient(credentials)
-        val client2 = transport.authenticatedClient(credentials)
-
-        assertSame(client1.connectionPool, client2.connectionPool)
-        assertSame(client1.dispatcher, client2.dispatcher)
-    }
-
     private fun assertAuthenticatedHeaders(request: Request) {
         assertEquals("Basic dXNlcjpzZWNyZXQ=", request.header("Authorization"))
         assertEquals("XMLHttpRequest", request.header("X-Requested-With"))

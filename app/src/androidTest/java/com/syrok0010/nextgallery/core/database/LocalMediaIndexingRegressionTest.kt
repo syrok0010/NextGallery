@@ -1,11 +1,9 @@
 package com.syrok0010.nextgallery.core.database
 
 import android.content.Context
-import android.util.Log
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.syrok0010.nextgallery.app.library.TimelineSnapshotProjection
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityResolution
@@ -19,8 +17,6 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaMetadata
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
-import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
-import kotlin.system.measureNanoTime
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -32,6 +28,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
+/** The JVM LocalMediaSourceTest uses in-memory stores; this runs the same rescan on Room. */
 @RunWith(AndroidJUnit4::class)
 class LocalMediaIndexingRegressionTest {
     private lateinit var context: Context
@@ -56,7 +53,7 @@ class LocalMediaIndexingRegressionTest {
     }
 
     @Test
-    fun incrementalIndexingReconcilesEachIdentityOnceInRoom() =
+    fun unchangedRescanFromRoomPublishesOnceAndResolvesNothingAgain() =
         runBlocking {
             val registry = CountingMediaIdentityRegistry(RoomMediaIdentityRegistry(database))
             val source = LocalMediaSource(
@@ -84,27 +81,12 @@ class LocalMediaIndexingRegressionTest {
 
             suspend fun scan(): Int {
                 var previous: List<MediaItem>? = null
-                var builds = 0
-                var projectionNanos = 0L
-                val elapsed = measureNanoTime {
-                    source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
-                        if (previous !== state.items) {
-                            projectionNanos += measureNanoTime {
-                                TimelineSnapshotProjection.project(
-                                    null,
-                                    projectMediaLibrary(state.items, emptyList()),
-                                )
-                            }
-                            builds++
-                            previous = state.items
-                        }
-                    }
+                var publications = 0
+                source.updates(emptyFlow()).take(BATCH_COUNT + 1).collect { state ->
+                    if (previous !== state.items) publications++
+                    previous = state.items
                 }
-                Log.i(
-                    "LocalIndexRegression",
-                    "items=${BATCH_COUNT * BATCH_SIZE} builds=$builds projectionMs=${projectionNanos / 1_000_000} scanMs=${elapsed / 1_000_000}",
-                )
-                return builds
+                return publications
             }
             scan()
             assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)

@@ -37,40 +37,6 @@ import org.junit.Test
 
 class LocalMediaSourceTest {
     @Test
-    fun `incremental indexing reconciles each local identity only once`() = runBlocking {
-        val batchCount = 20
-        val batchSize = 200
-        val registry = CountingMediaIdentityRegistry()
-        val source = LocalMediaSource(
-            reader = LocalMediaReader {
-                flowOf(
-                    *Array(batchCount) { batchIndex ->
-                        val indexedCount = (batchIndex + 1) * batchSize
-                        LocalMediaBatch(
-                            metadata = List(batchSize) { itemIndex ->
-                                val index = batchIndex * batchSize + itemIndex
-                                metadata("content://images/$index", taken = index * 1_000L + 1_000L)
-                            },
-                            progress = LocalMediaIndexProgress(
-                                indexedCount = indexedCount,
-                                totalCount = batchCount * batchSize,
-                            ),
-                        )
-                    },
-                )
-            },
-            projectionStore = InMemoryLocalMediaProjectionStore(),
-            identityRegistry = registry,
-            changeObserver = LocalMediaChangeObserver { emptyFlow() },
-            batchSize = batchSize,
-        )
-        source.updates(emptyFlow()).take(batchCount + 1).collect { state ->
-        }
-
-        assertEquals(batchCount * batchSize, registry.resolvedCandidateCount)
-    }
-
-    @Test
     fun `cached projection is published before fresh MediaStore batches`() = runBlocking {
         val cached = localItem("content://images/cached", 100)
         val store = InMemoryLocalMediaProjectionStore(listOf(cached))

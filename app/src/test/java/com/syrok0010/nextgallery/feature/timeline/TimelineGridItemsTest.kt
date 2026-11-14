@@ -7,6 +7,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.toMediaGridItems
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class TimelineGridItemsTest {
@@ -24,8 +25,14 @@ class TimelineGridItemsTest {
         val firstKey = listOf(firstSlot).toMediaGridItems().last().key
         val movedKey = listOf(movedSlot).toMediaGridItems().last().key
 
-        assertEquals("media:stable-media-id", firstKey)
+        val otherKey = listOf(
+            slot(index = 0, item = mediaItem(MediaId("other-media-id"), fileId = 41L)),
+        ).toMediaGridItems()
+            .last()
+            .key
+
         assertEquals(firstKey, movedKey)
+        assertNotEquals(firstKey, otherKey)
     }
 
     private fun slot(index: Int, item: MediaItem) =

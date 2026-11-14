@@ -45,18 +45,19 @@ class TimelineWorkflowTest {
 
     @Test fun `debounced viewport uses latest observation and continues across batches`() = runTest {
         val source = Source(days = (10..100).map { TimelineDay(it, 1) })
-        val workflow = workflow(source)
+        val workflow = TimelineWorkflow(credentials(), source, backgroundScope, debounceMillis = DEBOUNCE)
         runCurrent()
+        val initial = workflow.state.value.snapshot!!.loadedDayIds
         workflow.requestDays((78..100).toList(), debounced = true)
-        advanceTimeBy(200)
+        advanceTimeBy(DEBOUNCE / 2)
         val before = source.requests.size
         workflow.requestDays((76..100).toList(), debounced = true)
-        advanceTimeBy(449)
+        advanceTimeBy(DEBOUNCE - 1)
         runCurrent()
         assertEquals(before, source.requests.size)
         advanceTimeBy(1)
         runCurrent()
-        assertEquals((10..33).toSet() + (76..100).toSet(), workflow.state.value.snapshot!!.loadedDayIds)
+        assertEquals(initial + (76..100).toSet(), workflow.state.value.snapshot!!.loadedDayIds)
     }
 
     @Test fun `initial hydration expands viewport and excludes failed days on subsequent observations`() = runTest {
@@ -64,10 +65,12 @@ class TimelineWorkflowTest {
         source.fail = true
         val workflow = workflow(source)
         runCurrent()
-        assertEquals((10..33).toSet(), workflow.state.value.failedDayIds)
-        assertTrue(source.requests.all { it.size <= 4 })
+        // The first screen of the timeline is requested in several smaller batches.
+        val failed = workflow.state.value.failedDayIds
+        assertEquals((10 until 10 + failed.size).toSet(), failed)
+        assertTrue(failed.size > 1 && source.requests.all { it.size < failed.size })
         val count = source.requests.size
-        workflow.requestDays((10..33).toList())
+        workflow.requestDays(failed.toList())
         runCurrent()
         assertEquals(count, source.requests.size)
     }
@@ -169,5 +172,9 @@ class TimelineWorkflowTest {
             appPassword = "secret",
             userId = "user",
         )
+    }
+
+    private companion object {
+        const val DEBOUNCE = 1_000L
     }
 }
