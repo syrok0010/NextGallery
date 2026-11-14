@@ -170,6 +170,16 @@ internal data class ViewerBoundsTransform(
     val targetClipHeight: Float,
 )
 
+/** This closing, started from where [opening] has brought the surface at [progress]. */
+internal fun ViewerBoundsTransform.startingFrom(
+    opening: ViewerBoundsTransform,
+    progress: Float,
+): ViewerBoundsTransform =
+    copy(
+        startOffset = lerpOffset(opening.startOffset, opening.targetOffset, progress),
+        startScale = lerpFloat(opening.startScale, opening.targetScale, progress),
+    )
+
 internal fun Rect.settleTarget(
     tileBounds: Rect?,
     dragOffset: Offset,
