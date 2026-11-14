@@ -103,6 +103,63 @@ class TimelineWorkflowTest {
         assertEquals(before, workflow.state.value)
     }
 
+    @Test fun `offline start shows the cached timeline and the server replaces it once reachable`() = runTest {
+        val source = Source()
+        source.cached = timelineSnapshot(
+            listOf(TimelineDay(10, 1)),
+            itemsByDay = mapOf(10 to listOf(mediaItem(7, 10))),
+            loadedDayIds = setOf(10),
+        )
+        source.initialFailure = true
+        val workflow = workflow(source)
+        runCurrent()
+
+        assertEquals(source.cached, workflow.state.value.snapshot)
+        // Days the cache already holds are not requested again.
+        assertEquals(emptyList<List<Int>>(), source.requests)
+
+        source.initialFailure = false
+        workflow.refresh()
+        runCurrent()
+
+        assertEquals(listOf(1L), workflow.state.value.snapshot!!.items.map { it.remoteFileId })
+    }
+
+    @Test fun `failed refresh keeps the timeline already shown`() = runTest {
+        val source = Source()
+        val workflow = workflow(source)
+        runCurrent()
+        val shown = workflow.state.value.snapshot!!
+        assertEquals(listOf(1L), shown.items.map { it.remoteFileId })
+
+        source.initialFailure = true
+        workflow.refresh()
+        runCurrent()
+
+        assertEquals(shown, workflow.state.value.snapshot)
+        assertEquals("the cache is read only for an empty screen", 1, source.cacheReads)
+    }
+
+    @Test fun `an older load that answers late does not replace a newer one`() = runTest {
+        val source = Source(days = listOf(TimelineDay(20, 1)))
+        val late = CompletableDeferred<Unit>()
+        // The first load ignores cancellation, as a request already on the wire may.
+        source.initialAnswers += {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { late.await() }
+            timelineSnapshot(listOf(TimelineDay(10, 1)))
+        }
+        val workflow = workflow(source)
+        runCurrent()
+
+        workflow.refresh()
+        runCurrent()
+        late.complete(Unit)
+        runCurrent()
+
+        assertEquals(listOf(20), workflow.state.value.snapshot!!.days.map { it.dayId })
+        assertEquals(listOf(listOf(20)), source.requests)
+    }
+
     private fun TestScope.workflow(source: Source) =
         TimelineWorkflow(credentials(), source, backgroundScope)
 
@@ -110,11 +167,19 @@ class TimelineWorkflowTest {
         var initialFailure = false
         var fail = false
         var blocked: CompletableDeferred<Unit>? = null
+        var cached: TimelineSnapshot? = null
+        var cacheReads = 0
+
+        /** Answers of the timeline structure, one per load; [days] once they run out. */
+        val initialAnswers = ArrayDeque<suspend () -> TimelineSnapshot>()
         val requests = mutableListOf<List<Int>>()
-        override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? = null
+        override suspend fun loadCachedTimeline(credentials: AccountCredentials): TimelineSnapshot? {
+            cacheReads++
+            return cached
+        }
         override suspend fun loadInitialTimeline(credentials: AccountCredentials): TimelineSnapshot {
             if (initialFailure) error("offline")
-            return timelineSnapshot(days)
+            return initialAnswers.removeFirstOrNull()?.invoke() ?: timelineSnapshot(days)
         }
         override suspend fun loadTimelineDays(credentials: AccountCredentials, dayIds: List<Int>): List<MediaItem> {
             requests += dayIds
