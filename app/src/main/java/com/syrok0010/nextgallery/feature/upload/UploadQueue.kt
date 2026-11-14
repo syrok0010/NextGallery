@@ -39,6 +39,12 @@ internal class UploadQueue(
     /** WorkManager does not wait for a stopped worker's cleanup before it starts the next one. */
     private val passes = Mutex()
     private val rows = MutableStateFlow<List<UploadJob>>(emptyList())
+
+    /**
+     * Percent of the file on the wire. It outlives its transfer: the screens read it only while the
+     * journal still shows the file running, and the journal reports the outcome a moment after
+     * the transfer ends. Cleared then, it would leave the running file without progress meanwhile.
+     */
     private val progress = MutableStateFlow<Progress?>(null)
     private val running = ConcurrentHashMap<String, Job>()
 
@@ -187,7 +193,6 @@ internal class UploadQueue(
             } finally {
                 backoff.value = retry
                 withContext(NonCancellable) {
-                    progress.value = null
                     journal.release(owner) { it == processId }
                 }
                 if (reachedServer) refreshLibrary()
@@ -211,6 +216,8 @@ internal class UploadQueue(
         put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
     ): Boolean =
         coroutineScope {
+            // A file that runs again starts without the percent of its earlier attempt.
+            progress.value = Progress(claim.id, null)
             val work = async { execute(account, claim, put) { deferred += claim.id } }
             running[claim.id] = work
             try {
@@ -220,7 +227,6 @@ internal class UploadQueue(
                 false
             } finally {
                 running.remove(claim.id)
-                progress.value = null
             }
         }
 
