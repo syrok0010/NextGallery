@@ -46,7 +46,6 @@ class UploadQueueRuntimeTest {
         sessions = SessionStore(object : CredentialsStore {
             override fun load() = credentials
             override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
         })
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         processId = UUID.randomUUID().toString()

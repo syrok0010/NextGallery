@@ -17,7 +17,6 @@ class LoginViewModelTest {
             val store = object : CredentialsStore {
                 override fun load(): AccountCredentials? = null
                 override fun save(credentials: AccountCredentials) { if (fail) error("keystore unavailable") }
-                override fun clear() = Unit
             }
             val session = SessionStore(store)
             val gateway = object : LoginGateway {
@@ -47,7 +46,6 @@ class LoginViewModelTest {
             val store = object : CredentialsStore {
                 override fun load(): AccountCredentials? = null
                 override fun save(credentials: AccountCredentials) = error("unexpected save")
-                override fun clear() = Unit
             }
             var polls = 0
             val gateway = object : LoginGateway {
@@ -74,7 +72,6 @@ class LoginViewModelTest {
             val store = object : CredentialsStore {
                 override fun load(): AccountCredentials? = null
                 override fun save(credentials: AccountCredentials) = error("unexpected save")
-                override fun clear() = Unit
             }
             var polls = 0
             val gateway = object : LoginGateway {
@@ -159,7 +156,6 @@ class LoginViewModelTest {
         var saved: AccountCredentials? = null
         override fun load(): AccountCredentials? = saved
         override fun save(credentials: AccountCredentials) { saved = credentials }
-        override fun clear() { saved = null }
     }
 
     private class CompatibilityGateway(var compatibility: MemoriesCompatibility, val waitForCheck: Boolean = false) : LoginGateway {

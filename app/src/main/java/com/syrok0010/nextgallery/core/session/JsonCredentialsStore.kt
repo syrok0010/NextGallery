@@ -34,10 +34,6 @@ internal class JsonCredentialsStore(
         textStore.saveText(json.encodeToString(credentials))
     }
 
-    override fun clear() {
-        textStore.clear()
-    }
-
     private fun AccountCredentials.isComplete(): Boolean =
         serverUrl.isNotBlank() &&
             loginName.isNotBlank() &&

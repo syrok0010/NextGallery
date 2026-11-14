@@ -13,7 +13,7 @@ class JsonCredentialsStoreTest {
     }
 
     @Test
-    fun `save load and clear credentials`() {
+    fun `saved credentials load back`() {
         val textStore = FakeCredentialsTextStore()
         val store = JsonCredentialsStore(textStore, json)
         val credentials = AccountCredentials(
@@ -26,10 +26,6 @@ class JsonCredentialsStoreTest {
         store.save(credentials)
 
         assertEquals(credentials, store.load())
-
-        store.clear()
-
-        assertNull(store.load())
     }
 
     @Test

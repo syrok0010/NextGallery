@@ -123,7 +123,6 @@ class MediaAssetImageTest {
             object : CredentialsStore {
                 override fun load(): AccountCredentials = initialCredentials
                 override fun save(credentials: AccountCredentials) = Unit
-                override fun clear() = Unit
             },
         )
 

@@ -90,7 +90,6 @@ class AlbumUploadFollowUpTest {
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials
         override fun save(credentials: AccountCredentials) = Unit
-        override fun clear() = Unit
     }
 
     private companion object {

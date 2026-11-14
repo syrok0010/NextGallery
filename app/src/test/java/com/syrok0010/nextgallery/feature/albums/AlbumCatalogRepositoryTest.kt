@@ -48,6 +48,5 @@ class AlbumCatalogRepositoryTest {
     private fun sessions() = SessionStore(object : CredentialsStore {
         override fun load() = AccountCredentials("https://cloud.example", "demo", "secret", "demo")
         override fun save(credentials: AccountCredentials) = Unit
-        override fun clear() = Unit
     })
 }

@@ -53,7 +53,6 @@ class UploadsRetryUiTest {
         val sessions = SessionStore(object : CredentialsStore {
             override fun load() = account
             override fun save(credentials: AccountCredentials) = Unit
-            override fun clear() = Unit
         })
         val library = MediaLibraryIndex().apply {
             publish(listOf(MediaItem(
