@@ -12,13 +12,14 @@ import org.junit.Test
 
 class DragSelectionTest {
     // Day 1: a, b, c; day 2: d, e. A header opens each day.
-    private val items = listOf(
+    private val slots = listOf(
         slot("a", 1, 0),
         slot("b", 1, 1),
         slot("c", 1, 2),
         slot("d", 2, 0),
         slot("e", 2, 1),
-    ).toMediaGridItems()
+    )
+    private val items = slots.toMediaGridItems()
 
     private fun ids(vararg names: String) = names.mapTo(HashSet(), ::MediaId)
 
@@ -67,6 +68,30 @@ class DragSelectionTest {
         assertEquals("c", cellAt(cells, IntOffset(150, 150), exact = false)?.key)
         assertEquals("c", cellAt(cells, IntOffset(50, 220), exact = false)?.key)
         assertEquals("d", cellAt(cells, IntOffset(150, 400), exact = false)?.key)
+    }
+
+    @Test fun `a layout measured before an update still names the objects it shows`() {
+        // Day 1 was loaded above while the layout still shows day 2 at the top of the list:
+        // by index it would point at the new header and tiles a and b.
+        val earlier = listOf(slot("d", 2, 0), slot("e", 2, 1)).toMediaGridItems()
+        val measured = earlier.map { it.key }
+        val grid = MediaGridSnapshot(slots)
+
+        assertEquals(
+            listOf("d" to 3, "e" to 4),
+            grid.measuredSlots(measured).map { it.slot.mediaItem?.mediaId?.value to it.slotIndex },
+        )
+    }
+
+    @Test fun `a measured placeholder that has been loaded since is left out`() {
+        val placeholder = MediaGridItem.Slot(0, MediaSlot(MediaSlotKey(1, 0), 1, 0, null))
+        val grid = MediaGridSnapshot(slots)
+
+        assertNull(grid[placeholder.key])
+        assertEquals(
+            listOf(key("a")),
+            grid.measuredSlots(listOf(placeholder.key, key("a"))).map { it.key },
+        )
     }
 
     @Test fun `scroll speed grows towards the edges and is full beyond them`() {

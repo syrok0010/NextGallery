@@ -157,31 +157,25 @@ private fun TimelineScrollTooltip(
 
 @Composable
 internal fun MediaScrollIndicatorHost(
-    slots: List<MediaSlot>,
-    gridItems: List<MediaGridItem>,
-    slotGridIndexes: IntArray,
+    grid: MediaGridSnapshot,
     gridState: LazyGridState,
     isDragging: Boolean,
     onDragStateChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val scrollDispatcher = remember(coroutineScope, gridState, slotGridIndexes) {
-        TimelineHandleScrollDispatcher(
-            scope = coroutineScope,
-            gridState = gridState,
-            slotGridIndexes = slotGridIndexes,
-        )
+    val scrollDispatcher = remember(coroutineScope, gridState) {
+        TimelineHandleScrollDispatcher(scope = coroutineScope, gridState = gridState)
     }
+    scrollDispatcher.slotGridIndexes = grid.slotGridIndexes
     var dragFraction by remember { mutableStateOf<Float?>(null) }
-    val scrollInfo = remember(slots, gridItems, gridState) {
+    val scrollInfo = remember(grid, gridState) {
         derivedStateOf {
-            val visibleSlot = gridState.layoutInfo.visibleItemsInfo
-                .mapNotNull { visibleItem ->
-                    (gridItems.getOrNull(visibleItem.index) as? MediaGridItem.Slot)
-                        ?.let { it.slotIndex to it.slot.dayId }
-                }.minByOrNull { it.first }
-            val totalSlots = slots.size
+            val visibleSlot = grid
+                .measuredSlots(gridState.layoutInfo.visibleItemsInfo.map { it.key })
+                .map { it.slotIndex to it.slot.dayId }
+                .minByOrNull { it.first }
+            val totalSlots = grid.slots.size
             val fraction = if (visibleSlot == null || totalSlots <= 1) {
                 0f
             } else {
@@ -199,10 +193,10 @@ internal fun MediaScrollIndicatorHost(
             dragFraction ?: scrollInfo.value.fraction
         }
     }
-    val displayDayIdState = remember(slots, scrollInfo) {
+    val displayDayIdState = remember(grid, scrollInfo) {
         derivedStateOf {
             dragFraction
-                ?.let { slots.dayIdAtFraction(it) }
+                ?.let { grid.slots.dayIdAtFraction(it) }
                 ?: scrollInfo.value.dayId
         }
     }
@@ -255,32 +249,31 @@ private fun List<MediaSlot>.dayIdAtFraction(fraction: Float): Int? {
     return getOrNull(slotIndex)?.dayId
 }
 
+/**
+ * Scrolls after the handle, one jump at a time. One dispatcher lives as long as the grid: a jump
+ * still pending when the list changes lands by the list it scrolls in, not the one it was asked in.
+ */
 private class TimelineHandleScrollDispatcher(
     private val scope: CoroutineScope,
     private val gridState: LazyGridState,
-    private val slotGridIndexes: IntArray,
 ) {
+    var slotGridIndexes = IntArray(0)
     private var activeJob: Job? = null
-    private var pendingGridIndex: Int? = null
-    private var lastRequestedGridIndex: Int? = null
+    private var pendingFraction: Float? = null
 
     fun scrollToFraction(fraction: Float) {
-        val targetGridIndex = slotGridIndexes.gridIndexAtFraction(fraction) ?: return
-        if (targetGridIndex == lastRequestedGridIndex && activeJob?.isActive == true) {
-            return
-        }
-
-        pendingGridIndex = targetGridIndex
-        if (activeJob?.isActive == true) {
-            return
-        }
+        pendingFraction = fraction
+        if (activeJob?.isActive == true) return
 
         activeJob = scope.launch {
+            var lastGridIndex: Int? = null
             while (true) {
-                val nextGridIndex = pendingGridIndex ?: break
-                pendingGridIndex = null
-                lastRequestedGridIndex = nextGridIndex
-                gridState.scrollToItem(nextGridIndex)
+                val next = pendingFraction ?: break
+                pendingFraction = null
+                val gridIndex = slotGridIndexes.gridIndexAtFraction(next) ?: break
+                if (gridIndex == lastGridIndex) continue
+                lastGridIndex = gridIndex
+                gridState.scrollToItem(gridIndex)
             }
         }
     }
