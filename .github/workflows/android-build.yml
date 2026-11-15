@@ -26,42 +26,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Validate release tooling
         run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
-      - name: Build metadata
-        id: version
-        run: |
-          python3 tools/ci/release.py metadata
-          echo "label=${GITHUB_RUN_NUMBER}-$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Build and run unit tests
-        env:
-          PREVIEW_LABEL: ${{ steps.version.outputs.label }}
+      - name: Run checks and compile instrumentation tests
         run: |
           ./gradlew verifyFeatureBoundaries :core:media:test :app:testAutomationUnitTest \
-            :app:assemblePreview :app:assembleAutomation :app:compileAutomationAndroidTestKotlin \
-            "-PnextgalleryPreviewLabel=$PREVIEW_LABEL" --no-daemon
-      - name: Prepare test APK
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-          PREVIEW_LABEL: ${{ steps.version.outputs.label }}
-        run: |
-          mkdir -p dist
-          cp app/build/outputs/apk/preview/app-preview.apk \
-            "dist/NextGallery-$APP_VERSION-preview-$PREVIEW_LABEL.apk"
-          (cd dist && sha256sum *.apk > SHA256SUMS)
-      - name: Upload test APK
-        id: apk
-        uses: actions/upload-artifact@v4
-        with:
-          name: NextGallery-preview-${{ steps.version.outputs.label }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
-          overwrite: true
-      - name: APK download link
-        env:
-          ARTIFACT_URL: ${{ steps.apk.outputs.artifact-url }}
-          SOURCE_SHA: ${{ steps.version.outputs.sha }}
-        run: |
-          echo "[Скачать NextGallery Test]($ARTIFACT_URL) — commit $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+            :app:compileAutomationAndroidTestKotlin --no-daemon
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4

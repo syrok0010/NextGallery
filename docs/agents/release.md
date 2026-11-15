@@ -2,13 +2,35 @@
 
 ## Тестовые APK
 
-Workflow **Android build and unit tests** собирает `preview` на каждом PR и push
-в `main`. Через **Run workflow** можно выбрать любую ветку, содержащую workflow.
+APK собирается только по запросу: **Actions → Test APK → Run workflow → ветка**.
+Автоматический CI на PR и push в `main` запускает проверки и компиляцию тестов;
+упаковка APK и R8 выполняются в ручном workflow **Test APK**. Для опубликованной
+ветки без PR этот workflow тоже доступен.
+
 Ручной запуск станет доступен после первого слияния workflow в `main`.
+Выбранная ветка также должна содержать `.github/workflows/test-apk.yml`.
+
+Через CLI из checkout репозитория:
+
+```bash
+gh workflow run test-apk.yml --ref <ветка>
+gh run list --workflow test-apk.yml --branch <ветка> --event workflow_dispatch --limit 5 \
+  --json databaseId,headSha,status,conclusion,url
+```
+
+Выберите запуск с нужным `headSha` и дождитесь успешного завершения. Скачайте его
+artifact в отдельный каталог и проверьте контрольную сумму:
+
+```bash
+gh run download <run-id> --pattern 'NextGallery-preview-*' --dir <каталог>
+cd <каталог>/NextGallery-preview-*
+sha256sum --check SHA256SUMS
+```
 
 Ссылка на artifact есть в summary успешного запуска. Внутри — APK и `SHA256SUMS`;
-срок хранения 7 дней. На PR собирается merge commit, при ручном запуске — выбранная
-ревизия ветки. В `versionName` и имени APK записаны номер запуска и SHA.
+срок хранения 7 дней. Собирается commit выбранной ветки на момент запуска.
+В `versionName` и имени APK записаны номер запуска и SHA. Ручная сборка APK
+не запускает JVM-тесты повторно: результаты проверок этой ревизии смотри в CI.
 
 `preview` — отдельное приложение **NextGallery Test** с пакетом
 `com.syrok0010.nextgallery.preview`. Оно использует R8 и resource shrinking, как
