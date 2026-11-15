@@ -34,7 +34,7 @@
 
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов следуй правилам выбора устройства в `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов, а также при выборе локальной или CI-сборки APK следуй `docs/agents/android-development.md`.
 
 ### Тесты
 
@@ -44,6 +44,6 @@
 
 Для интеграционных проверок Nextcloud/Memories, тестовых медиа, скриншотов для PR и управления стендом читай `docs/agents/test-nextcloud.md`.
 
-### Релизная сборка
+### Сборки и релизы
 
-Подпись, сборка release и версии — в `docs/agents/release.md`.
+Ручная сборка APK с ветки через GitHub Actions, подпись и выпуск версий — в `docs/agents/release.md`.
