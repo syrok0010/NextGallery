@@ -83,13 +83,14 @@ data class MemoriesPhotoDto(
     val liveid: String? = null,
     val size: Long? = null,
     val buid: String? = null,
+    @SerialName("indexed_at") val indexedAt: Long? = null,
     @SerialName("shared_by") val sharedBy: String? = null,
     @SerialName("isvideo") val isVideo: JsonElement? = null,
     @SerialName("video_duration") val videoDuration: Long? = null,
     @SerialName("isfavorite") val isFavorite: JsonElement? = null,
     @SerialName("ishidden") val isHidden: JsonElement? = null,
 ) {
-    /** Memories 10 identity alias; zero epoch or size means that the alias is unknown. */
+    /** Identity alias computed from capture time and size; zero values mean it is unknown. */
     val auid: String?
         get() = if (epoch != null && epoch != 0L && size != null && size > 0) {
             MemoriesMediaIdentity.auid(epoch, size)

@@ -210,7 +210,7 @@ class MediaLibraryCoordinatorTest {
                 isVideo = false,
             )
 
-        val config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false)
+        val config = MemoriesConfig("11.1.4", "/Photos", false, false, false, false, false, false)
 
         fun cloudItem(id: String) =
             MediaItem(

@@ -302,7 +302,7 @@ class UploadTransferTest {
     private fun happyPath(request: RecordedRequest): MockResponse =
         when {
             "apps/memories/api/config" in request.target ->
-                json("""{"version":"10.1.0","timeline_path":"$timelinePath"}""")
+                json("""{"version":"11.1.4","timeline_path":"$timelinePath"}""")
 
             "cloud/capabilities" in request.target ->
                 json(

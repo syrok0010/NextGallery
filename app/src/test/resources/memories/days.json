@@ -16,7 +16,8 @@
         "size": 2048000,
         "buid": "buid-42",
         "shared_by": "Alice",
-        "isfavorite": 1
+        "isfavorite": 1,
+        "indexed_at": 1800000000
       }
     ]
   }

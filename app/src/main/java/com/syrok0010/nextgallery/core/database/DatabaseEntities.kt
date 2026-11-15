@@ -45,6 +45,7 @@ data class MemoriesMediaEntity(
     val videoDurationSeconds: Long?,
     val isFavorite: Boolean,
     val isHidden: Boolean,
+    val indexedAtEpochSeconds: Long? = null,
 )
 
 data class IdentifiedMemoriesMedia(@Embedded val media: MemoriesMediaEntity, val mediaId: String)

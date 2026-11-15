@@ -173,16 +173,28 @@ private fun remoteRequestPlan(
         MediaImagePurpose.TimelineThumbnail -> MediaImageRequestPlan(
             primary = ImageRequest
                 .Builder(context)
-                .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
-                .build(),
+                .data(
+                    thumbnailRequest(
+                        credentials,
+                        assetRef.photoFileId,
+                        item.etag,
+                        indexedAtEpochSeconds = item.indexedAtEpochSeconds,
+                    ),
+                ).build(),
         )
 
         MediaImagePurpose.DetailPreview -> MediaImageRequestPlan(
             primary = authenticatedImageRequest(context, urls.detailPreviewUrl, credentials),
             preview = ImageRequest
                 .Builder(context)
-                .data(thumbnailRequest(credentials, assetRef.photoFileId, item.etag))
-                .build(),
+                .data(
+                    thumbnailRequest(
+                        credentials,
+                        assetRef.photoFileId,
+                        item.etag,
+                        indexedAtEpochSeconds = item.indexedAtEpochSeconds,
+                    ),
+                ).build(),
         )
 
         MediaImagePurpose.Original -> MediaImageRequestPlan(

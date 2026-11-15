@@ -51,7 +51,7 @@ class UploadedCopiesFollowUpTest {
         return registry.resolve(listOf(candidate)).mediaIds.getValue(source)
     }
 
-    /** Memories 10.1 returns neither AUID nor BUID. */
+    /** A receipt links exact copies without relying on heuristic aliases. */
     private suspend fun resolveRemote(): MediaId {
         val source = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
         val candidate = mediaIdentityCandidate(source, auid = null, buid = null)

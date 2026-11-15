@@ -31,13 +31,9 @@ internal class RemoteImageRepository(
             }
             val keysByFileId = requestedKeys.distinctBy { it.fileId }.associateBy { it.fileId }
             val distinctFileIds = keysByFileId.keys.toList()
-            val etagsByFileId = keysByFileId.mapValues { (_, key) -> key.etag }
             val cachedKeys = bestEffort {
                 cacheRepository.loadThumbnailKeys(
-                    fileIds = distinctFileIds,
-                    width = firstKey.width,
-                    height = firstKey.height,
-                    etagsByFileId = etagsByFileId,
+                    keys = keysByFileId.values.toList(),
                 )
             }.getOrDefault(emptyList())
             cachedKeys.forEach { emit(it) }
@@ -49,9 +45,7 @@ internal class RemoteImageRepository(
                 bestEffort {
                     cacheRepository.saveThumbnails(
                         previews = listOf(preview),
-                        width = firstKey.width,
-                        height = firstKey.height,
-                        etagsByFileId = etagsByFileId,
+                        keys = keysByFileId.values.toList(),
                     )
                 }.isSuccess
 

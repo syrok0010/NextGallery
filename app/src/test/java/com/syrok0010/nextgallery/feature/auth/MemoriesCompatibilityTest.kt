@@ -4,14 +4,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class MemoriesCompatibilityTest {
-    @Test fun `10 releases and later majors pass the minimum version check`() {
-        listOf("10.0.0", "10.1", "10.1.0", "10.1.0-beta.1+build.2", "11.0.0").forEach {
+    @Test fun `11 releases and later majors pass the minimum version check`() {
+        listOf("11.0.0", "11.1", "11.1.4", "11.1.4-beta.1+build.2", "12.0.0").forEach {
             assertEquals(it, MemoriesCompatibility.Supported, memoriesCompatibility(it))
         }
     }
 
-    @Test fun `8 and 9 releases are too old`() {
-        listOf("8.0.0", "8.1.0", "9.0.1").forEach {
+    @Test fun `releases before 11 are too old`() {
+        listOf("8.0.0", "9.0.1", "10.0.0", "10.1.0").forEach {
             assertEquals(MemoriesCompatibility.TooOld(it), memoriesCompatibility(it))
         }
     }

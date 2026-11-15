@@ -54,6 +54,22 @@ class ThumbnailKeyTest {
         assertNotEquals(original.coilCacheKey(), modified.coilCacheKey())
     }
 
+    @Test
+    fun `reindexing changes the memory key without a file edit`() {
+        val original = thumbnailKey().copy(indexedAtEpochSeconds = 100)
+        val reindexed = original.copy(indexedAtEpochSeconds = 200)
+
+        assertNotEquals(original.coilMemoryCacheKey(), reindexed.coilMemoryCacheKey())
+        assertEquals(
+            reindexed.coilMemoryCacheKey(),
+            thumbnailRequest(
+                AccountCredentials("https://cloud.example.com", "user", "secret", "user"),
+                reindexed.fileId, reindexed.etag,
+                indexedAtEpochSeconds = reindexed.indexedAtEpochSeconds,
+            ).key.coilMemoryCacheKey(),
+        )
+    }
+
     private fun thumbnailKey(
         width: Int = 512,
         height: Int = 512,

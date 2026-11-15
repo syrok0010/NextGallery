@@ -14,7 +14,7 @@ internal data class RemoteVideoQuality(
     val isAdaptive: Boolean = false,
 )
 
-/** Memories 10 names direct.m3u8 Original; Direct is the untouched /stream source. */
+/** Memories names direct.m3u8 Original; Direct is the untouched /stream source. */
 @OptIn(UnstableApi::class)
 internal object MemoriesVideoManifest {
     fun qualities(masterUri: String, manifest: String): List<RemoteVideoQuality> {

@@ -27,7 +27,7 @@ class MemoriesDtoMappingTest {
     fun `decode describe response`() {
         val dto = json.decodeFromString<MemoriesDescribeDto>(fixture("describe.json"))
 
-        assertEquals("10.1.0", dto.version)
+        assertEquals("11.1.4", dto.version)
         assertEquals("https://cloud.example.com/apps/memories/", dto.baseUrl)
         assertEquals("https://cloud.example.com/index.php/login/v2", dto.loginFlowUrl)
         assertEquals("alice", dto.uid)
@@ -39,7 +39,7 @@ class MemoriesDtoMappingTest {
 
         val config = dto.toMemoriesConfig()
 
-        assertEquals("10.1.0", config.version)
+        assertEquals("11.1.4", config.version)
         assertEquals("/Photos", config.timelinePath)
         assertTrue(config.albumsEnabled)
         assertFalse(config.recognizeEnabled)
@@ -82,6 +82,7 @@ class MemoriesDtoMappingTest {
         assertEquals(MediaId("resolved-media"), item.mediaId)
         assertEquals("VID_0043.mp4", item.displayName)
         assertEquals("video/mp4", item.mimeType)
+        assertEquals(1_800_000_000L, item.indexedAtEpochSeconds)
         assertTrue(item.isVideo)
         assertTrue(item.isFavorite)
         assertTrue(item.isHidden)

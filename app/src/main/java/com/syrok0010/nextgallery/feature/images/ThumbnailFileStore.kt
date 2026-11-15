@@ -54,7 +54,7 @@ class ThumbnailFileStore(context: Context) {
             ?.joinToString(separator = "")
             ?: NO_ETAG
 
-        return "${key.fileId}-${key.width}x${key.height}-$etagPart.bin"
+        return "${key.fileId}-${key.width}x${key.height}-$etagPart-${key.indexedAtEpochSeconds ?: 0}.bin"
     }
 
     internal fun fileFor(key: ThumbnailKey): File {

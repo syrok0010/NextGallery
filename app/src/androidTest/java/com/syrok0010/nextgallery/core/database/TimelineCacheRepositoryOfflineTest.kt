@@ -12,7 +12,9 @@ import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPreviewDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.images.ThumbnailKey
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
@@ -104,7 +106,11 @@ class TimelineCacheRepositoryOfflineTest {
     @Test
     fun cloudObjectWithoutAliasesSurvivesOfflineRestore() =
         runBlocking {
-            val withoutAliases = remoteItem().copy(auid = null, buid = null)
+            val withoutAliases = remoteItem().copy(
+                auid = null,
+                buid = null,
+                indexedAtEpochSeconds = 100,
+            )
             identityRegistry.resolve(
                 listOf(
                     MediaIdentityCandidate(
@@ -164,12 +170,7 @@ class TimelineCacheRepositoryOfflineTest {
                 previews = listOf(changed, unchanged).map {
                     MemoriesPreviewDto(it.remoteFileId!!, "image/jpeg", byteArrayOf(1))
                 },
-                width = THUMBNAIL_SIZE,
-                height = THUMBNAIL_SIZE,
-                etagsByFileId = listOf(
-                    changed,
-                    unchanged,
-                ).associate { it.remoteFileId!! to it.etag },
+                keys = listOf(changed, unchanged).map { it.thumbnailKey() },
             )
             assertEquals(
                 listOf(FILE_ID, OTHER_FILE_ID),
@@ -213,6 +214,32 @@ class TimelineCacheRepositoryOfflineTest {
             assetRef = MediaAssetRef.MemoriesFile(FILE_ID),
         )
 
+    @Test
+    fun reindexingInvalidatesDiskThumbnailWithoutChangingEtag() =
+        runBlocking {
+            val old = remoteItem().copy(indexedAtEpochSeconds = 100).thumbnailKey()
+            val reindexed = old.copy(indexedAtEpochSeconds = 200)
+            imageCache.saveThumbnails(
+                listOf(MemoriesPreviewDto(old.fileId, "image/jpeg", byteArrayOf(1))),
+                listOf(old),
+            )
+            assertEquals(listOf(old), imageCache.loadThumbnailKeys(listOf(old)))
+
+            // A new repository instance models restoring the persisted cache after restart.
+            val reopened = RemoteImageCache(database, ThumbnailFileStore(context))
+            assertEquals(emptyList<ThumbnailKey>(), reopened.loadThumbnailKeys(listOf(reindexed)))
+            assertFalse(thumbnailFileStore.fileFor(old).exists())
+            reopened.saveThumbnails(
+                listOf(MemoriesPreviewDto(reindexed.fileId, "image/jpeg", byteArrayOf(2))),
+                listOf(reindexed),
+            )
+            assertEquals(listOf(reindexed), reopened.loadThumbnailKeys(listOf(reindexed)))
+            org.junit.Assert.assertArrayEquals(
+                byteArrayOf(2),
+                thumbnailFileStore.fileFor(reindexed).readBytes(),
+            )
+        }
+
     private fun MediaItem.sourceIdentity(): MediaSourceIdentity =
         when (val asset = assetRef) {
             is MediaAssetRef.MemoriesFile -> MediaSourceIdentity(
@@ -232,15 +259,21 @@ class TimelineCacheRepositoryOfflineTest {
     private suspend fun cachedThumbnails(vararg items: MediaItem) =
         imageCache
             .loadThumbnailKeys(
-                fileIds = items.map { it.remoteFileId!! },
-                width = THUMBNAIL_SIZE,
-                height = THUMBNAIL_SIZE,
-                etagsByFileId = items.associate { it.remoteFileId!! to it.etag },
+                keys = items.map { it.thumbnailKey() },
             ).map { it.fileId }
+
+    private fun MediaItem.thumbnailKey() =
+        ThumbnailKey(
+            remoteFileId!!,
+            THUMBNAIL_SIZE,
+            THUMBNAIL_SIZE,
+            etag,
+            indexedAtEpochSeconds,
+        )
 
     private fun memoriesConfig() =
         MemoriesConfig(
-            version = "10.1.0",
+            version = "11.1.4",
             timelinePath = "/Photos",
             albumsEnabled = false,
             recognizeEnabled = false,

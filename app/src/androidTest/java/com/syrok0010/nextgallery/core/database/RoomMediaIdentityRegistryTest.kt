@@ -307,7 +307,7 @@ class RoomMediaIdentityRegistryTest {
 
     private fun snapshot(item: MediaItem) = TimelineSnapshotAssembler.assemble(
         config = MemoriesConfig(
-            version = "10.1.0",
+            version = "11.1.4",
             timelinePath = "/Photos",
             albumsEnabled = false,
             recognizeEnabled = false,

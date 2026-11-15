@@ -19,6 +19,7 @@ class TimelineCacheMappersTest {
             width = 4032,
             height = 3024,
             etag = "etag-42",
+            indexedAtEpochSeconds = 1_800_000_000L,
             livePhotoId = null,
             auid = "auid-42",
             buid = "buid-42",

@@ -9,25 +9,14 @@ internal class RemoteImageCache(
     private val thumbnailFileStore: ThumbnailFileStore,
 ) {
     private val thumbnailDao = database.thumbnailCacheDao()
-    suspend fun loadThumbnailKeys(
-        fileIds: List<Long>,
-        width: Int,
-        height: Int,
-        etagsByFileId: Map<Long, String?>,
-    ): List<ThumbnailKey> {
-        if (fileIds.isEmpty()) {
-            return emptyList()
-        }
-
-        val rows = thumbnailDao.rows(fileIds, width, height)
+    suspend fun loadThumbnailKeys(keys: List<ThumbnailKey>): List<ThumbnailKey> {
+        if (keys.isEmpty()) return emptyList()
+        val first = keys.first()
+        val keysByFileId = keys.associateBy { it.fileId }
+        val rows = thumbnailDao.rows(keysByFileId.keys.toList(), first.width, first.height)
         val staleRows = mutableListOf<ThumbnailCacheEntity>()
-        val keys = rows.mapNotNull { row ->
-            val thumbnailKey = ThumbnailKey(
-                fileId = row.fileId,
-                width = width,
-                height = height,
-                etag = etagsByFileId[row.fileId],
-            )
+        val cachedKeys = rows.mapNotNull { row ->
+            val thumbnailKey = keysByFileId.getValue(row.fileId)
             val expectedCacheKey = thumbnailFileStore.cacheKey(thumbnailKey)
             if (row.cacheKey != expectedCacheKey) {
                 staleRows += row
@@ -43,39 +32,30 @@ internal class RemoteImageCache(
         }
 
         if (staleRows.isNotEmpty()) {
-            thumbnailDao.delete(staleRows.map { it.fileId }, width, height)
+            thumbnailDao.delete(staleRows.map { it.fileId }, first.width, first.height)
             thumbnailFileStore.delete(staleRows.map { it.relativePath })
         }
 
-        return keys
+        return cachedKeys
     }
 
-    suspend fun saveThumbnails(
-        previews: List<MemoriesPreviewDto>,
-        width: Int,
-        height: Int,
-        etagsByFileId: Map<Long, String?>,
-    ) {
+    suspend fun saveThumbnails(previews: List<MemoriesPreviewDto>, keys: List<ThumbnailKey>) {
         if (previews.isEmpty()) {
             return
         }
 
+        val keysByFileId = keys.associateBy { it.fileId }
         val now = System.currentTimeMillis()
         val rows = previews.map { preview ->
-            val thumbnailKey = ThumbnailKey(
-                fileId = preview.fileId,
-                width = width,
-                height = height,
-                etag = etagsByFileId[preview.fileId],
-            )
+            val thumbnailKey = keysByFileId.getValue(preview.fileId)
             val storedFile = thumbnailFileStore.save(
                 key = thumbnailKey,
                 bytes = preview.bytes,
             )
             ThumbnailCacheEntity(
                 fileId = preview.fileId,
-                width = width,
-                height = height,
+                width = thumbnailKey.width,
+                height = thumbnailKey.height,
                 mimeType = preview.type,
                 cacheKey = storedFile.cacheKey,
                 relativePath = storedFile.relativePath,
