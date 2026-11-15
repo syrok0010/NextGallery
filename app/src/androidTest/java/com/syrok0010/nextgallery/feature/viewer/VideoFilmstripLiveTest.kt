@@ -9,9 +9,14 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
+import com.syrok0010.nextgallery.feature.viewer.playback.lowestForFrames
+import com.syrok0010.nextgallery.feature.viewer.playback.newVodClientId
+import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Call
@@ -24,7 +29,7 @@ import org.koin.core.context.GlobalContext
 
 /** Opt-in measurement on disposable files: no playback or HLS warmup. */
 class VideoFilmstripLiveTest {
-    @Test fun compareOriginalWithColdLowestHls() =
+    @Test fun compareOriginalFirstWithColdHlsExperiment() =
         runBlocking {
             val args = InstrumentationRegistry.getArguments()
             val ids = args.getString("filmstripFileIds")
@@ -52,13 +57,40 @@ class VideoFilmstripLiveTest {
                 for (id in checkNotNull(ids).split(',').map(String::toLong)) {
                     val sources = factory.sources(MediaAssetRef.MemoriesFile(id))
                     val original = measure(
-                        RemoteVideoFrames(context) { factory.mediaSourceFactory(context) },
+                        VideoFramesFactory(context, factory).create(sources),
                         sources.primary,
                         traffic,
                     )
+                    assertTrue(
+                        "Original-first must not discover or request HLS: ${traffic.paths}",
+                        traffic.paths.none {
+                            it.contains(
+                                "/video/transcode/",
+                            ) ||
+                                it.endsWith("/config")
+                        },
+                    )
+                    val remote = RemoteVideoFrames(context) { factory.mediaSourceFactory(context) }
+                    // Deliberately retain the rejected HLS-first policy here as an experiment.
+                    val experiment = VideoFrameProvider { uri ->
+                        flow {
+                            val quality = checkNotNull(
+                                factory
+                                    .qualities(
+                                        checkNotNull(sources.remoteOriginal),
+                                        newVodClientId(),
+                                    ).lowestForFrames(),
+                            ) { "Experiment requires a fixed HLS profile" }
+                            try {
+                                emitAll(remote.frames(quality.uri))
+                            } catch (_: IOException) {
+                                emitAll(remote.frames(uri))
+                            }
+                        }
+                    }
                     val low =
                         measure(
-                            VideoFramesFactory(context, factory).create(sources),
+                            experiment,
                             sources.primary,
                             traffic,
                         )
@@ -66,7 +98,7 @@ class VideoFilmstripLiveTest {
                         "FilmstripMeasurement",
                         JSONObject()
                             .put("fileId", id)
-                            .put("original", original)
+                            .put("originalFirst", original)
                             .put("coldLowestHls", low)
                             .put("originalFallback", traffic.paths.any { it.contains("/stream/") })
                             .toString(),

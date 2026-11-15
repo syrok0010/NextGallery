@@ -23,7 +23,7 @@ class FallbackVideoFramesTest {
         assertEquals(listOf(VideoFrameEvent.Duration(12_000)), provider.frames("content://local/42").toList())
     }
 
-    @Test fun `remote and broken local prefer the cheapest fixed stream`() = runBlocking {
+    @Test fun `remote and broken local use readable original without discovery`() = runBlocking {
         for (uri in listOf(original, "content://local/42")) {
             val requests = mutableListOf<String>()
             val provider = FallbackVideoFrames(
@@ -32,77 +32,100 @@ class FallbackVideoFramesTest {
                     requests += source
                     emit(VideoFrameEvent.Duration(12_000))
                 } }, fallbackUri = original,
-                qualities = { listOf(high, RemoteVideoQuality("Auto", "$original/index.m3u8", isAdaptive = true), low) },
+                qualities = { error("Readable original must not start discovery") },
             )
-            provider.frames(uri).toList()
-            assertEquals(listOf(low.uri), requests)
-        }
-    }
-
-    @Test fun `unavailable VOD uses original without adaptive or stream copy extraction`() = runBlocking {
-        for (variants in listOf(emptyList(), listOf(
-            RemoteVideoQuality("Auto", "$original/index.m3u8", isAdaptive = true),
-            low.copy(label = "Original", isOriginal = true),
-        ))) {
-            val requests = mutableListOf<String>()
-            val provider = FallbackVideoFrames(
-                local = VideoFrameProvider { error("Local requested") },
-                remote = VideoFrameProvider { source -> flow { requests += source } },
-                fallbackUri = null, qualities = { variants },
-            )
-            provider.frames(original).toList()
+            assertEquals(listOf(VideoFrameEvent.Duration(12_000)), provider.frames(uri).toList())
             assertEquals(listOf(original), requests)
         }
     }
 
-    @Test fun `discovery failure does not prevent readable original frames`() = runBlocking {
-        val requests = mutableListOf<String>()
-        val provider = FallbackVideoFrames(
-            local = VideoFrameProvider { error("Local requested") },
-            remote = VideoFrameProvider { source -> flow { requests += source } },
-            fallbackUri = null, qualities = { throw IOException("VOD unavailable") },
-        )
-        provider.frames(original).toList()
-        assertEquals(listOf(original), requests)
-    }
-
-    @Test fun `failed low quality tries original once and explicit retry rediscovers`() = runBlocking {
+    @Test fun `unsupported original tries cheapest fixed HLS and retry starts from original`() = runBlocking {
         val requests = mutableListOf<String>()
         var discoveries = 0
         val provider = FallbackVideoFrames(
             local = VideoFrameProvider { error("Local requested") },
             remote = VideoFrameProvider { source -> flow {
                 requests += source
-                if (source == low.uri) throw IOException("Cold transcode failed")
+                if (source == original) throw UnsupportedVideoFrames(IOException("Unsupported"))
                 emit(VideoFrameEvent.Duration(12_000))
-            } }, fallbackUri = null, qualities = { discoveries++; listOf(low) },
+            } }, fallbackUri = null, qualities = {
+                discoveries++
+                listOf(high, RemoteVideoQuality("Auto", "$original/index.m3u8", isAdaptive = true), low)
+            },
         )
         repeat(2) { provider.frames(original).toList() }
-        assertEquals(listOf(low.uri, original, low.uri, original), requests)
+        assertEquals(listOf(original, low.uri, original, low.uri), requests)
         assertEquals(2, discoveries)
     }
 
-    @Test fun `failed original stops without retrying high quality or adaptive streams`() = runBlocking {
+    @Test fun `unavailable VOD preserves unsupported original without adaptive or stream copy extraction`() = runBlocking {
+        for (variants in listOf(emptyList(), listOf(
+            RemoteVideoQuality("Auto", "$original/index.m3u8", isAdaptive = true),
+            low.copy(label = "Original", isOriginal = true),
+        ))) {
+            val requests = mutableListOf<String>()
+            val unsupported = UnsupportedVideoFrames(IOException("Unsupported"))
+            val provider = FallbackVideoFrames(
+                local = VideoFrameProvider { error("Local requested") },
+                remote = VideoFrameProvider { source -> flow { requests += source; throw unsupported } },
+                fallbackUri = null, qualities = { variants },
+            )
+            try { provider.frames(original).toList(); fail() } catch (failure: IOException) { assertSame(unsupported, failure) }
+            assertEquals(listOf(original), requests)
+        }
+    }
+
+    @Test fun `original network and timeout failures never start HLS discovery`() = runBlocking {
+        for (failure in listOf(IOException("503"), IOException("Frame extraction timed out"))) {
+            val requests = mutableListOf<String>()
+            val provider = FallbackVideoFrames(
+                local = VideoFrameProvider { error("Local requested") },
+                remote = VideoFrameProvider { source -> flow { requests += source; throw failure } },
+                fallbackUri = null, qualities = { error("Network failure must not start transcode") },
+            )
+            try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(failure, actual) }
+            assertEquals(listOf(original), requests)
+        }
+    }
+
+    @Test fun `failed HLS stops without repeating original or trying another quality`() = runBlocking {
         val requests = mutableListOf<String>()
+        val hlsFailure = IOException("Cold transcode failed")
+        val provider = FallbackVideoFrames(
+            local = VideoFrameProvider { error("Local requested") },
+            remote = VideoFrameProvider { source -> flow {
+                requests += source
+                if (source == original) throw UnsupportedVideoFrames(IOException("Unsupported"))
+                throw hlsFailure
+            } }, fallbackUri = null, qualities = { listOf(high, low) },
+        )
+        try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(hlsFailure, actual) }
+        assertEquals(listOf(original, low.uri), requests)
+    }
+
+    @Test fun `failed discovery does not retry unsupported original`() = runBlocking {
+        val requests = mutableListOf<String>()
+        val discoveryFailure = IOException("Discovery unavailable")
         val provider = FallbackVideoFrames(
             local = VideoFrameProvider { error("Local requested") },
             remote = VideoFrameProvider { source -> flow {
                 requests += source
                 throw UnsupportedVideoFrames(IOException("Unsupported"))
-            } }, fallbackUri = null, qualities = { listOf(high, low) },
+            } }, fallbackUri = null, qualities = { throw discoveryFailure },
         )
-        try { provider.frames(original).toList(); fail() } catch (_: IOException) { }
-        assertEquals(listOf(low.uri, original), requests)
+        try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(discoveryFailure, actual) }
+        assertEquals(listOf(original), requests)
     }
 
     @Test fun `cancellation never starts another source`() = runBlocking {
-        for (stage in listOf("local", "discovery", "remote")) {
+        for (stage in listOf("local", "original", "discovery", "hls")) {
             val requests = mutableListOf<String>()
             val provider = FallbackVideoFrames(
                 local = VideoFrameProvider { flow { throw CancellationException("Page left") } },
                 remote = VideoFrameProvider { source -> flow {
                     requests += source
-                    throw CancellationException("Page left")
+                    if (stage == "original" || source == low.uri) throw CancellationException("Page left")
+                    throw UnsupportedVideoFrames(IOException("Unsupported"))
                 } }, fallbackUri = original, qualities = {
                     if (stage == "discovery") throw CancellationException("Page left")
                     listOf(low)
@@ -110,7 +133,11 @@ class FallbackVideoFramesTest {
             )
             try { provider.frames(if (stage == "local") "content://local/42" else original).toList(); fail() }
             catch (_: CancellationException) { }
-            assertEquals(if (stage == "remote") listOf(low.uri) else emptyList(), requests)
+            assertEquals(when (stage) {
+                "local" -> emptyList()
+                "hls" -> listOf(original, low.uri)
+                else -> listOf(original)
+            }, requests)
         }
     }
 }
