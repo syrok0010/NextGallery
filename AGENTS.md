@@ -34,7 +34,7 @@
 
 ### Android-разработка
 
-При изменении Android-кода, UI или тестов, а также при выборе локальной или CI-сборки APK следуй `docs/agents/android-development.md`.
+При изменении Android-кода, UI или тестов следуй правилам выбора устройства в `docs/agents/android-development.md`.
 
 ### Тесты
 
@@ -46,4 +46,4 @@
 
 ### Сборки и релизы
 
-Ручная сборка APK с ветки через GitHub Actions, подпись и выпуск версий — в `docs/agents/release.md`.
+Для получения APK, настройки подписи или выпуска версии читай `docs/agents/release.md`.
