@@ -12,7 +12,16 @@ internal data class RemoteVideoQuality(
     val label: String,
     val uri: String,
     val isAdaptive: Boolean = false,
+    val bitrate: Int? = null,
+    val resolution: Int? = null,
+    val isOriginal: Boolean = false,
 )
+
+/** Fixed transcodes only: Auto may increase bandwidth and direct is the original video. */
+internal fun List<RemoteVideoQuality>.lowestForFrames(): RemoteVideoQuality? =
+    filter { !it.isAdaptive && !it.isOriginal }.minWithOrNull(
+        compareBy({ it.bitrate ?: Int.MAX_VALUE }, { it.resolution ?: Int.MAX_VALUE }),
+    )
 
 /** Memories names direct.m3u8 Original; Direct is the untouched /stream source. */
 @OptIn(UnstableApi::class)
@@ -36,12 +45,19 @@ internal object MemoriesVideoManifest {
                     return@mapNotNull null
                 }
                 val resolution = minOf(variant.format.width, variant.format.height)
-                val label = if (uri.pathSegments.last() == "direct.m3u8") {
+                val isOriginal = uri.pathSegments.last() == "direct.m3u8"
+                val label = if (isOriginal) {
                     "Original"
                 } else {
                     resolution.takeIf { it > 0 }?.let { "${it}p" } ?: return@mapNotNull null
                 }
-                RemoteVideoQuality(label, uri.toString())
+                RemoteVideoQuality(
+                    label,
+                    uri.toString(),
+                    bitrate = variant.format.bitrate.takeIf { it > 0 },
+                    resolution = resolution.takeIf { it > 0 },
+                    isOriginal = isOriginal,
+                )
             }.distinct()
         return if (variants.isEmpty()) {
             emptyList()

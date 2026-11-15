@@ -109,7 +109,6 @@ class FilmstripTest {
         val currentPage = mutableIntStateOf(0)
         val seeks = mutableListOf<Pair<Long, Boolean>>()
         val playback = object : FilmstripPlayback {
-            override fun sourceFor(id: MediaId): String? = null
             override fun seek(id: MediaId, position: Long, finished: Boolean) {
                 if (items[currentPage.intValue].mediaId == id) seeks += position to finished
             }

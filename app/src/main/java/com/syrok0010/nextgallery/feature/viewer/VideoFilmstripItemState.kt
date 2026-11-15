@@ -25,7 +25,6 @@ internal class VideoFilmstripItemState(
     private val sources: VideoSources = VideoSources.from(item.assetRef),
     private val uptimeMillis: () -> Long = SystemClock::uptimeMillis,
 ) {
-    private var source: String? = null
     private var loader by mutableStateOf<VideoFilmstripLoader?>(null)
     val frames get() = loader?.state ?: VideoFilmstripState()
     private var expanded = false
@@ -36,11 +35,8 @@ internal class VideoFilmstripItemState(
             close()
             return
         }
-        val nextSource = playback.sourceFor(item.mediaId) ?: sources.primary
-        if (loader == null || nextSource != source) {
-            close()
-            source = nextSource
-            loader = VideoFilmstripLoader(provider, nextSource, scope).also { it.retry() }
+        if (loader == null) {
+            loader = VideoFilmstripLoader(provider, sources.primary, scope).also { it.retry() }
         }
         loader?.scroll(
             placement.fraction,
@@ -67,6 +63,5 @@ internal class VideoFilmstripItemState(
         if (loader != null) playback.finish(item.mediaId)
         loader?.close()
         loader = null
-        source = null
     }
 }

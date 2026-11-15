@@ -42,7 +42,6 @@ internal class VideoPlaybackController(
     private val session = VideoPlaybackSession(sources.primary, sources.fallback, sources.remoteOriginal?.uri)
     var state by mutableStateOf(session.state)
         private set
-    private var sourceUri by mutableStateOf(session.sourceUri)
     private val vodClientId = newVodClientId()
     private var started = false
     private var closed by mutableStateOf(false)
@@ -115,7 +114,6 @@ internal class VideoPlaybackController(
         }
         val effect = session.accept(input)
         state = session.state
-        sourceUri = session.sourceUri
         applyEffect(effect)
     }
 
@@ -157,9 +155,6 @@ internal class VideoPlaybackController(
         dispatch(VideoPlaybackInput.PlayerPositionChanged(player.currentPosition))
         dispatch(VideoPlaybackInput.SelectQuality(quality))
     }
-
-    override fun sourceFor(id: MediaId): String? =
-        sourceUri.takeIf { !closed && id == mediaId }
 
     override fun seek(id: MediaId, position: Long, finished: Boolean) {
         if (id != mediaId) return

@@ -17,6 +17,10 @@ class MemoriesVideoManifestTest {
         """.trimIndent())
         assertEquals(listOf("Auto", "Original", "360p"), result.map { it.label })
         assertTrue(result[1].uri.endsWith("direct.m3u8?session=123"))
+        assertTrue(result[1].isOriginal)
+        assertEquals(1_000_000, result[2].bitrate)
+        assertEquals(360, result[2].resolution)
+        assertEquals(result[2], result.lowestForFrames())
     }
 
     @Test fun `HLS attributes resolve variable references and quoted codec lists`() {
