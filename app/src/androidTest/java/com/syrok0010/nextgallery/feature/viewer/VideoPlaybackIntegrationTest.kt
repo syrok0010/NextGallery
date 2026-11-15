@@ -572,6 +572,47 @@ class VideoPlaybackIntegrationTest {
         rule.onAllNodesWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
+    @Test fun remoteFilmstripReusesFramesAcrossQualityCollapseAndChromeChanges() = withRemote { fixture, remote ->
+        fixture.hls = true
+        var shown by mutableStateOf(true)
+        lateinit var playback: VideoPlaybackController
+        rule.setContent {
+            val cache = rememberVideoFilmstripCache()
+            val owner = rememberViewerPlaybackState(remote)
+            owner.current?.let { playback = it }
+            if (shown) MaterialTheme {
+                Filmstrip(listOf(remote), 0, {}, playback = owner.current ?: FilmstripPlayback.None, frameCache = cache)
+            }
+        }
+        fun awaitFrames() {
+            rule.waitUntil(20_000) {
+                rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode()
+                    .config[SemanticsProperties.StateDescription] == rule.activity.getString(R.string.video_filmstrip_ready)
+            }
+        }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        awaitFrames()
+        val frameClientPath = checkNotNull(fixture.requests.firstOrNull {
+            it[":request"]?.endsWith("/360p.m3u8") == true
+        }?.get(":request")).substringBeforeLast('/')
+        fun frameRequests() = fixture.requests.count { it[":request"]?.startsWith(frameClientPath) == true }
+        val loadedRequests = frameRequests()
+        assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
+        rule.runOnIdle { playback.dispatch(VideoPlaybackInput.Play) }
+        rule.waitUntil(10_000) { playback.state.qualities.any { it.label == "360p" } }
+        rule.runOnIdle { playback.selectQuality(playback.state.qualities.first { it.label == "360p" }) }
+        rule.waitForIdle()
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        awaitFrames()
+        rule.runOnIdle { shown = false }
+        rule.waitForIdle()
+        rule.runOnIdle { shown = true }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        awaitFrames()
+        assertEquals(loadedRequests, frameRequests())
+    }
+
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
         val session = GlobalContext.get().get<SessionStore>()
         val previous = session.session.value

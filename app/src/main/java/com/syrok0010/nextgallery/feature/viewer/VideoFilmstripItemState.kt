@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +24,7 @@ internal class VideoFilmstripItemState(
     private val playback: FilmstripPlayback,
     private val scope: CoroutineScope,
     private val sources: VideoSources = VideoSources.from(item.assetRef),
+    private val cache: VideoFilmstripCache<Bitmap>? = null,
     private val uptimeMillis: () -> Long = SystemClock::uptimeMillis,
 ) {
     private var loader by mutableStateOf<VideoFilmstripLoader?>(null)
@@ -36,7 +38,13 @@ internal class VideoFilmstripItemState(
             return
         }
         if (loader == null) {
-            loader = VideoFilmstripLoader(provider, sources.primary, scope).also { it.retry() }
+            loader = VideoFilmstripLoader(
+                provider,
+                sources.primary,
+                scope,
+                cache,
+                VideoFrameCacheKey(item.assetRef, item.etag),
+            ).also { it.retry() }
         }
         loader?.scroll(
             placement.fraction,

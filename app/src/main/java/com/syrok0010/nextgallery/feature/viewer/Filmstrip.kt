@@ -1,6 +1,8 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import android.os.SystemClock
+import android.graphics.Bitmap
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
@@ -56,6 +58,7 @@ internal fun Filmstrip(
     modifier: Modifier = Modifier,
     playback: FilmstripPlayback = FilmstripPlayback.None,
     frameProvider: VideoFrameProvider? = null,
+    frameCache: VideoFilmstripCache<Bitmap> = rememberVideoFilmstripCache(),
     lazyListState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = currentPage),
     /** Paces seeks while scrubbing; a test passes its own clock, which it advances by hand. */
     uptimeMillis: () -> Long = SystemClock::uptimeMillis,
@@ -178,6 +181,7 @@ internal fun Filmstrip(
                             }
                         },
                         frameProvider = frameProvider,
+                        frameCache = frameCache,
                         uptimeMillis = uptimeMillis,
                         modifier = itemModifier,
                     )
@@ -200,4 +204,11 @@ internal fun Filmstrip(
 
         }
     }
+}
+
+@Composable
+internal fun rememberVideoFilmstripCache(): VideoFilmstripCache<Bitmap> {
+    val cache = remember { VideoFilmstripCache<Bitmap>(8L * 1024 * 1024) { it.allocationByteCount } }
+    DisposableEffect(cache) { onDispose { cache.clear() } }
+    return cache
 }

@@ -15,8 +15,11 @@ internal class VideoFilmstripLoader(
     private val provider: VideoFrameProvider,
     private val sourceUri: String,
     private val scope: CoroutineScope,
+    private val cache: VideoFilmstripCache<Bitmap>? = null,
+    private val cacheKey: VideoFrameCacheKey? = null,
 ) {
-    private val projection = VideoFilmstripProjection<Bitmap>()
+    private var projection =
+        VideoFilmstripProjection(cacheKey?.let { cache?.get(it) } ?: VideoFilmstripState())
     var state by mutableStateOf(projection.state)
         private set
     private var loading: Job? = null
@@ -24,9 +27,11 @@ internal class VideoFilmstripLoader(
 
     fun retry() {
         loading?.cancel()
+        val cached = cacheKey?.let { cache?.get(it) }
+        projection = VideoFilmstripProjection(cached ?: VideoFilmstripState())
+        state = projection.state
+        if (cached != null) return
         loading = scope.launch {
-            projection.retry()
-            state = projection.state
             try {
                 provider.frames(sourceUri).collect { event ->
                     when (event) {
@@ -36,6 +41,7 @@ internal class VideoFilmstripLoader(
                     state = projection.state
                 }
                 projection.finished()
+                cacheKey?.let { cache?.put(it, projection.state) }
             } catch (_: TimeoutCancellationException) {
                 projection.failed()
             } catch (cancelled: CancellationException) {
