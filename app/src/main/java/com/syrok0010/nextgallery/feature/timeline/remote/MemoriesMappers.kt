@@ -34,6 +34,7 @@ fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
         width = w,
         height = h,
         etag = etag,
+        indexedAtEpochSeconds = indexedAt,
         livePhotoId = liveid,
         auid = auid,
         buid = buid,

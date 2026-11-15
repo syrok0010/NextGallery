@@ -19,7 +19,7 @@ internal fun memoriesCompatibility(version: String?): MemoriesCompatibility {
         }?.substringBefore('.')
         ?.toIntOrNull()
         ?: return MemoriesCompatibility.UnknownVersion
-    return if (major >= 10) {
+    return if (major >= 11) {
         MemoriesCompatibility.Supported
     } else {
         MemoriesCompatibility.TooOld(value)

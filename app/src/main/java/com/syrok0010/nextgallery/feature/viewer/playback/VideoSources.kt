@@ -46,7 +46,7 @@ internal data class RemoteVideoOriginal(val fileId: Long, private val serverUrl:
     }
 }
 
-/** Memories 10 rejects VOD clients other than 8-128 hex characters with HTTP 400. */
+/** Memories rejects VOD clients other than 8-128 hex characters with HTTP 400. */
 private val VOD_CLIENT_ID = Regex("[0-9a-fA-F]{8,128}")
 
 /** One per playback session, like the Memories web client. */

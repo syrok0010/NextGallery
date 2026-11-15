@@ -44,7 +44,7 @@ internal class RemoteVideoFixture(private val bytes: ByteArray) : AutoCloseable 
         }
         if (code != 200) return MockResponse.Builder().code(code).build()
         val payload = when {
-            isConfig -> """{"version":"7","vod_disable":${!hls}}""".toByteArray()
+            isConfig -> """{"version":"11.1.4","vod_disable":${!hls}}""".toByteArray()
 
             isHls && path.endsWith("/index.m3u8") ->
                 "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n360p.m3u8\n"
@@ -63,7 +63,7 @@ internal class RemoteVideoFixture(private val bytes: ByteArray) : AutoCloseable 
         }
         val type = when {
             path.endsWith("m3u8") -> "application/vnd.apple.mpegurl"
-            path.endsWith(".ts") -> "video/mp2t"
+            path.endsWith(".m4s") -> "video/mp4"
             else -> "video/mp4"
         }
         val range = headers["range"]?.removePrefix("bytes=")

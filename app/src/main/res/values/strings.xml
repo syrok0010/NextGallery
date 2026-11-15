@@ -182,9 +182,9 @@
     <string name="media_activity_progress">%1$s, %2$d%%</string>
     <string name="status_checking_memories">Checking the Memories version…</string>
     <string name="action_retry_memories_check">Check again</string>
-    <string name="error_memories_too_old">Memories %1$s is installed. Signing in needs version 10 or newer. Ask the administrator to update Memories and check again.</string>
-    <string name="error_memories_unavailable">Memories isn\'t available on this server. Ask the administrator to install or enable Memories 10 or newer, then check again.</string>
-    <string name="error_memories_version_unknown">The server didn\'t report a valid Memories version. Signing in needs version 10 or newer. Check the Memories setup and check again.</string>
+    <string name="error_memories_too_old">Memories %1$s is installed. Signing in needs version 11 or newer. Ask the administrator to update Memories and check again.</string>
+    <string name="error_memories_unavailable">Memories isn\'t available on this server. Ask the administrator to install or enable Memories 11 or newer, then check again.</string>
+    <string name="error_memories_version_unknown">The server didn\'t report a valid Memories version. Signing in needs version 11 or newer. Check the Memories setup and check again.</string>
     <string name="error_memories_check_network">Couldn\'t check Memories because of a network error. Check the connection and check again.</string>
     <string name="error_memories_check_failed">Couldn\'t check Memories. Check access to the server and check again. If access was revoked, sign out and sign in again.</string>
     <string name="uploads_title">Uploads</string>

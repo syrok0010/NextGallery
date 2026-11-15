@@ -54,7 +54,11 @@ Offline remote timeline включает только materialized objects с д
 - albums, people, tags и places;
 - полный remote archive.
 
-Выход очищает все данные приложения: credentials, Memories metadata, remote thumbnails, identity bindings, MediaStore projection и local `MediaId`. После выхода приложение в состоянии свежей установки. Раньше local index переживал выход; от этого отказались: сохранять его ради следующего входа незачем, а частичная очистка оставляла гонки с поздними записями.
+Выход через `ActivityManager.clearApplicationUserData()` завершает процесс и очищает все данные приложения: credentials, Memories metadata, remote thumbnails, identity bindings, MediaStore projection и local `MediaId`. После выхода приложение в состоянии свежей установки. Раньше local index переживал выход; от этого отказались: сохранять его ради следующего входа незачем, а частичная очистка оставляла гонки с поздними записями.
+
+Версия миниатюры включает ETag файла и `indexed_at` Memories: переиндексация
+может пересоздать превью без изменения исходного файла. Эта версия сохраняется
+в Room и используется в ключах памяти и файлов, включая восстановление офлайн.
 
 Single-account граница описана в product vision: cache обслуживает одно подключение, привязывать его записи к аккаунту не нужно.
 
@@ -72,4 +76,3 @@ Single-account граница описана в product vision: cache обслу
 - Когда ввести Room migrations вместо destructive reset.
 - Какая eviction policy нужна remote thumbnails.
 - Какие данные должны получить явную offline pin/download policy.
-- Механизм очистки при выходе: `ActivityManager.clearApplicationUserData()` (завершает процесс) или ручная очистка с перезапуском Activity (#53).

@@ -4,7 +4,13 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 
 /** One cached preview. The cache holds one account only: logout erases it (ADR 0010). */
-data class ThumbnailKey(val fileId: Long, val width: Int, val height: Int, val etag: String?) {
+data class ThumbnailKey(
+    val fileId: Long,
+    val width: Int,
+    val height: Int,
+    val etag: String?,
+    val indexedAtEpochSeconds: Long? = null,
+) {
     internal fun coilMemoryCacheKey(): String =
         buildString {
             append("nextgallery-thumbnail:")
@@ -15,6 +21,8 @@ data class ThumbnailKey(val fileId: Long, val width: Int, val height: Int, val e
             append(height)
             append(':')
             append(etag.orEmpty())
+            append(':')
+            append(indexedAtEpochSeconds ?: 0)
         }
 }
 
@@ -26,6 +34,7 @@ fun thumbnailRequest(
     etag: String?,
     width: Int = DEFAULT_THUMBNAIL_SIZE,
     height: Int = DEFAULT_THUMBNAIL_SIZE,
+    indexedAtEpochSeconds: Long? = null,
 ): ThumbnailRequest =
     ThumbnailRequest(
         key = ThumbnailKey(
@@ -33,6 +42,7 @@ fun thumbnailRequest(
             width = width,
             height = height,
             etag = etag,
+            indexedAtEpochSeconds = indexedAtEpochSeconds,
         ),
         credentials = credentials,
     )

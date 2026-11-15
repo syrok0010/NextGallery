@@ -382,7 +382,8 @@ class VideoPlaybackIntegrationTest {
             assertFalse(player.playWhenReady)
             assertTrue(player.currentPosition > 6500)
         }
-        assertTrue(fixture.requests.any { it[":request"]?.contains(".ts") == true })
+        assertTrue(fixture.requests.any { it[":request"]?.contains(".m4s") == true })
+        assertTrue(fixture.requests.any { it[":request"]?.contains("/init.mp4") == true })
         assertTrue(fixture.requests.filter { it[":request"]?.contains("/video/transcode/") == true }
             .all { it["authorization"] == fixture.authorization })
     }

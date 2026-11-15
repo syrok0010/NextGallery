@@ -22,7 +22,7 @@ object MemoriesMediaIdentity {
         )
     }
 
-    /** Memories 10 no longer returns AUID, so server files get it from `epoch` and `size` too. */
+    /** Memories does not return AUID, so server files get it from `epoch` and `size` too. */
     fun auid(epochSeconds: Long, sizeBytes: Long): String = md5("$epochSeconds$sizeBytes")
 
     private fun md5(value: String): String {

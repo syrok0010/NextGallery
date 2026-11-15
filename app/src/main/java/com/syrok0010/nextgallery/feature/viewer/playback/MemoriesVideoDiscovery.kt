@@ -17,7 +17,7 @@ internal class MemoriesVideoDiscovery(private val memories: MemoriesVideoClient)
             val manifest = memories.playlist(master).use { it.string() }
             return MemoriesVideoManifest.qualities(master, manifest)
         } catch (error: HttpException) {
-            // Memories 10 redirects to the original when it needs no transcoding.
+            // Memories redirects to the original when it needs no transcoding.
             if (error.code() == 303) return emptyList()
             throw IOException("Video discovery failed: ${error.code()}", error)
         }

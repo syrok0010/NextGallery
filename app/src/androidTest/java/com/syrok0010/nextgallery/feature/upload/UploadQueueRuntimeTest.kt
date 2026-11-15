@@ -389,7 +389,9 @@ class UploadQueueRuntimeTest {
             }
             transfer(account, job, progress)
         }
-        assertEquals(listOf(UploadPhase.Uploaded, UploadPhase.Cancelled, UploadPhase.Uploaded), phases())
+        val finished = listOf(UploadPhase.Uploaded, UploadPhase.Cancelled, UploadPhase.Uploaded)
+        waitFor { phases() == finished }
+        assertEquals(finished, phases())
         assertEquals(2, links)
     }
 

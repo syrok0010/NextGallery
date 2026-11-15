@@ -21,6 +21,8 @@ data class MediaItem(
     val isFavorite: Boolean,
     val isHidden: Boolean,
     val assetRef: MediaAssetRef,
+    /** Server preview revision; reindexing can change it without changing the file ETag. */
+    val indexedAtEpochSeconds: Long? = null,
 ) {
     val day: LocalDate get() = LocalDate.ofEpochDay(dayId.toLong())
     val remoteFileId: Long? get() = when (val asset = assetRef) {

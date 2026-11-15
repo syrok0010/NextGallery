@@ -375,7 +375,7 @@ class VanishedSourceAliasesTest {
         cloudCache.saveTimelineSnapshot(
             credentials,
             TimelineSnapshotAssembler.assemble(
-                config = MemoriesConfig("10.1.0", "/Photos", false, false, false, false, false, false),
+                config = MemoriesConfig("11.1.4", "/Photos", false, false, false, false, false, false),
                 days = days,
                 mediaItems = items,
                 loadedDayIds = loaded,
@@ -433,7 +433,7 @@ class VanishedSourceAliasesTest {
         private val server = loopbackServer { request ->
             val photo = """{"fileid":43,"dayid":20000,"epoch":1728000000,"size":2048}"""
             val (status, body) = when {
-                request.target.endsWith("/config") -> 200 to """{"version":"10.1.0"}"""
+                request.target.endsWith("/config") -> 200 to """{"version":"11.1.4"}"""
                 request.target.endsWith("/days") -> 200 to """[{"dayid":20000,"count":2,"detail":[$photo]}]"""
                 failDetails -> 503 to "{}"
                 else -> 200 to "[$photo]"

@@ -10,7 +10,7 @@ class VodClientIdTest {
     private val original = RemoteVideoOriginal(42, "https://cloud.example")
 
     @Test
-    fun `client id is the hex form Memories 10 accepts`() {
+    fun `client id is the hex form Memories accepts`() {
         val clientId = newVodClientId()
 
         assertTrue(clientId.matches(Regex("[0-9a-f]{32}")))

@@ -13,7 +13,8 @@
     "buid": "buid-42",
     "shared_by": "Alice",
     "isfavorite": 0,
-    "ishidden": false
+    "ishidden": false,
+    "indexed_at": 1800000000
   },
   {
     "fileid": 43,
@@ -29,6 +30,7 @@
     "isfavorite": "1",
     "ishidden": true,
     "size": 15728640,
-    "buid": "buid-43"
+    "buid": "buid-43",
+    "indexed_at": 1800000000
   }
 ]
