@@ -57,6 +57,7 @@ internal fun MediaDetailScreen(
     val currentPage = pagerState.currentPage.coerceAtMost(items.lastIndex)
     val currentItem = items.getOrNull(currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
+    val frameCache = rememberVideoFilmstripCache()
     val videoFullscreen = playback.current?.state?.isFullscreen == true
     // Entering and leaving fullscreen video shows the chrome again, in the same frame.
     var chromeVisible by rememberSaveable(videoFullscreen) { mutableStateOf(true) }
@@ -166,6 +167,7 @@ internal fun MediaDetailScreen(
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(
+                        frameCache = frameCache,
                         items  = items,
                         currentPage = pagerState.currentPage,
                         playback = playback.current ?: FilmstripPlayback.None,

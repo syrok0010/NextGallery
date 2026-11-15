@@ -15,8 +15,8 @@ internal data class VideoFilmstripState<T>(
 }
 
 /** Bounded frame plan and gesture policy; independent of Android, decoding and the player. */
-internal class VideoFilmstripProjection<T> {
-    var state = VideoFilmstripState<T>()
+internal class VideoFilmstripProjection<T>(initialState: VideoFilmstripState<T> = VideoFilmstripState()) {
+    var state = initialState
         private set
     private var lastSeekAt: Long? = null
 
