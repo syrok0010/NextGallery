@@ -441,8 +441,6 @@ class VideoPlaybackIntegrationTest {
         lateinit var previous: VideoPlaybackController
         rule.runOnIdle {
             previous = checkNotNull(owner.current)
-            assertNotNull(previous.sourceFor(first.mediaId))
-            assertNull(previous.sourceFor(second.mediaId))
             previous.seek(second.mediaId, 500, true)
             assertEquals(VideoPlaybackPhase.Poster, previous.state.phase)
             selected = second
@@ -450,7 +448,6 @@ class VideoPlaybackIntegrationTest {
         rule.waitForIdle()
         rule.runOnIdle {
             assertTrue(previous.player.isReleased)
-            assertNull(previous.sourceFor(first.mediaId))
             previous.seek(first.mediaId, 500, true)
             assertEquals(second.mediaId, owner.current?.mediaId)
             assertFalse(checkNotNull(owner.current).player.isReleased)
@@ -511,7 +508,7 @@ class VideoPlaybackIntegrationTest {
             assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
         }
         val corruptLocal = sample(corrupt = true)
-        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri, originalUri) { qualities }
+        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri) { qualities }
         val recovered = kotlinx.coroutines.runBlocking {
             ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
         }
@@ -545,11 +542,13 @@ class VideoPlaybackIntegrationTest {
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying }
         fixture.status = 503
+        fixture.hlsStatus = 503
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         rule.waitUntil(15_000) { rule.onAllNodesWithTag(VideoFilmstripRetryTestTag).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag(VideoFilmstripRetryTestTag).assertIsDisplayed()
         rule.runOnIdle { assertTrue(player.playWhenReady) }
         fixture.status = 200
+        fixture.hlsStatus = 200
         rule.onNodeWithTag(VideoFilmstripRetryTestTag).performClick()
         rule.waitUntil(20_000) {
             rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.StateDescription] ==

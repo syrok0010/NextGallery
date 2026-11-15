@@ -1,10 +1,23 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
+import com.syrok0010.nextgallery.feature.viewer.playback.lowestForFrames
 import org.junit.Assert.*
 import org.junit.Test
 
 class VideoQualityTest {
+    @Test fun `frame quality uses bandwidth then resolution regardless of label or order`() {
+        val small = RemoteVideoQuality("portrait", "small", bitrate = 400_000, resolution = 480)
+        val sameBitrate = small.copy(label = "lower resolution", uri = "smaller", resolution = 360)
+        val heavy = small.copy(label = "240p", uri = "heavy", bitrate = 900_000)
+        val missingBitrate = small.copy(uri = "unknown", bitrate = null, resolution = 144)
+        val original = small.copy(uri = "direct", bitrate = 100_000, isOriginal = true)
+        assertEquals(sameBitrate, listOf(heavy, original, small, missingBitrate, sameBitrate).lowestForFrames())
+        assertNull(listOf(original, small.copy(isAdaptive = true)).lowestForFrames())
+        assertEquals(sameBitrate.copy(bitrate = null), listOf(
+            small.copy(bitrate = null), sameBitrate.copy(bitrate = null),
+        ).lowestForFrames())
+    }
     private val remote = "https://cloud.example/nextcloud/apps/memories/api/stream/42"
     private val auto = RemoteVideoQuality("Auto", "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/index.m3u8", isAdaptive = true)
     private val low = RemoteVideoQuality("360p", "https://cloud.example/nextcloud/apps/memories/api/video/transcode/client123/42/360p.m3u8")

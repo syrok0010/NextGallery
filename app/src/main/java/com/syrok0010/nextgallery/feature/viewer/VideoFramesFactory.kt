@@ -19,7 +19,6 @@ internal class VideoFramesFactory(
             local = LocalVideoFrames(context),
             remote = RemoteVideoFrames(context) { playerFactory.mediaSourceFactory(context) },
             fallbackUri = sources.fallback,
-            originalUri = sources.remoteOriginal?.uri,
             qualities = { playerFactory.qualities(checkNotNull(sources.remoteOriginal), clientId) },
         )
     }

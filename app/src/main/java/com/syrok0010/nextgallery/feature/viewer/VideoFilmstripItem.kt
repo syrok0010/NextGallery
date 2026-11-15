@@ -44,8 +44,7 @@ internal fun VideoFilmstripItem(
         val provider = frameProvider ?: checkNotNull(factory).create(sources)
         VideoFilmstripItemState(item, provider, playback, scope, sources, uptimeMillis)
     }
-    val activeSource = playback.sourceFor(item.mediaId)
-    LaunchedEffect(state, placement, activeSource) { state.update(placement) }
+    LaunchedEffect(state, placement) { state.update(placement) }
     DisposableEffect(state) { onDispose { state.close() } }
     val isExpanded = placement.expanded
     val compactWidth = if (placement.activeWidth) FilmstripActiveTileWidth else FilmstripTileWidth
