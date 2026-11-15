@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.library.local
 
+import app.cash.turbine.test
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
@@ -149,6 +150,7 @@ class LocalMediaSourceTest {
         assertEquals("33d6548e48d4318ceb0e3916a79afc84", item.auid)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `burst of MediaStore changes publishes one reconciled projection after debounce`() = runTest {
         val changes = Channel<Unit>(Channel.UNLIMITED)
@@ -169,27 +171,26 @@ class LocalMediaSourceTest {
             computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
             changeDebounce = DEBOUNCE,
         )
-        val publishedNames = mutableListOf<String>()
-        backgroundScope.launch {
-            source.updates(emptyFlow()).collect { state ->
-                state.items.singleOrNull()?.displayName?.let { publishedNames += it }
+        source.updates(emptyFlow()).test {
+            assertTrue(awaitItem().items.isEmpty()) // Cached projection.
+            assertEquals("scan-1", awaitItem().items.single().displayName)
+
+            // Each change comes before the previous one's quiet period ends.
+            repeat(3) {
+                changes.send(Unit)
+                advanceTimeBy(DEBOUNCE / 2)
             }
-        }
-        runCurrent()
-        assertEquals(listOf("scan-1"), publishedNames.distinct())
+            runCurrent()
+            assertEquals(1, scanNumber)
+            expectNoEvents()
+            advanceTimeBy(DEBOUNCE)
+            runCurrent()
 
-        // Each change comes before the previous one's quiet period ends.
-        repeat(3) {
-            changes.send(Unit)
-            advanceTimeBy(DEBOUNCE / 2)
+            assertEquals(2, scanNumber)
+            assertEquals("scan-2", awaitItem().items.single().displayName)
+            expectNoEvents()
+            // test cancels the ongoing observer subscription when this block ends.
         }
-        runCurrent()
-        assertEquals(1, scanNumber)
-        advanceTimeBy(DEBOUNCE)
-        runCurrent()
-
-        assertEquals(2, scanNumber)
-        assertEquals(listOf("scan-1", "scan-2"), publishedNames.distinct())
     }
 
     @Test
@@ -257,16 +258,19 @@ class LocalMediaSourceTest {
             computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
             changeDebounce = 25.milliseconds,
         )
-        val states = mutableListOf<LocalMediaIndexState>()
-        backgroundScope.launch { source.updates(emptyFlow()).collect { states += it } }
-        testScheduler.runCurrent()
-        assertTrue(states.last().failure)
-        changes.send(Unit)
-        testScheduler.advanceTimeBy(26)
-        testScheduler.runCurrent()
-        assertEquals(2, scans)
-        assertTrue(!states.last().failure)
-        assertEquals("recovered", states.last().items.single().displayName)
+        source.updates(emptyFlow()).test {
+            assertTrue(awaitItem().items.isEmpty()) // Cached projection.
+            assertTrue(awaitItem().failure)
+            changes.send(Unit)
+            testScheduler.advanceTimeBy(26)
+            testScheduler.runCurrent()
+            assertEquals(2, scans)
+            val recovered = awaitItem()
+            assertTrue(!recovered.failure)
+            assertEquals("recovered", recovered.items.single().displayName)
+            expectNoEvents()
+            // test cancels the ongoing observer subscription when this block ends.
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -412,15 +416,15 @@ class LocalMediaSourceTest {
             changeObserver = LocalMediaChangeObserver { emptyFlow() },
             computationDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
         )
-        val states = mutableListOf<LocalMediaIndexState>()
-        val job = backgroundScope.launch { source.updates(requests).collect { states += it } }
-        runCurrent()
-        assertTrue(job.isActive)
-        assertEquals(listOf("1"), states.last().items.map { it.displayName })
-        requests.emit(Unit)
-        runCurrent()
-        assertEquals(listOf("2"), states.last().items.map { it.displayName })
-        job.cancelAndJoin()
+        source.updates(requests).test {
+            assertTrue(awaitItem().items.isEmpty()) // Cache failure falls back to an empty projection.
+            assertEquals(listOf("1"), awaitItem().items.map { it.displayName })
+            requests.emit(Unit)
+            assertEquals(listOf("2"), awaitItem().items.map { it.displayName })
+            runCurrent()
+            expectNoEvents()
+            // test cancels the ongoing refresh subscription when this block ends.
+        }
     }
 
     private class InMemoryLocalMediaProjectionStore(

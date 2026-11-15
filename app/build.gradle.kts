@@ -111,6 +111,7 @@ dependencies {
     implementation(libs.telephoto.zoomable.image.coil3)
     implementation(libs.xmlutil.serialization)
     ksp(libs.androidx.room.compiler)
+    testImplementation(libs.turbine)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver3)
