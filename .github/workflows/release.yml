@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'prepare: PR с версией; publish: сборка черновика из main'
+        type: choice
+        options: [prepare, publish]
+        required: true
+      version:
+        description: 'Для prepare: patch, minor или X.Y.Z. Для publish не используется.'
+        type: string
+        default: patch
+      prerelease:
+        description: 'Для publish: отметить выпуск как предварительный'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Не прерываем выпуск между созданием тега и загрузкой файлов.
+concurrency:
+  group: nextgallery-release
+  cancel-in-progress: false
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'prepare'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare version PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: python3 tools/ci/release.py prepare --version "$REQUESTED_VERSION"
+
+  build:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version and tag
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci/release.py validate
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check and build unsigned release
+        run: |
+          python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
+          ./gradlew spotlessCheck verifyFeatureBoundaries :core:media:test \
+            :app:testAutomationUnitTest :app:assembleRelease --no-daemon
+      - name: Preserve unsigned APK for signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-unsigned-${{ github.run_id }}
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - name: Preserve R8 mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mapping-${{ steps.version.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-reports-${{ github.run_id }}
+          path: |
+            app/build/reports/tests/
+            core/media/build/reports/tests/
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Секреты доступны только этому job. В environment разрешена только ветка main.
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-unsigned-${{ github.run_id }}
+          path: unsigned/
+      - name: Sign, verify and create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          python3 tools/ci/release.py publish \
+            --unsigned unsigned/app-release-unsigned.apk --prerelease "$PRERELEASE"
