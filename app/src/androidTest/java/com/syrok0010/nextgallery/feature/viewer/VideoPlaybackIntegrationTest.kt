@@ -508,14 +508,17 @@ class VideoPlaybackIntegrationTest {
             assertTrue(bitmaps.all { maxOf(it.bitmap.width, it.bitmap.height) <= 160 })
         }
         val corruptLocal = sample(corrupt = true)
-        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri) { qualities }
+        var discoveries = 0
+        val ladder = FallbackVideoFrames(LocalVideoFrames(rule.activity), provider, originalUri) { discoveries++; qualities }
         val recovered = kotlinx.coroutines.runBlocking {
             ladder.frames((corruptLocal.assetRef as MediaAssetRef.LocalContent).contentUri).toList()
         }
         assertEquals(7, recovered.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertEquals(0, discoveries)
         fixture.corruptOriginal = true
         val transcoded = kotlinx.coroutines.runBlocking { ladder.frames(originalUri).toList() }
         assertEquals(7, transcoded.filterIsInstance<VideoFrameEvent.Frame>().size)
+        assertEquals(1, discoveries)
         assertTrue(fixture.requests.filter { it[":request"]?.contains("/stream/") == true ||
             it[":request"]?.contains("/video/transcode/") == true }.all { it["authorization"] == fixture.authorization })
     }
@@ -592,15 +595,20 @@ class VideoPlaybackIntegrationTest {
         }
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         awaitFrames()
-        val frameClientPath = checkNotNull(fixture.requests.firstOrNull {
-            it[":request"]?.endsWith("/360p.m3u8") == true
-        }?.get(":request")).substringBeforeLast('/')
-        fun frameRequests() = fixture.requests.count { it[":request"]?.startsWith(frameClientPath) == true }
-        val loadedRequests = frameRequests()
-        assertTrue(fixture.requests.none { it[":request"]?.contains("/stream/") == true })
-        rule.runOnIdle { playback.dispatch(VideoPlaybackInput.Play) }
-        rule.waitUntil(10_000) { playback.state.qualities.any { it.label == "360p" } }
-        rule.runOnIdle { playback.selectQuality(playback.state.qualities.first { it.label == "360p" }) }
+        fun originalRequests() = fixture.requests.count { it[":request"]?.contains("/stream/") == true }
+        val loadedRequests = originalRequests()
+        assertTrue(loadedRequests > 0)
+        assertTrue(fixture.requests.none { it[":request"]?.contains("/video/transcode/") == true })
+        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val qualities = kotlinx.coroutines.runBlocking {
+            factory.qualities(checkNotNull(factory.sources(remote.assetRef).remoteOriginal), newVodClientId())
+        }
+        rule.runOnIdle {
+            playback.dispatch(VideoPlaybackInput.QualitiesLoaded(qualities))
+            playback.selectQuality(qualities.first { it.label == "360p" })
+        }
+        waitForPlayer { playback.player.playbackState == androidx.media3.common.Player.STATE_READY }
+        assertEquals(loadedRequests, originalRequests())
         rule.waitForIdle()
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
@@ -610,7 +618,7 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { shown = true }
         rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         awaitFrames()
-        assertEquals(loadedRequests, frameRequests())
+        assertEquals(loadedRequests, originalRequests())
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
