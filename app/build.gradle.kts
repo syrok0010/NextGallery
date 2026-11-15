@@ -1,9 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+val appVersion = Properties().apply {
+    rootProject.file("version.properties").inputStream().use { load(it) }
+}
+val previewLabel = providers.gradleProperty("nextgalleryPreviewLabel").getOrElse("local")
 
 android {
     namespace = "com.syrok0010.nextgallery"
@@ -13,8 +20,8 @@ android {
         applicationId = "com.syrok0010.nextgallery"
         minSdk = 31
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.4.0"
+        versionCode = appVersion.getProperty("versionCode").toInt()
+        versionName = appVersion.getProperty("versionName")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -22,6 +29,12 @@ android {
     // The key stays outside the repository: ~/.gradle/gradle.properties or ORG_GRADLE_PROJECT_*.
     val releaseStore = providers.gradleProperty("nextgalleryReleaseStoreFile").orNull
     signingConfigs {
+        create("preview") {
+            storeFile = rootProject.file("tools/ci/preview.p12")
+            storePassword = "android"
+            keyAlias = "preview"
+            keyPassword = "android"
+        }
         if (releaseStore != null) {
             create("release") {
                 storeFile = file(releaseStore)
@@ -52,6 +65,19 @@ android {
                 "proguard-rules.pro",
             )
         }
+
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview-$previewLabel"
+            signingConfig = signingConfigs.getByName("preview")
+            matchingFallbacks += "release"
+        }
+    }
+    // Equal codes allow installing previews from any branch without a downgrade.
+    // The source revision is carried by versionName instead.
+    androidComponents.onVariants(androidComponents.selector().withBuildType("preview")) {
+        it.outputs.forEach { output -> output.versionCode.set(1) }
     }
     testBuildType = "automation"
 
