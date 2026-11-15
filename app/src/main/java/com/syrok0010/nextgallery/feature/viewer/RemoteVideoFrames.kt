@@ -34,7 +34,10 @@ internal class RemoteVideoFrames(
     override fun frames(uri: String): Flow<VideoFrameEvent> =
         flow {
             decoder.withLock {
-                withTimeout(45_000) {
+                // A cold HLS seek may start ffmpeg and wait for a new segment on the server.
+                val hls = uri.substringBefore('?').endsWith(".m3u8")
+                val frameTimeout = if (hls) 15_000L else 5_000L
+                withTimeout(if (hls) 90_000L else 45_000L) {
                     val item = MediaItem.fromUri(uri)
                     val duration = MetadataRetriever
                         .Builder(context, item)
@@ -69,7 +72,7 @@ internal class RemoteVideoFrames(
                             plan.forEachIndexed { index, position ->
                                 val frame =
                                     withTimeout(
-                                        5_000,
+                                        frameTimeout,
                                     ) { extractor.getFrame(position).awaitFrameResult() }
                                 emit(VideoFrameEvent.Frame(index, frame.bitmap))
                             }
