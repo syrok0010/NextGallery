@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import app.cash.turbine.test
 import com.syrok0010.nextgallery.feature.viewer.playback.RemoteVideoQuality
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -53,7 +54,12 @@ class FallbackVideoFramesTest {
                 listOf(high, RemoteVideoQuality("Auto", "$original/index.m3u8", isAdaptive = true), low)
             },
         )
-        repeat(2) { provider.frames(original).toList() }
+        repeat(2) {
+            provider.frames(original).test {
+                assertEquals(VideoFrameEvent.Duration(12_000), awaitItem())
+                awaitComplete()
+            }
+        }
         assertEquals(listOf(original, low.uri, original, low.uri), requests)
         assertEquals(2, discoveries)
     }
@@ -70,7 +76,7 @@ class FallbackVideoFramesTest {
                 remote = VideoFrameProvider { source -> flow { requests += source; throw unsupported } },
                 fallbackUri = null, qualities = { variants },
             )
-            try { provider.frames(original).toList(); fail() } catch (failure: IOException) { assertSame(unsupported, failure) }
+            provider.frames(original).test { assertSame(unsupported, awaitError()) }
             assertEquals(listOf(original), requests)
         }
     }
@@ -83,7 +89,7 @@ class FallbackVideoFramesTest {
                 remote = VideoFrameProvider { source -> flow { requests += source; throw failure } },
                 fallbackUri = null, qualities = { error("Network failure must not start transcode") },
             )
-            try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(failure, actual) }
+            provider.frames(original).test { assertSame(failure, awaitError()) }
             assertEquals(listOf(original), requests)
         }
     }
@@ -99,7 +105,7 @@ class FallbackVideoFramesTest {
                 throw hlsFailure
             } }, fallbackUri = null, qualities = { listOf(high, low) },
         )
-        try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(hlsFailure, actual) }
+        provider.frames(original).test { assertSame(hlsFailure, awaitError()) }
         assertEquals(listOf(original, low.uri), requests)
     }
 
@@ -113,26 +119,28 @@ class FallbackVideoFramesTest {
                 throw UnsupportedVideoFrames(IOException("Unsupported"))
             } }, fallbackUri = null, qualities = { throw discoveryFailure },
         )
-        try { provider.frames(original).toList(); fail() } catch (actual: IOException) { assertSame(discoveryFailure, actual) }
+        provider.frames(original).test { assertSame(discoveryFailure, awaitError()) }
         assertEquals(listOf(original), requests)
     }
 
     @Test fun `cancellation never starts another source`() = runBlocking {
         for (stage in listOf("local", "original", "discovery", "hls")) {
             val requests = mutableListOf<String>()
+            val cancelled = CancellationException("Page left")
             val provider = FallbackVideoFrames(
-                local = VideoFrameProvider { flow { throw CancellationException("Page left") } },
+                local = VideoFrameProvider { flow { throw cancelled } },
                 remote = VideoFrameProvider { source -> flow {
                     requests += source
-                    if (stage == "original" || source == low.uri) throw CancellationException("Page left")
+                    if (stage == "original" || source == low.uri) throw cancelled
                     throw UnsupportedVideoFrames(IOException("Unsupported"))
                 } }, fallbackUri = original, qualities = {
-                    if (stage == "discovery") throw CancellationException("Page left")
+                    if (stage == "discovery") throw cancelled
                     listOf(low)
                 },
             )
-            try { provider.frames(if (stage == "local") "content://local/42" else original).toList(); fail() }
-            catch (_: CancellationException) { }
+            provider.frames(if (stage == "local") "content://local/42" else original).test {
+                assertSame(cancelled, awaitError())
+            }
             assertEquals(when (stage) {
                 "local" -> emptyList()
                 "hls" -> listOf(original, low.uri)

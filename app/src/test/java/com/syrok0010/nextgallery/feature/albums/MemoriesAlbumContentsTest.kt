@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import app.cash.turbine.test
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudFixture
@@ -32,17 +33,16 @@ class MemoriesAlbumContentsTest {
     }
     @Test fun `failed day request propagates failure after initial progress`() = runBlocking {
         Fixture(fail = true).use { fixture ->
-            val shown = mutableListOf<AlbumContentsBatch>()
-            try {
-                fixture.contents().collect { shown += it }
-                fail("Expected HTTP failure")
-            } catch (error: HttpException) {
-                assertEquals(503, error.code())
+            fixture.contents().test {
+                // The day index is shown before the request for the remaining photos fails.
+                val shown = awaitItem()
+                assertEquals(listOf(1L), shown.items.map { it.remoteFileId })
+                assertEquals(1, shown.loaded)
+                assertEquals(3, shown.total)
+                val error = awaitError()
+                assertTrue(error is HttpException)
+                assertEquals(503, (error as HttpException).code())
             }
-            // The photos the day index already listed are on screen before the day request fails.
-            assertEquals(listOf(1L), shown.single().items.map { it.remoteFileId })
-            assertEquals(1, shown.single().loaded)
-            assertEquals(3, shown.single().total)
         }
     }
     private class Fixture(fail: Boolean = false) : AutoCloseable {
