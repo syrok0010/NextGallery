@@ -3,65 +3,65 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: 'prepare: PR с версией; publish: сборка черновика из main'
+      bump:
+        description: 'Повышение версии от последнего опубликованного релиза'
         type: choice
-        options: [prepare, publish]
-        required: true
-      version:
-        description: 'Для prepare: patch, minor или X.Y.Z. Для publish не используется.'
-        type: string
+        options: [patch, minor, major]
         default: patch
+        required: true
       prerelease:
-        description: 'Для publish: отметить выпуск как предварительный'
+        description: 'Отметить выпуск как предварительный'
         type: boolean
         default: true
 
 permissions:
   contents: read
 
-# Не прерываем выпуск между созданием тега и загрузкой файлов.
 concurrency:
   group: nextgallery-release
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 env:
   GH_REPO: ${{ github.repository }}
 
 jobs:
-  prepare:
-    if: github.ref == 'refs/heads/main' && inputs.operation == 'prepare'
+  release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 40
+    environment: release
     permissions:
       contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Prepare version PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REQUESTED_VERSION: ${{ inputs.version }}
-        run: python3 tools/ci/release.py prepare --version "$REQUESTED_VERSION"
-
-  build:
-    if: github.ref == 'refs/heads/main' && inputs.operation == 'publish'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Validate version and tag
+      - name: Calculate version and reject unfinished releases
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/ci/release.py validate
+          BUMP: ${{ inputs.bump }}
+        run: |
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          previous_tag=$(jq -sre '
+            add | if any(.draft) then error("Сначала опубликуйте или удалите существующий черновик")
+            else map(select(.draft == false)) | max_by(.published_at) | .tag_name
+              // error("Нет опубликованного релиза для расчёта версии") end
+          ' "$RUNNER_TEMP/releases.json")
+          [[ "$previous_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          python3 tools/ci/version.py bump --base "${previous_tag#v}" --part "$BUMP" > "$RUNNER_TEMP/version"
+          cat "$RUNNER_TEMP/version" >> "$GITHUB_OUTPUT"
+          version=$(sed -n 's/^version=//p' "$RUNNER_TEMP/version")
+          if git show-ref --verify --quiet "refs/tags/v$version"; then
+            echo "::error::Тег v$version уже существует. Разберите незавершённый выпуск вручную."
+            exit 1
+          fi
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -72,14 +72,45 @@ jobs:
           python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
           ./gradlew spotlessCheck verifyFeatureBoundaries :core:media:test \
             :app:testAutomationUnitTest :app:assembleRelease --no-daemon
-      - name: Preserve unsigned APK for signing
+      - name: Sign and verify APK
+        env:
+          RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_CERT: b5ad593630b422ed70249353fa05c196f5c105d31375a3b7a6142fa969d5fef5
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          ANDROID_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          key=$(mktemp "$RUNNER_TEMP/release-key.XXXXXX")
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$RELEASE_KEY_BASE64" | base64 --decode > "$key"
+          mkdir -p dist
+          apk="dist/NextGallery-$APP_VERSION.apk"
+          "$build_tools/apksigner" sign --ks "$key" --ks-type PKCS12 --ks-key-alias nextgallery \
+            --ks-pass env:RELEASE_KEY_PASSWORD --key-pass env:RELEASE_KEY_PASSWORD \
+            --out "$apk" app/build/outputs/apk/release/app-release-unsigned.apk
+          certificates=$("$build_tools/apksigner" verify --print-certs "$apk" \
+            | sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: //p')
+          if [[ "$certificates" != "$RELEASE_CERT" ]]; then
+            echo '::error::APK подписан неожиданным сертификатом'
+            exit 1
+          fi
+          badging=$("$build_tools/aapt" dump badging "$apk")
+          package=$(sed -n "s/^package: name='\([^']*\)' versionCode='\([^']*\)' versionName='\([^']*\)'.*/\1 \2 \3/p" <<< "$badging")
+          if [[ "$package" != "com.syrok0010.nextgallery $ANDROID_CODE $APP_VERSION" ]] \
+            || grep -q '^application-debuggable' <<< "$badging"; then
+            echo '::error::Неверный пакет, версия или debuggable в релизном APK'
+            exit 1
+          fi
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+      - name: Preserve signed APK before creating release
+        id: apk
         uses: actions/upload-artifact@v4
         with:
-          name: release-unsigned-${{ github.run_id }}
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: NextGallery-release-${{ steps.version.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
           if-no-files-found: error
           retention-days: 7
-          overwrite: true
       - name: Preserve R8 mapping
         uses: actions/upload-artifact@v4
         with:
@@ -87,45 +118,54 @@ jobs:
           path: app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
           retention-days: 7
-          overwrite: true
+      - name: Commit version and push main with tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git fetch origin main
+          if [[ $(git rev-parse origin/main) != "$GITHUB_SHA" ]]; then
+            echo '::error::main изменился во время сборки. Запустите новый Release.'
+            exit 1
+          fi
+          gh auth setup-git
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add version.properties
+          git -c commit.gpgsign=false commit -m "chore: release $APP_VERSION"
+          git tag "v$APP_VERSION"
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/v$APP_VERSION"
+          echo "Релизный commit: $(git rev-parse HEAD), исходники: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Create editable draft with GitHub release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
+          url=$(gh release create "v$APP_VERSION" "dist/NextGallery-$APP_VERSION.apk" dist/SHA256SUMS \
+            --verify-tag --draft --title "NextGallery v$APP_VERSION" \
+            --generate-notes --notes-start-tag "$PREVIOUS_TAG" "${flags[@]}")
+          echo "[Черновик релиза]($url): отредактируйте описание, проверьте APK и нажмите Publish release." >> "$GITHUB_STEP_SUMMARY"
+      - name: APK download and failure guidance
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.apk.outputs.artifact-url }}
+        run: |
+          if [[ -n "$ARTIFACT_URL" ]]; then
+            echo "[Подписанный APK и SHA256SUMS]($ARTIFACT_URL) хранятся 7 дней." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ '${{ job.status }}' == failure ]]; then
+            echo 'Автовосстановления нет. Перед повторным запуском проверьте main, тег и черновик; порядок действий — docs/agents/release.md.' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: release-test-reports-${{ github.run_id }}
+          name: release-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             app/build/reports/tests/
             core/media/build/reports/tests/
           retention-days: 7
-          overwrite: true
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Секреты доступны только этому job. В environment разрешена только ветка main.
-    environment: release
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-unsigned-${{ github.run_id }}
-          path: unsigned/
-      - name: Sign, verify and create draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          PRERELEASE: ${{ inputs.prerelease }}
-        run: |
-          python3 tools/ci/release.py publish \
-            --unsigned unsigned/app-release-unsigned.apk --prerelease "$PRERELEASE"

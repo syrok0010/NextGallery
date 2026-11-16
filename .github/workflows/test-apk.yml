@@ -24,7 +24,8 @@ jobs:
       - name: Build metadata
         id: version
         run: |
-          python3 tools/ci/release.py metadata
+          python3 tools/ci/version.py metadata >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "label=${GITHUB_RUN_NUMBER}-$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build test APK
         env:
