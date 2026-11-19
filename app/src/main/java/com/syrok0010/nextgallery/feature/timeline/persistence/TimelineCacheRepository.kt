@@ -6,7 +6,6 @@ import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.ThumbnailCacheEntity
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
@@ -111,7 +110,7 @@ class TimelineCacheRepository(
         timelineDao.fileIds().filterNot { it in currentFileIds }.chunked(500).forEach { fileIds ->
             database
                 .mediaIdentityDao()
-                .clearAliases(MediaSourceKind.Memories, fileIds.map(Long::toString))
+                .clearRemoteAliases(fileIds)
         }
     }
 

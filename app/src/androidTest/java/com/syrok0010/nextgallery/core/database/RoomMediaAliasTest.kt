@@ -92,24 +92,24 @@ class RoomMediaAliasTest {
                 listOf(
                     local.sourceKey,
                 ),
-                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).map {
-                    it.sourceKey
+                database.mediaIdentityDao().byAuid(listOf(oldAuid.value)).map {
+                    it.localUri
                 },
             )
             assertEquals(
                 listOf(
                     local.sourceKey,
                 ),
-                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).map {
-                    it.sourceKey
+                database.mediaIdentityDao().byBuid(listOf(oldBuid.value)).map {
+                    it.localUri
                 },
             )
             assertEquals(localId, resolve(local, newAuid, newBuid))
             assertTrue(
-                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).isEmpty(),
+                database.mediaIdentityDao().byAuid(listOf(oldAuid.value)).isEmpty(),
             )
             assertTrue(
-                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).isEmpty(),
+                database.mediaIdentityDao().byBuid(listOf(oldBuid.value)).isEmpty(),
             )
 
             assertNotEquals(
@@ -172,16 +172,16 @@ class RoomMediaAliasTest {
                 listOf(
                     remote.sourceKey,
                 ),
-                database.mediaIdentityDao().identifiersByAuid(listOf(newAuid.value)).map {
-                    it.sourceKey
+                database.mediaIdentityDao().byAuid(listOf(newAuid.value)).map {
+                    it.fileId.toString()
                 },
             )
             assertEquals(
                 listOf(
                     remote.sourceKey,
                 ),
-                database.mediaIdentityDao().identifiersByBuid(listOf(newBuid.value)).map {
-                    it.sourceKey
+                database.mediaIdentityDao().byBuid(listOf(newBuid.value)).map {
+                    it.fileId.toString()
                 },
             )
             assertEquals(localId, resolve(local))
@@ -201,7 +201,7 @@ class RoomMediaAliasTest {
                 listOf(
                     localId.value,
                 ),
-                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).map {
+                database.mediaIdentityDao().byAuid(listOf(oldAuid.value)).map {
                     it.mediaId
                 },
             )
@@ -209,17 +209,17 @@ class RoomMediaAliasTest {
                 listOf(
                     localId.value,
                 ),
-                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).map {
+                database.mediaIdentityDao().byBuid(listOf(oldBuid.value)).map {
                     it.mediaId
                 },
             )
             resolve(remote, newAuid, newBuid)
 
             assertTrue(
-                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).isEmpty(),
+                database.mediaIdentityDao().byAuid(listOf(oldAuid.value)).isEmpty(),
             )
             assertTrue(
-                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).isEmpty(),
+                database.mediaIdentityDao().byBuid(listOf(oldBuid.value)).isEmpty(),
             )
             assertNotEquals(
                 localId,

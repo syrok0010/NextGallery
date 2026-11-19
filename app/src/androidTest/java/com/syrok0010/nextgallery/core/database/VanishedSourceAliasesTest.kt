@@ -344,11 +344,8 @@ class VanishedSourceAliasesTest {
     }
 
     private suspend fun storedAliases(source: MediaSourceIdentity): Set<MediaAlias> {
-        val entity = database.mediaIdentityDao().identifiers(source.source, listOf(source.sourceKey)).single()
-        return buildSet {
-            entity.auid?.let { add(MediaAlias(MediaAliasKind.Auid, it)) }
-            entity.buid?.let { add(MediaAlias(MediaAliasKind.Buid, it)) }
-        }
+        val entity = checkNotNull(database.mediaIdentityDao().find(source))
+        return entity.aliases(source.source)
     }
 
     private suspend fun assertRemoteAliasesPresent() {
@@ -384,8 +381,8 @@ class VanishedSourceAliasesTest {
     private suspend fun assertAliasesRetired(id: MediaId) {
         aliases.forEach { alias ->
             val owners = when (alias.kind) {
-                MediaAliasKind.Auid -> database.mediaIdentityDao().identifiersByAuid(listOf(alias.value))
-                MediaAliasKind.Buid -> database.mediaIdentityDao().identifiersByBuid(listOf(alias.value))
+                MediaAliasKind.Auid -> database.mediaIdentityDao().byAuid(listOf(alias.value))
+                MediaAliasKind.Buid -> database.mediaIdentityDao().byBuid(listOf(alias.value))
             }
             assertTrue(owners.none { it.mediaId == id.value })
         }
