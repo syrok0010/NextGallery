@@ -72,7 +72,7 @@ data class MediaIdentityReconciliation(
 
 /**
  * An alias joins a copy to an object only while that object has no other copy from the same
- * non-local source: two server files with one AUID stay two objects and are reported as a
+ * source: two local URIs or server files with one AUID stay two objects and are reported as a
  * conflict. [initialMediaSources] lists known copies of objects the aliases may point to.
  */
 fun reconcileMediaIdentities(
@@ -126,13 +126,11 @@ fun reconcileMediaIdentities(
             return
         }
 
-        val occupied = candidate.source.source != MediaSourceKind.Local &&
-            matchedMediaIds.any { mediaId ->
-                mediaId != publishedMediaId &&
-                    mediaSources[mediaId].orEmpty().any {
-                        it != candidate.source && it.source == candidate.source.source
-                    }
+        val occupied = matchedMediaIds.any { mediaId ->
+            mediaSources[mediaId].orEmpty().any {
+                it != candidate.source && it.source == candidate.source.source
             }
+        }
         if (matchedMediaIds.size > 1 || occupied) {
             conflicts += MediaIdentityConflict(
                 source = candidate.source,

@@ -12,6 +12,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import java.util.concurrent.CountDownLatch
@@ -30,6 +31,35 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaDeletionTest {
+    @Test fun `each local duplicate prepares only its own URI after library projection`() = runBlocking {
+        val duplicates = listOf(item("first", local(1)), item("second", local(2)))
+            .map { it.copy(auid = "same", buid = "same") }
+        val index = MediaLibraryIndex()
+        index.publish(projectMediaLibrary(duplicates, emptyList()).items)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val repository = MediaDeletionRepository(
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                index,
+                CloudTrash { _, _ -> error("No cloud deletion expected") },
+                InMemoryMediaIdentityRegistry(),
+                { it },
+                scope,
+            ) {}
+            for ((position, duplicate) in duplicates.withIndex()) {
+                val preparation = requireNotNull(repository.prepare(listOf(duplicate.mediaId)))
+                assertEquals(DeletionPlan(phoneOnly = 1, cloudOnly = 0, merged = 0), preparation.plan)
+                assertEquals(
+                    targets(listOf("content://media/external/images/media/${position + 1}"), emptyList()),
+                    preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
+                )
+            }
+            assertEquals(2, repository.prepare(duplicates.map { it.mediaId })?.plan?.phoneOnly)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     @Test fun `plan splits copies and scope only narrows objects with both copies`() {
         val preparation = checkNotNull(
             DeletionPreparation.of(

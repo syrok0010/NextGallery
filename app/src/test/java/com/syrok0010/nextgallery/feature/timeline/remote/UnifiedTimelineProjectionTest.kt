@@ -17,6 +17,51 @@ import org.junit.Test
 
 class UnifiedTimelineProjectionTest {
     @Test
+    fun `identical local aliases publish both URIs with their own IDs`() = runBlocking {
+        val first = localItem(MediaId("first"), "same", contentUri = "content://images/1")
+        val second = localItem(MediaId("second"), "same", contentUri = "content://images/2")
+
+        val items = requireNotNull(project(listOf(first, second), null)).items
+
+        assertEquals(2, items.size)
+        assertEquals(setOf(first.mediaId, second.mediaId), items.map { it.mediaId }.toSet())
+        assertEquals(setOf(first.assetRef, second.assetRef), items.map { it.assetRef }.toSet())
+    }
+
+    @Test
+    fun `cloud copy joins only one of two local duplicates`() = runBlocking {
+        val first = localItem(MediaId("first"), "same", contentUri = "content://images/1")
+        val second = localItem(MediaId("second"), "same", contentUri = "content://images/2")
+        val remote = remoteItem(MediaId("remote"), "same")
+
+        val items = requireNotNull(project(listOf(first, second), remoteSnapshot(remote))).items
+
+        assertEquals(2, items.size)
+        assertEquals(setOf(first.mediaId, second.mediaId), items.map { it.mediaId }.toSet())
+        assertEquals(1, items.count { it.assetRef is MediaAssetRef.LocalFirst })
+        assertEquals(1, items.count { it.assetRef is MediaAssetRef.LocalContent })
+    }
+
+    @Test
+    fun `persistent cloud link to second duplicate wins over first duplicate aliases`() = runBlocking {
+        val first = localItem(MediaId("first"), "same", contentUri = "content://images/1")
+        val second = localItem(MediaId("second"), "same", contentUri = "content://images/2")
+        // An exact upload link can join a remote copy whose metadata aliases differ as well.
+        for (alias in listOf("same", "different")) {
+            val remote = remoteItem(second.mediaId, alias)
+            for (locals in listOf(listOf(first, second), listOf(second, first))) {
+                val items = requireNotNull(project(locals, remoteSnapshot(remote))).items
+
+                assertEquals(2, items.size)
+                assertEquals(first.assetRef, items.single { it.mediaId == first.mediaId }.assetRef)
+                val linked = items.single { it.mediaId == second.mediaId }.assetRef as MediaAssetRef.LocalFirst
+                assertEquals(second.assetRef, linked.local)
+                assertEquals(remote.assetRef, linked.remote)
+            }
+        }
+    }
+
+    @Test
     fun `shared alias publishes one item with local identity bytes and Memories metadata`() = runBlocking {
         val local = localItem(mediaId = MediaId("local-published"), auid = "shared-auid")
         val remote = remoteItem(mediaId = MediaId("remote-generated"), auid = "shared-auid")

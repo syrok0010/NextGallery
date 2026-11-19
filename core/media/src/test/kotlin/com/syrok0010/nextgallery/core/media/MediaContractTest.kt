@@ -4,6 +4,43 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaContractTest {
+    @Test fun `different local URIs with one alias keep distinct identities`() {
+        val first = MediaSourceIdentity(MediaSourceKind.Local, "content://media/1")
+        val second = MediaSourceIdentity(MediaSourceKind.Local, "content://media/2")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val result = reconcileMediaIdentities(
+            candidates = listOf(
+                MediaIdentityCandidate(first, MediaId("first"), setOf(alias)),
+                MediaIdentityCandidate(second, MediaId("second"), setOf(alias)),
+            ),
+            initialSourceMediaIds = emptyMap(),
+            initialAliasMediaIds = emptyMap(),
+            initialLocalMediaIds = emptySet(),
+            mediaIdFactory = { error("published IDs are present") },
+        )
+
+        assertEquals(MediaId("first"), result.resolution.mediaIds[first])
+        assertEquals(MediaId("second"), result.resolution.mediaIds[second])
+    }
+
+    @Test fun `local URI does not join another local file stored in a previous batch`() {
+        val first = MediaSourceIdentity(MediaSourceKind.Local, "content://media/1")
+        val second = MediaSourceIdentity(MediaSourceKind.Local, "content://media/2")
+        val shared = MediaId("shared")
+        val alias = MediaAlias(MediaAliasKind.Auid, "same")
+        val result = reconcileMediaIdentities(
+            candidates = listOf(MediaIdentityCandidate(second, MediaId("separate"), setOf(alias))),
+            initialSourceMediaIds = emptyMap(),
+            initialAliasMediaIds = mapOf(alias to shared),
+            initialLocalMediaIds = setOf(shared),
+            mediaIdFactory = { error("published ID is present") },
+            initialMediaSources = mapOf(shared to setOf(first)),
+        )
+
+        assertEquals(MediaId("separate"), result.resolution.mediaIds[second])
+        assertTrue(result.reassignments.isEmpty())
+    }
+
     @Test fun `local identity takes precedence when matching a previously remote alias`() {
         val remote = MediaSourceIdentity(MediaSourceKind.Memories, "42")
         val local = MediaSourceIdentity(MediaSourceKind.Local, "content://media/1")
@@ -19,6 +56,25 @@ class MediaContractTest {
         assertEquals(MediaId("local"), result.resolution.mediaIds[local])
         assertEquals(MediaId("local"), result.sourceMediaIds[remote])
         assertEquals(listOf(old to MediaId("local")), result.reassignments)
+    }
+
+    @Test fun `different local URIs remain separate without aliases or with only equal BUID`() {
+        val first = MediaSourceIdentity(MediaSourceKind.Local, "content://media/1")
+        val second = MediaSourceIdentity(MediaSourceKind.Local, "content://media/2")
+        for (aliases in listOf(emptySet(), setOf(MediaAlias(MediaAliasKind.Buid, "same")))) {
+            val result = reconcileMediaIdentities(
+                candidates = listOf(
+                    MediaIdentityCandidate(first, MediaId("first"), aliases),
+                    MediaIdentityCandidate(second, MediaId("second"), aliases),
+                ),
+                initialSourceMediaIds = emptyMap(),
+                initialAliasMediaIds = emptyMap(),
+                initialLocalMediaIds = emptySet(),
+                mediaIdFactory = { error("published IDs are present") },
+            )
+            assertEquals(MediaId("first"), result.resolution.mediaIds[first])
+            assertEquals(MediaId("second"), result.resolution.mediaIds[second])
+        }
     }
 
     @Test fun `two server files with one alias stay separate objects`() {

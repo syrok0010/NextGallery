@@ -27,9 +27,15 @@ internal suspend fun projectMediaLibrary(
     computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ): CanonicalMediaLibrary = withContext(computationDispatcher) {
         val candidates = (localItems + remoteItems).map(MediaItem::identityCandidate)
+        // IDs shared by a local and a remote copy already express a persistent exact link.
+        // Reserve it before aliases from another local file can claim the remote copy.
+        val linkedSources = candidates.groupBy { it.publishedMediaId }.values
+            .filter { copies -> copies.map { it.source.source }.toSet().size > 1 }
+            .flatten()
+            .associate { it.source to checkNotNull(it.publishedMediaId) }
         val identity = reconcileMediaIdentities(
             candidates = candidates,
-            initialSourceMediaIds = emptyMap(),
+            initialSourceMediaIds = linkedSources,
             initialAliasMediaIds = emptyMap(),
             initialLocalMediaIds = emptySet(),
             mediaIdFactory = { error("Media sources must resolve persistent MediaIds before projection") },
@@ -47,7 +53,7 @@ internal suspend fun projectMediaLibrary(
                 ),
             )
         }
-        val localOnly = resolvedLocal.distinctBy(MediaItem::mediaId).filterNot { it.mediaId in remoteMediaIds }
+        val localOnly = resolvedLocal.filterNot { it.mediaId in remoteMediaIds }
         CanonicalMediaLibrary(
             items = canonicalRemote + localOnly,
             mediaIdsBySource = identity.mediaIds,
