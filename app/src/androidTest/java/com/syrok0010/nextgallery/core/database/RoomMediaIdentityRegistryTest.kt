@@ -18,10 +18,24 @@ import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaBatch
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaChangeObserver
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaMetadata
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaReader
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,6 +69,97 @@ class RoomMediaIdentityRegistryTest {
         openDatabase(mediaIdFactory = { error("Existing local identity must not generate a new MediaId") })
 
         assertEquals(first, registry.resolveId(local))
+    }
+
+    @Test
+    fun localDuplicatesKeepDistinctIdsAndExactCloudLinkAcrossBatchesAndReopen() = runBlocking {
+        database.close()
+        openDatabase(mediaIdFactory = MediaId::generate)
+        val aliases = setOf(MediaAlias(MediaAliasKind.Auid, "shared-auid"), MediaAlias(MediaAliasKind.Buid, "shared-buid"))
+        val first = MediaSourceIdentity(MediaSourceKind.Local, LOCAL_CONTENT_URI)
+        val second = MediaSourceIdentity(MediaSourceKind.Local, OTHER_CONTENT_URI)
+        val remote = MediaSourceIdentity(MediaSourceKind.Memories, FILE_ID.toString())
+        val firstCandidate = MediaIdentityCandidate(first, aliases = aliases)
+        val secondCandidate = MediaIdentityCandidate(second, aliases = aliases)
+        val firstId = registry.resolve(listOf(firstCandidate)).mediaIds.getValue(first)
+        val secondId = registry.resolve(listOf(secondCandidate)).mediaIds.getValue(second)
+        assertNotEquals(firstId, secondId)
+        assertTrue(registry.link(second, remote))
+
+        val firstItem = localMediaItem(firstId)
+        val secondItem = localMediaItem(secondId).copy(
+            assetRef = (firstItem.assetRef as MediaAssetRef.LocalContent).copy(contentUri = OTHER_CONTENT_URI),
+        )
+        LocalMediaProjectionRepository(database).saveLocalMediaBatch(listOf(firstItem, secondItem))
+        cacheRepository.saveTimelineSnapshot(credentials, snapshot(mediaItem(secondId)))
+
+        database.close()
+        openDatabase(mediaIdFactory = { error("Persisted identities must remain stable") })
+        val reindexed = registry.resolve(listOf(secondCandidate, firstCandidate)).mediaIds
+        assertEquals(firstId, reindexed.getValue(first))
+        assertEquals(secondId, reindexed.getValue(second))
+        val locals = LocalMediaProjectionRepository(database).loadLocalMediaProjection()
+        val cloud = requireNotNull(cacheRepository.loadTimelineSnapshot(credentials)).items
+        val library = projectMediaLibrary(locals, cloud)
+        assertEquals(2, library.items.size)
+        assertEquals(firstItem.assetRef, library.items.single { it.mediaId == firstId }.assetRef)
+        assertEquals(secondItem.assetRef, (library.items.single { it.mediaId == secondId }.assetRef as MediaAssetRef.LocalFirst).local)
+    }
+
+    @Test
+    fun oldMergedLocalIdentitiesAreResetBeforeUnchangedFilesAreIndexed() = runBlocking {
+        val sharedId = MediaId("old-merged-id")
+        val first = localMediaItem(sharedId)
+        val second = first.copy(
+            assetRef = (first.assetRef as MediaAssetRef.LocalContent).copy(contentUri = OTHER_CONTENT_URI),
+        )
+        database.mediaIdentityDao().upsertIdentifiers(
+            listOf(
+                MediaIdentifierEntity(MediaSourceKind.Local, LOCAL_CONTENT_URI, sharedId.value, "shared-auid"),
+                MediaIdentifierEntity(MediaSourceKind.Local, OTHER_CONTENT_URI, sharedId.value, "shared-auid"),
+                MediaIdentifierEntity(MediaSourceKind.Memories, FILE_ID.toString(), sharedId.value, "shared-auid"),
+            ),
+        )
+        LocalMediaProjectionRepository(database).saveLocalMediaBatch(listOf(first, second))
+        cacheRepository.saveTimelineSnapshot(credentials, snapshot(mediaItem(sharedId)))
+        assertEquals(listOf(sharedId, sharedId), LocalMediaProjectionRepository(database).loadLocalMediaProjection().map { it.mediaId })
+        // Version 13 has the same tables, but permits the old many-local-files identity.
+        database.openHelper.writableDatabase.version = 13
+        database.close()
+        openDatabase(mediaIdFactory = MediaId::generate)
+
+        assertTrue(LocalMediaProjectionRepository(database).loadLocalMediaProjection().isEmpty())
+        assertNull(cacheRepository.loadTimelineSnapshot(credentials))
+        assertTrue(database.mediaIdentityDao().identifiersForMediaIds(listOf(sharedId.value)).isEmpty())
+
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flowOf(LocalMediaBatch(listOf(LOCAL_CONTENT_URI, OTHER_CONTENT_URI).map { uri ->
+                    LocalMediaMetadata(
+                        contentUri = uri,
+                        displayName = first.displayName,
+                        mimeType = first.mimeType,
+                        width = first.width,
+                        height = first.height,
+                        sizeBytes = 1,
+                            dateTakenMillis = requireNotNull(first.takenAtEpochSeconds) * 1_000,
+                        dateModifiedSeconds = first.takenAtEpochSeconds,
+                        dateAddedSeconds = first.takenAtEpochSeconds,
+                        durationMillis = null,
+                        isVideo = false,
+                    )
+                }, LocalMediaIndexProgress(2, 2)))
+            },
+            projectionStore = LocalMediaProjectionRepository(database),
+            identityRegistry = registry,
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+        )
+        val items = source.updates().take(2).toList().last().items
+        assertEquals(2, items.size)
+        assertEquals(1, items.map { it.auid }.toSet().size)
+        assertEquals(2, items.map { it.mediaId }.toSet().size)
+        assertTrue(items.none { it.mediaId == sharedId })
+        assertEquals(2, projectMediaLibrary(items, emptyList()).items.size)
     }
 
     @Test
@@ -287,7 +392,7 @@ class RoomMediaIdentityRegistryTest {
             context,
             NextGalleryDatabase::class.java,
             DATABASE_NAME,
-        ).build()
+        ).fallbackToDestructiveMigration(true).build()
         registry = RoomMediaIdentityRegistry(database, mediaIdFactory)
         cacheRepository = TimelineCacheRepository(
             database = database,

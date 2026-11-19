@@ -88,10 +88,29 @@ class RoomMediaAliasTest {
             assertEquals(localId, resolve(remote, oldAuid, oldBuid))
 
             assertEquals(localId, resolve(remote, newAuid, newBuid))
-            val anotherLocal = local.copy(sourceKey = "content://media/2")
-            assertEquals(localId, resolve(anotherLocal, oldAuid, oldBuid))
+            assertEquals(
+                listOf(
+                    local.sourceKey,
+                ),
+                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).map {
+                    it.sourceKey
+                },
+            )
+            assertEquals(
+                listOf(
+                    local.sourceKey,
+                ),
+                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).map {
+                    it.sourceKey
+                },
+            )
             assertEquals(localId, resolve(local, newAuid, newBuid))
-            assertEquals(localId, resolve(anotherLocal, newAuid, newBuid))
+            assertTrue(
+                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).isEmpty(),
+            )
+            assertTrue(
+                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).isEmpty(),
+            )
 
             assertNotEquals(
                 localId,
@@ -150,8 +169,20 @@ class RoomMediaAliasTest {
                 resolve(local.copy(sourceKey = "content://media/2"), oldAuid, oldBuid),
             )
             assertEquals(
-                localId,
-                resolve(local.copy(sourceKey = "content://media/3"), newAuid, newBuid),
+                listOf(
+                    remote.sourceKey,
+                ),
+                database.mediaIdentityDao().identifiersByAuid(listOf(newAuid.value)).map {
+                    it.sourceKey
+                },
+            )
+            assertEquals(
+                listOf(
+                    remote.sourceKey,
+                ),
+                database.mediaIdentityDao().identifiersByBuid(listOf(newBuid.value)).map {
+                    it.sourceKey
+                },
             )
             assertEquals(localId, resolve(local))
             assertEquals(localId, resolve(remote, newAuid, newBuid))
@@ -167,12 +198,29 @@ class RoomMediaAliasTest {
 
             assertTrue(registry.link(local, remote))
             assertEquals(
-                localId,
-                resolve(local.copy(sourceKey = "content://media/2"), oldAuid, oldBuid),
+                listOf(
+                    localId.value,
+                ),
+                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).map {
+                    it.mediaId
+                },
+            )
+            assertEquals(
+                listOf(
+                    localId.value,
+                ),
+                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).map {
+                    it.mediaId
+                },
             )
             resolve(remote, newAuid, newBuid)
-            resolve(local.copy(sourceKey = "content://media/2"))
 
+            assertTrue(
+                database.mediaIdentityDao().identifiersByAuid(listOf(oldAuid.value)).isEmpty(),
+            )
+            assertTrue(
+                database.mediaIdentityDao().identifiersByBuid(listOf(oldBuid.value)).isEmpty(),
+            )
             assertNotEquals(
                 localId,
                 resolve(local.copy(sourceKey = "content://media/3"), oldAuid, oldBuid),

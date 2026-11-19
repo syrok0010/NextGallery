@@ -17,7 +17,7 @@ import androidx.room.RoomDatabase
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = false,
 )
 abstract class NextGalleryDatabase : RoomDatabase() {

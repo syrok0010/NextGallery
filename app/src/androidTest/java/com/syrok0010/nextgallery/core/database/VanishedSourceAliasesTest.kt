@@ -36,7 +36,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -88,14 +87,14 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun disappearingLocalCopyKeepsSharedAliasesOfAnotherCopy() = runBlocking {
-        val id = saveLocal()
+        saveLocal()
         assertTrue(registry.link(local, remote))
         resolve(remote)
 
         localProjection.finishLocalMediaReconciliation(emptySet())
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
-        assertEquals(aliases.size, storedAliasCount(remote))
+        assertEquals(emptySet<MediaAlias>(), storedAliases(local))
+        assertRemoteAliasesPresent()
     }
 
     @Test
@@ -110,7 +109,7 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun unfinishedLocalScanAndReadFailureKeepAliases() = runBlocking {
-        val id = saveLocal()
+        saveLocal()
         val source = LocalMediaSource(
             reader = LocalMediaReader {
                 flow {
@@ -125,22 +124,22 @@ class VanishedSourceAliasesTest {
 
         source.updates().first { it.failure }
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertEquals(aliases, storedAliases(local))
         assertEquals(1, localProjection.loadLocalMediaProjection().size)
     }
 
     @Test
     fun unavailableLocalRowRetainsAliasesAtCompletedScan() = runBlocking {
-        val id = saveLocal()
+        saveLocal()
 
         localProjection.finishLocalMediaReconciliation(setOf(local.sourceKey))
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertEquals(aliases, storedAliases(local))
     }
 
     @Test
     fun localRowWithoutTimelineDateDoesNotCountAsVanished() = runBlocking {
-        val id = resolve(local)
+        resolve(local)
         val metadata = LocalMediaMetadata(
             contentUri = local.sourceKey,
             displayName = "photo.jpg",
@@ -165,7 +164,7 @@ class VanishedSourceAliasesTest {
 
         source.updates().first { it.processed == LocalMediaIndexProgress(1, 1) }
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertEquals(aliases, storedAliases(local))
     }
 
     @Test
@@ -183,21 +182,22 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun disappearingCloudCopyKeepsAliasesOfLinkedLocalCopy() = runBlocking {
-        val id = saveLinkedRemote(localAliases = aliases)
+        saveLinkedRemote(localAliases = aliases)
 
         saveSnapshot(emptyList(), emptyList(), emptySet())
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertEquals(aliases, storedAliases(local))
+        assertEquals(emptySet<MediaAlias>(), storedAliases(remote))
     }
 
     @Test
     fun partialCloudDetailsDoNotRetireMissingAliases() = runBlocking {
-        val id = saveLinkedRemote()
+        saveLinkedRemote()
         val other = item(remote.copy(sourceKey = "43"), resolve(remote.copy(sourceKey = "43"), emptySet()))
 
         cloudCache.saveDayDetails(listOf(other), emptySet())
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertRemoteAliasesPresent()
         assertEquals(2, database.memoriesTimelineDao().mediaItems().size)
     }
 
@@ -208,7 +208,7 @@ class VanishedSourceAliasesTest {
         reopenDatabase()
 
         assertTrue(requireNotNull(cloudCache.loadTimelineSnapshot(credentials)).items.isEmpty())
-        assertEquals(aliases.size, storedAliasCount(remote))
+        assertRemoteAliasesPresent()
         assertEquals(1, database.memoriesTimelineDao().mediaItems().size)
 
         saveSnapshot(emptyList(), emptyList(), emptySet())
@@ -256,14 +256,13 @@ class VanishedSourceAliasesTest {
 
     @Test
     fun loadedFlagWithoutAllCountedItemsDoesNotConfirmDisappearance() = runBlocking {
-        val id = saveLinkedRemote()
+        saveLinkedRemote()
         val other = remote.copy(sourceKey = "43")
         val replacement = item(other, resolve(other, emptySet()))
 
         saveSnapshot(listOf(TimelineDay(DAY, 2)), listOf(replacement), setOf(DAY))
 
         assertRemoteAliasesPresent()
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
     }
 
     @Test
@@ -273,17 +272,17 @@ class VanishedSourceAliasesTest {
 
         saveSnapshot(listOf(TimelineDay(DAY + 1, 1)), listOf(moved), setOf(DAY + 1))
 
-        assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
+        assertRemoteAliasesPresent()
         assertEquals(listOf(moved), cloudCache.loadTimelineSnapshot(credentials)?.items)
     }
 
     @Test
-    fun copyMovedToUnloadedDayKeepsAliasForLocalCopyBetweenRequests() = runBlocking {
+    fun copyMovedToUnloadedDayKeepsAliasesBetweenRequests() = runBlocking {
         assertCopyMovedAcrossRequests(keepOldDay = false)
     }
 
     @Test
-    fun replacingOldDayBeforeLoadingNewDayKeepsAliasForLocalCopy() = runBlocking {
+    fun replacingOldDayBeforeLoadingNewDayKeepsAliases() = runBlocking {
         assertCopyMovedAcrossRequests(keepOldDay = true)
     }
 
@@ -299,22 +298,20 @@ class VanishedSourceAliasesTest {
 
         assertRemoteAliasesPresent()
         val unchangedBuid = aliases.filter { it.kind == MediaAliasKind.Buid }.toSet()
-        val newLocal = local.copy(sourceKey = "content://media/2")
-        assertEquals(id, resolve(newLocal, unchangedBuid))
 
         val movedAliases = unchangedBuid + MediaAlias(MediaAliasKind.Auid, "moved-auid")
         assertEquals(id, resolve(remote, movedAliases))
         val moved = item(remote, id).copy(dayId = DAY + 1, auid = "moved-auid")
         cloudCache.saveDayDetails(listOf(moved), setOf(DAY + 1))
 
-        assertEquals(id, resolve(newLocal, unchangedBuid))
+        assertEquals(movedAliases, storedAliases(remote))
         assertEquals(listOf(moved), cloudCache.loadTimelineSnapshot(credentials)?.items)
         assertTrue(registry.conflicts().isEmpty())
     }
 
     @Test
     fun partialInitialResponseAndSeparateDayResponsesKeepAliases() = runBlocking {
-        val id = saveLinkedRemote()
+        saveLinkedRemote()
         CloudResponses().use { server ->
             val onlineCredentials = credentials.copy(serverUrl = server.origin)
             val transport = NextcloudTransport(Json { ignoreUnknownKeys = true })
@@ -343,18 +340,19 @@ class VanishedSourceAliasesTest {
             assertEquals(listOf(43L), full.map { it.remoteFileId })
             assertEquals(full, cloudCache.loadTimelineSnapshot(onlineCredentials)?.items)
             assertRemoteAliasesPresent()
-            assertEquals(id, resolve(local.copy(sourceKey = "content://media/2")))
         }
     }
 
-    private suspend fun storedAliasCount(source: MediaSourceIdentity): Int =
-        database
-            .mediaIdentityDao()
-            .identifiers(source.source, listOf(source.sourceKey))
-            .sumOf { listOfNotNull(it.auid, it.buid).size }
+    private suspend fun storedAliases(source: MediaSourceIdentity): Set<MediaAlias> {
+        val entity = database.mediaIdentityDao().identifiers(source.source, listOf(source.sourceKey)).single()
+        return buildSet {
+            entity.auid?.let { add(MediaAlias(MediaAliasKind.Auid, it)) }
+            entity.buid?.let { add(MediaAlias(MediaAliasKind.Buid, it)) }
+        }
+    }
 
     private suspend fun assertRemoteAliasesPresent() {
-        assertEquals(aliases.size, storedAliasCount(remote))
+        assertEquals(aliases, storedAliases(remote))
     }
 
     private suspend fun saveLocal(): MediaId {
@@ -384,8 +382,12 @@ class VanishedSourceAliasesTest {
     }
 
     private suspend fun assertAliasesRetired(id: MediaId) {
-        aliases.forEachIndexed { index, alias ->
-            assertNotEquals(id, resolve(local.copy(sourceKey = "content://media/new-$index"), setOf(alias)))
+        aliases.forEach { alias ->
+            val owners = when (alias.kind) {
+                MediaAliasKind.Auid -> database.mediaIdentityDao().identifiersByAuid(listOf(alias.value))
+                MediaAliasKind.Buid -> database.mediaIdentityDao().identifiersByBuid(listOf(alias.value))
+            }
+            assertTrue(owners.none { it.mediaId == id.value })
         }
     }
 
