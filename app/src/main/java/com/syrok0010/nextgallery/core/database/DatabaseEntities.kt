@@ -50,22 +50,31 @@ data class MemoriesMediaEntity(
 
 data class IdentifiedMemoriesMedia(@Embedded val media: MemoriesMediaEntity, val mediaId: String)
 
-/**
- * Exact source copy mapped to [mediaId]. [auid] and [buid] are the aliases the copy reports now:
- * reindexing rewrites them, so an alias the copy no longer reports stops matching other copies.
- */
+/** One media object, with at most one copy from each source. Aliases belong to each side. */
 @Entity(
-    tableName = "media_identifiers",
-    primaryKeys = ["source", "sourceKey"],
-    indices = [Index(value = ["mediaId"]), Index(value = ["auid"]), Index(value = ["buid"])],
+    tableName = "media_identities",
+    indices = [
+        Index(value = ["localUri"], unique = true),
+        Index(value = ["fileId"], unique = true),
+        Index(value = ["localAuid"]),
+        Index(value = ["localBuid"]),
+        Index(value = ["remoteAuid"]),
+        Index(value = ["remoteBuid"]),
+    ],
 )
-data class MediaIdentifierEntity(
-    val source: MediaSourceKind,
-    val sourceKey: String,
-    val mediaId: String,
-    val auid: String? = null,
-    val buid: String? = null,
-)
+data class MediaIdentityEntity(
+    @PrimaryKey val mediaId: String,
+    val localUri: String? = null,
+    val fileId: Long? = null,
+    val localAuid: String? = null,
+    val localBuid: String? = null,
+    val remoteAuid: String? = null,
+    val remoteBuid: String? = null,
+) {
+    init {
+        require(localUri != null || fileId != null) { "A media object must have a source identity" }
+    }
+}
 
 @Entity(
     tableName = "media_identity_conflicts",
