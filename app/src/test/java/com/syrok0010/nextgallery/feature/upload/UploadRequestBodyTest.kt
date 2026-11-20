@@ -7,27 +7,6 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UploadRequestBodyTest {
-    @Test fun `intermediate byte reports are limited in time and the final count is exact`() {
-        var time = 0L
-        val reports = mutableListOf<Pair<Long, Long>>()
-        val bytes = ByteArray(1024 * 1024)
-        UploadRequestBody(
-            bytes.size.toLong(),
-            null,
-            { bytes.inputStream() },
-            nanoTime = {
-                time += 20_000_000L
-                time
-            },
-        ) { reports += time to it }.writeTo(Buffer())
-        assertEquals(0L, reports.first().second)
-        assertEquals(bytes.size.toLong(), reports.last().second)
-        assertTrue(reports.size < 40)
-        reports.dropLast(1).zipWithNext().forEach { (previous, current) ->
-            assertTrue(current.first - previous.first >= 100_000_000L)
-        }
-    }
-
     @Test fun `large upload publishes progress within the first percent`() {
         val total = 4L * 1024 * 1024 * 1024
         val visible = kotlinx.coroutines.flow.MutableStateFlow<Progress?>(null)

@@ -17,7 +17,6 @@ internal class UploadRequestBody(
     private val mediaType: MediaType?,
     private val openStream: () -> InputStream,
     private val offset: Long = 0L,
-    private val nanoTime: () -> Long = System::nanoTime,
     private val onSent: (Long) -> Unit,
 ) : RequestBody() {
     override fun contentType() = mediaType
@@ -27,8 +26,6 @@ internal class UploadRequestBody(
     override fun writeTo(sink: BufferedSink) {
         // OkHttp writes the body again after authentication/retry.
         var written = 0L
-        var reported = 0L
-        var lastReport = nanoTime()
         onSent(written)
         openStream().use { stream ->
             // A file stream seeks; Okio's skip would read every skipped byte.
@@ -40,15 +37,9 @@ internal class UploadRequestBody(
                 if (count < 0L) break
                 sink.emitCompleteSegments()
                 written += count
-                val now = nanoTime()
-                if (now - lastReport >= 100_000_000L) {
-                    onSent(written)
-                    reported = written
-                    lastReport = now
-                }
+                onSent(written)
             }
         }
-        if (reported != written) onSent(written)
     }
 }
 
