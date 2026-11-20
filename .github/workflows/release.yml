@@ -102,20 +102,14 @@ jobs:
             echo '::error::Неверный пакет, версия или debuggable в релизном APK'
             exit 1
           fi
-          (cd dist && sha256sum *.apk > SHA256SUMS)
-      - name: Preserve signed APK before creating release
+          cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
+          (cd dist && sha256sum *.apk mapping.txt > SHA256SUMS)
+      - name: Preserve release files before creating release
         id: apk
         uses: actions/upload-artifact@v4
         with:
           name: NextGallery-release-${{ steps.version.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Preserve R8 mapping
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-mapping-${{ steps.version.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
           retention-days: 7
       - name: Commit version and push main with tag
@@ -145,7 +139,7 @@ jobs:
         run: |
           flags=()
           if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
-          url=$(gh release create "v$APP_VERSION" "dist/NextGallery-$APP_VERSION.apk" dist/SHA256SUMS \
+          url=$(gh release create "v$APP_VERSION" "dist/NextGallery-$APP_VERSION.apk" dist/SHA256SUMS dist/mapping.txt \
             --verify-tag --draft --title "NextGallery v$APP_VERSION" \
             --generate-notes --notes-start-tag "$PREVIOUS_TAG" "${flags[@]}")
           echo "[Черновик релиза]($url): отредактируйте описание, проверьте APK и нажмите Publish release." >> "$GITHUB_STEP_SUMMARY"
@@ -155,7 +149,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.apk.outputs.artifact-url }}
         run: |
           if [[ -n "$ARTIFACT_URL" ]]; then
-            echo "[Подписанный APK и SHA256SUMS]($ARTIFACT_URL) хранятся 7 дней." >> "$GITHUB_STEP_SUMMARY"
+            echo "[Подписанный APK, SHA256SUMS и R8 mapping]($ARTIFACT_URL) хранятся 7 дней." >> "$GITHUB_STEP_SUMMARY"
           fi
           if [[ '${{ job.status }}' == failure ]]; then
             echo 'Автовосстановления нет. Перед повторным запуском проверьте main, тег и черновик; порядок действий — docs/agents/release.md.' >> "$GITHUB_STEP_SUMMARY"
