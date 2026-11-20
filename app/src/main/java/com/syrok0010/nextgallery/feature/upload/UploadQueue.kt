@@ -41,7 +41,7 @@ internal class UploadQueue(
     private val rows = MutableStateFlow<List<UploadJob>>(emptyList())
 
     /**
-     * Percent of the file on the wire. It outlives its transfer: the screens read it only while the
+     * Bytes of the file on the wire. It outlives its transfer: the screens read it only while the
      * journal still shows the file running, and the journal reports the outcome a moment after
      * the transfer ends. Cleared then, it would leave the running file without progress meanwhile.
      */
@@ -165,12 +165,12 @@ internal class UploadQueue(
         }
 
     /**
-     * Runs jobs one by one until none is waiting. [put] transfers the bytes and reports percent;
+     * Runs jobs one by one until none is waiting. [put] transfers the bytes and reports sent and total bytes;
      * it returns null when every free name holds a different file. Returns true when a job failed
      * temporarily and waits for another attempt.
      */
     suspend fun drain(
-        put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile?,
     ): Boolean =
         passes.withLock {
             val account = credentials() ?: return@withLock false
@@ -211,11 +211,11 @@ internal class UploadQueue(
         account: AccountCredentials,
         claim: UploadJob,
         deferred: MutableSet<String>,
-        put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile?,
     ): Boolean =
         coroutineScope {
             // A file that runs again starts without the percent of its earlier attempt.
-            progress.value = Progress(claim.id, null)
+            progress.value = Progress(claim.id, 0L, -1L)
             val work = async { execute(account, claim, put) { deferred += claim.id } }
             running[claim.id] = work
             try {
@@ -232,7 +232,7 @@ internal class UploadQueue(
     private suspend fun execute(
         account: AccountCredentials,
         start: UploadJob,
-        put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile?,
         defer: () -> Unit,
     ): Boolean {
         var claim = start
@@ -267,12 +267,12 @@ internal class UploadQueue(
     private suspend fun transfer(
         account: AccountCredentials,
         claim: UploadJob,
-        put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile?,
+        put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile?,
         defer: () -> Unit,
     ): UploadJob? {
         if (!sourceUnchanged(claim.selection)) return problem(claim, UploadProblem.Source)
         val uploaded = try {
-            put(account, claim) { percent -> progress.value = Progress(claim.id, percent) }
+            put(account, claim) { sent, total -> progress.value = Progress(claim.id, sent, total) }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -340,10 +340,12 @@ internal class UploadQueue(
     private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
-/** Percent of the file on the wire; null while its size is unknown. */
-internal data class Progress(val id: String, val percent: Int?) {
+/** Actual byte counts of the current attempt; a negative total means its size is unknown. */
+internal data class Progress(val id: String, val sentBytes: Long, val totalBytes: Long) {
+    val percent: Int? get() = sentPercent(sentBytes, totalBytes)
+
     /** Every byte is sent; the server is storing the file, or joining its parts, before it answers. */
-    val saving: Boolean get() = percent == 100
+    val saving: Boolean get() = totalBytes > 0L && sentBytes >= totalBytes
 }
 
 /** Done or Attention; null when the step failed temporarily and should run again later. */

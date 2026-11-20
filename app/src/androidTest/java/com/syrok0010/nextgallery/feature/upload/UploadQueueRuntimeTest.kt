@@ -78,7 +78,7 @@ class UploadQueueRuntimeTest {
         return journal.jobs().takeLast(ids.size).map { it.id }
     }
 
-    private suspend fun transfer(account: AccountCredentials, job: UploadJob, onProgress: (Int?) -> Unit): UploadedFile {
+    private suspend fun transfer(account: AccountCredentials, job: UploadJob, onProgress: (Long, Long) -> Unit): UploadedFile {
         transfers++
         val path = queue.pin(job, DavFilePath(account.userId, listOf("Photos", job.selection.displayName)))
         return UploadedFile(job.selection, path, true, 42)
@@ -279,7 +279,7 @@ class UploadQueueRuntimeTest {
         val response = CompletableDeferred<Unit>()
         val sending = CompletableDeferred<Unit>()
         var first = true
-        val put: suspend (AccountCredentials, UploadJob, (Int?) -> Unit) -> UploadedFile? = { account, job, progress ->
+        val put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile? = { account, job, progress ->
             val file = transfer(account, job, progress)
             if (first) {
                 first = false
@@ -353,9 +353,22 @@ class UploadQueueRuntimeTest {
         assertEquals(0, queue.activity.value!!.processed)
     }
 
+    @Test fun bytesWithinOnePercentReachTheUploadsScreen() = runBlocking {
+        enqueue(listOf(ids.first()))
+        queue.drain { account, job, report ->
+            for (sent in listOf(1_048_576L, 2_097_152L)) {
+                report(sent, 4_294_967_296L)
+                waitFor { queue.entries.value.single().sentBytes == sent }
+                assertEquals(0, queue.entries.value.single().percent)
+            }
+            transfer(account, job, report)
+        }
+        Unit
+    }
+
     @Test fun aFileThatRunsAgainStartsWithoutItsEarlierPercent() = runBlocking {
         val (id) = enqueue(listOf(ids.first()))
-        assertTrue(queue.drain { _, _, progress -> progress(100); throw IOException("offline") })
+        assertTrue(queue.drain { _, _, progress -> progress(100L, 100L); throw IOException("offline") })
         var shown: Int? = -1
         queue.drain { account, job, progress ->
             waitFor { queue.entries.value.single().phase == UploadPhase.Uploading }
@@ -371,11 +384,11 @@ class UploadQueueRuntimeTest {
         val (third) = enqueue(listOf(ids.first()))
         queue.drain { account, job, progress ->
             when (job.id) {
-                first -> progress(100)
+                first -> progress(100L, 100L)
                 second -> withContext(NonCancellable) {
                     // A finished file must not stay current.
                     waitFor { queue.activity.value!!.let { it.processed == 1 && it.current == null } }
-                    progress(25)
+                    progress(25L, 100L)
                     queue.consumeResult()
                     waitFor { queue.result.value == null }
                     waitFor { queue.activity.value!!.percent == 25 }

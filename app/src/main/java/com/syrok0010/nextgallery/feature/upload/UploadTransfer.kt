@@ -45,7 +45,7 @@ internal class UploadTransfer(
      * The original name in the timeline folder; after a restart its neighbours are checked again.
      * Returns null when no free name is left for a file that differs from the taken ones.
      */
-    suspend fun upload(account: AccountCredentials, job: UploadJob, onProgress: (Int?) -> Unit): UploadedFile? {
+    suspend fun upload(account: AccountCredentials, job: UploadJob, onProgress: (Long, Long) -> Unit): UploadedFile? {
         val pinned = job.destination?.let { DavFilePath(account.userId, it) }
             ?: queue.pin(job, DavFilePath.of(account.userId, directory(), job.selection.displayName))
         return try {
@@ -81,13 +81,13 @@ internal class UploadTransfer(
         id: String,
         path: DavFilePath,
         selection: UploadSelection,
-        onProgress: (Int?) -> Unit,
+        onProgress: (Long, Long) -> Unit,
     ): UploadedFile? {
         val uri = Uri.parse(selection.contentUri)
         val length = readSource {
             resolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         } ?: -1L
-        onProgress(sentPercent(0L, length))
+        onProgress(0L, length)
         val openLocal = {
             val stream = readSource { resolver.openInputStream(uri) }
             stream ?: throw SourceUnavailable()
@@ -95,7 +95,7 @@ internal class UploadTransfer(
         // Parts already sent count as sent.
         fun body(offset: Long, size: Long) =
             UploadRequestBody(size, selection.mimeType?.toMediaTypeOrNull(), openLocal, offset) { sent ->
-                onProgress(sentPercent(offset + sent, length))
+                onProgress(offset + sent, length)
             }
         // Signed by the job's account, not whichever session is current by now.
         val dav = FilesDavClient(transport) { account }
@@ -106,7 +106,7 @@ internal class UploadTransfer(
             if (partSize in 1 until length) {
                 // Named by the job, so a later attempt finds the parts this one stored.
                 // Stored parts send no bytes, so a resumed upload reaches 100 here.
-                createInParts(uploads, id, target, length, partSize, ::body) { onProgress(100) }
+                createInParts(uploads, id, target, length, partSize, ::body) { onProgress(length, length) }
             } else {
                 dav.createFile(target, body(0L, length))
             }

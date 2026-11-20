@@ -7,6 +7,39 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UploadRequestBodyTest {
+    @Test fun `intermediate byte reports are limited in time and the final count is exact`() {
+        var time = 0L
+        val reports = mutableListOf<Pair<Long, Long>>()
+        val bytes = ByteArray(1024 * 1024)
+        UploadRequestBody(
+            bytes.size.toLong(),
+            null,
+            { bytes.inputStream() },
+            nanoTime = {
+                time += 20_000_000L
+                time
+            },
+        ) { reports += time to it }.writeTo(Buffer())
+        assertEquals(0L, reports.first().second)
+        assertEquals(bytes.size.toLong(), reports.last().second)
+        assertTrue(reports.size < 40)
+        reports.dropLast(1).zipWithNext().forEach { (previous, current) ->
+            assertTrue(current.first - previous.first >= 100_000_000L)
+        }
+    }
+
+    @Test fun `large upload publishes progress within the first percent`() {
+        val total = 4L * 1024 * 1024 * 1024
+        val visible = kotlinx.coroutines.flow.MutableStateFlow<Progress?>(null)
+        UploadRequestBody(total, null, { ByteArray(1024 * 1024).inputStream() }) {
+            visible.value = Progress("large", it, total)
+        }.writeTo(Buffer())
+        assertTrue(
+            "One MiB must be visible before the first 40 MiB percent",
+            checkNotNull(visible.value).sentBytes == 1024L * 1024,
+        )
+    }
+
     @Test fun `streams identical bytes and counts them from zero on another write`() {
         val bytes = ByteArray(1024 * 1024) { it.toByte() }
         val sent = mutableListOf<Long>()
