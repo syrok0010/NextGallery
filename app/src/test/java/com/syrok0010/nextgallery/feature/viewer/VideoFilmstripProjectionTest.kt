@@ -75,7 +75,7 @@ class VideoFilmstripProjectionTest {
         assertEquals(VideoPlaybackEffect.Play, session.accept(VideoPlaybackInput.Play))
     }
 
-    @Test fun `scrub pauses playback and retains mute after release`() {
+    @Test fun `scrub resumes playback and retains mute after release`() {
         val session =
             VideoPlaybackSession(
                 "content://video/1",
@@ -93,7 +93,7 @@ class VideoFilmstripProjectionTest {
             session.accept(VideoPlaybackInput.SourceFailed(VideoPlaybackError.CannotPlay)),
         )
         assertEquals(
-            VideoPlaybackEffect.FinishScrub(false, 0f),
+            VideoPlaybackEffect.FinishScrub(true, 0f),
             session.accept(VideoPlaybackInput.EndScrub),
         )
         session.accept(VideoPlaybackInput.ScrubTo(6000))

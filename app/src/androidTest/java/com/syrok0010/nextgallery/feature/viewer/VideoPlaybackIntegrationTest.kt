@@ -367,6 +367,15 @@ class VideoPlaybackIntegrationTest {
         screenshot("hls-paused-quality-switch")
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.25f) }
+        waitForPlayer { player.isPlaying && player.currentPosition in 3_000L..5_000L }
+        rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
+        waitForPlayer { !player.playWhenReady }
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        waitForPlayer { player.currentPosition in 7_000L..7_400L }
+        rule.runOnIdle { assertFalse(player.playWhenReady) }
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         fixture.hlsStatus = 500
         rule.onNodeWithTag("video_quality").performClick()
