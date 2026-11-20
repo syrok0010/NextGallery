@@ -51,8 +51,12 @@ internal class UploadQueue(
     /** Set when a pass left a job for another attempt, until the next pass starts. */
     private val backoff = MutableStateFlow(false)
 
+    // Sample bytes before projecting the UI. Journal outcomes are not sampled: even a
+    // transfer shorter than the interval still publishes its completed/cancelled row.
+    @OptIn(FlowPreview::class)
     val entries: StateFlow<List<UploadEntry>> =
-        combine(rows, progress, ::uploadEntries).stateIn(scope, SharingStarted.Eagerly, emptyList())
+        combine(rows, progress.sample(100L).onStart { emit(null) }, ::uploadEntries)
+            .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** Ids of the current pass: a file queued while others run joins it until none is active. */
     private val pass =
