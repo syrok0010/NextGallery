@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -82,6 +83,34 @@ class UploadsScreenSectionsTest {
             scope.coroutineContext[Job]!!.cancelAndJoin()
             db.close()
             context.deleteDatabase(dbName)
+            Unit
+        }
+
+    @Test fun byteCounterChangesBeforeTheFirstPercent() =
+        runBlocking {
+            queue.submit(listOf(MediaId(UPLOADED)))
+            rule.setContent { MaterialTheme { UploadsScreen({}, queue) } }
+            queue.drain { account, job, report ->
+                val total = 4_294_967_296L
+                for (sent in listOf(1_048_576L, 2_097_152L)) {
+                    report(sent, total)
+                    val text = context.getString(
+                        R.string.uploads_sent,
+                        Formatter.formatShortFileSize(context, sent),
+                        Formatter.formatShortFileSize(context, total),
+                    )
+                    rule.waitUntil(
+                        5_000,
+                    ) { rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+                    rule.onNodeWithText(text).assertIsDisplayed()
+                }
+                UploadedFile(
+                    job.selection,
+                    DavFilePath.of(account.userId, "/Photos/test.jpg"),
+                    true,
+                    42,
+                )
+            }
             Unit
         }
 

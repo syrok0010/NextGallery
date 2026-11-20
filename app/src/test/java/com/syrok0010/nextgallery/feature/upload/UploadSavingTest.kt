@@ -20,22 +20,31 @@ class UploadSavingTest {
     )
 
     @Test fun `bytes on the wire show their percent`() {
-        val entry = uploadEntries(listOf(job), Progress("job", 99)).single()
+        val entry = uploadEntries(listOf(job), Progress("job", 99L, 100L)).single()
         assertEquals(99, entry.percent)
         assertFalse(entry.saving)
 
-        val tile = tileProgress(Progress("job", 99))
+        val tile = tileProgress(Progress("job", 99L, 100L))
         assertEquals(0.99f, checkNotNull(tile), 0.0001f)
     }
 
     @Test fun `once every byte is sent the server stores the file without progress`() {
-        val entry = uploadEntries(listOf(job), Progress("job", 100)).single()
+        val entry = uploadEntries(listOf(job), Progress("job", 100L, 100L)).single()
         assertTrue(entry.saving)
 
-        val activity = checkNotNull(uploadActivity(listOf(job), setOf("job"), Progress("job", 100)))
+        val activity =
+            checkNotNull(uploadActivity(listOf(job), setOf("job"), Progress("job", 100L, 100L)))
         assertTrue(activity.saving)
         // The tile ring spins instead of standing full.
-        assertNull(tileProgress(Progress("job", 100)))
+        assertNull(tileProgress(Progress("job", 100L, 100L)))
+    }
+
+    @Test fun `entries keep real bytes even before one percent`() {
+        val entry = uploadEntries(listOf(job), Progress("job", 1_048_576L, 4_294_967_296L)).single()
+        assertEquals(0, entry.percent)
+        assertEquals(1_048_576L, entry.sentBytes)
+        assertEquals(4_294_967_296L, entry.totalBytes)
+        assertFalse(entry.saving)
     }
 
     private fun tileProgress(progress: Progress): Float? {

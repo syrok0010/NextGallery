@@ -331,7 +331,7 @@ private fun UploadRow(
 @Composable
 private fun TransferProgress(entry: UploadEntry) {
     val percent = entry.percent
-    val size = entry.selection.local.sizeBytes
+    val size = entry.totalBytes ?: entry.selection.local.sizeBytes
     Row(
         // One height for both states, so the row does not jump when the bar gives way.
         Modifier.padding(top = 4.dp).height(24.dp),
@@ -347,7 +347,10 @@ private fun TransferProgress(entry: UploadEntry) {
             if (percent == null) {
                 LinearProgressIndicator(bar)
             } else {
-                LinearProgressIndicator({ percent / 100f }, bar)
+                LinearProgressIndicator(
+                    { (entry.sentBytes ?: 0L).toFloat() / size.coerceAtLeast(1L) },
+                    bar,
+                )
             }
             SizeText(
                 if (percent == null) {
@@ -355,7 +358,7 @@ private fun TransferProgress(entry: UploadEntry) {
                 } else {
                     stringResource(
                         R.string.uploads_sent,
-                        fileSize(size * percent / 100),
+                        fileSize(entry.sentBytes ?: 0L),
                         fileSize(size),
                     )
                 },

@@ -117,6 +117,24 @@ class UploadTransferTest {
             Unit
         }
 
+    @Test fun wholeAndChunkedUploadsReportBytesOfTheWholeFile() =
+        runBlocking {
+            for (size in listOf(0L, 4L)) {
+                partSize = size
+                val reports = CopyOnWriteArrayList<Pair<Long, Long>>()
+                assertNotNull(
+                    newTransfer().upload(
+                        credentials,
+                        claim(),
+                    ) { sent, total -> reports += sent to total },
+                )
+                assertEquals(0L to PHOTO_SIZE.toLong(), reports.first())
+                assertEquals(PHOTO_SIZE.toLong() to PHOTO_SIZE.toLong(), reports.last())
+                assertTrue(reports.all { it.second == PHOTO_SIZE.toLong() })
+                if (size > 0L) assertTrue(reports.any { it.first == 4L })
+            }
+        }
+
     @Test fun phoneFileThatCannotBeReadIsAProblemWithTheSourceNotARetry() =
         runBlocking {
             for (refusal in listOf(
@@ -247,7 +265,7 @@ class UploadTransferTest {
                 transfer = newTransfer()
                 requests.clear()
 
-                assertNotNull(transfer.upload(credentials, claim()) {})
+                assertNotNull(transfer.upload(credentials, claim()) { _, _ -> })
 
                 assertEquals("part size $size", listOf("PUT $PHOTO_PATH"), uploads())
             }
@@ -255,7 +273,7 @@ class UploadTransferTest {
             partSize = 4
             transfer = newTransfer()
             requests.clear()
-            val uploaded = transfer.upload(credentials, claim()) {}
+            val uploaded = transfer.upload(credentials, claim()) { _, _ -> }
 
             assertEquals(
                 PHOTO_PATH,
@@ -281,7 +299,7 @@ class UploadTransferTest {
 
     private suspend fun failure(): Exception {
         try {
-            transfer.upload(credentials, claim()) {}
+            transfer.upload(credentials, claim()) { _, _ -> }
         } catch (error: Exception) {
             return error
         }
