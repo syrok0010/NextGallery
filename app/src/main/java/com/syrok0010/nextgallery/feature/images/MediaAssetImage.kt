@@ -18,6 +18,7 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.size.Scale
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -223,7 +224,11 @@ private fun localRequest(
         ).memoryCacheKey("$cacheKey:$purpose")
         .diskCacheKey("$cacheKey:$purpose")
         .apply {
-            if (purpose != MediaImagePurpose.TimelineThumbnail) {
+            if (purpose == MediaImagePurpose.TimelineThumbnail) {
+                // One crop geometry for the thumbnail shared by grid, filmstrip and uploads.
+                size(DEFAULT_THUMBNAIL_SIZE, DEFAULT_THUMBNAIL_SIZE)
+                scale(Scale.FILL)
+            } else {
                 placeholderMemoryCacheKey("$cacheKey:${MediaImagePurpose.TimelineThumbnail}")
             }
         }.build()
