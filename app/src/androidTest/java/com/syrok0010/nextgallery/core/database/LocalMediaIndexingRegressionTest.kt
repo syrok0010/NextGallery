@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import java.time.Instant
+import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -94,6 +97,31 @@ class LocalMediaIndexingRegressionTest {
             assertEquals(BATCH_COUNT * BATCH_SIZE, registry.resolvedCandidateCount)
         }
 
+    @Test
+    fun captureInstantAndExifCalendarDaySurviveDatabaseReopen() = runBlocking {
+        val epoch = Instant.parse("2026-11-07T22:02:00Z").epochSecond
+        val dayId = LocalDate.parse("2026-11-08").toEpochDay().toInt()
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flowOf(LocalMediaBatch(listOf(metadata(1).copy(
+                    dateTakenMillis = epoch * 1_000,
+                    captureEpochSeconds = epoch,
+                    captureDayId = dayId,
+                )), LocalMediaIndexProgress(1, 1)))
+            },
+            projectionStore = LocalMediaProjectionRepository(database),
+            identityRegistry = RoomMediaIdentityRegistry(database),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+        )
+        val indexed = source.updates().take(2).toList().last().items.single()
+        assertEquals(epoch, indexed.takenAtEpochSeconds)
+        assertEquals(dayId, indexed.dayId)
+        database.close()
+        database = Room.databaseBuilder(context, NextGalleryDatabase::class.java, DATABASE_NAME).build()
+        val restored = LocalMediaProjectionRepository(database).loadLocalMediaProjection().single()
+        assertEquals(indexed, restored)
+    }
+
     private fun metadata(index: Int) =
         LocalMediaMetadata(
             contentUri = "content://media/external/images/media/$index",
@@ -103,7 +131,7 @@ class LocalMediaIndexingRegressionTest {
             height = 3_024,
             sizeBytes = 4_000_000,
             dateTakenMillis = 1_728_000_000_000L + index * 1_000L,
-            memoriesTimelineEpochSeconds = null,
+            captureEpochSeconds = null,
             imageUniqueId = null,
             dateModifiedSeconds = 1_728_000_000L + index,
             dateAddedSeconds = 1_728_000_000L + index,

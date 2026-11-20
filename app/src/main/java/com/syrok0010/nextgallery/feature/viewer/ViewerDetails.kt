@@ -172,9 +172,8 @@ internal fun ViewerDetailsSheet(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
         Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-            // Memories and MediaStore both give a real instant, and Memories files it under the
-            // local day. A local time on another day would contradict the header, so it is left
-            // out: the local projection still files its days by UTC (#175).
+            // Memories supplies the photo's calendar day separately from its capture instant.
+            // If the device uses a different timezone, omit a clock that contradicts that day.
             val time = item.takenAtEpochSeconds
                 ?.let { Instant.ofEpochSecond(it).atZone(ZoneId.systemDefault()) }
                 ?.takeIf { it.toLocalDate() == item.day }

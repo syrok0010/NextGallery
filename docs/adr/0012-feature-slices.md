@@ -44,7 +44,7 @@ LoginAttempt выражает взаимоисключающие фазы. Crede
 - Android features пока не имеют compiler-enforced internal isolation между собой: `verifyFeatureBoundaries` проверяет явные imports core/feature/app и независимость viewer от timeline. Это guardrail, не полный Kotlin dependency analyzer.
 - Workflow tests заменяют fake-host orchestration и используют управляемые источники и virtual time.
 - Best-effort cache errors не становятся отменой: CancellationException пробрасывается, остальные failures диагностируются без payload и credentials.
-- Canonical timeline seconds обозначают календарную координату Memories, а не обязательно UTC capture instant. Raw DATE_TAKEN сохраняется для AUID.
+- `takenAtEpochSeconds` — настоящий Unix-момент съёмки без сдвига часового пояса. `dayId` хранится отдельно: для локального EXIF — записанный день съёмки, иначе — день момента в часовом поясе устройства; для облачной копии — день Memories. Оба значения сохраняются в локальной проекции. Raw DATE_TAKEN сохраняется для AUID.
 - Время сборки и performance от package extraction не обещаются; для них нужны отдельные замеры.
 
 ## Открытые вопросы

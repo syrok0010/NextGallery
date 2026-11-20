@@ -14,7 +14,7 @@ data class MediaItem(
     val auid: String?,
     val buid: String?,
     val sharedBy: String?,
-    /** Canonical calendar coordinate used by Memories timeline, not necessarily a UTC instant. */
+    /** Capture timestamp in Unix seconds. Calendar grouping is carried separately by dayId. */
     val takenAtEpochSeconds: Long?,
     val isVideo: Boolean,
     val videoDurationSeconds: Long?,
