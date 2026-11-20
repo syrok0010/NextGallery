@@ -54,19 +54,7 @@ internal class LocalThumbnailFetcher(
                         ImageDecoder.decodeBitmap(
                             ImageDecoder.createSource(resolver, uri),
                         ) { decoder, info, _ ->
-                            val scale = maxOf(
-                                target.width.toDouble() / info.size.width,
-                                target.height.toDouble() / info.size.height,
-                            ).coerceAtMost(1.0)
-                            val width = ceil(info.size.width * scale).toInt()
-                            val height = ceil(info.size.height * scale).toInt()
-                            val cropWidth = target.width.coerceAtMost(width)
-                            val cropHeight = target.height.coerceAtMost(height)
-                            val left = (width - cropWidth) / 2
-                            val top = (height - cropHeight) / 2
-                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                            decoder.setTargetSize(width, height)
-                            decoder.crop = Rect(left, top, left + cropWidth, top + cropHeight)
+                            decoder.configureThumbnailCrop(info.size, target)
                         }
                     } finally {
                         thumbnail.recycle()
@@ -92,6 +80,22 @@ internal class LocalThumbnailFetcher(
             imageLoader: coil3.ImageLoader,
         ): Fetcher = LocalThumbnailFetcher(data, options)
     }
+}
+
+private fun ImageDecoder.configureThumbnailCrop(source: Size, target: Size) {
+    val scale = maxOf(
+        target.width.toDouble() / source.width,
+        target.height.toDouble() / source.height,
+    ).coerceAtMost(1.0)
+    val width = ceil(source.width * scale).toInt()
+    val height = ceil(source.height * scale).toInt()
+    val cropWidth = target.width.coerceAtMost(width)
+    val cropHeight = target.height.coerceAtMost(height)
+    val left = (width - cropWidth) / 2
+    val top = (height - cropHeight) / 2
+    allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+    setTargetSize(width, height)
+    crop = Rect(left, top, left + cropWidth, top + cropHeight)
 }
 
 internal fun localThumbnailTargetSize(size: CoilSize): Size =
