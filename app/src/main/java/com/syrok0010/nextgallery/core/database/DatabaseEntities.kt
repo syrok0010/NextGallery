@@ -96,6 +96,7 @@ data class LocalMediaEntity(
     val videoDurationSeconds: Long?,
     val auid: String?,
     val buid: String?,
+    val dayId: Int,
 )
 
 data class IdentifiedLocalMedia(@Embedded val media: LocalMediaEntity, val mediaId: String)

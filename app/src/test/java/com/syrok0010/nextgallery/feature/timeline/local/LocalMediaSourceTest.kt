@@ -10,6 +10,10 @@ import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlin.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.util.TimeZone
+import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -35,6 +39,42 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocalMediaSourceTest {
+    @Test
+    fun `all timestamp origins keep their instant and local day before and after cloud merge`() = runBlocking {
+        val previous = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("Europe/Moscow"))
+        try {
+            val epoch = Instant.parse("2026-11-07T22:02:00Z").epochSecond
+            val rows = listOf(
+                metadata("content://images/taken", taken = epoch * 1_000),
+                metadata("content://images/modified", modified = epoch),
+                metadata("content://images/added", added = epoch),
+                metadata("content://video/modified", modified = epoch, video = true),
+            )
+            val source = LocalMediaSource(
+                reader = LocalMediaReader { flowOf(LocalMediaBatch(rows, LocalMediaIndexProgress(4, 4))) },
+                projectionStore = InMemoryLocalMediaProjectionStore(),
+                identityRegistry = InMemoryMediaIdentityRegistry(),
+                changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            )
+            val items = source.updates().take(2).toList().last().items
+            assertEquals(4, items.size)
+            items.forEach { item ->
+                assertEquals(epoch, item.takenAtEpochSeconds)
+                assertEquals(LocalDate.parse("2026-11-08"), item.day)
+            }
+            val local = items.single { it.displayName == "taken" }
+            val cloud = local.copy(mediaId = MediaId("cloud"), assetRef = MediaAssetRef.MemoriesFile(42))
+            val merged = projectMediaLibrary(listOf(local), listOf(cloud)).items.single()
+            assertEquals(local.mediaId, merged.mediaId)
+            assertEquals(local.day, merged.day)
+            assertEquals(epoch, merged.takenAtEpochSeconds)
+            assertTrue(merged.assetRef is MediaAssetRef.LocalFirst)
+        } finally {
+            TimeZone.setDefault(previous)
+        }
+    }
+
     @Test
     fun `cached projection is published before fresh MediaStore batches`() = runBlocking {
         val cached = localItem("content://images/cached", 100)
@@ -122,7 +162,7 @@ class LocalMediaSourceTest {
     }
 
     @Test
-    fun `Memories timeline date does not replace raw DATE_TAKEN in AUID`() = runBlocking {
+    fun `resolved capture time does not replace raw DATE_TAKEN in AUID`() = runBlocking {
         val source = LocalMediaSource(
             reader = LocalMediaReader {
                 flowOf(
@@ -131,7 +171,7 @@ class LocalMediaSourceTest {
                             metadata(
                                 uri = "content://images/1",
                                 taken = 1_000,
-                                memoriesTimelineEpochSeconds = 200,
+                                captureEpochSeconds = 200,
                             ),
                         ),
                         progress = LocalMediaIndexProgress(indexedCount = 1, totalCount = 1),
@@ -466,7 +506,7 @@ class LocalMediaSourceTest {
         modified: Long? = null,
         added: Long? = null,
         video: Boolean = false,
-        memoriesTimelineEpochSeconds: Long? = null,
+        captureEpochSeconds: Long? = null,
     ) = LocalMediaMetadata(
         contentUri = uri,
         displayName = uri.substringAfterLast('/'),
@@ -475,7 +515,7 @@ class LocalMediaSourceTest {
         height = 200,
         sizeBytes = 1_000,
         dateTakenMillis = taken,
-        memoriesTimelineEpochSeconds = memoriesTimelineEpochSeconds,
+        captureEpochSeconds = captureEpochSeconds,
         dateModifiedSeconds = modified,
         dateAddedSeconds = added,
         durationMillis = if (video) 2_500 else null,

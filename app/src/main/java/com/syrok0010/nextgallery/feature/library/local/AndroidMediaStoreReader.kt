@@ -98,7 +98,7 @@ class AndroidMediaStoreReader(
                     height = orientedHeight,
                     sizeBytes = cursor.getLong(sizeColumn),
                     dateTakenMillis = dateTakenMillis,
-                    memoriesTimelineEpochSeconds = null,
+                    captureEpochSeconds = null,
                     imageUniqueId = null,
                     dateModifiedSeconds = cursor.nullableLong(modifiedColumn),
                     dateAddedSeconds = cursor.nullableLong(addedColumn),
@@ -142,17 +142,27 @@ class AndroidMediaStoreReader(
     private fun LocalMediaMetadata.withExif(): LocalMediaMetadata? {
         if (isVideo) return withDateFallback()
         val exif = readExif(contentUri) ?: return null
+        val (exifDate, exifOffset) = listOf(
+            ExifInterface.TAG_DATETIME_ORIGINAL to ExifInterface.TAG_OFFSET_TIME_ORIGINAL,
+            ExifInterface.TAG_DATETIME_DIGITIZED to ExifInterface.TAG_OFFSET_TIME_DIGITIZED,
+            ExifInterface.TAG_DATETIME to ExifInterface.TAG_OFFSET_TIME,
+        ).firstOrNull { (dateTag, _) -> exif.getAttribute(dateTag) != null }
+            ?.let { (dateTag, offsetTag) -> exif.getAttribute(dateTag) to exif.getAttribute(offsetTag) }
+            ?: (null to null)
+        val capture = localCaptureEpochSeconds(
+            exifDateTime = exifDate,
+            dateTakenMillis = dateTakenMillis,
+            exifOffset = exifOffset,
+        )
         return copy(
-            memoriesTimelineEpochSeconds = canonicalTimelineSeconds(
-                exifDateTime = exif.getAttribute(ExifInterface.TAG_DATETIME),
-                dateTakenMillis = dateTakenMillis,
-            ),
+            captureEpochSeconds = capture,
+            captureDayId = capture?.let { localMediaDayId(it, exifDate) },
             imageUniqueId = exif.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
         )
     }
 
     private fun LocalMediaMetadata.withDateFallback() = copy(
-        memoriesTimelineEpochSeconds = canonicalTimelineSeconds(null, dateTakenMillis),
+        captureEpochSeconds = localCaptureEpochSeconds(null, dateTakenMillis),
     )
 
     private fun android.database.Cursor.nullableString(column: Int): String? =

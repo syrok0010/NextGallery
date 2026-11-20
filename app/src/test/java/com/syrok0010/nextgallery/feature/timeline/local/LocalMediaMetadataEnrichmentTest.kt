@@ -16,7 +16,7 @@ class LocalMediaMetadataEnrichmentTest {
                 val enrichment =
                     LocalMediaMetadataEnrichment(cache, mapOf("external_primary" to version)) {
                         opens++
-                        it.copy(imageUniqueId = "exif", memoriesTimelineEpochSeconds = 42)
+                        it.copy(imageUniqueId = "exif", captureEpochSeconds = 42)
                     }
                 enrichment.load()
                 rows.chunked(200).forEach { batch ->

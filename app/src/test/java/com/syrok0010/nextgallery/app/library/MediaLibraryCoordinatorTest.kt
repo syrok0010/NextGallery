@@ -203,7 +203,7 @@ class MediaLibraryCoordinatorTest {
                             '/',
                         ).toLong() *
                     1_000,
-                memoriesTimelineEpochSeconds = null,
+                captureEpochSeconds = null,
                 dateModifiedSeconds = null,
                 dateAddedSeconds = null,
                 durationMillis = null,

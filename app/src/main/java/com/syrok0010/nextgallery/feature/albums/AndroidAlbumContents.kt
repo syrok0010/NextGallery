@@ -18,7 +18,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import com.syrok0010.nextgallery.feature.library.local.canonicalTimelineSeconds
+import com.syrok0010.nextgallery.feature.library.local.localCaptureEpochSeconds
+import com.syrok0010.nextgallery.feature.library.local.localMediaDayId
 
 /** Reads only the selected folder, without running a second EXIF index. */
 internal class AndroidAlbumContents(
@@ -59,9 +60,9 @@ internal class AndroidAlbumContents(
                 else MediaStore.Images.Media.getContentUri(location.volume)
                 val uri = ContentUris.withAppendedId(collection, id).toString()
                 val modified = cursor.getLong(7)
-                val epoch = canonicalTimelineSeconds(null, cursor.getLong(6))
+                val epoch = localCaptureEpochSeconds(null, cursor.getLong(6))
                     ?: modified.takeIf { it > 0 } ?: cursor.getLong(8)
-                val day = Math.floorDiv(epoch, 86_400L).toInt()
+                val day = localMediaDayId(epoch)
                 val rotated = cursor.getInt(10) in listOf(90, 270)
                 val publishedId = MediaId.generate()
                 // Use the same aggregate URI identity as the device index; bytes use the exact volume.

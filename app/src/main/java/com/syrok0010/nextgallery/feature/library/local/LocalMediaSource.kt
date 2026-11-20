@@ -39,7 +39,8 @@ data class LocalMediaMetadata(
     val height: Int?,
     val sizeBytes: Long,
     val dateTakenMillis: Long?,
-    val memoriesTimelineEpochSeconds: Long? = null,
+    val captureEpochSeconds: Long? = null,
+    val captureDayId: Int? = null,
     val imageUniqueId: String? = null,
     val dateModifiedSeconds: Long?,
     val dateAddedSeconds: Long?,
@@ -191,7 +192,7 @@ class LocalMediaSource(
                 dateTakenMillis = item.dateTakenMillis ?: 0,
                 imageUniqueId = item.imageUniqueId,
             )
-            LocalMediaDraft(item, timestamp, aliases)
+            LocalMediaDraft(item, timestamp, aliases, item.captureDayId ?: localMediaDayId(timestamp))
         }
         val unchangedItems = drafts.mapNotNull { draft ->
             existingItems[draft.metadata.contentUri]?.takeIf { existing ->
@@ -220,6 +221,7 @@ class LocalMediaSource(
         width = metadata.width,
         height = metadata.height,
         takenAtEpochSeconds = timelineEpochSeconds,
+        dayId = dayId,
         modifiedAtEpochSeconds = metadata.dateModifiedSeconds,
         sizeBytes = metadata.sizeBytes,
         isVideo = metadata.isVideo,
@@ -229,7 +231,7 @@ class LocalMediaSource(
     ).toMediaItem()
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
-        memoriesTimelineEpochSeconds
+        captureEpochSeconds
             ?: dateTakenMillis?.takeIf { it > 0 }?.div(1_000)
             ?: dateModifiedSeconds?.takeIf { it > 0 }
             ?: dateAddedSeconds?.takeIf { it > 0 }
@@ -255,4 +257,5 @@ private data class LocalMediaDraft(
     val metadata: LocalMediaMetadata,
     val timelineEpochSeconds: Long,
     val aliases: MediaAliases,
+    val dayId: Int,
 )

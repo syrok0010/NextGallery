@@ -19,6 +19,8 @@ import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.time.Instant
+import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -57,10 +59,9 @@ class AndroidMediaStoreReaderTest {
             listOf(4_032, 3_024, 4_032),
             batches.flatMap { it.metadata }.map { it.height },
         )
-        // Without EXIF the timeline time comes from DATE_TAKEN; the conversion is CanonicalTimelineTimeTest's.
         assertEquals(
-            canonicalTimelineSeconds(exifDateTime = null, dateTakenMillis = 1_700_000_000_030L),
-            batches.first().metadata.first().memoriesTimelineEpochSeconds,
+            1_700_000_000L,
+            batches.first().metadata.first().captureEpochSeconds,
         )
     }
 
@@ -90,7 +91,7 @@ class AndroidMediaStoreReaderTest {
     }
 
     @Test
-    fun readsMemoriesDateAndImageUniqueIdFromExif() = runBlocking {
+    fun readsCaptureInstantAndOriginalCalendarDayFromExifAndCachesBoth() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val jpeg = File(context.cacheDir, "media-reader-exif-fixture.jpg")
         FileOutputStream(jpeg).use { output ->
@@ -101,12 +102,19 @@ class AndroidMediaStoreReaderTest {
         }
         ExifInterface(jpeg.absolutePath).apply {
             setAttribute(ExifInterface.TAG_DATETIME, "2024:01:02 03:04:05")
+            setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "2026:11:08 01:02:00")
+            setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "+03:00")
             setAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID, "camera-unique-42")
             saveAttributes()
         }
 
         try {
-            val provider = FixtureMediaProvider(jpeg)
+            val epoch = Instant.parse("2026-11-07T22:02:00Z").epochSecond
+            val provider = FixtureMediaProvider(jpeg, rows = listOf(
+                FixtureRow(30, dateTakenMillis = epoch * 1_000),
+                FixtureRow(20, mediaType = VIDEO),
+                FixtureRow(10, dateTakenMillis = 0),
+            ))
             val database = Room.inMemoryDatabaseBuilder(context, NextGalleryDatabase::class.java).build()
             try {
                 var version = "v1"
@@ -114,11 +122,18 @@ class AndroidMediaStoreReaderTest {
                     ContentResolver.wrap(provider), database.localMediaMetadataDao(),
                     volumeVersions = { mapOf("external_primary" to version) },
                 )
-                val firstImage = reader().readBatches(3).toList().single().metadata.first()
-                assertEquals(1_704_164_645L, firstImage.memoriesTimelineEpochSeconds)
-                assertEquals("camera-unique-42", firstImage.imageUniqueId)
+                suspend fun assertDates() {
+                    val images = reader().readBatches(3).toList().single().metadata.filterNot { it.isVideo }
+                    assertEquals(2, images.size)
+                    images.forEach { image ->
+                        assertEquals(epoch, image.captureEpochSeconds)
+                        assertEquals(LocalDate.parse("2026-11-08").toEpochDay().toInt(), image.captureDayId)
+                        assertEquals("camera-unique-42", image.imageUniqueId)
+                    }
+                }
+                assertDates()
                 assertEquals(2, provider.fileOpens.get())
-                reader().readBatches(2).toList()
+                assertDates()
                 assertEquals(2, provider.fileOpens.get())
                 provider.generation = 2
                 reader().readBatches(3).toList()

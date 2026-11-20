@@ -10,13 +10,20 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.last
 import org.junit.Assert.*
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.util.TimeZone
 
 class AndroidAlbumSourceTest {
     @Test fun sameNamedFoldersInDifferentPathsHaveSeparateCountsAndUsableCovers() = runBlocking {
+        val previousZone = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("Europe/Moscow"))
+        val epoch = Instant.parse("2026-11-07T22:02:00Z").epochSecond
         val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
         val inserted = mutableListOf<Uri>()
         val prefix = "Pictures/NextGalleryCatalogTest-${System.nanoTime()}"
@@ -32,7 +39,17 @@ class AndroidAlbumSourceTest {
             val bitmap = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
             resolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 80, it) }
             bitmap.recycle()
-            resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+            resolver.openFileDescriptor(uri, "rw")!!.use { descriptor ->
+                ExifInterface(descriptor.fileDescriptor).apply {
+                    setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "2026:11:08 01:02:00")
+                    setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "+03:00")
+                    saveAttributes()
+                }
+            }
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Images.Media.IS_PENDING, 0)
+                put(MediaStore.Images.Media.DATE_TAKEN, epoch * 1_000)
+            }, null, null)
         }
         try {
             insert("$prefix/one/Отпуск/"); insert("$prefix/one/Отпуск/"); insert("$prefix/two/Отпуск/")
@@ -46,6 +63,10 @@ class AndroidAlbumSourceTest {
                 val contents = AndroidAlbumContents(resolver, GlobalContext.get().get(), GlobalContext.get().get()).load(album.location as AlbumLocation.Folder).last()
                 assertEquals(album.count, contents.items.size)
                 assertEquals(album.count, contents.total)
+                contents.items.forEach { item ->
+                    assertEquals(epoch, item.takenAtEpochSeconds)
+                    assertEquals(LocalDate.parse("2026-11-08"), item.day)
+                }
                 val indexed = contents.items.map { item ->
                     val asset = item.assetRef as MediaAssetRef.LocalContent
                     val aggregateUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -66,6 +87,9 @@ class AndroidAlbumSourceTest {
                 }
                 resolver.openInputStream(Uri.parse((album.cover as AlbumCover.Local).uri))!!.use { assertTrue(it.read() >= 0) }
             }
-        } finally { inserted.forEach { resolver.delete(it, null, null) } }
+        } finally {
+            inserted.forEach { resolver.delete(it, null, null) }
+            TimeZone.setDefault(previousZone)
+        }
     }
 }
