@@ -3,8 +3,11 @@ package com.syrok0010.nextgallery.feature.viewer
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.media.ThumbnailUtils
 import android.net.Uri
 import androidx.core.net.toUri
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -49,16 +52,37 @@ internal class LocalVideoFrames(private val context: Context) : VideoFrameProvid
                         .extractMetadata(
                             MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT,
                         )?.toIntOrNull() ?: 160
-                    val scale = 160.0 / maxOf(width, height, 1)
+                    val density = context.resources.displayMetrics.density
+                    val targetWidth = (VideoFilmstripFrameWidth.value * density)
+                        .roundToInt()
+                        .coerceAtLeast(
+                            1,
+                        )
+                    val targetHeight = (FilmstripActiveTileHeight.value * density)
+                        .roundToInt()
+                        .coerceAtLeast(
+                            1,
+                        )
+                    // Crop fills the cell: both axes must have enough pixels before cropping.
+                    val scale = maxOf(
+                        targetWidth.toDouble() / width,
+                        targetHeight.toDouble() / height,
+                    ).coerceAtMost(1.0)
                     plan.forEachIndexed { index, position ->
                         currentCoroutineContext().ensureActive()
                         val bitmap = retriever.getScaledFrameAtTime(
                             position * 1000,
                             MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                            (width * scale).toInt().coerceAtLeast(1),
-                            (height * scale).toInt().coerceAtLeast(1),
+                            ceil(width * scale).toInt().coerceAtLeast(1),
+                            ceil(height * scale).toInt().coerceAtLeast(1),
                         ) ?: error("Video frame unavailable")
-                        emit(VideoFrameEvent.Frame(index, bitmap))
+                        val cropped = ThumbnailUtils.extractThumbnail(
+                            bitmap,
+                            targetWidth.coerceAtMost(bitmap.width),
+                            targetHeight.coerceAtMost(bitmap.height),
+                            ThumbnailUtils.OPTIONS_RECYCLE_INPUT,
+                        )
+                        emit(VideoFrameEvent.Frame(index, cropped))
                     }
                 }
             }
