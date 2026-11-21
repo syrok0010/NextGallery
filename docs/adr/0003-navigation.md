@@ -51,6 +51,12 @@ Uploads
 
 Версия Navigation3 определяется version catalog, а не дублируется в ADR.
 
+### Регистрация destinations
+
+Destinations регистрируются через Koin `navigation<Route>()`, а root использует `koinEntryProvider`. Root сохраняет `rememberNavBackStack`, decorators ViewModelStore/saveable state, состояние вкладок и навигационные callbacks. Koin не становится владельцем состояния UI.
+
+Koin 4.2.2 DSL не принимает custom content key. Публичный адаптер `NavEntry` сохраняет существующий `navContentKey()` и metadata исходного entry, делегируя его content. Это сохраняет независимые owners разных альбомов и прежние ключи переходов, включая сохранённый стек; библиотека не форкается. Experimental API локализован в navigation adapter.
+
 ## Последствия
 
 - Выход из аккаунта очищает данные приложения и завершает процесс (ADR 0010); при старте без сессии корневым экраном является `Login`.
