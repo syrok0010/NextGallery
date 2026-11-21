@@ -8,7 +8,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
-import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
+import com.syrok0010.nextgallery.feature.albums.Albums
 import org.koin.compose.koinInject
 
 /** Shared presentation for the library chrome and page content. */
@@ -22,7 +22,7 @@ internal fun LibraryScreenScaffold(
     onBack: (() -> Unit)? = null,
     title: String? = null,
     library: MediaLibraryCoordinator = koinInject(),
-    catalog: AlbumsRepository = koinInject(),
+    albums: Albums = koinInject(),
     operations: OperationStatus = rememberOperationStatus(),
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -38,7 +38,7 @@ internal fun LibraryScreenScaffold(
                 destination = destination,
                 onRefresh = {
                     library.refresh()
-                    catalog.refresh()
+                    albums.refresh()
                     onRefresh()
                 },
                 onLogout = {

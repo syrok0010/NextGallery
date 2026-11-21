@@ -7,7 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
-import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
 import org.koin.compose.koinInject
@@ -18,7 +18,7 @@ internal fun AlbumScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onOpenUploads: () -> Unit,
-    albums: AlbumsRepository = koinInject(),
+    albums: Albums = koinInject(),
 ) {
     val contents by remember(album.location, albums) {
         albums.observeContents(album.location)
@@ -41,7 +41,7 @@ internal fun AlbumScreen(
             operations = operations,
         ) {
             Column(Modifier.fillMaxSize()) {
-                if (contents.items.isNotEmpty() && (contents.loading || contents.failed)) {
+                if (contents.items.isNotEmpty() && (contents.loading || contents.failed || contents.pendingMetadata > 0)) {
                     AlbumContentsStatus(contents, { albums.refresh(album.location) })
                 }
                 Box(Modifier.weight(1f)) { content() }

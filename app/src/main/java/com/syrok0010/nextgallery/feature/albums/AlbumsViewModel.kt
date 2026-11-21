@@ -2,7 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import androidx.lifecycle.ViewModel
 
-internal class AlbumsViewModel(private val catalog: AlbumsRepository) : ViewModel() {
-    val state = catalog.state
-    fun refresh() = catalog.refresh()
+internal class AlbumsViewModel(private val albums: Albums) : ViewModel() {
+    val state = albums.state
+    fun refresh() = albums.refresh()
 }

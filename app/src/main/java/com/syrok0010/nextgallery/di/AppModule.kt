@@ -23,7 +23,7 @@ import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
-import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
@@ -82,7 +82,7 @@ val appModule = module {
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single {
-        AlbumsRepository(
+        Albums(
             get(), get(), get<RemoteAlbumSource>(), get<LocalAlbumSource>(), get(),
             get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope")),
             enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
@@ -100,7 +100,7 @@ val appModule = module {
             get(named("libraryScope")),
         ) {
             get<MediaLibraryCoordinator>().refresh()
-            get<AlbumsRepository>().refresh()
+            get<Albums>().refresh()
         }
     } bind OperationStatusSource::class
     single { UploadQueueDatabase.open(androidContext()) }
