@@ -9,6 +9,7 @@ import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -116,6 +117,7 @@ class TimelineSnapshotAssemblerTest {
 
         assertEquals(2, snapshot.slots.size)
         assertEquals(listOf(42L, 43L), snapshot.items.map { it.remoteFileId })
+        assertTrue(snapshot.items.mapNotNull { it.remoteFileId }.isSortedBy { it })
         assertEquals(1, snapshot.totalMediaCountHint)
     }
 

@@ -114,16 +114,17 @@ class UploadsDavClient(
 
 /** Numbered children with a size; the collection itself and `.file` are not parts. */
 internal fun storedParts(body: InputStream): Map<Int, Long> =
-    decodeMultistatus(body)
-        .responses
-        .mapNotNull { response ->
-            val number = response.href.trim().trimEnd('/').substringAfterLast('/').toIntOrNull()
-            val size = response.propstats
-                .firstOrNull(
-                    PropStat::found,
-                )?.prop
-                ?.size
-                ?.trim()
-                ?.toLongOrNull()
-            if (number != null && size != null) number to size else null
-        }.toMap()
+    withMultistatusResponses(body) { responses ->
+        responses
+            .mapNotNull { response ->
+                val number = response.href.trim().trimEnd('/').substringAfterLast('/').toIntOrNull()
+                val size = response.propstats
+                    .firstOrNull(
+                        PropStat::found,
+                    )?.prop
+                    ?.size
+                    ?.trim()
+                    ?.toLongOrNull()
+                if (number != null && size != null) number to size else null
+            }.toMap()
+    }
