@@ -53,8 +53,13 @@ internal fun MediaDetailScreen(
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     val coroutineScope = rememberCoroutineScope()
-    // Right after the last page is removed the pager still points past the end for a frame.
-    val currentPage = pagerState.currentPage.coerceAtMost(items.lastIndex)
+    // Hydration can shift indices before the pager remeasures. Read its displayed key
+    // against the new sequence, rather than selecting a different photo at the old index.
+    val displayedKey = pagerState.layoutInfo.visiblePagesInfo
+        .firstOrNull { it.index == pagerState.currentPage }?.key as? String
+    val currentPage = displayedKey?.let { sequence.pageIndex(MediaId(it)) }
+        // Deleted pages have no surviving key; show the page that took their place.
+        ?: pagerState.currentPage.coerceAtMost(items.lastIndex)
     val currentItem = items.getOrNull(currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
     val frameCache = rememberVideoFilmstripCache()
@@ -169,7 +174,7 @@ internal fun MediaDetailScreen(
                     Filmstrip(
                         frameCache = frameCache,
                         items  = items,
-                        currentPage = pagerState.currentPage,
+                        currentPage = currentPage,
                         playback = playback.current ?: FilmstripPlayback.None,
                         onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         // The action row under the filmstrip takes the navigation bar instead.
