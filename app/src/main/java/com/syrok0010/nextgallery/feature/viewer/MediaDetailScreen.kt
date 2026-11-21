@@ -48,6 +48,7 @@ internal fun MediaDetailScreen(
     /** Labeled actions for the current object; null hides the action row. */
     actions: (@Composable (MediaItem) -> Unit)? = null,
     status: @Composable (visible: Boolean) -> Unit = {},
+    itemNote: @Composable (MediaItem) -> Unit = {},
 ) {
     val items = sequence.items
     val initialPage = sequence.pageIndex(initialMediaId) ?: 0
@@ -169,6 +170,7 @@ internal fun MediaDetailScreen(
                 status = status,
                 detailsProgress = { details.progress },
                 onHeaderBottomChange = { headerBottom = it },
+                itemNote = itemNote,
                 onBack = { motion.close() },
                 filmstrip = {
                     Filmstrip(

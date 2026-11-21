@@ -43,11 +43,15 @@ import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
+import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoritesSource
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
@@ -129,6 +133,8 @@ val appModule = module {
         ) {
             get<MediaLibraryCoordinator>().refresh()
             get<AlbumCatalogRepository>().refresh()
+            val favorites = get<CloudFavorites>()
+            if (favorites.state.value.loaded) favorites.refresh()
         }
     } bind OperationStatusSource::class
     single { UploadQueueDatabase.open(androidContext()) }
@@ -162,17 +168,21 @@ val appModule = module {
             remoteSource = get<MemoriesRepository>(),
             localMedia = get(),
             permissions = get<LocalMediaPermissionCoordinator>().mode,
+            favorites = get(),
         )
     }
     viewModel { AlbumsViewModel(get()) }
-    single { MemoriesAlbumContents(get<MemoriesApiClient>(), get()) }
+    single {
+        val cache = get<TimelineCacheRepository>()
+        MemoriesAlbumContents(get<MemoriesApiClient>(), get(), get(), cache::updateCachedFavorites)
+    }
     single { AndroidAlbumContents(androidContext().contentResolver, get(), get()) }
     single<AlbumContentsSource> {
         val remote = get<MemoriesAlbumContents>()
         val local = get<AndroidAlbumContents>()
-        AlbumContentsSource { location, _ ->
+        AlbumContentsSource { location, credentials ->
             when (location) {
-                is AlbumLocation.Remote -> remote.load(location)
+                is AlbumLocation.Remote -> remote.load(location, credentials)
                 is AlbumLocation.Folder -> local.load(location)
             }
         }
@@ -193,6 +203,7 @@ val appModule = module {
                     writes
                 }
             },
+            favorites = get(),
         )
     }
 
@@ -246,7 +257,32 @@ val appModule = module {
         )
     }
     single { NextcloudLoginRepository(get<NextcloudAuthClient>(), get<NextcloudTransport>()) }
-    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get()) }
+    single { MemoriesRepository(get<MemoriesApiClient>(), get(), get(), get()) }
+    single { CloudFavoriteMetadata(get()) }
+    single { MemoriesFavoriteWriter(get()) }
+    single { MemoriesFavoritesSource(get(), get(), get(), get()) }
+    single {
+        CloudFavorites(
+            get(),
+            get(),
+            { credentials -> get<MemoriesFavoritesSource>().load(credentials) },
+            get(),
+            get(named("libraryScope")),
+            write = { credentials, id, value ->
+                get<MemoriesFavoriteWriter>().set(
+                    credentials,
+                    id,
+                    value,
+                )
+            },
+            persist = { item ->
+                get<TimelineCacheRepository>().saveDayDetails(
+                    listOf(item),
+                    emptySet(),
+                )
+            },
+        )
+    }
     single { RemoteImageCache(get(), get()) }
     single { RemoteImageRepository(get(), get()) }
     single {

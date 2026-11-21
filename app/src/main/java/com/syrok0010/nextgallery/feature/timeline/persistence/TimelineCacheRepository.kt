@@ -105,6 +105,15 @@ class TimelineCacheRepository(
         }
     }
 
+    // Album reads refresh known flags without adding out-of-timeline membership to warm start.
+    suspend fun updateCachedFavorites(items: List<MediaItem>) {
+        database.withTransaction {
+            items.forEach { item ->
+                item.remoteFileId?.let { timelineDao.updateFavorite(it, item.isFavorite) }
+            }
+        }
+    }
+
     private suspend fun retireMissingAliasesInTransaction(items: List<MediaItem>) {
         val currentFileIds = items.map { it.remoteFileId }.toSet()
         // A day alone cannot prove disappearance: the same fileId may have moved to an unloaded day.
