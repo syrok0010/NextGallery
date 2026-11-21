@@ -18,7 +18,7 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
-import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
@@ -43,7 +43,7 @@ internal fun PhotosScreen(
     onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
-    albums: AlbumsRepository = koinInject(),
+    albums: Albums = koinInject(),
     uploads: UploadQueue = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
     trashBin: NextcloudTrashBin = koinInject(),

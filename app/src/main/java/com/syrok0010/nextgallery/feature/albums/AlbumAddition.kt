@@ -8,24 +8,9 @@ import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
 import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
-import com.syrok0010.nextgallery.core.operation.OperationStatusSource
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
-import com.syrok0010.nextgallery.feature.upload.EnqueueResult
-import com.syrok0010.nextgallery.feature.upload.UploadAlbum
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 internal sealed interface AlbumTarget {
     val name: String
@@ -75,102 +60,7 @@ internal fun writableAlbums(albums: List<AlbumSummary>, user: String): List<Albu
         location != null && AlbumAddress.of(location)?.owner == user
     }
 
-/**
- * Runs album additions in the app scope, so one outlives the sheet and the screen that started it,
- * and keeps its state for the result message.
- */
-internal class AlbumAdditions(
-    private val credentials: AccountCredentials,
-    private val writer: MemoriesAlbumWriter,
-    private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
-    private val scope: CoroutineScope,
-    private val onAdded: (AlbumLocation.Remote, Set<Long>, List<MediaItem>) -> Unit,
-    private val onCreated: () -> Unit,
-    private val mutations: Mutex = Mutex(),
-) : OperationStatusSource {
-    private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
-    val state = mutableState.asStateFlow()
-    override val operations = state
-        .map(::albumOperationSnapshots)
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
-    private var job: Job? = null
-
-    /**
-     * Returns false while another addition is running. The caller keeps the selection in that case.
-     *
-     * Local-only objects are queued for upload once the album exists, so they never race album
-     * creation; they are not uploaded when the album cannot be written.
-     */
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
-        if (job?.isActive == true) return false
-        mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
-        job = scope.launch {
-            mutations.withLock {
-                mutableState.value = try {
-                    val location = when (target) {
-                        is AlbumTarget.Existing -> target.location
-
-                        is AlbumTarget.New ->
-                            writer
-                                .create(
-                                    credentials,
-                                    target.name.trim(),
-                                ).also { onCreated() }
-                    }
-                    val address = AlbumAddress.of(location)
-                    if (address == null || address.owner != credentials.userId) {
-                        AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
-                    } else {
-                        val queued = if (request.uploads.isEmpty()) {
-                            0
-                        } else {
-                            when (
-                                val enqueue = enqueueUploads(
-                                    request.uploads,
-                                    UploadAlbum(address.owner, address.name),
-                                )
-                            ) {
-                                is EnqueueResult.Accepted -> enqueue.count
-                                EnqueueResult.NothingToUpload -> 0
-                                EnqueueResult.Rejected -> throw UploadEnqueueRejected()
-                            }
-                        }
-                        val result = writer.add(address, request.fileIds)
-                        onAdded(location, result.presentIds, request.items)
-                        AlbumAdditionState.Done(target.name, result.summary, queued)
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: UploadEnqueueRejected) {
-                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
-                } catch (_: AlbumAlreadyExistsException) {
-                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
-                } catch (_: Exception) {
-                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.Network)
-                }
-            }
-        }
-        return true
-    }
-
-    /** Called once the UI has shown a terminal result. */
-    fun consume() {
-        val current = mutableState.value
-        if (current is AlbumAdditionState.Done || current is AlbumAdditionState.Failed) {
-            mutableState.value = AlbumAdditionState.Idle
-        }
-    }
-
-    override fun consumeSucceeded() {
-        if ((state.value as? AlbumAdditionState.Done)?.result?.failed == 0) consume()
-    }
-
-    override fun consumeAll() {
-        consume()
-    }
-}
-
-private fun albumOperationSnapshots(state: AlbumAdditionState): List<OperationStatusSnapshot> {
+internal fun albumOperationSnapshots(state: AlbumAdditionState): List<OperationStatusSnapshot> {
     val lines = albumAdditionMessage(state) ?: return emptyList()
     val running = state as? AlbumAdditionState.Running
     val failed = state is AlbumAdditionState.Failed ||
@@ -245,5 +135,3 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
             ),
         )
     }
-
-private class UploadEnqueueRejected : Exception()

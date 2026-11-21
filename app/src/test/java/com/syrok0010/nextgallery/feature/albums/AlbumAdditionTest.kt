@@ -89,32 +89,13 @@ class AlbumAdditionTest {
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 var refreshed = 0
-                val catalog = AlbumCatalogRepository(
-                    sessions.requireCredentials(),
-                    object : RemoteAlbumSource {
-                        override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
-                            refreshed++
-                            return RemoteAlbums(emptyList())
-                        }
-                    },
-                    object : LocalAlbumSource {
-                        override suspend fun load() = emptyList<AlbumSummary>()
-                        override fun changes() = emptyFlow<Unit>()
-                    },
-                    MutableStateFlow<LocalMediaPermissionMode?>(null),
-                    scope,
-                )
                 val submittedAlbum = MutableStateFlow<UploadAlbum?>(null)
-                val additions = AlbumAdditions(
-                    sessions.requireCredentials(),
-                    fixture.writer,
-                    { ids, album ->
+                val additions = fixture.albums(scope, sessions = sessions,
+                    catalog = { refreshed++; RemoteAlbums(emptyList()) },
+                    enqueue = { ids, album ->
                         submittedAlbum.value = album
                         EnqueueResult.Accepted(ids.size)
                     },
-                    scope,
-                    onAdded = { _, _, _ -> },
-                    onCreated = catalog::refresh,
                 )
                 val before = refreshed
                 var mkcolBeforeSubmit = false
@@ -129,17 +110,18 @@ class AlbumAdditionTest {
                 )
                 assertTrue(accepted)
                 val done = withTimeout(5_000) {
-                    additions.state.first { it is AlbumAdditionState.Done }
-                } as AlbumAdditionState.Done
-                assertEquals(AlbumAddResult(1, 0, 0), done.result)
-                assertEquals(1, done.localUploads)
+                    additions.operations.first { it.singleOrNull()?.running == false }.single()
+                }
+                assertEquals(uiText(R.string.album_add_done, "Поход", 1), done.title)
+                assertEquals(listOf(pluralText(R.plurals.album_add_done_uploading, 1, 1)), done.details)
                 submitted.join()
                 assertTrue("uploads must start after the album exists", mkcolBeforeSubmit)
                 assertEquals(UploadAlbum("anna", "Поход"), submittedAlbum.value)
                 assertTrue(fixture.requests.any { it.method == "MKCOL" && it.decodedTarget.endsWith("/photos/anna/albums/Поход") })
                 withTimeout(5_000) { while (refreshed == before) kotlinx.coroutines.delay(10) }
-                additions.consume()
-                assertEquals(AlbumAdditionState.Idle, additions.state.value)
+                additions.consumeAll()
+                withTimeout(5_000) { additions.operations.first { it.isEmpty() } }
+                Unit
             } finally {
                 scope.cancel()
             }
@@ -161,21 +143,14 @@ class AlbumAdditionTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
-                val additions = AlbumAdditions(
-                    sessions.requireCredentials(),
-                    fixture.writer,
-                    { ids, _ -> EnqueueResult.Accepted(ids.size) },
-                    scope,
-                    onAdded = { _, _, _ -> },
-                    onCreated = {},
-                )
+                val additions = fixture.albums(scope, sessions = sessions)
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
                 val request = AlbumAdditionRequest(listOf(1L))
                 assertTrue(additions.add(album, request))
                 assertFalse(additions.add(album, request))
                 release.countDown()
-                withTimeout(5_000) { additions.state.first { it is AlbumAdditionState.Done } }
-                additions.consume()
+                withTimeout(5_000) { additions.operations.first { it.singleOrNull()?.running == false } }
+                additions.consumeAll()
                 withTimeout(5_000) {
                     while (!additions.add(album, request)) kotlinx.coroutines.delay(10)
                 }
@@ -189,7 +164,7 @@ class AlbumAdditionTest {
     @Test fun `album of another user is not written and its photos are not uploaded`() = runBlocking {
         val outcome = failedAddition(AlbumTarget.Existing(AlbumLocation.Remote("bob/Лето"), "Лето")) { 201 to "" }
 
-        assertEquals(AlbumAdditionFailure.NotWritable, outcome.reason)
+        assertEquals(uiText(R.string.album_add_failed_not_writable, "Лето"), outcome.message)
         assertEquals(emptyList<String>(), outcome.requests)
         assertEquals(0, outcome.enqueued)
     }
@@ -197,7 +172,7 @@ class AlbumAdditionTest {
     @Test fun `taken album name fails as such and uploads nothing`() = runBlocking {
         val outcome = failedAddition(AlbumTarget.New("Лето")) { 405 to "" }
 
-        assertEquals(AlbumAdditionFailure.AlbumExists, outcome.reason)
+        assertEquals(uiText(R.string.album_add_failed_exists, "Лето"), outcome.message)
         assertEquals(listOf("MKCOL"), outcome.requests)
         assertEquals(0, outcome.enqueued)
     }
@@ -205,7 +180,7 @@ class AlbumAdditionTest {
     @Test fun `server failure is reported as a network problem and uploads nothing`() = runBlocking {
         val outcome = failedAddition(AlbumTarget.New("Лето")) { 503 to "" }
 
-        assertEquals(AlbumAdditionFailure.Network, outcome.reason)
+        assertEquals(uiText(R.string.album_add_failed_network, "Лето"), outcome.message)
         assertEquals(0, outcome.enqueued)
     }
 
@@ -215,13 +190,13 @@ class AlbumAdditionTest {
             enqueue = EnqueueResult.Rejected,
         ) { if (it.method == "MKCOL") 201 to "" else 500 to "" }
 
-        assertEquals(AlbumAdditionFailure.QueueStorage, outcome.reason)
+        assertEquals(uiText(R.string.uploads_enqueue_rejected, "Лето"), outcome.message)
         assertEquals(listOf("MKCOL"), outcome.requests)
         assertEquals(1, outcome.enqueued)
     }
 
     private class FailedAddition(
-        val reason: AlbumAdditionFailure,
+        val message: com.syrok0010.nextgallery.core.ui.UiText,
         /** Methods the server saw, in order. */
         val requests: List<String>,
         val enqueued: Int,
@@ -239,45 +214,20 @@ class AlbumAdditionTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
-                val refreshes = java.util.concurrent.atomic.AtomicInteger()
-                val catalog = AlbumCatalogRepository(
-                    sessions.requireCredentials(),
-                    object : RemoteAlbumSource {
-                        override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
-                            refreshes.incrementAndGet()
-                            return RemoteAlbums(emptyList())
-                        }
-                    },
-                    object : LocalAlbumSource {
-                        override suspend fun load() = emptyList<AlbumSummary>()
-                        override fun changes() = emptyFlow<Unit>()
-                    },
-                    MutableStateFlow<LocalMediaPermissionMode?>(null),
-                    scope,
-                )
                 val enqueued = java.util.concurrent.atomic.AtomicInteger()
-                val additions = AlbumAdditions(
-                    sessions.requireCredentials(),
-                    fixture.writer,
-                    { _, _ ->
-                        enqueued.incrementAndGet()
-                        enqueue
-                    },
-                    scope,
-                    onAdded = { _, _, _ -> },
-                    onCreated = catalog::refresh,
-                )
-                withTimeout(5_000) { while (refreshes.get() == 0) kotlinx.coroutines.delay(10) }
-                val before = refreshes.get()
+                val additions = fixture.albums(scope, sessions = sessions, enqueue = { _, _ ->
+                    enqueued.incrementAndGet()
+                    enqueue
+                })
                 fixture.requests.clear()
 
                 assertTrue(additions.add(target, AlbumAdditionRequest(listOf(1L), listOf(MediaId("phone-only")))))
 
                 val failed = withTimeout(5_000) {
-                    additions.state.first { it is AlbumAdditionState.Failed }
-                } as AlbumAdditionState.Failed
+                    additions.operations.first { it.singleOrNull()?.failed == true }.single()
+                }
                 FailedAddition(
-                    failed.reason,
+                    failed.title,
                     fixture.requests.map { it.method },
                     enqueued.get(),
                 )
@@ -285,20 +235,6 @@ class AlbumAdditionTest {
                 scope.cancel()
             }
         }
-
-    private fun emptyCatalog(sessions: SessionStore, scope: CoroutineScope) =
-        AlbumCatalogRepository(
-            sessions.requireCredentials(),
-            object : RemoteAlbumSource {
-                override suspend fun load(credentials: AccountCredentials) = RemoteAlbums(emptyList())
-            },
-            object : LocalAlbumSource {
-                override suspend fun load() = emptyList<AlbumSummary>()
-                override fun changes() = emptyFlow<Unit>()
-            },
-            MutableStateFlow<LocalMediaPermissionMode?>(null),
-            scope,
-        )
 
     private class FixedCredentials(private val credentials: AccountCredentials) : CredentialsStore {
         override fun load() = credentials
