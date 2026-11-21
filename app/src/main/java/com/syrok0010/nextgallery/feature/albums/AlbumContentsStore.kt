@@ -16,6 +16,7 @@ internal data class AlbumContentsState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val permissionRequired: Boolean = false,
+    val departedIds: Set<MediaId> = emptySet(),
 )
 
 /** The in-memory membership of known albums. Only AlbumsRepository coordinates writes here. */
@@ -102,6 +103,12 @@ internal class AlbumContentsStore(
         items.size == ids.size
     }
 
+    fun removed(location: AlbumLocation.Remote, ids: Set<Long>): Boolean = synchronized(lock) {
+        val entry = entries[location] ?: return@synchronized false
+        edit(location, entry, ids.associateWith { null })
+        entry.initialized
+    }
+
     private fun edit(location: AlbumLocation, entry: Entry, changes: Map<Long, MediaItem?>) {
         if (changes.isEmpty()) return
         entry.edits.putAll(changes)
@@ -153,11 +160,15 @@ internal class AlbumContentsStore(
         val items = applyEdits(batch.items, entry.edits)
         publish(location, entry, entry.state.value.copy(items = items,
             total = if (finished) items.size else batch.total, loaded = items.size, loading = !finished,
-        ))
+        ), trackDepartures = finished)
     }
 
-    private fun publish(location: AlbumLocation, entry: Entry, next: AlbumContentsState) {
-        entry.state.value = next
+    private fun publish(location: AlbumLocation, entry: Entry, next: AlbumContentsState, trackDepartures: Boolean = true) {
+        val previous = entry.state.value
+        val ids = next.items.mapTo(mutableSetOf()) { it.mediaId }
+        entry.state.value = next.copy(departedIds =
+            (previous.departedIds + if (trackDepartures) previous.items.map { it.mediaId } else emptyList()) - ids,
+        )
         if (entry.initialized) complete.update { it + (location to next.items) }
     }
 

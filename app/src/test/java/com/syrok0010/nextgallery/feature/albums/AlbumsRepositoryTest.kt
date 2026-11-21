@@ -18,6 +18,58 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AlbumsRepositoryTest {
+    @Test fun `partial removal updates membership catalog selection and viewer without rereading`() = scenario { server, scope ->
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, source = AlbumContentsSource { _, _ -> flow {
+            reads.incrementAndGet()
+            emit(AlbumContentsBatch(listOf(first, second), 2))
+        } }, catalog = { RemoteAlbums(listOf(summary)) })
+        val contents = albums.observeContents(album)
+        contents.first { it.loaded == 2 && !it.loading }
+        val viewer = ViewerSequenceController()
+        viewer.updateSlots(contents.value.items.toMediaSlots(), first.mediaId)
+
+        assertTrue(albums.removeMembers(album, "album", setOf(1, 2)))
+        val after = contents.first { first.mediaId in it.departedIds }
+        assertEquals(listOf(second), after.items)
+        assertEquals(1, after.total)
+        assertEquals(listOf(second), viewer.updateSlots(after.items.toMediaSlots(), first.mediaId, after.departedIds).items)
+        val catalog = albums.state.first { it.remote.items.singleOrNull()?.count == 1 }
+        assertEquals(AlbumCover.Remote(2, null), catalog.remote.items.single().cover)
+        albums.operations.first { it.any { operation -> operation.failed } }
+        assertEquals(1, reads.get())
+        // Reopening uses the same membership; no ViewModel lifetime owns or discards it.
+        assertSame(contents, albums.observeContents(album))
+        assertEquals(1, reads.get())
+    }
+
+    @Test fun `late complete response cannot resurrect a confirmed removal but a later refresh is authoritative`() = scenario { server, scope ->
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, source = AlbumContentsSource { _, _ -> flow {
+            val read = reads.incrementAndGet()
+            if (read == 2) {
+                emit(AlbumContentsBatch(emptyList(), 2))
+                started.complete(Unit)
+                release.await()
+            }
+            emit(AlbumContentsBatch(listOf(first, second), 2))
+        } })
+        val contents = albums.observeContents(album)
+        contents.first { it.loaded == 2 && !it.loading }
+        albums.refresh(album)
+        started.await()
+        assertTrue(albums.removeMembers(album, "album", setOf(1)))
+        contents.first { it.items == listOf(second) }
+        release.complete(Unit)
+        val stale = contents.first { !it.loading }
+        assertEquals(listOf(second), stale.items)
+        albums.refresh(album)
+        val fresh = contents.first { !it.loading && it.items.size == 2 }
+        assertFalse(first.mediaId in fresh.departedIds)
+    }
+
     @Test fun `partial addition applies only confirmed ids and survives an older read`() = scenario { server, scope ->
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -95,9 +147,10 @@ class AlbumsRepositoryTest {
         albums.refresh(album)
         val failed = contents.first { it.failed }
         assertEquals(setOf(first.mediaId, second.mediaId), failed.items.map { it.mediaId }.toSet())
+        assertTrue(failed.departedIds.isEmpty())
         albums.refresh(album)
         val empty = contents.first { !it.loading && !it.failed && it.items.isEmpty() }
-        assertEquals(0, empty.total)
+        assertEquals(setOf(first.mediaId, second.mediaId), empty.departedIds)
     }
 
     @Test fun `upload follow up updates known membership without refreshing`() = scenario { server, scope ->
@@ -138,7 +191,7 @@ class AlbumsRepositoryTest {
 
     private fun scenario(block: suspend (NextcloudFixture, CoroutineScope) -> Unit) = runBlocking {
         NextcloudFixture { request -> when (request.method) {
-            "PROPFIND" -> 207 to found()
+            "PROPFIND" -> 207 to MemoriesAlbumRemoverTest.listing("/remote.php/dav/photos/anna/albums/album")
             "DELETE" -> (if (request.decodedTarget.endsWith("2-b.jpg")) 403 else 204) to ""
             "SEARCH" -> 207 to found(request.searchedFileId to "Photos/${request.searchedFileId}.jpg")
             "COPY" -> (if (request.decodedTarget.endsWith("3.jpg")) 403 else 201) to ""
