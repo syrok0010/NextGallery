@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,7 +55,7 @@ internal fun MediaScrollIndicator(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
-            .width(150.dp)
+            .widthIn(min = 150.dp)
             .padding(end = 8.dp),
     ) {
         val thumbOffset = Modifier.offset {
