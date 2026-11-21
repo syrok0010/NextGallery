@@ -6,10 +6,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -20,18 +23,18 @@ import kotlinx.coroutines.launch
 
 /** Interaction belongs to the viewer; the row and its cancellable frame loaders may disappear. */
 internal class ViewerFilmstripState(
+    items: State<List<MediaItem>>,
+    currentMediaId: State<MediaId?>,
+    private val onSelected: State<(MediaId) -> Unit>,
     val lazyListState: LazyListState,
     private val scope: CoroutineScope,
 ) {
-    var items by mutableStateOf<List<MediaItem>>(emptyList())
-        private set
-    var currentMediaId by mutableStateOf<MediaId?>(null)
-        private set
+    val items by items
+    val currentMediaId by currentMediaId
     var expandedVideo by mutableStateOf<MediaId?>(null)
         private set
     private var expansionSelection by mutableStateOf<MediaId?>(null)
-    private var itemsByKey by mutableStateOf<Map<String, MediaItem>>(emptyMap())
-    private var onSelected: (MediaId) -> Unit = {}
+    private val itemsByKey by derivedStateOf { this.items.associateBy { filmstripKey(it.mediaId) } }
 
     val scrollState = ScrollableState { lazyListState.dispatchRawDelta(it) }
     val isScrolling get() = scrollState.isScrollInProgress
@@ -39,13 +42,7 @@ internal class ViewerFilmstripState(
     val activeSizeMediaId get() = expansionSelection ?: currentMediaId
     val currentPage get() = items.indexOfFirst { it.mediaId == currentMediaId }
 
-    fun update(items: List<MediaItem>, currentMediaId: MediaId?, onSelected: (MediaId) -> Unit) {
-        if (this.items != items) {
-            this.items = items
-            itemsByKey = items.associateBy { filmstripKey(it.mediaId) }
-        }
-        this.currentMediaId = currentMediaId
-        this.onSelected = onSelected
+    fun reconcileExpansion() {
         if (expandedVideo?.let { itemsByKey[filmstripKey(it)] }?.isVideo != true) {
             expandedVideo = null
             expansionSelection = null
@@ -55,7 +52,7 @@ internal class ViewerFilmstripState(
     }
 
     fun select(id: MediaId) {
-        if (filmstripKey(id) in itemsByKey && id != currentMediaId) onSelected(id)
+        if (filmstripKey(id) in itemsByKey && id != currentMediaId) onSelected.value(id)
     }
 
     fun click(id: MediaId) {
@@ -128,16 +125,32 @@ internal fun rememberViewerFilmstripState(
     ),
 ): ViewerFilmstripState {
     val scope = rememberCoroutineScope()
-    val state = remember(lazyListState, scope) { ViewerFilmstripState(lazyListState, scope) }
-    SideEffect { state.update(items, currentMediaId, onSelected) }
+    val latestItems = rememberUpdatedState(items)
+    val latestCurrentMediaId = rememberUpdatedState(currentMediaId)
+    val latestOnSelected = rememberUpdatedState(onSelected)
+    val state = remember(lazyListState, scope) {
+        ViewerFilmstripState(
+            latestItems,
+            latestCurrentMediaId,
+            latestOnSelected,
+            lazyListState,
+            scope,
+        )
+    }
+    SideEffect { state.reconcileExpansion() }
     LaunchedEffect(state) {
         snapshotFlow { if (state.isScrolling) state.mediaAtPlayhead() else null }
             .collect { it?.let(state::select) }
     }
-    LaunchedEffect(state, currentMediaId, items, state.isScrolling, state.expanded) {
-        if (!state.isScrolling && !state.expanded && state.currentPage >= 0) {
-            lazyListState.animateScrollToItem(state.currentPage)
+    val centerPage = if (state.isScrolling || state.expanded) {
+        null
+    } else {
+        state.currentPage.takeIf {
+            it >= 0
         }
+    }
+    LaunchedEffect(state, items, centerPage) {
+        if (centerPage != null) lazyListState.animateScrollToItem(centerPage)
     }
     return state
 }
