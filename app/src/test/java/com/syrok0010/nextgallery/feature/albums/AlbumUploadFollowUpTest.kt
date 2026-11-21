@@ -64,22 +64,11 @@ class AlbumUploadFollowUpTest {
         }.use { fixture ->
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
-                val catalog = AlbumCatalogRepository(
-                    SessionStore(FixedCredentials(fixture.credentials)).requireCredentials(),
-                    object : RemoteAlbumSource {
-                        override suspend fun load(credentials: AccountCredentials) = RemoteAlbums(emptyList())
-                    },
-                    object : LocalAlbumSource {
-                        override suspend fun load() = emptyList<AlbumSummary>()
-                        override fun changes() = emptyFlow<Unit>()
-                    },
-                    MutableStateFlow(null),
-                    scope,
-                )
+                val albums = fixture.albums(scope)
                 val selection = UploadSelection(MediaAssetRef.LocalContent("content://media/a", 1, 1), "a.jpg", "image/jpeg")
                 val job = UploadJob("job", selection, UploadAlbum("anna", "Лето"))
                 val file = UploadedFile(selection, DavFilePath.of("anna", "/Photos/a.jpg"), created = true, fileId = FILE_ID)
-                val added = AlbumUploadFollowUp(fixture.writer, catalog).run(fixture.credentials, job, file, recovered)
+                val added = AlbumUploadFollowUp(albums).run(fixture.credentials, job, file, recovered)
                 added to fixture.requests.map { if (it.method == "PROPFIND") "PROPFIND ${it.headers["depth"]}" else it.method }
             } finally {
                 scope.cancel()
