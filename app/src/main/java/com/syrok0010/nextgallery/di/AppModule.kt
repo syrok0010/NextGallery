@@ -20,12 +20,10 @@ import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.KeystoreCredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
@@ -81,25 +79,13 @@ val appModule = module {
     single<RemoteAlbumSource> { MemoriesAlbumSource(get<MemoriesApiClient>()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    single {
-        AlbumCatalogRepository(
-            get(),
-            get(),
-            get(),
-            get<LocalMediaPermissionCoordinator>().mode,
-            get(named("libraryScope")),
-        )
-    }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single {
-        val uploads: UploadQueue = get()
-        AlbumAdditions(
-            get(),
-            get(),
-            get(),
-            { ids, album -> uploads.submit(ids, album) },
-            get(named("libraryScope")),
+        Albums(
+            get(), get(), get<RemoteAlbumSource>(), get<LocalAlbumSource>(), get(),
+            get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope")),
+            enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
         )
     } bind OperationStatusSource::class
     single<CloudTrash> { MemoriesCloudTrash(get(), get()) }
@@ -114,6 +100,7 @@ val appModule = module {
             get(named("libraryScope")),
         ) {
             get<MediaLibraryCoordinator>().refresh()
+            get<Albums>().refresh()
         }
     } bind OperationStatusSource::class
     single { UploadQueueDatabase.open(androidContext()) }
@@ -129,7 +116,7 @@ val appModule = module {
             get<UploadSource>()::snapshot,
             UploadFollowUps(
                 link = UploadedCopiesFollowUp(get()),
-                album = AlbumUploadFollowUp(get(), get()),
+                album = AlbumUploadFollowUp(get()),
             ),
             refreshLibrary = { get<MediaLibraryCoordinator>().refresh() },
             schedule = { UploadWorker.schedule(context) },
@@ -161,15 +148,6 @@ val appModule = module {
                 is AlbumLocation.Folder -> local.load(location)
             }
         }
-    }
-    viewModel { (location: AlbumLocation) ->
-        AlbumContentsViewModel(
-            get(),
-            get(),
-            get<MediaLibraryIndex>(),
-            get<LocalMediaPermissionCoordinator>().mode,
-            location,
-        )
     }
 
     single {

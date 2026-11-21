@@ -213,4 +213,5 @@
     <string name="upload_enqueue_rejected">Couldn\'t queue the files for upload. Try again.</string>
     <string name="uploads_enqueue_rejected">Couldn\'t queue the files for upload to “%1$s”. Try again.</string>
     <string name="uploads_logout_blocked">There are unfinished uploads or actions. Finish or cancel them on the Uploads screen before signing out.</string>
+    <string name="album_contents_pending_metadata">Added items are still being prepared: %1$d.</string>
 </resources>

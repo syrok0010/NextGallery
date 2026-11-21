@@ -66,3 +66,22 @@ internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<Album
     }
     return groups.values.toList()
 }
+
+/** Loaded membership supplies catalog counts and covers without another catalog read. */
+internal fun albumCatalogProjection(
+    catalog: AlbumsUiState,
+    contents: Map<AlbumLocation, AlbumContentsState>,
+): AlbumsUiState =
+    catalog.copy(
+        remote = catalog.remote.copy(
+            items = catalog.remote.items.map { album ->
+                val membership = contents[album.location] ?: return@map album
+                val cover = (album.cover as? AlbumCover.Remote)?.takeIf { cover ->
+                    membership.items.any { it.remoteFileId == cover.fileId }
+                } ?: membership.items.firstOrNull { it.remoteFileId != null }?.let {
+                    AlbumCover.Remote(requireNotNull(it.remoteFileId), it.etag)
+                }
+                album.copy(count = membership.total, cover = cover)
+            },
+        ),
+    )

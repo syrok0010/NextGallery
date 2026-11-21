@@ -32,17 +32,15 @@ internal fun AddToAlbumSheet(
     request: AlbumAdditionRequest,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
-    additions: AlbumAdditions = koinInject(),
-    catalog: AlbumCatalogRepository = koinInject(),
+    albums: Albums = koinInject(),
     sessions: SessionStore = koinInject(),
 ) {
-    val additionState by additions.state.collectAsStateWithLifecycle()
-    val busy = additionState is AlbumAdditionState.Running
-    val albums by catalog.state.collectAsStateWithLifecycle()
+    val busy by albums.adding.collectAsStateWithLifecycle()
+    val catalog by albums.state.collectAsStateWithLifecycle()
     val session by sessions.session.collectAsStateWithLifecycle()
     val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
-    val writable = remember(albums.remote.items, user) {
-        user?.let { writableAlbums(albums.remote.items, it) }.orEmpty()
+    val writable = remember(catalog.remote.items, user) {
+        user?.let { writableAlbums(catalog.remote.items, it) }.orEmpty()
     }
     var creating by remember { mutableStateOf(false) }
 
@@ -69,7 +67,7 @@ internal fun AddToAlbumSheet(
                 )
             }
         }
-        if (albums.remote.loading) {
+        if (catalog.remote.loading) {
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
         }
         if (busy) {
@@ -79,7 +77,7 @@ internal fun AddToAlbumSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
         }
-        if (albums.remote.failed) {
+        if (catalog.remote.failed) {
             Text(
                 stringResource(R.string.albums_remote_error),
                 color = MaterialTheme.colorScheme.error,
@@ -99,7 +97,7 @@ internal fun AddToAlbumSheet(
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
-            if (user != null && !albums.remote.loading && writable.isEmpty()) {
+            if (user != null && !catalog.remote.loading && writable.isEmpty()) {
                 item {
                     Text(
                         stringResource(R.string.album_add_list_empty),

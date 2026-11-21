@@ -6,8 +6,10 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.ui.*
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.string
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -16,6 +18,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AlbumCatalogUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun confirmedMemberWithoutMetadataShowsWaitingAndRefreshInsteadOfEmptyAlbum() {
+        var refreshed = false
+        rule.setContent {
+            NextGalleryTheme {
+                AlbumContentsStatus(
+                    AlbumContentsState(total = 1, pendingMetadata = 1),
+                ) { refreshed = true }
+            }
+        }
+        rule.onNodeWithText(string(R.string.album_contents_pending_metadata, 1)).assertIsDisplayed()
+        rule.onNodeWithText(string(R.string.album_contents_empty)).assertDoesNotExist()
+        rule.onNodeWithText(string(R.string.action_refresh)).performClick()
+        rule.runOnIdle { assertTrue(refreshed) }
+    }
 
     @Test fun cardsStretchToTallestInRowWithoutMovingCoversAndOpenTheirOwnAlbum() {
         var opened: AlbumSummary? = null
