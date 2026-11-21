@@ -89,6 +89,10 @@ class LibraryIntegrationTest {
                 assertEquals(albumAnchor, rule.onNodeWithContentDescription("album-120.jpg").fetchSemanticsNode().boundsInRoot.top, 1f)
                 Espresso.pressBack()
                 rule.onNodeWithTag("album_catalog").assertIsDisplayed()
+                rule.onNodeWithTag("album_card:remote:2").performClick()
+                rule.waitUntil(10_000) { fixture.paths.any { java.net.URLDecoder.decode(it, "UTF-8").contains("albums=anna/02 ") } }
+                Espresso.pressBack()
+                rule.onNodeWithTag("album_catalog").assertIsDisplayed()
                 rule.onNodeWithTag("album_catalog").performScrollToIndex(5)
                 val anchor = rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top
                 restoration.emulateSavedInstanceStateRestore()
@@ -111,6 +115,7 @@ class LibraryIntegrationTest {
 }
 
 private class LibraryFixture : AutoCloseable {
+    val paths = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val jpeg = ByteArrayOutputStream().apply {
         val bitmap = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -122,6 +127,7 @@ private class LibraryFixture : AutoCloseable {
     }.toByteArray()
     private val server = loopbackServer { request ->
         val path = request.target
+        paths += path
         val body = when {
             path.endsWith("/config") -> """{"version":"fixture","albums_enabled":true,"timeline_path":"/Photos/Fixture"}""".toByteArray()
             path.endsWith("/clusters/albums") -> (1..16).joinToString(prefix = "[", postfix = "]") {

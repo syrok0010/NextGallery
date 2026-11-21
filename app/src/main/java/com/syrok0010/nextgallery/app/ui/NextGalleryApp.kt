@@ -72,7 +72,7 @@ private fun AnimatedContentTransitionScope<*>.horizontalTransition(
  * A screen opened over a tab slides in from the end and leaves the same way. During the back
  * gesture it follows the finger and uncovers the tab.
  */
-private val subscreenTransitions =
+internal val subscreenTransitions =
     NavDisplay.transitionSpec {
         horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Left)
     } + NavDisplay.popTransitionSpec {
@@ -136,7 +136,17 @@ internal fun NextGalleryApp(
     val content: @Composable () -> Unit = {
         if (signedIn) LocalMediaPermissionFlow(isSignedIn = true)
         NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+            CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+                LocalNavigationUi provides NavigationUi(
+                    signedIn, screenStates, sessionViewModel::logout, openUploads,
+                    album = { album -> album.location?.let { location ->
+                        if (backStack.lastOrNull() == NextGalleryRoute.Albums) open(NextGalleryRoute.Album(location, album.name))
+                    } },
+                    back = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                    viewer = { viewerVisible = it }, selection = { selectionMode = it },
+                ),
+            ) {
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -173,56 +183,7 @@ internal fun NextGalleryApp(
                                 ),
                             )
                         },
-                        entryProvider = entryProvider {
-                            entry<NextGalleryRoute.Uploads>(
-                                clazzContentKey = { it.navContentKey() },
-                                metadata = subscreenTransitions,
-                            ) {
-                                if (signedIn) UploadsScreen(onBack = { backStack.removeLastOrNull() })
-                            }
-                            entry<NextGalleryRoute.Login>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) { LoginScreen() }
-                            entry<NextGalleryRoute.Photos>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) {
-                                if (signedIn) {
-                                    screenStates.SaveableStateProvider("photos") {
-                                        PhotosScreen(
-                                            onLogout = sessionViewModel::logout,
-                                            onOpenUploads = openUploads,
-                                            onViewerVisibilityChanged = { viewerVisible = it },
-                                            onSelectionModeChanged = { selectionMode = it },
-                                        )
-                                    }
-                                }
-                            }
-                            entry<NextGalleryRoute.Album>(
-                                clazzContentKey = { it.navContentKey() },
-                                metadata = subscreenTransitions,
-                            ) { album ->
-                                if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout, onOpenUploads = openUploads)
-                            }
-                            entry<NextGalleryRoute.Albums>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) {
-                                if (signedIn) {
-                                    screenStates.SaveableStateProvider("albums") {
-                                        AlbumsScreen(
-                                            onLogout = sessionViewModel::logout,
-                                            onOpenUploads = openUploads,
-                                            onOpen = { album ->
-                                                album.location?.let { location ->
-                                                    if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
-                                                        backStack.add(NextGalleryRoute.Album(location, album.name))
-                                                    }
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        },
+                        entryProvider = appEntryProvider(),
                     )
                     if (signedIn && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
                         // It floats over the pages and so over the viewer too: it steps down out of
