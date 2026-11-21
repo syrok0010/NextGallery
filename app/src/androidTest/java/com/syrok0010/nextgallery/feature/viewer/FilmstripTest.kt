@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.viewer
 
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -38,12 +39,11 @@ class FilmstripTest {
 
         composeRule.setContent {
             Filmstrip(
-                items = items,
-                currentPage = currentPage.intValue,
-                onPageSelected = { index ->
+                state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
+                    val index = items.indexOfFirst { it.mediaId == id }
                     selectedPage = index
                     currentPage.intValue = index
-                },
+                }),
             )
         }
 
@@ -66,10 +66,9 @@ class FilmstripTest {
         val listState = LazyListState(firstVisibleItemIndex = 20)
         composeRule.setContent {
             Filmstrip(
-                items = items,
-                currentPage = currentPage.intValue,
-                onPageSelected = { currentPage.intValue = it },
-                lazyListState = listState,
+                state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
+                    currentPage.intValue = items.indexOfFirst { it.mediaId == id }
+                }, lazyListState = listState),
             )
         }
         composeRule.waitForIdle()
@@ -133,12 +132,11 @@ class FilmstripTest {
         }
         composeRule.setContent {
             Filmstrip(
-                items,
-                currentPage.intValue,
-                { currentPage.intValue = it },
+                state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
+                    currentPage.intValue = items.indexOfFirst { it.mediaId == id }
+                }, lazyListState = listState),
                 playback = playback,
                 frameProvider = provider,
-                lazyListState = listState,
                 // Seeks are paced by time; the test clock, not the wall clock, decides it here.
                 uptimeMillis = { composeRule.mainClock.currentTime },
             )
@@ -217,6 +215,127 @@ class FilmstripTest {
         composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput { swipeLeft() }
         composeRule.runOnIdle { assertEquals(2, currentPage.intValue) }
         composeRule.onNodeWithTag(filmstripTileTestTag(2)).assertIsDisplayed()
+    }
+
+    @Test
+    fun sameLengthReorderDuringFlingKeepsVideoSelectedWhilePlayheadIsInsideIt() {
+        val video = mediaItem("video", 20_000).copy(isVideo = true, videoDurationSeconds = 3600)
+        val before = mediaItem("before", 20_001)
+        val after = mediaItem("after", 19_999)
+        val items = mutableStateOf(listOf(before, video, after))
+        val current = mutableStateOf(video.mediaId)
+        val provider = VideoFrameProvider {
+            kotlinx.coroutines.flow.flow { emit(VideoFrameEvent.Duration(3_600_000)) }
+        }
+        lateinit var state: ViewerFilmstripState
+        composeRule.setContent {
+            state = rememberViewerFilmstripState(items.value, current.value, { current.value = it })
+            Filmstrip(
+                state = state,
+                frameProvider = provider,
+            )
+        }
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.8f) }
+        composeRule.waitForIdle()
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithTag(FilmstripTestTag).performTouchInput {
+            swipeWithVelocity(
+                Offset(width * 0.6f, height * 0.8f),
+                Offset(width * 0.3f, height * 0.8f),
+                3000f,
+                200,
+            )
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.runOnIdle {
+            assertTrue("Reorder must happen during fling", state.isScrolling)
+            items.value = listOf(video, before, after)
+        }
+        composeRule.mainClock.advanceTimeBy(80)
+        composeRule.runOnIdle {
+            assertTrue("Playhead is still inside expanded video", state.fraction(video.mediaId) in 0.8f..0.99f)
+            assertEquals(video.mediaId, current.value)
+        }
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun hiddenStripRetainsScrollPositionAndCancelsFrameExtraction() {
+        val video = mediaItem("video", 20_000).copy(isVideo = true, videoDurationSeconds = 12)
+        val items = listOf(video, mediaItem("after", 19_999))
+        val shown = mutableStateOf(true)
+        var cancellations = 0
+        var requests = 0
+        val provider = VideoFrameProvider {
+            kotlinx.coroutines.flow.flow {
+                requests++
+                try {
+                    emit(VideoFrameEvent.Duration(12_000))
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    cancellations++
+                }
+            }
+        }
+        lateinit var state: ViewerFilmstripState
+        composeRule.setContent {
+            state = rememberViewerFilmstripState(items, video.mediaId, {})
+            if (shown.value) Filmstrip(state, frameProvider = provider)
+        }
+        composeRule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.waitForIdle()
+        var fraction = 0f
+        var offset = 0
+        composeRule.runOnIdle {
+            fraction = state.fraction(video.mediaId)
+            assertEquals(0.7f, fraction, 0.01f)
+            offset = state.lazyListState.firstVisibleItemScrollOffset
+            shown.value = false
+        }
+        composeRule.onNodeWithTag(FilmstripTestTag).assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals(1, cancellations)
+            assertEquals(video.mediaId, state.expandedVideo)
+            shown.value = true
+        }
+        composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(2, requests)
+            assertEquals(offset, state.lazyListState.firstVisibleItemScrollOffset)
+            assertEquals(fraction, state.fraction(video.mediaId), 0.01f)
+        }
+    }
+
+    @Test
+    fun removingExpandedVideoRestoresAutoCentering() {
+        val video = mediaItem("video", 20_000).copy(isVideo = true, videoDurationSeconds = 12)
+        val photos = (0 until 60).map { mediaItem("photo-$it", 20_000 - it) }
+        val items = mutableStateOf(listOf(video) + photos)
+        val currentPage = mutableIntStateOf(0)
+        val listState = LazyListState()
+        composeRule.setContent {
+            Filmstrip(
+                state = rememberViewerFilmstripState(items.value, items.value[currentPage.intValue].mediaId, { id ->
+                    currentPage.intValue = items.value.indexOfFirst { it.mediaId == id }
+                }, lazyListState = listState),
+                frameProvider = VideoFrameProvider { kotlinx.coroutines.flow.emptyFlow() },
+            )
+        }
+        composeRule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        composeRule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
+        composeRule.runOnIdle {
+            // The expanded object disappears after the viewer moves to a neighbor.
+            items.value = photos
+            currentPage.intValue = 40
+        }
+        composeRule.onNodeWithTag("video_filmstrip_playhead").assertDoesNotExist()
+        composeRule.onNodeWithTag(filmstripTileTestTag(40)).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(40, listState.firstVisibleItemIndex) }
     }
 
     private fun mediaItem(id: String, dayId: Int) =

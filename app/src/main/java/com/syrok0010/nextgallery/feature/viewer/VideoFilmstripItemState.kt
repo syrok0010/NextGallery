@@ -30,6 +30,7 @@ internal class VideoFilmstripItemState(
     private var loader by mutableStateOf<VideoFilmstripLoader?>(null)
     val frames get() = loader?.state ?: VideoFilmstripState()
     private var expanded = false
+    private var lastFraction = 0f
 
     fun update(placement: VideoFilmstripPlacement) {
         expanded = placement.expanded
@@ -46,6 +47,7 @@ internal class VideoFilmstripItemState(
                 VideoFrameCacheKey(item.assetRef, item.etag),
             ).also { it.retry() }
         }
+        lastFraction = placement.fraction
         loader?.scroll(
             placement.fraction,
             placement.scrolling && placement.selected,
@@ -68,6 +70,14 @@ internal class VideoFilmstripItemState(
     }
 
     fun close() {
+        // Disposal can end a drag/fling without a non-scrolling placement.
+        loader?.scroll(
+            lastFraction,
+            false,
+            uptimeMillis(),
+            { position, final -> playback.seek(item.mediaId, position, final) },
+            {},
+        )
         if (loader != null) playback.finish(item.mediaId)
         loader?.close()
         loader = null
