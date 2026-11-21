@@ -48,13 +48,15 @@ class PhotosAlbumsDavClient(
     suspend fun containsFile(album: AlbumPath, fileId: Long): Boolean {
         val account = credentials()
         return transport.propfind(account, albumUrl(account.serverUrl, album), depth = 1) { body ->
-            decodeMultistatus(body).responses.any { member ->
-                member.propstats
-                    .firstOrNull(PropStat::found)
-                    ?.prop
-                    ?.fileId
-                    ?.trim()
-                    ?.toLongOrNull() == fileId
+            withMultistatusResponses(body) { responses ->
+                responses.any { member ->
+                    member.propstats
+                        .firstOrNull(PropStat::found)
+                        ?.prop
+                        ?.fileId
+                        ?.trim()
+                        ?.toLongOrNull() == fileId
+                }
             }
         } ?: false
     }

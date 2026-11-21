@@ -79,6 +79,14 @@ Memories сочетает обычные JSON endpoints, бинарный `image
 
 Версии остальных библиотек определяет version catalog.
 
+### XML и большие DAV-ответы
+
+После обновления xmlutil формат создаётся через `XML.v1` с явно сохранённой совместимой policy: generic parser и пропуск неизвестных детей остаются включены, поэтому ответы Nextcloud с дополнительными namespace-элементами не меняют контракт. Старый `XML.compat` больше не используется.
+
+DAV `multistatus` читается через `decodeToSequence` внутри открытого response body. Поиск файла, проверка membership альбома, чтение свойств и список multipart-частей потребляют только нужные `response`-элементы; список всего ответа не материализуется. Указатель parser и sequence должны использоваться до закрытия body. DOCTYPE по-прежнему отклоняется до декодирования.
+
+Kotlin 2.4 API `isSortedBy` используется в тесте assembler как проверка уже существующего порядка; production-логика не меняется. Явные backing fields для Flow state намеренно не применяются: `asStateFlow()` сохраняет read-only wrapper и является частью границы состояния.
+
 ## Последствия
 
 - UI знает media item и назначение изображения, но не transport URL или credentials.

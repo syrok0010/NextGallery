@@ -7,6 +7,7 @@ import java.io.InputStream
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import nl.adaptivity.xmlutil.EventType
+import nl.adaptivity.xmlutil.QName
 import nl.adaptivity.xmlutil.XmlException
 import nl.adaptivity.xmlutil.core.KtXmlReader
 import nl.adaptivity.xmlutil.serialization.XML
@@ -136,7 +137,9 @@ internal data class FileProps(
     val fileId: String? = null,
 )
 
-private val davXml = XML.compat {
+private val davXml = XML.v1 {
+    // Keep the previous DAV compatibility policy while using xmlutil 1.0 API.
+
     // The pure Kotlin parser: the same code on Android and in JVM tests, and it never loads
     // external entities.
     defaultToGenericParser = true
@@ -147,6 +150,34 @@ internal fun encodeDav(body: PropFind): String = davXml.encodeToString(PropFind.
 
 internal fun encodeDav(body: SearchRequest): String =
     davXml.encodeToString(SearchRequest.serializer(), body)
+
+/**
+ * Decodes the response elements lazily while the input stream is still open.
+ * Callers must consume the sequence inside [block]; this keeps large DAV listings off the heap.
+ */
+internal fun <T> withMultistatusResponses(
+    body: InputStream,
+    block: (Sequence<MultistatusResponse>) -> T,
+): T =
+    try {
+        val reader = KtXmlReader(body, expandEntities = false)
+        while (reader.next() != EventType.START_ELEMENT) {
+            if (reader.eventType == EventType.DOCDECL) {
+                throw IOException("DAV response declares a DOCTYPE")
+            }
+        }
+        val responses = davXml.decodeToSequence(
+            MultistatusResponse.serializer(),
+            reader,
+            QName(DAV, "multistatus", "d"),
+            QName(DAV, "response", "d"),
+        )
+        block(responses)
+    } catch (error: XmlException) {
+        throw IOException("Malformed DAV response", error)
+    } catch (error: SerializationException) {
+        throw IOException("Malformed DAV response", error)
+    }
 
 /** Fails with [IOException] on a malformed body or one that declares a DOCTYPE. */
 internal fun decodeMultistatus(body: InputStream): Multistatus =

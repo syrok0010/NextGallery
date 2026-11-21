@@ -78,7 +78,11 @@ class FilesDavClient(
             transport.baseClient.newCall(request).awaitUse { response ->
                 if (response.code != 207) throw DavHttpException(response.code, SEARCH)
                 val body = response.body.byteStream()
-                body.use { foundFile(decodeMultistatus(it), fileId, request.url, filesRoot, user) }
+                body.use {
+                    withMultistatusResponses(
+                        it,
+                    ) { foundFile(it, fileId, request.url, filesRoot, user) }
+                }
             }
         }
 
@@ -154,12 +158,9 @@ sealed interface ReadFileResult<out T> {
 
 /** Reads the first successful `propstat` of a multistatus body. */
 internal fun fileProperties(body: InputStream): DavFileProperties {
-    val found = decodeMultistatus(body)
-        .responses
-        .firstOrNull()
-        ?.propstats
-        ?.firstOrNull(PropStat::found)
-        ?.prop
+    val found = withMultistatusResponses(body) { responses ->
+        responses.firstOrNull()?.propstats?.firstOrNull(PropStat::found)?.prop
+    }
     return DavFileProperties(
         size = found?.size?.trim()?.toLongOrNull(),
         fileId = found?.fileId?.trim()?.toLongOrNull()?.takeIf { it > 0L },
@@ -173,14 +174,14 @@ internal fun fileProperties(body: InputStream): DavFileProperties {
  * [base] and must lie under [filesRoot], the user's files collection.
  */
 private fun foundFile(
-    multistatus: Multistatus,
+    responses: Sequence<MultistatusResponse>,
     fileId: Long,
     base: HttpUrl,
     filesRoot: HttpUrl,
     user: String,
 ): DavFilePath? {
     val prefix = filesRoot.pathSegments.filter(String::isNotEmpty)
-    return multistatus.responses.firstNotNullOfOrNull { response ->
+    return responses.firstNotNullOfOrNull { response ->
         val id = response.propstats.firstOrNull(PropStat::found)?.prop?.fileId?.trim()
         val segments = base.resolve(response.href.trim())?.pathSegments?.filter(String::isNotEmpty)
         if (id?.toLongOrNull() != fileId || segments == null) return@firstNotNullOfOrNull null
