@@ -10,6 +10,7 @@ import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.di.MediaTestContext
 import com.syrok0010.nextgallery.string
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -64,23 +65,25 @@ class MediaCollectionSelectionTest {
 
     private fun show(perform: (List<MediaItem>, () -> Unit) -> Unit) {
         rule.setContent {
-            NextGalleryTheme {
-                MediaCollectionScreen(
-                    slots = listOf(first, second).mapIndexed { index, item ->
-                        MediaSlot(MediaSlotKey(item.dayId, index), item.dayId, index, item)
-                    },
-                    emptyContent = {},
-                    selection = rememberMediaSelection(),
-                    selectionActions = listOf(
-                        SelectionAction(
-                            ColorPainter(Color.Black),
-                            "Действие",
-                            isPrimary = true,
-                            perform = perform,
+            MediaTestContext {
+                NextGalleryTheme {
+                    MediaCollectionScreen(
+                        slots = listOf(first, second).mapIndexed { index, item ->
+                            MediaSlot(MediaSlotKey(item.dayId, index), item.dayId, index, item)
+                        },
+                        emptyContent = {},
+                        selection = rememberMediaSelection(),
+                        selectionActions = listOf(
+                            SelectionAction(
+                                ColorPainter(Color.Black),
+                                "Действие",
+                                isPrimary = true,
+                                perform = perform,
+                            ),
                         ),
-                    ),
-                    scaffold = { _, content -> content() },
-                )
+                        scaffold = { _, content -> content() },
+                    )
+                }
             }
         }
     }

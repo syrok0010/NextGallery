@@ -36,17 +36,15 @@ class VideoFilmstripLiveTest {
             assumeTrue("Live test requires disposable testcloud file IDs", !ids.isNullOrBlank())
             val server = checkNotNull(args.getString("filmstripServer"))
             require(server == "http://test.syrok")
-            val session = GlobalContext.get().get<SessionStore>()
-            val previous = session.session.value
             val traffic = Traffic()
             val transport = NextcloudTransport(
                 Json { ignoreUnknownKeys = true },
                 NextcloudTransport.defaultBaseClient().newBuilder().eventListener(traffic).build(),
             )
             val context = InstrumentationRegistry.getInstrumentation().targetContext
-            val factory = VideoPlayerFactory(transport, session)
-            try {
-                session.signIn(
+            val factory =
+                VideoPlayerFactory(
+                    transport,
                     AccountCredentials(
                         server,
                         "test",
@@ -54,75 +52,69 @@ class VideoFilmstripLiveTest {
                         "test",
                     ),
                 )
-                for (id in checkNotNull(ids).split(',').map(String::toLong)) {
-                    val sources = factory.sources(MediaAssetRef.MemoriesFile(id))
-                    val original = measure(
-                        VideoFramesFactory(context, factory).create(sources),
+            for (id in checkNotNull(ids).split(',').map(String::toLong)) {
+                val sources = factory.sources(MediaAssetRef.MemoriesFile(id))
+                val original = measure(
+                    VideoFramesFactory(context, factory).create(sources),
+                    sources.primary,
+                    traffic,
+                )
+                assertTrue(
+                    "Original-first must not discover or request HLS: ${traffic.paths}",
+                    traffic.paths.none {
+                        it.contains(
+                            "/video/transcode/",
+                        ) ||
+                            it.endsWith("/config")
+                    },
+                )
+                val remote = RemoteVideoFrames(context) { factory.mediaSourceFactory(context) }
+                // Deliberately retain the rejected HLS-first policy here as an experiment.
+                val experiment = VideoFrameProvider { uri ->
+                    flow {
+                        val quality = checkNotNull(
+                            factory
+                                .qualities(
+                                    checkNotNull(sources.remoteOriginal),
+                                    newVodClientId(),
+                                ).lowestForFrames(),
+                        ) { "Experiment requires a fixed HLS profile" }
+                        try {
+                            emitAll(remote.frames(quality.uri))
+                        } catch (_: IOException) {
+                            emitAll(remote.frames(uri))
+                        }
+                    }
+                }
+                val low =
+                    measure(
+                        experiment,
                         sources.primary,
                         traffic,
                     )
-                    assertTrue(
-                        "Original-first must not discover or request HLS: ${traffic.paths}",
-                        traffic.paths.none {
-                            it.contains(
-                                "/video/transcode/",
-                            ) ||
-                                it.endsWith("/config")
-                        },
-                    )
-                    val remote = RemoteVideoFrames(context) { factory.mediaSourceFactory(context) }
-                    // Deliberately retain the rejected HLS-first policy here as an experiment.
-                    val experiment = VideoFrameProvider { uri ->
-                        flow {
-                            val quality = checkNotNull(
-                                factory
-                                    .qualities(
-                                        checkNotNull(sources.remoteOriginal),
-                                        newVodClientId(),
-                                    ).lowestForFrames(),
-                            ) { "Experiment requires a fixed HLS profile" }
-                            try {
-                                emitAll(remote.frames(quality.uri))
-                            } catch (_: IOException) {
-                                emitAll(remote.frames(uri))
-                            }
-                        }
-                    }
-                    val low =
-                        measure(
-                            experiment,
-                            sources.primary,
-                            traffic,
-                        )
-                    Log.i(
-                        "FilmstripMeasurement",
-                        JSONObject()
-                            .put("fileId", id)
-                            .put("originalFirst", original)
-                            .put("coldLowestHls", low)
-                            .put("originalFallback", traffic.paths.any { it.contains("/stream/") })
-                            .toString(),
-                    )
-                    assertEquals(original.getInt("frames"), low.getInt("frames"))
-                    assertTrue(
-                        "Expected a fixed HLS variant: ${traffic.paths}",
-                        traffic.paths.any { it.endsWith("p.m3u8") },
-                    )
-                    val expectedFallback = args
-                        .getString("filmstripFallbackIds", "")
-                        .split(',')
-                        .contains(id.toString())
-                    assertEquals(
-                        "Unexpected original fallback: ${traffic.paths}",
-                        expectedFallback,
-                        traffic.paths.any { it.contains("/stream/") },
-                    )
-                }
-            } finally {
-                when (previous) {
-                    is SessionUiState.SignedIn -> session.signIn(previous.credentials)
-                    else -> session.signOut()
-                }
+                Log.i(
+                    "FilmstripMeasurement",
+                    JSONObject()
+                        .put("fileId", id)
+                        .put("originalFirst", original)
+                        .put("coldLowestHls", low)
+                        .put("originalFallback", traffic.paths.any { it.contains("/stream/") })
+                        .toString(),
+                )
+                assertEquals(original.getInt("frames"), low.getInt("frames"))
+                assertTrue(
+                    "Expected a fixed HLS variant: ${traffic.paths}",
+                    traffic.paths.any { it.endsWith("p.m3u8") },
+                )
+                val expectedFallback = args
+                    .getString("filmstripFallbackIds", "")
+                    .split(',')
+                    .contains(id.toString())
+                assertEquals(
+                    "Unexpected original fallback: ${traffic.paths}",
+                    expectedFallback,
+                    traffic.paths.any { it.contains("/stream/") },
+                )
             }
         }
 

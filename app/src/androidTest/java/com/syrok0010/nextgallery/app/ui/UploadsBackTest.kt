@@ -12,27 +12,23 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.di.ProductionGraph
 import com.syrok0010.nextgallery.string
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import org.koin.core.context.GlobalContext
 
 class UploadsBackTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun uploadsFollowTheBackGesture() {
-        val sessions = GlobalContext.get().get<SessionStore>()
-        val previousSession = sessions.session.value
-        rule.runOnUiThread {
-            // Nothing listens on the port: the screens only need a session, not a server.
-            sessions.signIn(
+        val graph =
+            ProductionGraph(
                 AccountCredentials("http://127.0.0.1:9", "fixture", "password", "fixture"),
             )
-        }
         try {
-            rule.setContent { NextGalleryApp(links = flowOf(AppLinks.Uploads)) }
+            rule.setContent { graph.Content { NextGalleryApp(links = flowOf(AppLinks.Uploads)) } }
             val title = string(R.string.uploads_title)
             rule.waitUntil(
                 10_000,
@@ -67,11 +63,9 @@ class UploadsBackTest {
             )
         } finally {
             rule.runOnUiThread {
-                when (previousSession) {
-                    is SessionUiState.SignedIn -> sessions.signIn(previousSession.credentials)
-                    else -> sessions.signOut()
-                }
+                rule.activity.setContentView(android.widget.FrameLayout(rule.activity))
             }
+            graph.close()
         }
     }
 

@@ -32,6 +32,14 @@ class SessionStoreTest {
         assertEquals(SessionUiState.SignedIn(credentials), store.session.value)
     }
 
+    @Test fun `failed graph preparation cannot publish signed in`() {
+        val store = SessionStore(FakeCredentialsStore(null)) { error("graph unavailable") }
+        org.junit.Assert.assertThrows(
+            IllegalStateException::class.java,
+        ) { store.signIn(credentials()) }
+        assertEquals(SessionUiState.SignedOut, store.session.value)
+    }
+
     private fun credentials(): AccountCredentials =
         AccountCredentials(
             serverUrl = "https://cloud.example.com",

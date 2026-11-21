@@ -6,7 +6,12 @@ import androidx.compose.foundation.layout.Box
 import android.content.Context
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
-import org.koin.core.context.GlobalContext
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import org.koin.compose.KoinIsolatedContext
+import org.koin.dsl.koinApplication
+import org.koin.dsl.module
+import coil3.SingletonImageLoader
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.newVodClientId
 import com.syrok0010.nextgallery.core.session.SessionStore
@@ -64,16 +69,30 @@ import org.junit.Test
 class VideoPlaybackIntegrationTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
     private val inserted = mutableListOf<Uri>()
+    private var credentials = AccountCredentials("http://127.0.0.1:9", "fixture", "password", "fixture")
+    private val videoKoin by lazy { koinApplication {
+        modules(module {
+            single { VideoPlayerFactory(NextcloudTransport(kotlinx.serialization.json.Json), credentials) }
+            single { VideoFramesFactory(rule.activity, get()) }
+            single { MediaImageRequestFactory(rule.activity, credentials) }
+            single<coil3.ImageLoader> { SingletonImageLoader.get(rule.activity) }
+        })
+    } }
+    private fun setContent(content: @Composable () -> Unit) {
+        rule.setContent { KoinIsolatedContext(videoKoin, content = content) }
+    }
 
     @After fun removeSamples() {
         val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        rule.runOnUiThread { rule.activity.setContentView(android.widget.FrameLayout(rule.activity)) }
+        videoKoin.close()
         inserted.forEach { resolver.delete(it, null, null) }
     }
 
     @Test fun localMp4RequiresPlaySupportsControlsAndPausesInBackground() {
         val item = sample()
         lateinit var player: ExoPlayer
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(
                     item = item,
@@ -130,7 +149,7 @@ class VideoPlaybackIntegrationTest {
         rule.waitUntil(10_000) { rule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT }
         val initialOrientation = rule.activity.requestedOrientation
         val items = listOf(video, neighbor)
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 MediaDetailScreen(
                     initialMediaId = video.mediaId,
@@ -183,7 +202,7 @@ class VideoPlaybackIntegrationTest {
         val item = sample()
         val visible = mutableStateOf(true)
         val players = mutableListOf<ExoPlayer>()
-        rule.setContent {
+        setContent {
             if (visible.value) {
                 MaterialTheme {
                     TestPlaybackSurface(
@@ -214,7 +233,7 @@ class VideoPlaybackIntegrationTest {
     @Test fun unreadableVideoShowsRetryAndCanRecover() {
         val item = sample(corrupt = true)
         val uri = Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri)
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(item, Modifier.fillMaxSize(), onToggleChrome = {})
             }
@@ -235,8 +254,8 @@ class VideoPlaybackIntegrationTest {
 
     @Test fun remoteOriginalPlaysAndPagerChangeReleasesPlayer() = withRemote { fixture, remote ->
         val players = mutableListOf<ExoPlayer>()
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        rule.setContent {
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
+        setContent {
             val pagerState = rememberPagerState { 2 }
             HorizontalPager(
                 state = pagerState,
@@ -280,16 +299,16 @@ class VideoPlaybackIntegrationTest {
         rule.onAllNodesWithTag(VideoPlaybackSurfaceTestTag, useUnmergedTree = true).assertCountEquals(1)
     }
 
-    @Test fun corruptLocalFallsBackToRemoteAndAuthRetryUsesNewSession() = withRemote { fixture, remote ->
+    @Test fun corruptLocalFallsBackToRemoteAndRetryRecoversAfterAuthError() = withRemote { fixture, remote ->
         val local = sample(corrupt = true)
         val merged = local.copy(assetRef = MediaAssetRef.LocalFirst(
             local.assetRef as MediaAssetRef.LocalContent, remote.assetRef as MediaAssetRef.MemoriesFile,
         ))
         fixture.authorization = okhttp3.Credentials.basic("fixture", "renewed")
         lateinit var player: ExoPlayer
-        val koin = GlobalContext.get()
+        val koin = videoKoin.koin
         val factory = koin.get<VideoPlayerFactory>()
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
@@ -301,9 +320,7 @@ class VideoPlaybackIntegrationTest {
             rule.onAllNodesWithText(rule.activity.getString(R.string.video_playback_auth_error)).fetchSemanticsNodes().isNotEmpty()
         }
         screenshot("remote-auth-error")
-        koin.get<SessionStore>().signIn(
-            AccountCredentials(fixture.url, "fixture", "renewed", "fixture"),
-        )
+        fixture.authorization = okhttp3.Credentials.basic("fixture", "password")
         fixture.status = 404
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
         rule.waitUntil(10_000) {
@@ -324,8 +341,8 @@ class VideoPlaybackIntegrationTest {
             local.assetRef as MediaAssetRef.LocalContent, remote.assetRef as MediaAssetRef.MemoriesFile,
         ))
         lateinit var player: ExoPlayer
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        rule.setContent {
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(merged, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
@@ -340,8 +357,8 @@ class VideoPlaybackIntegrationTest {
     @Test fun remoteHlsSwitchKeepsPausedPositionAndRetryRecovers() = withRemote { fixture, remote ->
         fixture.hls = true
         lateinit var player: ExoPlayer
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        rule.setContent {
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
@@ -406,8 +423,8 @@ class VideoPlaybackIntegrationTest {
         fixture.hls = true
         fixture.corruptOriginal = true
         lateinit var player: ExoPlayer
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        rule.setContent {
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
@@ -425,8 +442,8 @@ class VideoPlaybackIntegrationTest {
         fixture.corruptOriginal = true
         fixture.hlsStatus = 503
         lateinit var player: ExoPlayer
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
-        rule.setContent {
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
+        setContent {
             MaterialTheme {
                 TestPlaybackSurface(remote, onToggleChrome = {}, createPlayer = {
                     factory.create(it).also { created -> player = created }
@@ -448,7 +465,7 @@ class VideoPlaybackIntegrationTest {
         val second = first.copy(mediaId = MediaId("second-video"))
         var selected by mutableStateOf(first)
         lateinit var owner: ViewerPlaybackState
-        rule.setContent {
+        setContent {
             owner = rememberViewerPlaybackState(selected)
         }
         rule.waitForIdle()
@@ -473,7 +490,7 @@ class VideoPlaybackIntegrationTest {
     @Test fun localFilmstripBuilds24FramesAndScrubsBeforeFirstPlay() {
         val item = sample()
         lateinit var player: ExoPlayer
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                     val playback = rememberViewerPlaybackState(item,
@@ -508,7 +525,7 @@ class VideoPlaybackIntegrationTest {
 
     @Test fun remoteFrameExtractionAuthenticatesOriginalAndHlsAndFallsBackFromCorruptLocal() = withRemote { fixture, remote ->
         fixture.hls = true
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
         val provider = RemoteVideoFrames(rule.activity) { factory.mediaSourceFactory(rule.activity) }
         val original = checkNotNull(factory.sources(remote.assetRef).remoteOriginal)
         val originalUri = original.uri
@@ -539,9 +556,9 @@ class VideoPlaybackIntegrationTest {
 
     @Test fun remoteFilmstripFailureAndRetryDoNotInterruptPlaybackOrChangeMedia() = withRemote { fixture, remote ->
         fixture.hls = true
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
         lateinit var player: ExoPlayer
-        rule.setContent {
+        setContent {
             MaterialTheme {
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                     val playback = rememberViewerPlaybackState(remote,
@@ -593,7 +610,7 @@ class VideoPlaybackIntegrationTest {
         fixture.hls = true
         var shown by mutableStateOf(true)
         lateinit var playback: VideoPlaybackController
-        rule.setContent {
+        setContent {
             val cache = rememberVideoFilmstripCache()
             val owner = rememberViewerPlaybackState(remote)
             owner.current?.let { playback = it }
@@ -614,7 +631,7 @@ class VideoPlaybackIntegrationTest {
         val loadedRequests = originalRequests()
         assertTrue(loadedRequests > 0)
         assertTrue(fixture.requests.none { it[":request"]?.contains("/video/transcode/") == true })
-        val factory = GlobalContext.get().get<VideoPlayerFactory>()
+        val factory = videoKoin.koin.get<VideoPlayerFactory>()
         val qualities = kotlinx.coroutines.runBlocking {
             factory.qualities(checkNotNull(factory.sources(remote.assetRef).remoteOriginal), newVodClientId())
         }
@@ -636,20 +653,11 @@ class VideoPlaybackIntegrationTest {
     }
 
     private fun withRemote(block: (RemoteVideoFixture, MediaItem) -> Unit) {
-        val session = GlobalContext.get().get<SessionStore>()
-        val previous = session.session.value
         val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("local-video.mp4").use { it.readBytes() }
         RemoteVideoFixture(bytes).use { fixture ->
-            try {
-                session.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture"))
-                val remote = sample().copy(assetRef = MediaAssetRef.MemoriesFile(42))
-                block(fixture, remote)
-            } finally {
-                when (previous) {
-                    is SessionUiState.SignedIn -> session.signIn(previous.credentials)
-                    else -> session.signOut()
-                }
-            }
+            credentials = AccountCredentials(fixture.url, "fixture", "password", "fixture")
+            val remote = sample().copy(assetRef = MediaAssetRef.MemoriesFile(42))
+            block(fixture, remote)
         }
     }
 

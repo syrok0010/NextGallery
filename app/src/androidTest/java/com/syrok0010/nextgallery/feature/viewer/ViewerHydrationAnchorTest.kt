@@ -13,6 +13,7 @@ import androidx.compose.ui.test.swipeLeft
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.di.MediaTestContext
 import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.rememberViewerSequence
@@ -42,18 +43,20 @@ class ViewerHydrationAnchorTest {
         val deleted = mutableStateOf(emptySet<MediaId>())
         val observed = CopyOnWriteArrayList<MediaId>()
         rule.setContent {
-            val sequence = rememberViewerSequence(slots.value, current.value, deleted.value)
-            MaterialTheme {
-                MediaDetailScreen(
-                    initialMediaId = current.value,
-                    sequence = sequence,
-                    tileBoundsForMediaId = { null },
-                    onBack = {},
-                    onCurrentItemChange = {
-                        observed += it.mediaId
-                        current.value = it.mediaId
-                    },
-                )
+            MediaTestContext {
+                val sequence = rememberViewerSequence(slots.value, current.value, deleted.value)
+                MaterialTheme {
+                    MediaDetailScreen(
+                        initialMediaId = current.value,
+                        sequence = sequence,
+                        tileBoundsForMediaId = { null },
+                        onBack = {},
+                        onCurrentItemChange = {
+                            observed += it.mediaId
+                            current.value = it.mediaId
+                        },
+                    )
+                }
             }
         }
         rule.waitForIdle()

@@ -18,6 +18,7 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.di.MediaTestContext
 import com.syrok0010.nextgallery.feature.collection.MediaSlot
 import com.syrok0010.nextgallery.feature.collection.MediaSlotKey
 import com.syrok0010.nextgallery.feature.collection.MediaSlotTile
@@ -175,26 +176,28 @@ class TimelineSlotTileTest {
 
     private fun showSlot(mediaItem: MediaItem?) {
         composeRule.setContent {
-            MaterialTheme {
-                MediaSlotTile(
-                    slot = MediaSlot(
-                        key = MediaSlotKey(dayId = DAY_ID, indexInDay = 0),
-                        dayId = DAY_ID,
-                        indexInDay = 0,
-                        mediaItem = mediaItem,
-                    ),
-                    registerTimelineTile = { _, _ -> noOpUnregister },
-                    onSelect = {},
-                    requestFactory = MediaImageRequestFactory(
-                        InstrumentationRegistry.getInstrumentation().targetContext,
-                        SessionStore(
-                            object : CredentialsStore {
-                                override fun load(): AccountCredentials = CREDENTIALS
-                                override fun save(credentials: AccountCredentials) = Unit
-                            },
+            MediaTestContext {
+                MaterialTheme {
+                    MediaSlotTile(
+                        slot = MediaSlot(
+                            key = MediaSlotKey(dayId = DAY_ID, indexInDay = 0),
+                            dayId = DAY_ID,
+                            indexInDay = 0,
+                            mediaItem = mediaItem,
                         ),
-                    ),
-                )
+                        registerTimelineTile = { _, _ -> noOpUnregister },
+                        onSelect = {},
+                        requestFactory = MediaImageRequestFactory(
+                            InstrumentationRegistry.getInstrumentation().targetContext,
+                            SessionStore(
+                                object : CredentialsStore {
+                                    override fun load(): AccountCredentials = CREDENTIALS
+                                    override fun save(credentials: AccountCredentials) = Unit
+                                },
+                            ).requireCredentials(),
+                        ),
+                    )
+                }
             }
         }
     }

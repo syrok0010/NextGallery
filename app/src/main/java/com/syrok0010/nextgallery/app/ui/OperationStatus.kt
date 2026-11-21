@@ -71,7 +71,7 @@ import com.syrok0010.nextgallery.feature.collection.icon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
-import org.koin.compose.getKoin
+import org.koin.compose.currentKoinScope
 
 /** A running operation or a result the user has not seen yet. */
 internal data class OperationEntry(
@@ -170,7 +170,7 @@ private fun OperationKind.toTileOperation(): MediaTileOperation =
 @Composable
 internal fun rememberOperationStatus(
     // Classic DSL collects bound sources only via getAll(); koinInject() needs a List definition.
-    sources: List<OperationStatusSource> = getKoin().getAll(),
+    sources: List<OperationStatusSource> = currentKoinScope().getAll(),
 ): OperationStatus {
     val snapshotFlow = remember(sources) {
         if (sources.isEmpty()) {

@@ -115,7 +115,7 @@ class MediaAssetImageTest {
     private fun requestFactory(): MediaImageRequestFactory =
         MediaImageRequestFactory(
             context = InstrumentationRegistry.getInstrumentation().targetContext,
-            sessionStore = sessionStore(credentials),
+            credentials = credentials,
         )
 
     private fun sessionStore(initialCredentials: AccountCredentials): SessionStore =
