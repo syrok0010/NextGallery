@@ -25,12 +25,14 @@ import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.feature.albums.AlbumRemovals
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
@@ -68,7 +70,12 @@ import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -77,6 +84,7 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.bind
 import org.koin.dsl.module
 
+@OptIn(FlowPreview::class)
 val appModule = module {
     single<RemoteAlbumSource> { MemoriesAlbumSource(get<MemoriesApiClient>()) }
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
@@ -91,6 +99,12 @@ val appModule = module {
         )
     }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
+    single { MemoriesAlbumRemover(get()) }
+    single {
+        AlbumRemovals(get(), get(), get(named("libraryScope"))) {
+            get<AlbumCatalogRepository>().refresh()
+        }
+    } bind OperationStatusSource::class
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single {
         val uploads: UploadQueue = get()
@@ -114,6 +128,7 @@ val appModule = module {
             get(named("libraryScope")),
         ) {
             get<MediaLibraryCoordinator>().refresh()
+            get<AlbumCatalogRepository>().refresh()
         }
     } bind OperationStatusSource::class
     single { UploadQueueDatabase.open(androidContext()) }
@@ -169,6 +184,15 @@ val appModule = module {
             get<MediaLibraryIndex>(),
             get<LocalMediaPermissionCoordinator>().mode,
             location,
+            // An open folder also follows MediaStore; the catalog signals every write the app makes.
+            // The catalog's current count is not a change: the screen loads once on its own.
+            get<AlbumCatalogRepository>().changes.drop(1).map { }.let { writes ->
+                if (location is AlbumLocation.Folder) {
+                    merge(writes, get<LocalAlbumSource>().changes().debounce(450))
+                } else {
+                    writes
+                }
+            },
         )
     }
 
