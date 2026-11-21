@@ -1,9 +1,13 @@
 package com.syrok0010.nextgallery.app.ui
 
+import com.syrok0010.nextgallery.router.AppNavigator
+import com.syrok0010.nextgallery.router.NextGalleryRoute
+import com.syrok0010.nextgallery.router.applyNavigationCommand
+import com.syrok0010.nextgallery.router.normalizedBackStack
+import com.syrok0010.nextgallery.router.topLevelRouteFromContentKey
+import androidx.lifecycle.repeatOnLifecycle
 import android.app.Activity
-import android.content.Context
 import android.content.ContextWrapper
-import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -41,8 +45,6 @@ import com.syrok0010.nextgallery.di.AuthenticatedGraph
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
 import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.scope.UnboundKoinScope
@@ -84,12 +86,14 @@ private val subscreenTransitions =
             horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
         }
 
+internal val LocalSessionLogout = staticCompositionLocalOf<() -> Unit> { {} }
+
 @OptIn(KoinExperimentalAPI::class, KoinDelicateAPI::class)
 @Composable
 internal fun NextGalleryApp(
-    links: Flow<Uri> = emptyFlow(),
     sessionViewModel: SessionViewModel = koinViewModel(),
     graph: AuthenticatedGraph = koinInject(),
+    navigator: AppNavigator = koinInject(),
 ) {
     val session by sessionViewModel.session.collectAsState()
     val logoutRefusal by sessionViewModel.logoutRefusal.collectAsState()
@@ -133,7 +137,7 @@ internal fun NextGalleryApp(
                     } else {
                         UnboundKoinScope(graph.requireScope()) {
                             AuthenticatedApp(
-                                links = links,
+                                navigator = navigator,
                                 onLogout = sessionViewModel::logout,
                             )
                         }
@@ -145,7 +149,7 @@ internal fun NextGalleryApp(
 }
 
 @Composable
-private fun AuthenticatedApp(links: Flow<Uri>, onLogout: () -> Unit) {
+private fun AuthenticatedApp(navigator: AppNavigator, onLogout: () -> Unit) {
     val backStack = rememberNavBackStack(NextGalleryRoute.Photos)
     val routes = normalizedBackStack(backStack.toList())
     val page = routes.last()
@@ -158,127 +162,116 @@ private fun AuthenticatedApp(links: Flow<Uri>, onLogout: () -> Unit) {
             backStack.addAll(routes)
         }
     }
-    val open = { route: NextGalleryRoute ->
-        if (backStack.lastOrNull() != route) backStack.add(route)
-    }
-    val openUploads = { open(NextGalleryRoute.Uploads) }
-    LaunchedEffect(links) {
-        links.collect { link -> linkRoute(link)?.let(open) }
-    }
-    LibrarySystemBars()
-    LocalMediaPermissionFlow(isSignedIn = true)
-    Box(Modifier.fillMaxSize()) {
-        NavDisplay(
-            backStack = routes,
-            onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
-            entryDecorators = listOf(
-                rememberSaveableStateHolderNavEntryDecorator(),
-                rememberViewModelStoreNavEntryDecorator(),
-            ),
-            transitionSpec = {
-                horizontalTransition(
-                    transitionDirection(
-                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                    ),
-                )
-            },
-            popTransitionSpec = {
-                horizontalTransition(
-                    transitionDirection(
-                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                    ),
-                )
-            },
-            predictivePopTransitionSpec = {
-                horizontalTransition(
-                    transitionDirection(
-                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                    ),
-                )
-            },
-            entryProvider = entryProvider {
-                entry<NextGalleryRoute.Uploads>(
-                    clazzContentKey = { it.navContentKey() },
-                    metadata = subscreenTransitions,
-                ) {
-                    UploadsScreen(onBack = { backStack.removeLastOrNull() })
-                }
-                entry<NextGalleryRoute.Photos>(
-                    clazzContentKey = { it.navContentKey() },
-                ) {
-                    screenStates.SaveableStateProvider("photos") {
-                        PhotosScreen(
-                            onLogout = onLogout,
-                            onOpenUploads = openUploads,
-                            onViewerVisibilityChanged = { viewerVisible = it },
-                            onSelectionModeChanged = { selectionMode = it },
-                        )
-                    }
-                }
-                entry<NextGalleryRoute.Album>(
-                    clazzContentKey = { it.navContentKey() },
-                    metadata = subscreenTransitions,
-                ) { album ->
-                    AlbumScreen(
-                        album,
-                        onBack = { backStack.removeLastOrNull() },
-                        onLogout = onLogout,
-                        onOpenUploads = openUploads,
-                    )
-                }
-                entry<NextGalleryRoute.Albums>(
-                    clazzContentKey = { it.navContentKey() },
-                ) {
-                    screenStates.SaveableStateProvider("albums") {
-                        AlbumsScreen(
-                            onLogout = onLogout,
-                            onOpenUploads = openUploads,
-                            onOpen = { album ->
-                                album.location?.let { location ->
-                                    if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
-                                        backStack.add(NextGalleryRoute.Album(location, album.name))
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            },
-        )
-        if (!selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
-            // It floats over the pages and so over the viewer too: it steps down out of
-            // the way while the viewer opens, and comes back once it has closed.
-            AnimatedVisibility(
-                visible = !viewerVisible,
-                enter = slideInVertically(
-                    tween(IslandMoveMillis),
-                ) { it } +
-                    fadeIn(tween(IslandMoveMillis)),
-                exit = slideOutVertically(
-                    tween(IslandMoveMillis),
-                ) { it } +
-                    fadeOut(tween(IslandMoveMillis)),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .safeDrawingPadding()
-                    .padding(bottom = 16.dp),
-            ) {
-                LibraryIsland(
-                    page,
-                    { destination ->
-                        val target = destinationBackStack(
+    // UI and external links share the same retained command queue.
+    val navigationLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(navigator, navigationLifecycle) {
+        navigationLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            navigator.commands.collect { pending ->
+                pending.firstOrNull()?.let { next ->
+                    navigator.consume(next.id) { command ->
+                        val target = applyNavigationCommand(
                             backStack.toList().filterIsInstance<NextGalleryRoute>(),
-                            destination.route,
+                            command,
                         )
                         if (backStack.toList() != target) {
                             backStack.clear()
                             backStack.addAll(target)
                         }
-                    },
-                )
+                    }
+                }
+            }
+        }
+    }
+    LibrarySystemBars()
+    LocalMediaPermissionFlow(isSignedIn = true)
+    CompositionLocalProvider(LocalSessionLogout provides onLogout) {
+        Box(Modifier.fillMaxSize()) {
+            NavDisplay(
+                backStack = routes,
+                onBack = navigator::back,
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator(),
+                ),
+                transitionSpec = {
+                    horizontalTransition(
+                        transitionDirection(
+                            topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                            topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                        ),
+                    )
+                },
+                popTransitionSpec = {
+                    horizontalTransition(
+                        transitionDirection(
+                            topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                            topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                        ),
+                    )
+                },
+                predictivePopTransitionSpec = {
+                    horizontalTransition(
+                        transitionDirection(
+                            topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                            topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                        ),
+                    )
+                },
+                entryProvider = entryProvider {
+                    entry<NextGalleryRoute.Uploads>(
+                        clazzContentKey = { it.navContentKey() },
+                        metadata = subscreenTransitions,
+                    ) {
+                        UploadsScreen()
+                    }
+                    entry<NextGalleryRoute.Photos>(
+                        clazzContentKey = { it.navContentKey() },
+                    ) {
+                        screenStates.SaveableStateProvider("photos") {
+                            PhotosScreen(
+                                onViewerVisibilityChanged = { viewerVisible = it },
+                                onSelectionModeChanged = { selectionMode = it },
+                            )
+                        }
+                    }
+                    entry<NextGalleryRoute.Album>(
+                        clazzContentKey = { it.navContentKey() },
+                        metadata = subscreenTransitions,
+                    ) { album ->
+                        AlbumScreen(album)
+                    }
+                    entry<NextGalleryRoute.Albums>(
+                        clazzContentKey = { it.navContentKey() },
+                    ) {
+                        screenStates.SaveableStateProvider("albums") {
+                            AlbumsScreen()
+                        }
+                    }
+                },
+            )
+            if (!selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
+                // It floats over the pages and so over the viewer too: it steps down out of
+                // the way while the viewer opens, and comes back once it has closed.
+                AnimatedVisibility(
+                    visible = !viewerVisible,
+                    enter = slideInVertically(
+                        tween(IslandMoveMillis),
+                    ) { it } +
+                        fadeIn(tween(IslandMoveMillis)),
+                    exit = slideOutVertically(
+                        tween(IslandMoveMillis),
+                    ) { it } +
+                        fadeOut(tween(IslandMoveMillis)),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .safeDrawingPadding()
+                        .padding(bottom = 16.dp),
+                ) {
+                    LibraryIsland(
+                        page,
+                        { destination -> navigator.select(destination.route) },
+                    )
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.ui
 
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
