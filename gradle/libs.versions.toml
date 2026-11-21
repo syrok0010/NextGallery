@@ -10,15 +10,14 @@ espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.6.1"
 lifecycleViewmodelNavigation3 = "2.10.0"
 activityCompose = "1.13.0"
-kotlin = "2.2.10"
+kotlin = "2.4.21"
 composeBom = "2026.08.00"
 # LoadingIndicator (Material 3 Expressive) appears in 1.5; BOMs still ship 1.4.0.
 material3 = "1.5.0-rc01"
 koin = "4.2.1"
-ksp = "2.2.10-2.0.2"
+ksp = "2.3.14"
 kotlinxSerializationJson = "1.11.0"
-# 1.0.x is built with Kotlin 2.4, which the 2.2 compiler cannot read.
-xmlutil = "0.91.3"
+xmlutil = "1.0.2.1"
 okhttp = "5.3.2"
 retrofit = "3.0.0"
 coil = "3.5.0-beta01"
@@ -29,6 +28,7 @@ media3 = "1.11.0"
 work = "2.12.0"
 
 [libraries]
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version = "1.10.2" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

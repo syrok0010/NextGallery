@@ -77,7 +77,7 @@ class FilesDavClient(
                 .build()
             transport.baseClient.newCall(request).awaitUse { response ->
                 if (response.code != 207) throw DavHttpException(response.code, SEARCH)
-                val body = response.body?.byteStream() ?: throw IOException("No DAV body")
+                val body = response.body.byteStream()
                 body.use { foundFile(decodeMultistatus(it), fileId, request.url, filesRoot, user) }
             }
         }
@@ -105,11 +105,11 @@ class FilesDavClient(
             transport.baseClient.newCall(request).awaitUse { response ->
                 when {
                     response.isSuccessful -> ReadFileResult.Read(
-                        response.body?.byteStream()?.use {
+                        response.body.byteStream().use {
                             read(
                                 it,
                             )
-                        } ?: throw IOException("No DAV body"),
+                        },
                     )
 
                     response.code == 404 || response.code == 412 -> ReadFileResult.Changed
