@@ -3,6 +3,10 @@ package com.syrok0010.nextgallery.app.ui
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.router.NextGalleryRoute
+import com.syrok0010.nextgallery.router.destinationBackStack
+import com.syrok0010.nextgallery.router.normalizedBackStack
+import com.syrok0010.nextgallery.router.topLevelRouteFromContentKey
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
