@@ -1,46 +1,55 @@
 # NextGallery
 
-NextGallery — развивающаяся Android-галерея для личной медиатеки на телефоне и в Nextcloud Memories.
+A native Android gallery client for [Nextcloud Memories](https://memories.gallery/) that brings photos and videos on your phone and on your Nextcloud server together in a single timeline.
 
-Сейчас приложение уже закрывает единую ленту, просмотр фото и видео, работу с альбомами, ручную фоновую загрузку и удаление копий. Проект развивается дальше — в полноценный клиент для синхронизации, совместного доступа и удобной навигации по личному фотоархиву.
+NextGallery is under active development and currently in pre-release. Core browsing, video playback, albums, manual uploads, and deletion already work, though local data compatibility between versions is not yet guaranteed.
 
-## Что уже работает
+## Features
 
-- Единая лента локальных и облачных фото и видео, сгруппированная по дням, с объединением совпадающих копий и быстрым стартом из локального кэша.
-- Полноэкранный просмотр фото и видео: масштабирование, жесты, лента кадров (filmstrip), воспроизведение локального и облачного видео с переходом на Memories HLS и выбором качества.
-- Просмотр серверных альбомов и локальных папок устройства, добавление медиа в свой существующий или новый альбом Nextcloud.
-- Ручная фоновая загрузка локальных фото и видео в облако через WorkManager с передачей крупных файлов по частям и экраном статуса загрузок.
-- Удаление выбранных медиа в корзину Android и/или Nextcloud из ленты и из просмотрщика.
-- Безопасное подключение к Nextcloud с подтверждением входа в браузере (Login Flow v2) и интерфейс на английском и русском языках.
+- **Unified timeline** — view local photos and videos alongside your Nextcloud Memories archive grouped by day. Matching local and cloud copies are merged into one item, and local caching speeds up app startup.
+- **Full-screen photo & video viewer** — pinch-to-zoom and swipe gestures, bottom thumbnail strip, playback for local and cloud videos, frame-by-frame scrubbing, and server-side video quality switching via Memories transcoding.
+- **Albums & device folders** — browse your Nextcloud albums and local device folders, and add items from the timeline or viewer to an existing or newly created Nextcloud album (phone-only items are uploaded first).
+- **Manual background uploads** — upload selected photos and videos in the background with chunked transfers for large files, automatic retries on temporary failures, and a dedicated uploads screen to track progress, retry, or cancel.
+- **Trash-safe deletion** — move selected items to the Android trash and/or the Nextcloud trash; when both copies exist, you choose which copy to delete.
+- **Secure sign-in & languages** — sign in to your Nextcloud server through your browser without entering your password into the app. Available in English and Russian.
 
-## Куда развивается проект
+## Requirements
 
-- Освобождение места на устройстве для медиа с подтверждённой облачной копией и расширение действий над медиатекой (в том числе из альбомов).
-- Работа с shared-альбомами и удобный общий доступ к альбомам и фото.
-- Автоматическая фоновая синхронизация новых фотографий и видео с настройками сети и зарядки.
-- Просмотр медиатеки по карте, лицам и другим полезным признакам.
+- Android 12 (API 31) or newer.
+- A Nextcloud server with [Memories](https://memories.gallery/) **11 or newer** installed and configured.
 
-Подробные планы развития описаны в [текущем состоянии продукта](docs/product/mvp.md).
+## Installation
 
-## Требования
+### Prebuilt APK
 
-- Android 12 (API 31) или новее.
-- Доступный по сети сервер Nextcloud с установленным и настроенным приложением [Memories](https://memories.gallery/) **11 или новее**.
+Download the latest APK from [GitHub Releases](https://github.com/syrok0010/NextGallery/releases) (checksums are published in `SHA256SUMS`).
 
-## Запуск из исходников
+### Build from source
 
-1. Откройте проект в Android Studio и дождитесь Gradle Sync.
-2. Подключите устройство или запустите эмулятор с Android 12+.
-3. Запустите конфигурацию `app`.
-4. В приложении укажите URL своего Nextcloud, откройте браузер и подтвердите вход.
+1. Open the project in Android Studio and wait for Gradle sync (or run `./gradlew :app:assembleDebug`).
+2. Connect an Android 12+ device or start an emulator.
+3. Run the `app` configuration.
 
-## Ограничения
+### First sign-in
 
-- Поддерживается один подключённый аккаунт Nextcloud/Memories; выход очищает все локальные данные приложения.
-- Для показа локальной медиатеки нужен полный доступ к фото и видео на устройстве (частичный доступ Android Selected Photos Access пока не поддерживается).
-- Сервер без установленного Memories 11+ не поддерживается.
-- Действия над медиа (загрузка, добавление в альбом, удаление) пока доступны из общей ленты и её просмотрщика, но не из экрана конкретного альбома.
+Enter your Nextcloud server URL, approve the login in your browser, and grant media permissions if you want local photos and videos to appear in the timeline.
 
-## Для разработчиков
+## Current Limitations
 
-Архитектура, исследования и рабочие материалы собраны в [документации проекта](docs/README.md). Конкретная работа ведётся через GitHub Issues.
+- **Single account:** only one Nextcloud/Memories account is supported at a time; signing out clears all local app data.
+- **Server required:** Nextcloud with Memories 11+ is required — there is no standalone offline-only mode for local photos.
+- **Full media access:** showing local media requires full photo and video access on Android (Android Selected Photos Access is not supported yet).
+- **Cache is not offline mode:** previews and metadata are cached for faster startup, not as a guaranteed offline archive.
+- **Actions inside albums:** uploading, adding to albums, and deleting are currently available from the main timeline and its viewer, not from inside an opened album.
+- **Shared albums:** adding items currently supports your own Nextcloud albums only.
+
+## Roadmap
+
+- Media actions inside opened albums and freeing up device space for backed-up items.
+- Shared albums and convenient album/photo sharing.
+- Automatic background sync for new photos and videos with network and charging constraints.
+- Favorites, map view, faces, and other discovery views.
+
+## For Developers
+
+Architecture decision records (ADRs), API research, and the domain glossary live in [docs/README.md](docs/README.md) and [CONTEXT.md](CONTEXT.md) (currently written in Russian). Tasks and discussions are tracked in [GitHub Issues](https://github.com/syrok0010/NextGallery/issues).
