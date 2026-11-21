@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.*
 import org.junit.Assert.*
 import org.junit.Test
 
-class AlbumsRepositoryTest {
+class AlbumsTest {
     @Test fun `partial addition applies only confirmed ids and survives an older read`() = scenario { server, scope ->
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -79,6 +79,77 @@ class AlbumsRepositoryTest {
         reconciled.await()
         val after = contents.first { !it.loading && it.items.size == 2 }
         assertEquals(setOf(first.mediaId, second.mediaId), after.items.map { it.mediaId }.toSet())
+        assertEquals(2, reads.get())
+    }
+
+    @Test fun `confirmed upload without metadata stays pending through lagging reads and resolves on reopening`() = scenario { server, scope ->
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, source = AlbumContentsSource { _, _ -> flow {
+            if (reads.incrementAndGet() < 3) emit(AlbumContentsBatch(emptyList(), 0))
+            else emit(AlbumContentsBatch(listOf(first), 1))
+        } }, catalog = { RemoteAlbums(listOf(summary.copy(count = 0))) })
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading }
+        val local = MediaAssetRef.LocalContent("content://media/external/images/media/1", 1, 1)
+        val selection = UploadSelection(local, "upload.jpg", "image/jpeg")
+        val job = UploadJob("upload", selection, UploadAlbum("anna", "album"))
+        val uploaded = UploadedFile(selection, DavFilePath.of("anna", "/Photos/1.jpg"), true, 1)
+        assertTrue(AlbumUploadFollowUp(albums).run(server.credentials, job, uploaded, false))
+        val pending = contents.first { !it.loading && it.pendingMetadata == 1 }
+        assertTrue(pending.items.isEmpty())
+        assertEquals(1, pending.total)
+        assertFalse(pending.failed)
+        albums.state.first { it.remote.items.singleOrNull()?.count == 1 }
+        albums.observeContents(album)
+        val resolved = contents.first { !it.loading && it.loaded == 1 }
+        assertEquals(listOf(first), resolved.items)
+        assertEquals(0, resolved.pendingMetadata)
+        assertEquals(3, reads.get())
+    }
+
+    @Test fun `shared index can materialize confirmed membership without another server read`() = scenario { server, scope ->
+        val library = MediaLibraryIndex()
+        val albums = server.albums(scope, library = library,
+            source = AlbumContentsSource { _, _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) })
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading }
+        albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest(listOf(1)))
+        contents.first { !it.loading && it.pendingMetadata == 1 }
+        library.publish(listOf(first))
+        val resolved = contents.first { it.pendingMetadata == 0 && it.loaded == 1 }
+        assertEquals(listOf(first), resolved.items)
+        assertEquals(1, resolved.total)
+    }
+
+    @Test fun `explicit authoritative refresh can retire pending membership`() = scenario { server, scope ->
+        val albums = server.albums(scope,
+            source = AlbumContentsSource { _, _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) })
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading }
+        albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest(listOf(1)))
+        contents.first { !it.loading && it.pendingMetadata == 1 }
+        albums.refresh(album)
+        val refreshed = contents.first { !it.loading && it.pendingMetadata == 0 }
+        assertEquals(0, refreshed.total)
+        assertTrue(refreshed.items.isEmpty())
+    }
+
+    @Test fun `empty folder clears permission requirement after full access is restored`() = scenario { server, scope ->
+        val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Full)
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, permission = permission, source = AlbumContentsSource { _, _ -> flow {
+            reads.incrementAndGet()
+            emit(AlbumContentsBatch(emptyList(), 0))
+        } })
+        val contents = albums.observeContents(AlbumLocation.Folder("external_primary", "Pictures/"))
+        contents.first { !it.loading && !it.permissionRequired }
+        permission.value = LocalMediaPermissionMode.Partial
+        contents.first { it.permissionRequired }
+        permission.value = LocalMediaPermissionMode.Full
+        val restored = contents.first { !it.loading && !it.permissionRequired }
+        assertTrue(restored.items.isEmpty())
+        assertEquals(0, restored.total)
+        assertFalse(restored.failed)
         assertEquals(2, reads.get())
     }
 
