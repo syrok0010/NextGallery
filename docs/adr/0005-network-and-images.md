@@ -85,7 +85,6 @@ Memories сочетает обычные JSON endpoints, бинарный `image
 
 DAV `multistatus` читается через `decodeToSequence` внутри открытого response body. Поиск файла, проверка membership альбома, чтение свойств и список multipart-частей потребляют только нужные `response`-элементы; список всего ответа не материализуется. Указатель parser и sequence должны использоваться до закрытия body. DOCTYPE по-прежнему отклоняется до декодирования.
 
-Kotlin 2.4 API `isSortedBy` используется в тесте assembler как проверка уже существующего порядка; production-логика не меняется. Явные backing fields для Flow state намеренно не применяются: `asStateFlow()` сохраняет read-only wrapper и является частью границы состояния.
 
 ## Последствия
 
