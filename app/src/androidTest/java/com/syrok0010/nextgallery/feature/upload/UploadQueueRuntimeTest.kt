@@ -353,13 +353,16 @@ class UploadQueueRuntimeTest {
         assertEquals(0, queue.activity.value!!.processed)
     }
 
-    @Test fun bytesWithinOnePercentReachTheUploadsScreen() = runBlocking {
+    @Test fun bytesWithinOnePercentReachTheUploadsScreenAndNotification() = runBlocking {
         enqueue(listOf(ids.first()))
         queue.drain { account, job, report ->
             for (sent in listOf(1_048_576L, 2_097_152L)) {
                 report(sent, 4_294_967_296L)
                 waitFor { queue.entries.value.single().sentBytes == sent }
                 assertEquals(0, queue.entries.value.single().percent)
+                waitFor { queue.activity.value?.sentBytes == sent }
+                assertEquals(4_294_967_296L, queue.activity.value?.totalBytes)
+                assertEquals(0, queue.activity.value?.percent)
             }
             transfer(account, job, report)
         }

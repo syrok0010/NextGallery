@@ -20,6 +20,8 @@ internal data class UploadActivity(
     val processed: Int,
     val current: String? = null,
     val percent: Int? = null,
+    val sentBytes: Long? = null,
+    val totalBytes: Long? = null,
     /** [current] is sent and the server is storing it: no progress to show until it answers. */
     val saving: Boolean = false,
 )
@@ -46,6 +48,8 @@ internal fun uploadActivity(rows: List<UploadJob>, pass: Set<String>, progress: 
         processed = pass.size - active.size,
         current = current?.selection?.identityUri,
         percent = progress?.percent?.takeIf { current != null },
+        sentBytes = progress?.sentBytes?.takeIf { current != null },
+        totalBytes = progress?.totalBytes?.takeIf { current != null && it >= 0L },
         saving = current != null && progress.saving,
     )
 }

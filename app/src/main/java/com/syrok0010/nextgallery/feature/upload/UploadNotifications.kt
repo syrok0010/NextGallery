@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.text.format.Formatter
 import androidx.core.content.getSystemService
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.MainActivity
@@ -27,19 +28,44 @@ internal class UploadNotifications(private val context: Context) {
     }
 
     /** [percent] null shows an indeterminate bar. */
-    fun progress(message: String, percent: Int?): Notification =
+    fun progress(message: String, percent: Int?, detail: String? = null): Notification =
         Notification
             .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
             .setContentIntent(uploadsIntent())
             .setContentTitle(message)
+            .setContentText(detail)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, percent ?: 0, percent == null)
             .build()
 
-    fun showProgress(message: String, percent: Int?) =
-        manager.notify(PROGRESS_ID, progress(message, percent))
+    fun progress(activity: UploadActivity): Notification {
+        val message = context.getString(
+            R.string.upload_progress,
+            (activity.processed + 1).coerceAtMost(activity.total),
+            activity.total,
+        )
+        return progress(
+            message,
+            activity.percent.takeUnless { activity.saving },
+            transferText(activity),
+        )
+    }
+
+    private fun transferText(activity: UploadActivity): String? {
+        if (activity.saving) return context.getString(R.string.uploads_saving)
+        val sent = activity.sentBytes ?: return null
+        val sentSize = Formatter.formatShortFileSize(context, sent)
+        val total = activity.totalBytes ?: return sentSize
+        return context.getString(
+            R.string.uploads_sent,
+            sentSize,
+            Formatter.formatShortFileSize(context, total),
+        )
+    }
+
+    fun showProgress(activity: UploadActivity) = manager.notify(PROGRESS_ID, progress(activity))
 
     fun showResult(result: UploadResult) {
         val lines = result.details().map { it.asString(context) }
