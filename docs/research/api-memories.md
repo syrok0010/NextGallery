@@ -354,7 +354,8 @@ reconciliation. Переименование или перенос папки м
 - Для восстановления после COPY можно запросить `PROPFIND Depth: 1` и проверить
   точный `oc:fileid` участника (проверено на стенде: участник отдаёт тот же
   `oc:fileid`, что и сам файл). Запрос read-only и не атомарен с последующим COPY.
-- `GET /apps/memories/api/image/info/{fileId}` возвращает `filename` относительно корня файлов пользователя, `basename`, `size`, `owneruid`. Этого достаточно, чтобы построить источник `COPY` по `fileId` из таймлайна.
+- Для поиска пути по `fileId` используется WebDAV `SEARCH remote.php/dav/` в области `/files/{uid}` по условию `oc:fileid = {fileId}`: Nextcloud отвечает из своего файлового кэша сразу после загрузки, тогда как Memories `image/info/{fileId}` до индексации отвечает `404` (#110).
+- Владелец альбома определяется из `cluster_id` (`owner/name`): запись поддержана только в собственные альбомы (`owner == uid`); права коллабораторов на shared-альбомы (`photos/{uid}/sharedalbums/{name} ({owner})`) не проверены.
 - DAV uid нужно брать из OCS `cloud/user`, а не из login name.
 
 ### Загрузка файлов
@@ -369,7 +370,7 @@ reconciliation. Переименование или перенос папки м
 
 Проверено на тестовом стенде (Nextcloud 34.0.5, Memories 10.1.0, октябрь 2026):
 
-- Memories не даёт отдельного endpoint удаления; файл удаляется через DAV `DELETE remote.php/dav/files/{uid}/{path}` (`204`). Путь получается так же, как для альбомов: `image/info/{fileId}` → `filename`.
+- Memories не даёт отдельного endpoint удаления; файл удаляется через DAV `DELETE remote.php/dav/files/{uid}/{path}` (`204`). Путь и `etag` берутся из `GET /apps/memories/api/image/info/{fileId}` (`filename` и `etag`).
 - `image/info/{fileId}` возвращает `etag`, равный DAV `getetag` без кавычек. `DELETE` с `If-Match: "<etag>"` удаляет файл (`204`), с чужим ETag — отвечает `412` и файл не трогает.
 - С включённым Deleted files файл попадает в `remote.php/dav/trashbin/{uid}/trash/{basename}.d{timestamp}`; повторный `DELETE` на исходный путь даёт `404`.
 - После удаления `days/{id}` перестаёт возвращать объект без дополнительной индексации.
