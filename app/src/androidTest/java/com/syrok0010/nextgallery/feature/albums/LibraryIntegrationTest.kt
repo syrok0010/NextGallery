@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.string
+import androidx.compose.runtime.*
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -33,24 +34,20 @@ import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
-import org.koin.core.context.GlobalContext
+import com.syrok0010.nextgallery.di.ProductionGraph
 
 /** Exercises the real NextGalleryApp, production DI and HTTP adapters with an isolated account. */
 class LibraryIntegrationTest {
     @get:Rule val rule = createComposeRule()
     @Test fun photosAlbumsMenuAndViewerKeepTheirState() {
-        val koin = GlobalContext.get()
-        val sessions = koin.get<SessionStore>()
-        val previousSession = sessions.session.value
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         LibraryFixture().use { fixture ->
-            rule.runOnUiThread {
-                sessions.signIn(AccountCredentials(fixture.url, "fixture", "password", "fixture"))
-            }
+            val graph = ProductionGraph(AccountCredentials(fixture.url, "fixture", "password", "fixture"))
+            val mounted = mutableStateOf(true)
             try {
                 val restoration = StateRestorationTester(rule)
                 restoration.setContent {
-                    NextGalleryApp()
+                    if (mounted.value) graph.Content { NextGalleryApp() }
                 }
                 // Permission explanation is an existing first-run flow on a fresh automation package.
                 rule.waitForIdle()
@@ -59,7 +56,7 @@ class LibraryIntegrationTest {
                 }
                 rule.waitUntil(15_000) { rule.onAllNodesWithContentDescription("fixture-1.jpg").fetchSemanticsNodes().isNotEmpty() }
                 val imageResult = runBlocking(Dispatchers.IO) {
-                    SingletonImageLoader.get(context).execute(ImageRequest.Builder(context)
+                    graph.scope.get<coil3.ImageLoader>().execute(ImageRequest.Builder(context)
                         .data(thumbnailRequest(AccountCredentials(fixture.url, "fixture", "password", "fixture"), 1, "v1"))
                         .size(300, 300).build())
                 }
@@ -105,12 +102,9 @@ class LibraryIntegrationTest {
                 rule.onNodeWithTag("library_page:Albums").performClick()
                 assertEquals(anchor, rule.onNodeWithTag("album_card:remote:7").fetchSemanticsNode().boundsInRoot.top, 1f)
             } finally {
-                rule.runOnUiThread {
-                    when (previousSession) {
-                        is SessionUiState.SignedIn -> sessions.signIn(previousSession.credentials)
-                        else -> sessions.signOut()
-                    }
-                }
+                rule.runOnIdle { mounted.value = false }
+                rule.waitForIdle()
+                graph.close()
             }
         }
     }

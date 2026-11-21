@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -22,8 +23,6 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import org.koin.compose.koinInject
@@ -168,15 +167,12 @@ internal fun AlbumCardRow(
 }
 
 @Composable
-internal fun AlbumCoverImage(album: AlbumSummary, sessions: SessionStore = koinInject()) {
-    val session by sessions.session.collectAsState()
+internal fun AlbumCoverImage(album: AlbumSummary, credentials: AccountCredentials = koinInject()) {
     val context = LocalContext.current
-    val request = remember(album.cover, session, context) {
+    val request = remember(album.cover, credentials, context) {
         when (val cover = album.cover) {
-            is AlbumCover.Remote -> (session as? SessionUiState.SignedIn)?.let {
-                ImageRequest.Builder(context)
-                    .data(thumbnailRequest(it.credentials, cover.fileId, cover.etag)).build()
-            }
+            is AlbumCover.Remote -> ImageRequest.Builder(context)
+                .data(thumbnailRequest(credentials, cover.fileId, cover.etag)).build()
 
             is AlbumCover.Local -> ImageRequest.Builder(context).data(cover.uri)
                 .memoryCacheKey("album:${cover.uri}:${cover.modified}")
@@ -187,6 +183,7 @@ internal fun AlbumCoverImage(album: AlbumSummary, sessions: SessionStore = koinI
     }
     if (request != null) AsyncImage(
         request,
+        imageLoader = koinInject<coil3.ImageLoader>(),
         contentDescription = null,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,

@@ -3,8 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlinx.coroutines.CancellationException
@@ -28,7 +27,7 @@ internal data class AlbumContentsState(
 )
 
 internal class AlbumContentsViewModel(
-    sessionStore: SessionStore,
+    private val credentials: AccountCredentials,
     source: AlbumContentsSource,
     library: MediaLibraryIndex,
     permission: StateFlow<LocalMediaPermissionMode?>,
@@ -64,19 +63,16 @@ internal class AlbumContentsViewModel(
     init {
         viewModelScope.launch {
             combine(
-                sessionStore.session,
                 permission,
                 refreshes,
-            ) { session, mode, refresh ->
+            ) { mode, refresh ->
                 LoadRequest(
-                    session,
                     location,
                     location is AlbumLocation.Folder && mode != LocalMediaPermissionMode.Full,
                     refresh,
                 )
-            }.distinctUntilChanged().collectLatest { (session, location, needsPermission) ->
+            }.distinctUntilChanged().collectLatest { (location, needsPermission) ->
                 mutableState.value = AlbumContentsState()
-                if (session !is SessionUiState.SignedIn) return@collectLatest
                 if (needsPermission) {
                     mutableState.value = AlbumContentsState(
                         permissionRequired = true,
@@ -85,7 +81,7 @@ internal class AlbumContentsViewModel(
                 }
                 mutableState.update { it.copy(loading = true) }
                 try {
-                    source.load(location, session.credentials).collect { batch ->
+                    source.load(location, credentials).collect { batch ->
                         mutableState.update {
                             it.copy(
                                 items = batch.items,
@@ -110,7 +106,6 @@ internal class AlbumContentsViewModel(
 }
 
 private data class LoadRequest(
-    val session: SessionUiState,
     val location: AlbumLocation,
     val needsPermission: Boolean,
     val refresh: Int,

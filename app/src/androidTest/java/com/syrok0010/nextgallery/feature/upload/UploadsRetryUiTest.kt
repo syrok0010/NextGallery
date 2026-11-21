@@ -63,7 +63,7 @@ class UploadsRetryUiTest {
         }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         queue = UploadQueue(
-            sessions, library, scope, UploadJournal(db),
+            sessions.requireCredentials(), library, scope, UploadJournal(db),
             { SourceStamp(10, 1, 1) },
             UploadFollowUps(link = { _, _, _, _ -> linked }, album = { _, _, _, _ -> true }),
             {}, UUID.randomUUID().toString(),

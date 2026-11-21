@@ -13,8 +13,6 @@ import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
@@ -187,7 +185,7 @@ internal fun interface PhoneTrashCheck {
  * been confirmed in the system trash dialog, so the result must survive the screen.
  */
 internal class MediaDeletionRepository(
-    private val sessions: SessionStore,
+    private val credentials: AccountCredentials,
     private val library: MediaLibraryIndex,
     private val cloud: CloudTrash,
     private val identities: MediaIdentityRegistry,
@@ -251,9 +249,7 @@ internal class MediaDeletionRepository(
                 val cloud = if (fileIds.isEmpty()) {
                     CloudDeleteResult(deleted = 0, failed = 0)
                 } else {
-                    val credentials = credentials()
-                    credentials?.let { deleteCloud(it, fileIds) }
-                        ?: CloudDeleteResult(deleted = 0, failed = fileIds.size)
+                    deleteCloud(credentials, fileIds)
                 }
                 val done = DeletionResult(
                     phoneTrashed = phoneTrashed,
@@ -292,8 +288,6 @@ internal class MediaDeletionRepository(
         consume()
     }
 
-    private fun credentials(): AccountCredentials? =
-        (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 
     private suspend fun deleteCloud(
         credentials: AccountCredentials,

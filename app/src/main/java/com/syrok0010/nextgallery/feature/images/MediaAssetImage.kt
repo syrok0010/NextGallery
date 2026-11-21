@@ -22,8 +22,6 @@ import coil3.size.Scale
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.koin.compose.koinInject
 
 internal enum class MediaImagePurpose {
@@ -40,20 +38,18 @@ internal data class MediaImageRequestPlan(
 
 internal class MediaImageRequestFactory(
     private val context: Context,
-    private val sessionStore: SessionStore,
+    private val credentials: AccountCredentials,
 ) {
     @Composable
-    fun rememberPlan(item: MediaItem, purpose: MediaImagePurpose): MediaImageRequestPlan {
-        val session by sessionStore.session.collectAsState()
-        return remember(context, item, purpose, session) {
+    fun rememberPlan(item: MediaItem, purpose: MediaImagePurpose): MediaImageRequestPlan =
+        remember(context, item, purpose, credentials) {
             mediaImageRequestPlan(
                 context = context,
                 item = item,
-                credentials = (session as? SessionUiState.SignedIn)?.credentials,
+                credentials = credentials,
                 purpose = purpose,
             )
         }
-    }
 }
 
 @Composable
@@ -63,7 +59,7 @@ internal fun MediaAssetImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
-    imageLoader: ImageLoader = SingletonImageLoader.get(LocalContext.current),
+    imageLoader: ImageLoader = koinInject(),
     requestFactory: MediaImageRequestFactory = koinInject(),
 ) {
     val context = LocalContext.current
@@ -92,9 +88,14 @@ internal fun MediaAssetImage(
 
 /** A phone copy known without its media item, e.g. a queued upload; shares the grid tile cache. */
 @Composable
-internal fun LocalThumbnail(local: MediaAssetRef.LocalContent, modifier: Modifier = Modifier) {
+internal fun LocalThumbnail(
+    local: MediaAssetRef.LocalContent,
+    modifier: Modifier = Modifier,
+    imageLoader: ImageLoader = koinInject(),
+) {
     val context = LocalContext.current
     AsyncImage(
+        imageLoader = imageLoader,
         model = remember(context, local) {
             localRequest(context, local, MediaImagePurpose.TimelineThumbnail)
         },

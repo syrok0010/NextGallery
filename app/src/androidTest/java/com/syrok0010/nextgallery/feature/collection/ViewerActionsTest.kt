@@ -138,19 +138,21 @@ class ViewerActionsTest {
     private fun show(actionsEnabled: Boolean = true) {
         val imageKoin = koinApplication {
             modules(module {
-                single<VideoPlayerFactory> { GlobalContext.get().get() }
+                single { VideoPlayerFactory(com.syrok0010.nextgallery.core.network.NextcloudTransport(kotlinx.serialization.json.Json), AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")) }
+                single<coil3.ImageLoader> { coil3.SingletonImageLoader.get(InstrumentationRegistry.getInstrumentation().targetContext) }
                 single {
                     MediaImageRequestFactory(
                         InstrumentationRegistry.getInstrumentation().targetContext,
                         SessionStore(object : CredentialsStore {
                             override fun load() = AccountCredentials("http://127.0.0.1:1", "test", "unused", "test")
                             override fun save(credentials: AccountCredentials) = Unit
-                        }),
+                        }).requireCredentials(),
                     )
                 }
             })
         }
         rule.setContent {
+            androidx.compose.runtime.DisposableEffect(imageKoin) { onDispose { imageKoin.close() } }
             KoinIsolatedContext(imageKoin) {
             NextGalleryTheme {
                 val actions = if (actionsEnabled) {

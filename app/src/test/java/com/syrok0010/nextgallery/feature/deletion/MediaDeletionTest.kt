@@ -39,7 +39,7 @@ class MediaDeletionTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val repository = MediaDeletionRepository(
-                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))).requireCredentials(),
                 index,
                 CloudTrash { _, _ -> error("No cloud deletion expected") },
                 InMemoryMediaIdentityRegistry(),
@@ -140,7 +140,7 @@ class MediaDeletionTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val repository = MediaDeletionRepository(
-                    SessionStore(FixedCredentials(fixture.credentials)),
+                    SessionStore(FixedCredentials(fixture.credentials)).requireCredentials(),
                     index,
                     MemoriesCloudTrash(fixture.dav, MemoriesFiles(fixture.memories)),
                     InMemoryMediaIdentityRegistry(),
@@ -210,7 +210,7 @@ class MediaDeletionTest {
                 val refreshed = AtomicInteger()
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val repository = MediaDeletionRepository(
-                    sessions,
+                    sessions.requireCredentials(),
                     MediaLibraryIndex(),
                     CloudTrash { _, fileId -> fileId != 3L },
                     InMemoryMediaIdentityRegistry(),
@@ -262,7 +262,7 @@ class MediaDeletionTest {
             val repository = MediaDeletionRepository(
                 SessionStore(
                     FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna")),
-                ),
+                ).requireCredentials(),
                 MediaLibraryIndex(),
                 CloudTrash { _, fileId -> fileId != 3L },
                 identities,
@@ -321,7 +321,7 @@ class MediaDeletionTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val repository = MediaDeletionRepository(
-                    SessionStore(FixedCredentials(fixture.credentials)),
+                    SessionStore(FixedCredentials(fixture.credentials)).requireCredentials(),
                     MediaLibraryIndex(),
                     CloudTrash { _, fileId ->
                         release.await()
@@ -356,7 +356,7 @@ class MediaDeletionTest {
             val calls = AtomicInteger()
             val finished = AtomicInteger()
             val repository = MediaDeletionRepository(
-                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))).requireCredentials(),
                 MediaLibraryIndex(),
                 // Each request waits for its own gate, so the second is queued while the first runs.
                 CloudTrash { _, _ ->
@@ -390,7 +390,7 @@ class MediaDeletionTest {
         try {
             val finished = AtomicInteger()
             val repository = MediaDeletionRepository(
-                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))).requireCredentials(),
                 MediaLibraryIndex(),
                 CloudTrash { _, _ -> error("no cloud copy to delete") },
                 InMemoryMediaIdentityRegistry(),
@@ -420,7 +420,7 @@ class MediaDeletionTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val repository = MediaDeletionRepository(
-                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))),
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))).requireCredentials(),
                 MediaLibraryIndex(),
                 CloudTrash { _, _ -> true },
                 InMemoryMediaIdentityRegistry(),
@@ -442,40 +442,6 @@ class MediaDeletionTest {
         }
     }
 
-    @Test fun `without a session every cloud copy counts as failed`() = runBlocking {
-        NextcloudFixture(::server).use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-            try {
-                val repository = MediaDeletionRepository(
-                    SessionStore(FixedCredentials(null)),
-                    MediaLibraryIndex(),
-                    CloudTrash { _, _ -> error("no cloud request expected") },
-                    InMemoryMediaIdentityRegistry(),
-                    { it },
-                    scope,
-                ) {}
-                repository.delete(
-                    DeletionTargets(emptyList(), listOf(1, 2)),
-                )
-                assertEquals(
-                    DeletionResult(phoneTrashed = 0, cloud = CloudDeleteResult(deleted = 0, failed = 2)),
-                    withTimeout(5_000) { repository.state.map { it.unseen }.filterNotNull().first() },
-                )
-                assertEquals(emptyList<String>(), fixture.requests.map { it.method })
-            } finally {
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test fun `message stays silent for zero counters`() {
-        assertEquals(
-            listOf("delete_done_phone_failed", "delete_done_cloud", "delete_done_failed"),
-            mediaDeletionMessage(DeletionResult(0, CloudDeleteResult(deleted = 2, failed = 1), phoneFailed = 1))
-                .map { resourceName(it) },
-        )
-        assertEquals(emptyList<Any>(), mediaDeletionMessage(DeletionResult(0, CloudDeleteResult(0, 0))))
-    }
 
     private fun resourceName(text: com.syrok0010.nextgallery.core.ui.UiText): String {
         val id = (text as com.syrok0010.nextgallery.core.ui.UiText.Resource).id

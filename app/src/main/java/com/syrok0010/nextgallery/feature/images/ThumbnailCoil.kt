@@ -16,7 +16,7 @@ import okio.Path.Companion.toPath
 
 internal fun createNextGalleryImageLoader(
     context: Context,
-    thumbnailBatchLoader: ThumbnailBatchLoader,
+    ensureAvailable: suspend (ThumbnailRequest) -> Boolean,
     thumbnailFileStore: ThumbnailFileStore,
 ): ImageLoader =
     ImageLoader
@@ -25,7 +25,7 @@ internal fun createNextGalleryImageLoader(
             add(LocalMediaRequestInterceptor())
             add(LocalThumbnailFetcher.Factory())
             add(ThumbnailRequestKeyer)
-            add(ThumbnailFetcher.Factory(thumbnailBatchLoader, thumbnailFileStore))
+            add(ThumbnailFetcher.Factory(ensureAvailable, thumbnailFileStore))
             add(VideoFrameDecoder.Factory())
         }.memoryCache {
             MemoryCache
@@ -42,14 +42,14 @@ internal object ThumbnailRequestKeyer : Keyer<ThumbnailRequest> {
 private class ThumbnailFetcher(
     private val data: ThumbnailRequest,
     private val options: Options,
-    private val thumbnailBatchLoader: ThumbnailBatchLoader,
+    private val ensureAvailable: suspend (ThumbnailRequest) -> Boolean,
     private val thumbnailFileStore: ThumbnailFileStore,
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
         val file = resolveThumbnailFile(
             request = data,
             thumbnailFile = thumbnailFileStore::fileFor,
-            ensureAvailable = thumbnailBatchLoader::ensureAvailable,
+            ensureAvailable = ensureAvailable,
         ) ?: return null
 
         return SourceFetchResult(
@@ -63,7 +63,7 @@ private class ThumbnailFetcher(
     }
 
     class Factory(
-        private val thumbnailBatchLoader: ThumbnailBatchLoader,
+        private val ensureAvailable: suspend (ThumbnailRequest) -> Boolean,
         private val thumbnailFileStore: ThumbnailFileStore,
     ) : Fetcher.Factory<ThumbnailRequest> {
         override fun create(
@@ -74,7 +74,7 @@ private class ThumbnailFetcher(
             ThumbnailFetcher(
                 data = data,
                 options = options,
-                thumbnailBatchLoader = thumbnailBatchLoader,
+                ensureAvailable = ensureAvailable,
                 thumbnailFileStore = thumbnailFileStore,
             )
     }

@@ -18,19 +18,19 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.get
-import org.koin.core.component.inject
 
 /**
  * Runs the jobs of [UploadQueue] as one unique work. It knows nothing about why a file is uploaded:
  * the journal decides which steps remain after the transfer. A job that failed temporarily makes
  * the whole work retry with backoff, for as long as the user does not cancel it.
  */
-internal class UploadWorker(context: Context, params: WorkerParameters) :
-    CoroutineWorker(context, params),
-    KoinComponent {
-    private val queue: UploadQueue by inject()
+internal class UploadWorker(
+    context: Context,
+    params: WorkerParameters,
+    private val queue: UploadQueue,
+    private val transport: com.syrok0010.nextgallery.core.network.NextcloudTransport,
+    private val memories: com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient,
+) : CoroutineWorker(context, params) {
     private val notifications = UploadNotifications(context)
 
     override suspend fun doWork(): Result =
@@ -56,7 +56,8 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
             // runs, only without the notification and with the system's time limit.
             false
         }
-        val transfer = UploadTransfer(applicationContext.contentResolver, get(), get(), queue)
+        val transfer =
+            UploadTransfer(applicationContext.contentResolver, transport, memories, queue)
         val retry = coroutineScope {
             val progress = launch { if (foreground) publishProgress() }
             queue.drain(transfer::upload).also { progress.cancel() }

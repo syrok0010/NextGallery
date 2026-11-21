@@ -140,6 +140,7 @@ internal fun MediaViewerPage(
                     .then(pageTransformModifier),
             ) {
                 ZoomableAsyncImage(
+                    imageLoader = koinInject(),
                     model = originalRequest,
                     contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),
