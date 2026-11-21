@@ -60,6 +60,34 @@ class FilmstripTest {
     }
 
     @Test
+    fun viewerInputsAreAvailableDuringCompositionAndSelectionUsesLatestCallback() {
+        val first = mediaItem("first", 20_000)
+        val second = mediaItem("second", 19_999)
+        val items = mutableStateOf(listOf(first, second))
+        val current = mutableStateOf(first.mediaId)
+        val oldSelections = mutableListOf<MediaId>()
+        val newSelections = mutableListOf<MediaId>()
+        val onSelected = mutableStateOf<(MediaId) -> Unit>({ oldSelections += it })
+        composeRule.setContent {
+            val state = rememberViewerFilmstripState(items.value, current.value, onSelected.value)
+            // The row must see the viewer's inputs in this composition, without a synchronization pass.
+            assertEquals(items.value, state.items)
+            assertEquals(current.value, state.currentMediaId)
+            Filmstrip(state)
+        }
+        composeRule.runOnIdle {
+            items.value = listOf(second, first)
+            current.value = second.mediaId
+            onSelected.value = { newSelections += it }
+        }
+        composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
+        composeRule.runOnIdle {
+            assertTrue(oldSelections.isEmpty())
+            assertEquals(listOf(first.mediaId), newSelections)
+        }
+    }
+
+    @Test
     fun fastSwipeKeepsSelectingPhotosAfterRelease() {
         val items = (0 until 100).map { mediaItem("item-$it", 20_000 - it) }
         val currentPage = mutableIntStateOf(20)
