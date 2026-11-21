@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.app.ui
 
 import androidx.navigation3.runtime.NavEntry
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.junit.Assert.*
 import org.junit.Test
 

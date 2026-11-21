@@ -24,6 +24,7 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.router.AppNavigator
 import com.syrok0010.nextgallery.string
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
@@ -89,7 +90,7 @@ class UploadsScreenSectionsTest {
     @Test fun byteCounterChangesBeforeTheFirstPercent() =
         runBlocking {
             queue.submit(listOf(MediaId(UPLOADED)))
-            rule.setContent { MaterialTheme { UploadsScreen({}, queue) } }
+            rule.setContent { MaterialTheme { UploadsScreen(queue, AppNavigator()) } }
             queue.drain { account, job, report ->
                 val total = 4_294_967_296L
                 for (sent in listOf(1_048_576L, 2_097_152L)) {
@@ -117,7 +118,7 @@ class UploadsScreenSectionsTest {
     @Test fun clearLeavesFilesThatNeedAttentionAndRetryNowShowsOnlyWhilePaused() =
         runBlocking {
             queue.submit(files.map(::MediaId))
-            rule.setContent { MaterialTheme { UploadsScreen({}, queue) } }
+            rule.setContent { MaterialTheme { UploadsScreen(queue, AppNavigator()) } }
 
             // Queued files simply wait for the worker: nothing to hurry.
             rule.waitUntil(5_000) { visible(R.string.uploads_section_waiting) }

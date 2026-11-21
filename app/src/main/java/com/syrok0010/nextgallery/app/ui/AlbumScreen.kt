@@ -9,15 +9,13 @@ import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun AlbumScreen(
     album: NextGalleryRoute.Album,
-    onBack: () -> Unit,
-    onLogout: () -> Unit,
-    onOpenUploads: () -> Unit,
     viewModel: AlbumContentsViewModel = koinViewModel { parametersOf(album.location) },
 ) {
     val contents by viewModel.state.collectAsState()
@@ -31,11 +29,9 @@ internal fun AlbumScreen(
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Albums,
-            onLogout,
-            onOpenUploads,
             viewerVisible = viewerVisible,
             onRefresh = viewModel::refresh,
-            onBack = onBack,
+            isSubscreen = true,
             title = album.title,
             operations = operations,
         ) {

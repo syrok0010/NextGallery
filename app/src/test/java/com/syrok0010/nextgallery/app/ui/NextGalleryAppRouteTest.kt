@@ -4,6 +4,11 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.router.NextGalleryRoute
+import com.syrok0010.nextgallery.router.destinationBackStack
+import com.syrok0010.nextgallery.router.rootRoute
+import com.syrok0010.nextgallery.router.syncedBackStack
+import com.syrok0010.nextgallery.router.topLevelRouteFromContentKey
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

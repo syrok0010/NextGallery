@@ -10,11 +10,9 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.di.ProductionGraph
+import com.syrok0010.nextgallery.router.AppNavigator
 import com.syrok0010.nextgallery.string
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,7 +26,8 @@ class UploadsBackTest {
                 AccountCredentials("http://127.0.0.1:9", "fixture", "password", "fixture"),
             )
         try {
-            rule.setContent { graph.Content { NextGalleryApp(links = flowOf(AppLinks.Uploads)) } }
+            graph.koin.get<AppNavigator>().follow(AppLinks.Uploads)
+            rule.setContent { graph.Content { NextGalleryApp() } }
             val title = string(R.string.uploads_title)
             rule.waitUntil(
                 10_000,
