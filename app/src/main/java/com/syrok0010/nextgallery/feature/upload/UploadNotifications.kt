@@ -27,30 +27,28 @@ internal class UploadNotifications(private val context: Context) {
         )
     }
 
-    /** [percent] null shows an indeterminate bar. */
-    fun progress(message: String, percent: Int?, detail: String? = null): Notification =
-        Notification
+    /** No activity means preparation; unknown size or server assembly shows a spinning bar. */
+    fun progress(activity: UploadActivity? = null): Notification {
+        val message = if (activity == null) {
+            context.getString(R.string.upload_preparing)
+        } else {
+            context.getString(
+                R.string.upload_progress,
+                (activity.processed + 1).coerceAtMost(activity.total),
+                activity.total,
+            )
+        }
+        val percent = activity?.takeUnless { it.saving }?.percent
+        return Notification
             .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloud)
             .setContentIntent(uploadsIntent())
             .setContentTitle(message)
-            .setContentText(detail)
+            .setContentText(activity?.let(::transferText))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, percent ?: 0, percent == null)
             .build()
-
-    fun progress(activity: UploadActivity): Notification {
-        val message = context.getString(
-            R.string.upload_progress,
-            (activity.processed + 1).coerceAtMost(activity.total),
-            activity.total,
-        )
-        return progress(
-            message,
-            activity.percent.takeUnless { activity.saving },
-            transferText(activity),
-        )
     }
 
     private fun transferText(activity: UploadActivity): String? {
