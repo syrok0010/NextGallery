@@ -74,10 +74,10 @@ internal fun authenticatedModule() =
     module {
         scope<AuthenticatedGraph> {
             scoped<AccountCredentials> { checkNotNull(getSource<AccountCredentials>()) }
-            scoped { create(::libraryDatabase) } onClose { it?.close() }
-            scoped { create(::uploadDatabase) } onClose { it?.close() }
+            scoped { NextGalleryDatabase.create(get()) } onClose { it?.close() }
+            scoped { UploadQueueDatabase.open(get()) } onClose { it?.close() }
             scoped<UploadJournal>()
-            scoped { create(::thumbnailFiles) }
+            scoped { ThumbnailFileStore(get()) }
             scoped<RoomMediaIdentityRegistry>() bind MediaIdentityRegistry::class
             scoped<TimelineCacheRepository>()
             scoped<RemoteImageCache>()
@@ -92,12 +92,16 @@ internal fun authenticatedModule() =
             scoped { create(::filesClient) }
             scoped { create(::capabilitiesClient) }
             scoped<MemoriesAlbumSource>() bind RemoteAlbumSource::class
-            scoped { create(::localAlbums) } bind LocalAlbumSource::class
-            scoped { create(::permissions) }
+            scoped {
+                AndroidAlbumSource(
+                    get<Context>().contentResolver,
+                )
+            } bind LocalAlbumSource::class
+            scoped { LocalMediaPermissionCoordinator(get()) }
             scoped<AlbumCatalogRepository> { create(::albumCatalog) }
             scoped<MemoriesAlbumWriter>()
             scoped<MemoriesFiles>()
-            scoped { create(::uploadSource) }
+            scoped { UploadSource(get<Context>().contentResolver) }
             scoped { create(::uploadQueue) }
             scoped { create(::albumAdditions) }
             scoped<MemoriesCloudTrash>() bind CloudTrash::class
@@ -113,7 +117,7 @@ internal fun authenticatedModule() =
             scoped<TimelineProjectionStore>()
             scoped { create(::libraryCoordinator) }
             scoped { create(::mediaReader) }
-            scoped { create(::mediaChanges) }
+            scoped { AndroidMediaStoreChangeObserver(get<Context>().contentResolver) }
             scoped { create(::localMedia) }
             scoped<RemoteImageRepository>()
             scoped<MemoriesRepository>()
@@ -130,7 +134,7 @@ internal fun authenticatedModule() =
                     location,
                 )
             }
-            scoped { create(::thumbnails) }
+            scoped { ThumbnailBatchLoader(get<RemoteImageRepository>()::ensureThumbnails, get()) }
             scoped<VideoPlayerFactory>()
             scoped<VideoFramesFactory>()
             scoped<MediaImageRequestFactory>()
@@ -148,8 +152,6 @@ private fun filesClient(transport: NextcloudTransport, credentials: AccountCrede
     FilesDavClient(transport) { credentials }
 private fun capabilitiesClient(transport: NextcloudTransport, credentials: AccountCredentials) =
     NextcloudCapabilitiesClient(transport) { credentials }
-private fun localAlbums(context: Context) = AndroidAlbumSource(context.contentResolver)
-private fun permissions(context: Context) = LocalMediaPermissionCoordinator(context)
 private fun albumCatalog(
     credentials: AccountCredentials,
     remote: RemoteAlbumSource,
@@ -157,7 +159,6 @@ private fun albumCatalog(
     permissions: LocalMediaPermissionCoordinator,
     scope: CoroutineScope,
 ) = AlbumCatalogRepository(credentials, remote, local, permissions.mode, scope)
-private fun uploadSource(context: Context) = UploadSource(context.contentResolver)
 private fun uploadQueue(
     credentials: AccountCredentials,
     library: MediaLibraryIndex,
@@ -236,8 +237,6 @@ private fun mediaReader(
             check(it.isNotEmpty()) { "No mounted media volumes" }
         }
 })
-private fun mediaChanges(context: Context) =
-    AndroidMediaStoreChangeObserver(context.contentResolver)
 private fun localMedia(
     reader: AndroidMediaStoreReader,
     projection: LocalMediaProjectionStore,
@@ -256,9 +255,6 @@ private fun albumContents(remote: MemoriesAlbumContents, local: AndroidAlbumCont
             is AlbumLocation.Folder -> local.load(location)
         }
     }
-private fun thumbnails(images: RemoteImageRepository, scope: CoroutineScope) =
-    ThumbnailBatchLoader(images::ensureThumbnails, scope)
-
 private fun imageLoader(
     context: Context,
     thumbnails: ThumbnailBatchLoader,
@@ -268,7 +264,3 @@ private fun imageLoader(
     thumbnails::ensureAvailable,
     files,
 )
-
-private fun libraryDatabase(context: Context) = NextGalleryDatabase.create(context)
-private fun uploadDatabase(context: Context) = UploadQueueDatabase.open(context)
-private fun thumbnailFiles(context: Context) = ThumbnailFileStore(context)
