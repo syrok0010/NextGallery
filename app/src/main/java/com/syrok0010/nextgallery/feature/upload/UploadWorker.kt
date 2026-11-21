@@ -13,7 +13,6 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
-import com.syrok0010.nextgallery.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -69,10 +68,7 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
     override suspend fun getForegroundInfo(): ForegroundInfo =
         ForegroundInfo(
             UploadNotifications.PROGRESS_ID,
-            notifications.progress(
-                applicationContext.getString(R.string.upload_preparing),
-                percent = null,
-            ),
+            notifications.progress(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
 
