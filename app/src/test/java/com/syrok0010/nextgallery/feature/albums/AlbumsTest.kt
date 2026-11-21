@@ -190,6 +190,37 @@ class AlbumsTest {
         assertEquals(1, reads.get())
     }
 
+    @Test fun `uploaded local metadata yields to matching canonical cloud metadata without refresh`() = scenario { server, scope ->
+        val local = first.copy(dayId = 19, takenAtEpochSeconds = 1_641_600,
+            assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/1", 1, 1))
+        val library = MediaLibraryIndex().apply { publish(listOf(local)) }
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, library = library, source = AlbumContentsSource { _, _ -> flow {
+            reads.incrementAndGet()
+            emit(AlbumContentsBatch(listOf(second), 1))
+        } })
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading && it.loaded == 1 }
+        val selection = requireNotNull(uploadSelection(local))
+        val job = UploadJob("upload", selection, UploadAlbum("anna", "album"))
+        val file = UploadedFile(selection, DavFilePath.of("anna", "/Photos/1.jpg"), true, 1)
+        assertTrue(AlbumUploadFollowUp(albums).run(server.credentials, job, file, false))
+        contents.first { it.items.size == 2 }
+        val cloud = first.copy(dayId = 21, takenAtEpochSeconds = 1_814_400,
+            isFavorite = true, indexedAtEpochSeconds = 999, etag = "cloud-revision")
+        library.publish(listOf(cloud))
+        val after = contents.first { state -> state.items.any { it.indexedAtEpochSeconds == 999L } }
+        val uploaded = after.items.single { it.mediaId == first.mediaId }
+        assertEquals(cloud.dayId, uploaded.dayId)
+        assertEquals(cloud.takenAtEpochSeconds, uploaded.takenAtEpochSeconds)
+        assertTrue(uploaded.isFavorite)
+        assertEquals(cloud.etag, uploaded.etag)
+        assertEquals(local.localCopy, uploaded.localCopy)
+        assertEquals(cloud.remoteCopy, uploaded.remoteCopy)
+        assertEquals(listOf(first.mediaId, second.mediaId), after.items.map { it.mediaId })
+        assertEquals(1, reads.get())
+    }
+
     @Test fun `permission loss cancels folder read and gaining permission reloads it`() = scenario { server, scope ->
         val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Denied)
         val cancelled = CompletableDeferred<Unit>()
