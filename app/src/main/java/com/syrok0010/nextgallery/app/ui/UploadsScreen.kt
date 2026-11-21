@@ -71,6 +71,7 @@ import com.syrok0010.nextgallery.feature.upload.UploadEntry
 import com.syrok0010.nextgallery.feature.upload.UploadPhase
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
+import com.syrok0010.nextgallery.router.AppNavigator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -78,7 +79,10 @@ import org.koin.compose.koinInject
 /** Files grouped by status rather than by batch: batches are how files were sent, not what the user tracks. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()) {
+internal fun UploadsScreen(
+    queue: UploadQueue = koinInject(),
+    navigator: AppNavigator = koinInject(),
+) {
     val entries by queue.entries.collectAsStateWithLifecycle()
     val paused by queue.paused.collectAsStateWithLifecycle()
     val moves = rememberRowMoves(entries)
@@ -96,7 +100,7 @@ internal fun UploadsScreen(onBack: () -> Unit, queue: UploadQueue = koinInject()
             TopAppBar(
                 title = { Text(stringResource(R.string.uploads_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = navigator::back) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             stringResource(R.string.uploads_back),

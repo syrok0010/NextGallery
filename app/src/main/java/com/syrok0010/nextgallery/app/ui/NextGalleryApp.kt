@@ -1,9 +1,14 @@
 package com.syrok0010.nextgallery.app.ui
 
+import com.syrok0010.nextgallery.router.applyNavigationCommand
+import com.syrok0010.nextgallery.router.AppNavigator
+import com.syrok0010.nextgallery.router.NextGalleryRoute
+import com.syrok0010.nextgallery.router.topLevelRouteFromContentKey
+import com.syrok0010.nextgallery.router.rootRoute
+import com.syrok0010.nextgallery.router.syncedBackStack
+import androidx.lifecycle.repeatOnLifecycle
 import android.app.Activity
-import android.content.Context
 import android.content.ContextWrapper
-import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -37,10 +42,7 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
 import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
-import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.scope.UnboundKoinScope
@@ -84,9 +86,9 @@ internal val subscreenTransitions =
 @OptIn(KoinExperimentalAPI::class, KoinDelicateAPI::class)
 @Composable
 internal fun NextGalleryApp(
-    links: Flow<Uri> = emptyFlow(),
     sessionViewModel: SessionViewModel = koinViewModel(),
     graph: AuthenticatedGraph = koinInject(),
+    navigator: AppNavigator = koinInject(),
 ) {
     val session by sessionViewModel.session.collectAsState()
     val logoutRefusal by sessionViewModel.logoutRefusal.collectAsState()
@@ -124,13 +126,26 @@ internal fun NextGalleryApp(
             backStack.addAll(routes)
         }
     }
-    val open = { route: NextGalleryRoute ->
-        if (backStack.lastOrNull() != route) backStack.add(route)
-    }
-    val openUploads = { open(NextGalleryRoute.Uploads) }
-    // Collected only while signed in: a link that arrives earlier waits for the session.
-    LaunchedEffect(links, signedIn) {
-        if (signedIn) links.collect { link -> linkRoute(link)?.let(open) }
+    // UI and external links share the same retained command queue.
+    val navigationLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(signedIn, navigator, navigationLifecycle) {
+        if (signedIn) {
+            navigationLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+                navigator.commands.collect { pending ->
+                    pending.firstOrNull()?.let { next ->
+                        navigator.consume(next.id) { command ->
+                            val target = applyNavigationCommand(
+                                backStack.toList().filterIsInstance<NextGalleryRoute>(), command,
+                            )
+                            if (backStack.toList() != target) {
+                                backStack.clear()
+                                backStack.addAll(target)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     if (signedIn) LibrarySystemBars()
     val content: @Composable () -> Unit = {
@@ -138,12 +153,9 @@ internal fun NextGalleryApp(
         NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
             CompositionLocalProvider(
                 LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+                LocalSessionLogout provides sessionViewModel::logout,
                 LocalNavigationUi provides NavigationUi(
-                    signedIn, screenStates, sessionViewModel::logout, openUploads,
-                    album = { album -> album.location?.let { location ->
-                        if (backStack.lastOrNull() == NextGalleryRoute.Albums) open(NextGalleryRoute.Album(location, album.name))
-                    } },
-                    back = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                    signedIn, screenStates,
                     viewer = { viewerVisible = it }, selection = { selectionMode = it },
                 ),
             ) {
@@ -154,7 +166,7 @@ internal fun NextGalleryApp(
                 ) {
                     NavDisplay(
                         backStack = routes,
-                        onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                        onBack = navigator::back,
                         entryDecorators = listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),
                             rememberViewModelStoreNavEntryDecorator(),
@@ -199,16 +211,7 @@ internal fun NextGalleryApp(
                         ) {
                             LibraryIsland(
                                 page,
-                                { destination ->
-                                    val target = destinationBackStack(
-                                        backStack.toList().filterIsInstance<NextGalleryRoute>(),
-                                        destination.route,
-                                    )
-                                    if (backStack.toList() != target) {
-                                        backStack.clear()
-                                        backStack.addAll(target)
-                                    }
-                                },
+                                { destination -> navigator.select(destination.route) },
                             )
                         }
                     }

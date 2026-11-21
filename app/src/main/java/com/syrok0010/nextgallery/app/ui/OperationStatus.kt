@@ -68,10 +68,13 @@ import com.syrok0010.nextgallery.core.ui.asString
 import com.syrok0010.nextgallery.feature.collection.MediaTileActivity
 import com.syrok0010.nextgallery.feature.collection.MediaTileOperation
 import com.syrok0010.nextgallery.feature.collection.icon
+import com.syrok0010.nextgallery.router.AppNavigator
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import org.koin.compose.currentKoinScope
+import org.koin.compose.koinInject
 
 /** A running operation or a result the user has not seen yet. */
 internal data class OperationEntry(
@@ -194,7 +197,7 @@ internal fun rememberOperationStatus(
 internal fun OperationStatusPill(
     status: OperationStatus,
     visible: Boolean,
-    onOpenUploads: () -> Unit,
+    navigator: AppNavigator = koinInject(),
     modifier: Modifier = Modifier,
     /** The viewer keeps the pill as wide as its text, so it covers less of the photo. */
     fillWidth: Boolean = true,
@@ -247,7 +250,7 @@ internal fun OperationStatusPill(
                 ) {
                     StatusList(entries) {
                         expanded = false
-                        onOpenUploads()
+                        navigator.open(NextGalleryRoute.Uploads)
                     }
                 }
             }

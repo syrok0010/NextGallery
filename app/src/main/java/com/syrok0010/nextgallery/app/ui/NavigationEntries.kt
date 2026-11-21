@@ -3,8 +3,8 @@ package com.syrok0010.nextgallery.app.ui
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.navigation3.runtime.NavEntry
-import com.syrok0010.nextgallery.feature.albums.AlbumSummary
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.compose.navigation3.koinEntryProvider
 import org.koin.core.annotation.KoinExperimentalAPI
 import org.koin.dsl.module
@@ -14,10 +14,6 @@ import org.koin.dsl.navigation3.navigation
 internal data class NavigationUi(
     val signedIn: Boolean,
     val screenStates: SaveableStateHolder,
-    val logout: () -> Unit,
-    val uploads: () -> Unit,
-    val album: (AlbumSummary) -> Unit,
-    val back: () -> Unit,
     val viewer: (Boolean) -> Unit,
     val selection: (Boolean) -> Unit,
 )
@@ -30,13 +26,13 @@ internal fun navigationModule() =
         navigation<NextGalleryRoute.Login> { LoginScreen() }
         navigation<NextGalleryRoute.Uploads>(metadata = subscreenTransitions) {
             val ui = LocalNavigationUi.current
-            if (ui.signedIn) UploadsScreen(onBack = ui.back)
+            if (ui.signedIn) UploadsScreen()
         }
         navigation<NextGalleryRoute.Photos> {
             val ui = LocalNavigationUi.current
             if (ui.signedIn) {
                 ui.screenStates.SaveableStateProvider("photos") {
-                    PhotosScreen(ui.logout, ui.uploads, ui.viewer, ui.selection)
+                    PhotosScreen(ui.viewer, ui.selection)
                 }
             }
         }
@@ -44,13 +40,13 @@ internal fun navigationModule() =
             val ui = LocalNavigationUi.current
             if (ui.signedIn) {
                 ui.screenStates.SaveableStateProvider("albums") {
-                    AlbumsScreen(ui.logout, ui.uploads, ui.album)
+                    AlbumsScreen()
                 }
             }
         }
         navigation<NextGalleryRoute.Album>(metadata = subscreenTransitions) { album ->
             val ui = LocalNavigationUi.current
-            if (ui.signedIn) AlbumScreen(album, ui.back, ui.logout, ui.uploads)
+            if (ui.signedIn) AlbumScreen(album)
         }
     }
 
@@ -71,3 +67,6 @@ internal fun appEntryProvider(): (NextGalleryRoute) -> NavEntry<NextGalleryRoute
     val provider = koinEntryProvider<NextGalleryRoute>()
     return { route -> stableNavigationEntry(route, provider(route)) }
 }
+
+internal val LocalSessionLogout =
+    staticCompositionLocalOf<() -> Unit> { error("Session owner required") }

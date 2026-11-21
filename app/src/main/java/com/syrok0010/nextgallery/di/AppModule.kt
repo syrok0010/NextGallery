@@ -14,6 +14,7 @@ import com.syrok0010.nextgallery.feature.auth.LoginGateway
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.router.routerModule
 import kotlinx.serialization.json.Json
 import org.koin.core.module.dsl.viewModel as explicitViewModel
 import org.koin.dsl.bind
@@ -60,5 +61,6 @@ fun appModule() =
             authenticatedModule(),
             workerModule(),
             navigationModule(),
+            routerModule(),
         )
     }

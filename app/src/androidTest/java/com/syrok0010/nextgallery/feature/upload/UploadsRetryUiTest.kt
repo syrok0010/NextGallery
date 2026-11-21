@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.upload
 
+import com.syrok0010.nextgallery.router.AppNavigator
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.string
 import androidx.compose.material3.MaterialTheme
@@ -84,7 +85,7 @@ class UploadsRetryUiTest {
             puts++
             UploadedFile(job.selection, DavFilePath.of(account.userId, "/Photos/retry.jpg"), true, 42)
         }
-        rule.setContent { MaterialTheme { UploadsScreen({}, queue) } }
+        rule.setContent { MaterialTheme { UploadsScreen(queue, AppNavigator()) } }
         rule.onNodeWithText(string(R.string.uploads_retry_actions)).assertIsDisplayed()
         linked = true
         rule.onNodeWithText(string(R.string.uploads_retry_actions)).performClick()

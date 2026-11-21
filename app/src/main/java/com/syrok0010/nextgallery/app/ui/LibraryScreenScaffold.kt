@@ -9,24 +9,25 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
+import com.syrok0010.nextgallery.router.AppNavigator
 import org.koin.compose.koinInject
 
 /** Shared presentation for the library chrome and page content. */
 @Composable
 internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
-    onLogout: () -> Unit,
-    onOpenUploads: () -> Unit,
     viewerVisible: Boolean = false,
     onRefresh: () -> Unit = {},
-    onBack: (() -> Unit)? = null,
+    isSubscreen: Boolean = false,
     title: String? = null,
+    navigator: AppNavigator = koinInject(),
     library: MediaLibraryCoordinator = koinInject(),
     catalog: AlbumCatalogRepository = koinInject(),
     operations: OperationStatus = rememberOperationStatus(),
     content: @Composable BoxScope.() -> Unit,
 ) {
     val context = LocalContext.current
+    val logout = LocalSessionLogout.current
     Column(
         Modifier
             .fillMaxSize()
@@ -42,7 +43,7 @@ internal fun LibraryScreenScaffold(
                     onRefresh()
                 },
                 onLogout = {
-                    if (!operations.tryLogout(onLogout)) {
+                    if (!operations.tryLogout(logout)) {
                         Toast
                             .makeText(
                                 context,
@@ -52,14 +53,13 @@ internal fun LibraryScreenScaffold(
                     }
                 },
                 logoutEnabled = !operations.running,
-                onBack = onBack,
+                onBack = if (isSubscreen) navigator::back else null,
                 title = title,
                 statusActive = operations.active,
                 status = {
                     OperationStatusPill(
                         operations,
                         visible = true,
-                        onOpenUploads,
                     )
                 },
             )

@@ -1,34 +1,31 @@
 package com.syrok0010.nextgallery
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.syrok0010.nextgallery.app.ui.NextGalleryApp
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
+import com.syrok0010.nextgallery.router.AppNavigator
+import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
-    // Holds a link until the app follows it, e.g. one that arrives before sign-in.
-    private val links = Channel<Uri>(Channel.CONFLATED)
+    private val navigator: AppNavigator by inject()
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.data?.let(links::trySend)
+        intent.data?.let(navigator::follow)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A recreated activity gets its old intent again; that link was already followed.
-        if (savedInstanceState == null) intent.data?.let(links::trySend)
-        val linkFlow = links.receiveAsFlow()
+        if (savedInstanceState == null) intent.data?.let(navigator::follow)
         enableEdgeToEdge()
         setContent {
             NextGalleryTheme {
-                NextGalleryApp(links = linkFlow)
+                NextGalleryApp()
             }
         }
     }

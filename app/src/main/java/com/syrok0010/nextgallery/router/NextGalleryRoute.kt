@@ -1,11 +1,8 @@
-package com.syrok0010.nextgallery.app.ui
+package com.syrok0010.nextgallery.router
 
 import android.net.Uri
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.AppLinks
-import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import kotlinx.serialization.Serializable
@@ -59,19 +56,6 @@ internal fun topLevelRouteFromContentKey(contentKey: Any): NextGalleryRoute? =
         "albums" -> NextGalleryRoute.Albums
         else -> null
     }
-
-internal enum class TopLevelDestination(
-    val route: NextGalleryRoute,
-    @get:StringRes val titleRes: Int,
-    @get:DrawableRes val iconRes: Int,
-) {
-    Photos(NextGalleryRoute.Photos, R.string.library_photos, R.drawable.ic_photos),
-    Albums(NextGalleryRoute.Albums, R.string.library_albums, R.drawable.ic_albums),
-    ;
-
-    val position: Int
-        get() = entries.indexOf(this)
-}
 
 internal fun SessionUiState.rootRoute(): NextGalleryRoute =
     when (this) {
