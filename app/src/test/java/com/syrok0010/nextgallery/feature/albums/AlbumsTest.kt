@@ -5,8 +5,6 @@ import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.*
-import com.syrok0010.nextgallery.feature.collection.ViewerSequenceController
-import com.syrok0010.nextgallery.feature.collection.toMediaSlots
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
@@ -121,6 +119,31 @@ class AlbumsTest {
         assertEquals(1, resolved.total)
     }
 
+    @Test fun `confirmed card from an incomplete initial read survives a later lagging read`() = scenario { server, scope ->
+        val release = CompletableDeferred<Unit>()
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, source = AlbumContentsSource { _, _ -> flow {
+            if (reads.incrementAndGet() == 1) {
+                emit(AlbumContentsBatch(listOf(first), 2))
+                release.await()
+                error("connection lost after the first page")
+            } else {
+                emit(AlbumContentsBatch(emptyList(), 0))
+            }
+        } })
+        albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest(listOf(1)))
+        albums.operations.first { it.singleOrNull()?.running == false }
+        val contents = albums.observeContents(album)
+        contents.first { it.loaded == 1 }
+        release.complete(Unit)
+        contents.first { it.failed }
+        albums.observeContents(album)
+        val reopened = contents.first { !it.loading && !it.failed }
+        assertEquals(listOf(first), reopened.items)
+        assertEquals(0, reopened.pendingMetadata)
+        assertEquals(1, reopened.total)
+    }
+
     @Test fun `explicit authoritative refresh can retire pending membership`() = scenario { server, scope ->
         val albums = server.albums(scope,
             source = AlbumContentsSource { _, _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) })
@@ -171,9 +194,39 @@ class AlbumsTest {
         assertEquals(0, empty.total)
     }
 
-    @Test fun `upload follow up updates known membership without refreshing`() = scenario { server, scope ->
+    @Test fun `failed refresh retains confirmed cards through index updates until a complete replacement`() = scenario { server, scope ->
+        val library = MediaLibraryIndex()
+        val reads = AtomicInteger()
+        val albums = server.albums(scope, library = library, source = AlbumContentsSource { _, _ -> flow {
+            when (reads.incrementAndGet()) {
+                1 -> emit(AlbumContentsBatch(listOf(second), 1))
+                2 -> {
+                    emit(AlbumContentsBatch(emptyList(), 0))
+                    error("connection lost before completion")
+                }
+                else -> emit(AlbumContentsBatch(emptyList(), 0))
+            }
+        } })
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading && it.loaded == 1 }
+        albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first)))
+        contents.first { it.loaded == 2 }
+        albums.refresh(album)
+        contents.first { it.failed }
+        val local = MediaAssetRef.LocalContent("content://media/second", 1, 1)
+        library.publish(listOf(second.copy(assetRef = MediaAssetRef.LocalFirst(local, requireNotNull(second.remoteCopy)))))
+        val updated = contents.first { state -> state.items.any { it.localCopy == local } }
+        assertEquals(setOf(first.mediaId, second.mediaId), updated.items.map { it.mediaId }.toSet())
+        albums.refresh(album)
+        val replaced = contents.first { !it.loading && !it.failed }
+        assertTrue(replaced.items.isEmpty())
+        assertEquals(0, replaced.total)
+    }
+
+    @Test fun `upload follow up uses known canonical metadata without refreshing`() = scenario { server, scope ->
         val local = first.copy(assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/1", 1, 1))
-        val library = MediaLibraryIndex().apply { publish(listOf(local)) }
+        val canonical = first.copy(assetRef = MediaAssetRef.LocalFirst(requireNotNull(local.localCopy), requireNotNull(first.remoteCopy)))
+        val library = MediaLibraryIndex().apply { publish(listOf(canonical)) }
         val reads = AtomicInteger()
         val albums = server.albums(scope, library = library, source = AlbumContentsSource { _, _ -> flow {
             reads.incrementAndGet()
@@ -190,7 +243,7 @@ class AlbumsTest {
         assertEquals(1, reads.get())
     }
 
-    @Test fun `uploaded local metadata yields to matching canonical cloud metadata without refresh`() = scenario { server, scope ->
+    @Test fun `upload waits for canonical metadata and preserves local copy from the shared index`() = scenario { server, scope ->
         val local = first.copy(dayId = 19, takenAtEpochSeconds = 1_641_600,
             assetRef = MediaAssetRef.LocalContent("content://media/external/images/media/1", 1, 1))
         val library = MediaLibraryIndex().apply { publish(listOf(local)) }
@@ -204,10 +257,17 @@ class AlbumsTest {
         val selection = requireNotNull(uploadSelection(local))
         val job = UploadJob("upload", selection, UploadAlbum("anna", "album"))
         val file = UploadedFile(selection, DavFilePath.of("anna", "/Photos/1.jpg"), true, 1)
-        assertTrue(AlbumUploadFollowUp(albums).run(server.credentials, job, file, false))
-        contents.first { it.items.size == 2 }
+        val accepted = withContext(Dispatchers.Default) {
+            AlbumUploadFollowUp(albums).run(server.credentials, job, file, false)
+        }
+        assertTrue(accepted)
+        val pending = contents.first { !it.loading && it.pendingMetadata == 1 }
+        assertEquals(listOf(second), pending.items)
+        assertEquals(2, pending.total)
+        assertEquals(2, reads.get())
         val cloud = first.copy(dayId = 21, takenAtEpochSeconds = 1_814_400,
-            isFavorite = true, indexedAtEpochSeconds = 999, etag = "cloud-revision")
+            isFavorite = true, indexedAtEpochSeconds = 999, etag = "cloud-revision",
+            assetRef = MediaAssetRef.LocalFirst(requireNotNull(local.localCopy), requireNotNull(first.remoteCopy)))
         library.publish(listOf(cloud))
         val after = contents.first { state -> state.items.any { it.indexedAtEpochSeconds == 999L } }
         val uploaded = after.items.single { it.mediaId == first.mediaId }
@@ -218,7 +278,8 @@ class AlbumsTest {
         assertEquals(local.localCopy, uploaded.localCopy)
         assertEquals(cloud.remoteCopy, uploaded.remoteCopy)
         assertEquals(listOf(first.mediaId, second.mediaId), after.items.map { it.mediaId })
-        assertEquals(1, reads.get())
+        assertEquals(0, after.pendingMetadata)
+        assertEquals(2, reads.get())
     }
 
     @Test fun `permission loss cancels folder read and gaining permission reloads it`() = scenario { server, scope ->
@@ -246,7 +307,7 @@ class AlbumsTest {
             "COPY" -> (if (request.decodedTarget.endsWith("3.jpg")) 403 else 201) to ""
             else -> 500 to ""
         } }.use { server ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try { withTimeout(5_000) { block(server, scope) } } finally { scope.cancel() }
         }
     }

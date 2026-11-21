@@ -12,9 +12,10 @@ import com.syrok0010.nextgallery.feature.upload.UploadJob
 import com.syrok0010.nextgallery.feature.upload.UploadSelection
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
@@ -62,7 +63,7 @@ class AlbumUploadFollowUpTest {
                 else -> 500 to ""
             }
         }.use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
                 val albums = fixture.albums(scope)
                 val selection = UploadSelection(MediaAssetRef.LocalContent("content://media/a", 1, 1), "a.jpg", "image/jpeg")
