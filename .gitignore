@@ -43,3 +43,5 @@ requests.*.txt
 
 # Keep the Gradle wrapper reproducible.
 !gradle/wrapper/gradle-wrapper.jar
+
+.kotlin/

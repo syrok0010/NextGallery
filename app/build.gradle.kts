@@ -83,8 +83,8 @@ android {
 
     // Test helpers both JVM and instrumentation tests use, such as the loopback HTTP server.
     sourceSets {
-        getByName("test").kotlin.srcDir("src/sharedTest/java")
-        getByName("androidTest").kotlin.srcDir("src/sharedTest/java")
+        getByName("test").kotlin.directories.add("src/sharedTest/java")
+        getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
     }
 
     compileOptions {

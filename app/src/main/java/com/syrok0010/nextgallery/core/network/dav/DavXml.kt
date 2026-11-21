@@ -1,3 +1,5 @@
+@file:OptIn(nl.adaptivity.xmlutil.ExperimentalXmlUtilApi::class)
+
 package com.syrok0010.nextgallery.core.network.dav
 
 import java.io.IOException
@@ -134,7 +136,7 @@ internal data class FileProps(
     val fileId: String? = null,
 )
 
-private val davXml = XML {
+private val davXml = XML.compat {
     // The pure Kotlin parser: the same code on Android and in JVM tests, and it never loads
     // external entities.
     defaultToGenericParser = true
