@@ -15,7 +15,6 @@ import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
-import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -25,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal sealed interface AlbumTarget {
     val name: String
@@ -41,12 +42,14 @@ internal sealed interface AlbumTarget {
 internal data class AlbumAdditionRequest(
     val fileIds: List<Long>,
     val uploads: List<MediaId> = emptyList(),
+    val items: List<MediaItem> = emptyList(),
 ) {
     companion object {
         fun of(items: List<MediaItem>) =
             AlbumAdditionRequest(
                 fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
                 uploads = items.filterNot { it.hasRemoteCopy }.map { it.mediaId },
+                items = items,
             )
     }
 }
@@ -79,9 +82,11 @@ internal fun writableAlbums(albums: List<AlbumSummary>, user: String): List<Albu
 internal class AlbumAdditions(
     private val credentials: AccountCredentials,
     private val writer: MemoriesAlbumWriter,
-    private val catalog: AlbumCatalogRepository,
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
     private val scope: CoroutineScope,
+    private val onAdded: (AlbumLocation.Remote, Set<Long>, List<MediaItem>) -> Unit,
+    private val onCreated: () -> Unit,
+    private val mutations: Mutex = Mutex(),
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     val state = mutableState.asStateFlow()
@@ -100,45 +105,50 @@ internal class AlbumAdditions(
         if (job?.isActive == true) return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
         job = scope.launch {
-            mutableState.value = try {
-                val location = when (target) {
-                    is AlbumTarget.Existing -> target.location
-                    is AlbumTarget.New -> writer.create(credentials, target.name.trim())
-                }
-                val address = AlbumAddress.of(location)
-                if (address == null || address.owner != credentials.userId) {
-                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
-                } else {
-                    val queued = if (request.uploads.isEmpty()) {
-                        0
-                    } else {
-                        when (
-                            val enqueue = enqueueUploads(
-                                request.uploads,
-                                UploadAlbum(address.owner, address.name),
-                            )
-                        ) {
-                            is EnqueueResult.Accepted -> enqueue.count
-                            EnqueueResult.NothingToUpload -> 0
-                            EnqueueResult.Rejected -> throw UploadEnqueueRejected()
-                        }
+            mutations.withLock {
+                mutableState.value = try {
+                    val location = when (target) {
+                        is AlbumTarget.Existing -> target.location
+
+                        is AlbumTarget.New ->
+                            writer
+                                .create(
+                                    credentials,
+                                    target.name.trim(),
+                                ).also { onCreated() }
                     }
-                    AlbumAdditionState.Done(
-                        target.name,
-                        writer.add(address, request.fileIds),
-                        queued,
-                    )
+                    val address = AlbumAddress.of(location)
+                    if (address == null || address.owner != credentials.userId) {
+                        AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
+                    } else {
+                        val queued = if (request.uploads.isEmpty()) {
+                            0
+                        } else {
+                            when (
+                                val enqueue = enqueueUploads(
+                                    request.uploads,
+                                    UploadAlbum(address.owner, address.name),
+                                )
+                            ) {
+                                is EnqueueResult.Accepted -> enqueue.count
+                                EnqueueResult.NothingToUpload -> 0
+                                EnqueueResult.Rejected -> throw UploadEnqueueRejected()
+                            }
+                        }
+                        val result = writer.add(address, request.fileIds)
+                        onAdded(location, result.presentIds, request.items)
+                        AlbumAdditionState.Done(target.name, result.summary, queued)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: UploadEnqueueRejected) {
+                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
+                } catch (_: AlbumAlreadyExistsException) {
+                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
+                } catch (_: Exception) {
+                    AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.Network)
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: UploadEnqueueRejected) {
-                AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
-            } catch (_: AlbumAlreadyExistsException) {
-                AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
-            } catch (_: Exception) {
-                AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.Network)
             }
-            catalog.refresh()
         }
         return true
     }

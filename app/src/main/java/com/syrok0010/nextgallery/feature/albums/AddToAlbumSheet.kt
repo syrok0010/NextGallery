@@ -21,7 +21,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.koin.compose.koinInject
 
 /** Album picker for a selection snapshot; the caller owns the selection and its lifetime. */
@@ -31,16 +32,15 @@ internal fun AddToAlbumSheet(
     request: AlbumAdditionRequest,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
-    additions: AlbumAdditions = koinInject(),
-    catalog: AlbumCatalogRepository = koinInject(),
-    credentials: AccountCredentials = koinInject(),
+    repository: AlbumsRepository = koinInject(),
+    sessions: SessionStore = koinInject(),
 ) {
-    val additionState by additions.state.collectAsStateWithLifecycle()
-    val busy = additionState is AlbumAdditionState.Running
-    val albums by catalog.state.collectAsStateWithLifecycle()
-    val user = credentials.userId
+    val busy by repository.adding.collectAsStateWithLifecycle()
+    val albums by repository.state.collectAsStateWithLifecycle()
+    val session by sessions.session.collectAsStateWithLifecycle()
+    val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
     val writable = remember(albums.remote.items, user) {
-        writableAlbums(albums.remote.items, user)
+        user?.let { writableAlbums(albums.remote.items, it) }.orEmpty()
     }
     var creating by remember { mutableStateOf(false) }
 
@@ -91,13 +91,13 @@ internal fun AddToAlbumSheet(
             item {
                 AlbumChoiceRow(
                     title = stringResource(R.string.album_add_new),
-                    enabled = !busy,
+                    enabled = user != null && !busy,
                     onClick = { creating = true },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
-            if (!albums.remote.loading && writable.isEmpty()) {
+            if (user != null && !albums.remote.loading && writable.isEmpty()) {
                 item {
                     Text(
                         stringResource(R.string.album_add_list_empty),

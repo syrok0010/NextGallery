@@ -18,7 +18,7 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
+import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
@@ -43,7 +43,7 @@ internal fun PhotosScreen(
     onSelectionModeChanged: (Boolean) -> Unit = {},
     timeline: TimelineProjectionStore = koinInject(),
     coordinator: MediaLibraryCoordinator = koinInject(),
-    additions: AlbumAdditions = koinInject(),
+    albums: AlbumsRepository = koinInject(),
     uploads: UploadQueue = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
     trashBin: NextcloudTrashBin = koinInject(),
@@ -166,7 +166,7 @@ internal fun PhotosScreen(
             onDismiss = { albumRequest = null },
             onPick = { target ->
                 // A rejected request keeps the sheet and the selection; the sheet explains why.
-                if (additions.add(target, request)) {
+                if (albums.add(target, request)) {
                     albumRequest = null
                     onDone()
                     // Phone-only items are uploaded into the album.
