@@ -131,6 +131,7 @@ dependencies {
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.annotations)
     implementation(libs.koin.workmanager)
+    implementation(libs.koin.navigation3)
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
     implementation(libs.kotlinx.serialization.json)

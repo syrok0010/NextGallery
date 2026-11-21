@@ -31,6 +31,7 @@ work = "2.12.0"
 [libraries]
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
 koin-annotations = { module = "io.insert-koin:koin-annotations" }
+koin-navigation3 = { module = "io.insert-koin:koin-compose-navigation3" }
 koin-workmanager = { module = "io.insert-koin:koin-androidx-workmanager" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }

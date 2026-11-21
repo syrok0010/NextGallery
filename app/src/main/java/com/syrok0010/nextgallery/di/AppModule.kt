@@ -4,6 +4,7 @@ import android.content.Context
 import com.syrok0010.nextgallery.app.ui.AppDataEraser
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.app.ui.SystemAppDataEraser
+import com.syrok0010.nextgallery.app.ui.navigationModule
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.auth.NextcloudAuthClient
 import com.syrok0010.nextgallery.core.session.CredentialsStore
@@ -53,5 +54,11 @@ private fun sessionViewModel(
 
 fun appModule() =
     module {
-        includes(bootstrapModule(), storageModule(), authenticatedModule(), workerModule())
+        includes(
+            bootstrapModule(),
+            storageModule(),
+            authenticatedModule(),
+            workerModule(),
+            navigationModule(),
+        )
     }
