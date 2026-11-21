@@ -11,26 +11,21 @@
 
 - [Nextcloud API](research/api-nextcloud.md) - авторизация, WebDAV, capabilities и fallback-роль Nextcloud.
 - [Memories API](research/api-memories.md) - найденные endpoint'ы, модель данных и риски использования Memories как основного фотодоменного API.
+- [Холодные замеры HLS для ленты кадров](research/filmstrip-cold-hls.md) - сравнение original и HLS-транскодирования при извлечении кадров.
 
 ## ADR
 
-- [ADR 0001: Целевая архитектура и вертикальные срезы](adr/0001-architecture.md)
-- [ADR 0002: Граница источников и identity медиа](adr/0002-media-source-abstraction.md)
+- [ADR 0001: Целевая архитектура, вертикальные срезы и границы модулей](adr/0001-architecture.md)
+- [ADR 0002: Медиатека: источники, индекс и identity медиа](adr/0002-media-source-abstraction.md)
 - [ADR 0003: Навигация](adr/0003-navigation.md)
 - [ADR 0004: Dependency Injection](adr/0004-dependency-injection.md)
-- [ADR 0005: Network, endpoint-клиенты и загрузка изображений](adr/0005-network-and-images.md)
-- [ADR 0006: Secure storage для Nextcloud app password](adr/0006-secure-credentials-storage.md)
+- [ADR 0005: Сеть, endpoint-клиенты, DAV XML и загрузка изображений](adr/0005-network-and-images.md)
+- [ADR 0006: Сессия, вход и хранение credentials](adr/0006-secure-credentials-storage.md)
 - [ADR 0007: Lazy loading timeline через virtual slots](adr/0007-timeline-lazy-loading.md)
-- [ADR 0009: Типизированная session boundary](adr/0009-typed-ui-session-state.md)
 - [ADR 0010: Warm-start cache policy](adr/0010-mvp-cache-policy.md)
-- [ADR 0011: Стек просмотра фото](adr/0011-photo-viewer-stack.md)
-
-- [ADR 0012: Feature-срезы и чистый media module](adr/0012-feature-slices.md)
-- [ADR 0013: Общий индекс медиатеки и проекции коллекций](adr/0013-media-library-index.md)
-- [ADR 0014: Ручная загрузка из таймлайна](adr/0014-timeline-upload.md)
+- [ADR 0011: Стек просмотра фото и видео](adr/0011-photo-viewer-stack.md)
+- [ADR 0014: Ручная загрузка в облако: выбор, размещение и передача](adr/0014-timeline-upload.md)
 - [ADR 0015: Добавление выбранных медиа в альбом](adr/0015-add-to-album.md)
 - [ADR 0016: Удаление выбранных медиа в корзины](adr/0016-delete-selection.md)
-- [ADR 0017: Связь локальной и облачной копий после загрузки](adr/0017-link-uploaded-copies.md)
 - [ADR 0019: Журнал ручных загрузок и выполнение через WorkManager](adr/0019-durable-manual-uploads.md)
-- [ADR 0020: Возобновление прерванной передачи частями](adr/0020-resumable-uploads.md)
 - [ADR 0021: Английский и русский языки приложения](adr/0021-app-languages.md)

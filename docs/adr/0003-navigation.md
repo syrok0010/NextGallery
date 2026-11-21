@@ -6,7 +6,7 @@
 
 ## Контекст
 
-Приложению нужна Compose-first навигация, где авторизация определяет корневой экран, а viewer остаётся связан с живым timeline и shared transition.
+Приложению нужна Compose-first навигация, где авторизация определяет корневой экран, вкладки сохраняют состояние прокрутки и фильтра, вложенные экраны (альбом, экран загрузок) открываются поверх вкладок, а viewer остаётся связан с живым timeline и shared transition.
 
 ## Критерии выбора
 
@@ -24,7 +24,7 @@
 
 ### Все ViewModel в корне приложения
 
-Облегчает сборку общего меню, но заставляет навигацию знать индексацию, содержимое экранов и состояние viewer. Получение ViewModel внутри destinations сохраняет плоский router и локализует экранное состояние.
+Облегчает сборку общего меню, но заставляет навигацию знать индексацию, содержимое экранов и состояние viewer. Локальная инъекция state holders внутри destinations сохраняет плоский router и локализует экранное состояние.
 
 ### Отдельный route для каждого состояния viewer
 
@@ -34,26 +34,30 @@
 
 Использовать стабильную Navigation3 через `NavKey`, `rememberNavBackStack` и `NavDisplay`.
 
-Корневые routes:
+Корневые routes (`NextGalleryRoute`):
 
 ```text
 Login
 Photos
 Albums
 Album(location, title)
+Uploads
 ```
 
-`SessionUiState` синхронизирует один плоский back stack. `NextGalleryApp` получает только `SessionViewModel`, связывает destinations и плавающий переключатель. `PhotosScreen`, `AlbumsScreen` и `AlbumScreen` получают свои ViewModel внутри destination и владеют прокруткой/фильтром. Saveable state вкладок сохраняется при переключении и сбрасывается на границе сессии. Viewer отображается внутри экрана фото или конкретного альбома поверх его сетки и адресуется по `MediaId`; `ViewerTransitionCoordinator` связывает tile bounds, reveal и закрытие viewer. Корень получает только признак видимости viewer для переключателя.
+- `SessionUiState` синхронизирует один плоский back stack (`syncedBackStack`). `NextGalleryApp` получает только `SessionViewModel`, связывает destinations, плавающий переключатель вкладок (`LibraryIsland`) и входящие внутренние ссылки (`AppLinks.Uploads` → `linkRoute()` → `NextGalleryRoute.Uploads`, собираются только в состоянии `SignedIn`).
+- Экраны получают свои зависимости внутри destination: `PhotosScreen` и `UploadsScreen` инжектируют сторы и репозитории через `koinInject`, а `AlbumsScreen` и `AlbumScreen` используют свои ViewModel (`AlbumsViewModel`, `AlbumContentsViewModel`) и владеют прокруткой/фильтром.
+- Saveable state вкладок (`Photos`, `Albums`) сохраняется через `rememberSaveableStateHolder` при переключении и сбрасывается на границе сессии.
+- Viewer отображается внутри экрана фото или конкретного альбома поверх его сетки и адресуется по `MediaId`; `ViewerTransitionCoordinator` связывает tile bounds, reveal и закрытие viewer. Корень получает только признаки видимости viewer и режима выбора для скрытия нижнего переключателя вкладок.
 
 Версия Navigation3 определяется version catalog, а не дублируется в ADR.
 
 ## Последствия
 
-- Logout атомарно возвращает приложение к signed-out root.
+- Выход из аккаунта очищает данные приложения и завершает процесс (ADR 0010); при старте без сессии корневым экраном является `Login`.
 - Timeline state не уничтожается отдельным detail route во время просмотра.
-- Общая оболочка использует repositories: постоянно наблюдает только флаг ошибки, подробную диагностику — пока открыта панель.
-- Deep links и самостоятельная route-модель viewer потребуют отдельного решения.
+- Уведомление загрузки открывает экран `Uploads` поверх текущей сессии через `AppLinks.Uploads`.
+- Deep links на конкретный медиаобъект и самостоятельная route-модель viewer потребуют отдельного решения.
 
 ## Открытые вопросы
 
-- Нужны ли deep links на медиаобъект?
+- Нужны ли внешние deep links на медиаобъект?

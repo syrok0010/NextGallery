@@ -1,20 +1,23 @@
 # Тестовый Nextcloud
 
 Для интеграционных проверок NextGallery используй отдельный Nextcloud/Memories
-на `syrok-server`: **http://test.syrok/**. Локальный AdGuard Home разрешает
-`test.syrok` в `10.9.0.1`; с устройства нужен маршрут к этому VPN-адресу.
+на **`syrok-server`** (`10.9.0.1`, в T3 Code — `Homelab` / linked environment
+`syrok0010.keenetic.pro`): **http://test.syrok/**. Локальный AdGuard Home
+разрешает `test.syrok` в `10.9.0.1`; доступ по HTTP работает и с других машин
+при поднятом WireGuard (через тот же DNS и nginx).
 
 ## Доступ и данные
 
 - Рабочая учётная запись — `test`, папка медиатеки — `/Photos`.
 - Memories доступен по `/apps/memories/`, API — по `/apps/memories/api/`.
 - Учётные данные и команды запуска, остановки и удаления ведутся в
-  [README стенда](/home/syrok/nextgallery-testcloud/README.md).
+  `/home/syrok/nextgallery-testcloud/README.md` на `syrok-server`.
 - Перед загрузкой или удалением медиа проверяй адрес подключённой сессии:
   операции должны выполняться на `http://test.syrok/` под тестовой учётной записью.
   Личный Nextcloud содержит пользовательские данные и для этих проверок не подходит.
-- Стенд и эмулятор `emulator-5554` — рабочие среды агента. Постоянные тестовые
-  медиа (_фикстуры_) переиспользуй между задачами:
+- Стенд и эмулятор `nextgallery-api36-dev` на `syrok-server` (см.
+  [android-development.md](android-development.md)) — рабочие среды агента.
+  Постоянные тестовые медиа (_фикстуры_) переиспользуй между задачами:
   - стенд, `/Photos/fixtures/`: `cloud-NN.jpg`, объекты только в облаке;
   - эмулятор, `/sdcard/Pictures/fixtures/`: `phone-N.jpg`, объекты только на телефоне.
 - Загрузку, удаление и добавление в альбом проверяй на одноразовых копиях в папке
@@ -25,34 +28,39 @@
 
 Стенд работает по HTTP. Для подключения из Android требуется разрешение
 cleartext-трафика к точному домену `test.syrok` в network security config тестового
-варианта приложения. Проверяй конфигурацию выбранной сборки, DNS и маршрут с устройства: успешный
-запрос с хоста не подтверждает доступность сервера из приложения.
+варианта приложения. Проверяй конфигурацию выбранной сборки, DNS и маршрут с устройства:
+успешный запрос с хоста не подтверждает доступность сервера из приложения.
 
 Выбор устройства и защита данных телефона описаны в
 [android-development.md](android-development.md) и [testing.md](testing.md).
 
 ## Скриншоты и состояния
 
+Команды `adb` и `docker compose` выполняются на `syrok-server` (с других машин —
+через linked environment `syrok0010.keenetic.pro` или SSH на `syrok-server`).
+
 - Русский интерфейс на английском эмуляторе:
-  `adb shell cmd locale set-app-locales <пакет> --locales ru-RU`.
+  `adb -s <serial> shell cmd locale set-app-locales <пакет> --locales ru-RU`
+  (где `<serial>` — актуальный serial `nextgallery-api36-dev` из `adb devices`).
 - Состояние ошибки сети: `docker compose pause app` в каталоге стенда, после
   проверки — `docker compose unpause app`. Запросы зависают, операции падают по таймауту.
-- Локальные файлы без EXIF ставь на тот же день, что облачные фикстуры
-  (`touch -d "<дата> 13:00"`, затем `MEDIA_SCANNER_SCAN_FILE`): день без облачных
-  объектов может не попасть в ленту (#118).
 
-## Управление на хосте
+## Управление на `syrok-server`
 
-Compose-проект `nextgallery-testcloud` находится в
+Compose-проект `nextgallery-testcloud` находится на `syrok-server` в
 `/home/syrok/nextgallery-testcloud`, вне Git-репозитория NextGallery. Сам clone
 проекта не разворачивает этот стенд. Его README и `compose.yaml` — источник
 актуальных версий, настроек и команд управления.
 
-Начни с проверки состояния контейнеров и HTTP:
+HTTP-проверку можно выполнить с любой машины с WireGuard; `docker compose` — на
+`syrok-server`:
 
 ```bash
+# на syrok-server:
 cd /home/syrok/nextgallery-testcloud
 docker compose ps
+
+# на syrok-server или другой машине с WireGuard:
 curl --noproxy '*' --fail --silent --show-error --max-time 15 http://test.syrok/status.php
 ```
 
@@ -61,7 +69,7 @@ curl --noproxy '*' --fail --silent --show-error --max-time 15 http://test.syrok/
 локальный домен, хотя прямой доступ работает.
 
 Memories индексирует новые медиа фоновыми заданиями. Для немедленной проверки
-после загрузки запусти из каталога стенда:
+после загрузки запусти на `syrok-server` из каталога стенда:
 
 ```bash
 docker compose exec --user www-data app php occ memories:index --user=test

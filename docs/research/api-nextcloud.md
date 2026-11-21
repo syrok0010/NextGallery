@@ -42,7 +42,12 @@ WebDAV полезен для:
 
 ## OCS и capabilities
 
-OCS/capabilities нужны для определения возможностей сервера и установленных приложений.
+OCS/capabilities (`GET /ocs/v2.php/cloud/capabilities?format=json`) нужны для определения возможностей сервера и установленных приложений. Для `ocs/v2.php` неуспешный OCS-статус приходит не-2xx HTTP-кодом.
+
+Проверено на тестовом стенде (`http://test.syrok/`):
+
+- **Корзина (`files_trashbin`):** при включённом приложении capabilities содержит `files.undelete: true` (и `PROPFIND remote.php/dav/trashbin/{uid}/trash/` с `Depth: 0` отвечает `207`); при выключенном (`occ app:disable files_trashbin`) поле `files.undelete` отсутствует (`PROPFIND` отвечает `404`).
+- **Chunked upload:** максимальный размер части приходит в `files.chunked_upload.max_size` (по умолчанию 100 МиБ; `<= 0` отключает chunked upload).
 
 Потенциальные вопросы:
 
