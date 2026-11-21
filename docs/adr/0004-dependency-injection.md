@@ -36,7 +36,7 @@ Auth, network, Room, MediaStore, cache и ViewModel требуют composition r
 
 `allowOverride(false)` запрещает пересечение регистраций разных модулей; замены в изолированных тестовых контейнерах включаются явно. Несколько `OperationStatusSource` имеют типовые qualifiers и ссылаются на исходные singleton-экземпляры; UI собирает их через текущий scope.
 
-Один авторизованный scope принадлежит `AuthenticatedGraph` на уровне процесса (ADR 0006). Compose использует `UnboundKoinScope`, поэтому уход с экрана не закрывает очередь и наблюдателей. WorkerFactory Koin обращается к тому же владельцу, а `UploadWorker` получает queue/transport/client конструктором. Default WorkManagerInitializer удалён, WorkManager настраивается после Koin.
+Один scope `AuthenticatedSession` принадлежит `AuthenticatedGraph` на уровне процесса (ADR 0006). `AuthenticatedGraph` — технический владелец lifecycle, а session — доменная граница пользовательского состояния. Compose использует `UnboundKoinScope`, поэтому уход с экрана не закрывает очередь и наблюдателей. WorkerFactory Koin обращается к тому же владельцу, а `UploadWorker` получает queue/transport/client конструктором. Default WorkManagerInitializer удалён, WorkManager настраивается после Koin.
 
 Graph явно отменяет принадлежащий ему CoroutineScope; scoped Coil loader и Room databases закрываются через `onClose` вместе с авторизованным графом. Bootstrap не предоставляет пользовательские storage-зависимости и image loader. В тестах сначала освобождаются ViewModel/композиция и авторизованный граф, затем bootstrap. Убийство процесса не требует выполнения cleanup.
 

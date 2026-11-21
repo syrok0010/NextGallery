@@ -15,6 +15,7 @@ import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AuthenticatedSession
 import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
 import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
@@ -72,8 +73,9 @@ import org.koin.plugin.module.dsl.*
 
 internal fun authenticatedModule() =
     module {
-        scope<AuthenticatedGraph> {
-            scoped<AccountCredentials> { checkNotNull(getSource<AccountCredentials>()) }
+        scope<AuthenticatedSession> {
+            scoped<AuthenticatedSession> { checkNotNull(getSource<AuthenticatedSession>()) }
+            scoped<AccountCredentials> { get<AuthenticatedSession>().credentials }
             scoped { NextGalleryDatabase.create(get()) } onClose { it?.close() }
             scoped { UploadQueueDatabase.open(get()) } onClose { it?.close() }
             scoped<UploadJournal>()

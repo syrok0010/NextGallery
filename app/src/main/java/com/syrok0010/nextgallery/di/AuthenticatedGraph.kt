@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.di
 import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AuthenticatedSession
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -17,11 +18,12 @@ internal class AuthenticatedGraph(private val koin: Koin) : AutoCloseable {
     fun start(credentials: AccountCredentials) {
         current?.let {
             check(
-                it.get<AccountCredentials>() == credentials,
+                it.get<AuthenticatedSession>().credentials == credentials,
             ) { "Authenticated graph is already running" }
             return
         }
-        val scope = koin.createScope<AuthenticatedGraph>("authenticated", credentials)
+        val session = AuthenticatedSession(credentials)
+        val scope = koin.createScope<AuthenticatedSession>("authenticated", session)
         try {
             scope.get<UploadQueue>()
             val coordinator = scope.get<MediaLibraryCoordinator>()
