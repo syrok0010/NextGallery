@@ -13,6 +13,8 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -28,8 +30,8 @@ internal class UploadWorker(
     context: Context,
     params: WorkerParameters,
     private val queue: UploadQueue,
-    private val transport: com.syrok0010.nextgallery.core.network.NextcloudTransport,
-    private val memories: com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient,
+    private val transport: NextcloudTransport,
+    private val memories: MemoriesApiClient,
 ) : CoroutineWorker(context, params) {
     private val notifications = UploadNotifications(context)
 

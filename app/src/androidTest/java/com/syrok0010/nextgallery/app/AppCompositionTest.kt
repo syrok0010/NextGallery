@@ -34,6 +34,7 @@ class AppCompositionTest {
                     store.put("auth", graph.koin.get<LoginViewModel>())
                     store.put("session", graph.koin.get<SessionViewModel>())
                     assertNull(graph.koin.getOrNull<UploadQueue>())
+                    assertNull(graph.koin.getOrNull<coil3.ImageLoader>())
                     assertThrows(IllegalStateException::class.java) {
                         graph.koin.get<AuthenticatedGraph>().requireScope()
                     }
@@ -55,7 +56,8 @@ class AppCompositionTest {
                     assertTrue(sources.any { it === queue })
                     assertTrue(sources.any { it === scope.get<AlbumAdditions>() })
                     assertTrue(sources.any { it === scope.get<MediaDeletionRepository>() })
-                    assertSame(graph.koin.get<UploadJournal>(), scope.get<UploadJournal>())
+                    assertNull(graph.koin.getOrNull<UploadJournal>())
+                    assertNotNull(scope.get<UploadJournal>())
                     store.put("albums", scope.get<AlbumsViewModel>())
                     store.put(
                         "album",

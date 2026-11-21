@@ -53,5 +53,5 @@ private fun sessionViewModel(
 
 fun appModule() =
     module {
-        includes(bootstrapModule(), storageModule(), authenticatedModule(), workerModule())
+        includes(bootstrapModule(), authenticatedModule(), workerModule())
     }

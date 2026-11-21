@@ -31,6 +31,7 @@ import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import coil3.BitmapImage
 import coil3.Image
+import coil3.ImageLoader
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.images.MediaAssetImage
@@ -139,8 +140,9 @@ internal fun MediaViewerPage(
                     .fillMaxSize()
                     .then(pageTransformModifier),
             ) {
+                val imageLoader: ImageLoader = koinInject()
                 ZoomableAsyncImage(
-                    imageLoader = koinInject(),
+                    imageLoader = imageLoader,
                     model = originalRequest,
                     contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),

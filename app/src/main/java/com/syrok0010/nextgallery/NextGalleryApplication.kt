@@ -22,6 +22,5 @@ class NextGalleryApplication : Application() {
         }.koin
 
         koin.get<SessionStore>()
-        coil3.SingletonImageLoader.setSafe { koin.get<coil3.ImageLoader>() }
     }
 }
