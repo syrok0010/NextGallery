@@ -213,5 +213,13 @@
     <string name="upload_enqueue_rejected">Couldn\'t queue the files for upload. Try again.</string>
     <string name="uploads_enqueue_rejected">Couldn\'t queue the files for upload to “%1$s”. Try again.</string>
     <string name="uploads_logout_blocked">There are unfinished uploads or actions. Finish or cancel them on the Uploads screen before signing out.</string>
-    <string name="album_contents_pending_metadata">Added items are still being prepared: %1$d.</string>
+    <string name="album_remove_action">Remove from album</string>
+    <string name="album_add_other">Add to another album</string>
+    <string name="album_remove_title">Remove %2$d items from “%1$s”?</string>
+    <string name="album_remove_note">Photos and videos will remain on the phone, in the cloud, and in other albums. Only this album’s contents will change.</string>
+    <string name="album_remove_running">Removing from “%1$s”</string>
+    <string name="album_remove_done">Removed from albums: %1$d</string>
+    <string name="album_remove_failed">Couldn\'t remove: %1$d</string>
+    <string name="album_remove_busy">Wait for the previous album removal to finish.</string>
+    <string name="delete_album_note">Deleting the cloud copy will remove it from every server album it belongs to.</string>
 </resources>

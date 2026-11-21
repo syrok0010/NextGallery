@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 internal class Albums(
     private val sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
+    remover: MemoriesAlbumRemover,
     remoteSource: RemoteAlbumSource,
     localSource: LocalAlbumSource,
     source: AlbumContentsSource,
@@ -39,12 +40,20 @@ internal class Albums(
     private val contents = AlbumContentsStore(sessions, source, library, permission, scope)
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
+    private val removals = AlbumRemovals(sessions, remover, scope, mutations) { location, ids ->
+        if (!contents.removed(location, ids)) catalog.refresh()
+    }
 
     val state = combine(catalog.state, contents.snapshots, ::albumCatalogProjection)
         .stateIn(scope, SharingStarted.Eagerly, AlbumsUiState())
     val adding = additionState.map { it is AlbumAdditionState.Running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations = additionState.map(::albumOperationSnapshots)
+    val removing = removals.progress.map { it != null }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    override val operations = combine(
+        additionState.map(::albumOperationSnapshots),
+        removals.operations,
+    ) { add, remove -> add + remove }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
@@ -120,6 +129,9 @@ internal class Albums(
     @MainThread
     fun refresh(location: AlbumLocation) = contents.refresh(location)
 
+    fun removeMembers(location: AlbumLocation.Remote, name: String, ids: Set<Long>): Boolean =
+        removals.remove(location, name, ids)
+
     private fun added(location: AlbumLocation.Remote, ids: Set<Long>, items: List<MediaItem> = emptyList()) {
         if (ids.isNotEmpty() && !contents.added(location, ids, items)) reconcile(location)
     }
@@ -157,11 +169,13 @@ internal class Albums(
     @MainThread
     override fun consumeSucceeded() {
         if ((additionState.value as? AlbumAdditionState.Done)?.result?.failed == 0) consumeAll()
+        removals.consumeSucceeded()
     }
 
     @MainThread
     override fun consumeAll() {
         if (additionState.value !is AlbumAdditionState.Running) additionState.value = AlbumAdditionState.Idle
+        removals.consumeAll()
     }
 }
 

@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import androidx.annotation.MainThread
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -18,6 +19,7 @@ internal data class AlbumContentsState(
     val permissionRequired: Boolean = false,
     /** Confirmed members whose metadata has not reached Memories or the shared index yet. */
     val pendingMetadata: Int = 0,
+    val departedIds: Set<MediaId> = emptySet(),
 )
 
 /** Read lifecycle and publication, confined to the scope's main dispatcher. */
@@ -112,6 +114,17 @@ internal class AlbumContentsStore(
         return entry.membership.initialized && entry.state.value.pendingMetadata == 0
     }
 
+    fun removed(location: AlbumLocation.Remote, ids: Set<Long>): Boolean {
+        val entry = entries[location] ?: return false
+        val departed = entry.state.value.items
+            .filter { it.remoteFileId in ids }
+            .mapTo(mutableSetOf()) { it.mediaId }
+        entry.membership = entry.membership.removed(ids)
+        entry.state.value = entry.state.value.copy(departedIds = entry.state.value.departedIds + departed)
+        publish(location, entry)
+        return entry.membership.initialized
+    }
+
     private fun load(location: AlbumLocation, entry: Entry, preserveConfirmed: Boolean = false) {
         val credentials = (sessions.session.value as? SessionUiState.SignedIn)?.credentials ?: return
         if (location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full) return
@@ -134,8 +147,13 @@ internal class AlbumContentsStore(
                 }
                 if (entry.request == request) {
                     check(latest.loaded == latest.total) { "Incomplete album membership" }
+                    val previousIds = entry.state.value.items.mapTo(mutableSetOf()) { it.mediaId }
                     entry.membership = entry.membership.read(latest, finished = true)
-                    entry.state.value = entry.state.value.copy(loading = false)
+                    val currentIds = entry.membership.contents().items.mapTo(mutableSetOf()) { it.mediaId }
+                    entry.state.value = entry.state.value.copy(
+                        loading = false,
+                        departedIds = entry.state.value.departedIds + (previousIds - currentIds),
+                    )
                     publish(location, entry)
                 }
             } catch (cancelled: CancellationException) {
@@ -152,6 +170,7 @@ internal class AlbumContentsStore(
             loading = previous.loading,
             failed = previous.failed,
             permissionRequired = previous.permissionRequired,
+            departedIds = previous.departedIds - entry.membership.contents().items.map { it.mediaId }.toSet(),
         )
         entry.state.value = state
         if (entry.membership.initialized) complete.value += location to state

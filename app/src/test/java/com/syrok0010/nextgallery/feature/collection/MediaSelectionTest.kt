@@ -27,6 +27,15 @@ class MediaSelectionTest {
         assertTrue(selection.selectedIds.isEmpty())
     }
 
+    @Test fun `departed album members leave selection without dropping other members`() {
+        val selection = MediaSelection()
+        selection.select(first)
+        selection.select(second)
+        selection.remove(setOf(first))
+        assertTrue(selection.active)
+        assertEquals(setOf(second), selection.selectedIds)
+    }
+
     @Test fun `clear leaves the mode`() {
         val selection = MediaSelection()
         selection.select(first)
