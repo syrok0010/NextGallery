@@ -27,6 +27,7 @@ import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.di.MediaTestContext
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -152,13 +153,15 @@ class MediaDetailScreenTest {
         )
         var closed: MediaItem? = null
         rule.setContent {
-            MediaDetailScreen(
-                initialMediaId = first.mediaId,
-                sequence = sequenceState.value,
-                tileBoundsForMediaId = { null },
-                onBack = { closed = it },
-                onCurrentItemChange = {},
-            )
+            MediaTestContext {
+                MediaDetailScreen(
+                    initialMediaId = first.mediaId,
+                    sequence = sequenceState.value,
+                    tileBoundsForMediaId = { null },
+                    onBack = { closed = it },
+                    onCurrentItemChange = {},
+                )
+            }
         }
         rule.onNodeWithText("first.jpg").assertIsDisplayed()
 
@@ -187,13 +190,15 @@ class MediaDetailScreenTest {
         val sequence = mutableStateOf(sequenceOf(current, neighbor))
         var closed: MediaItem? = null
         rule.setContent {
-            MediaDetailScreen(
-                initialMediaId = current.mediaId,
-                sequence = sequence.value,
-                tileBoundsForMediaId = { null },
-                onBack = { closed = it },
-                onCurrentItemChange = {},
-            )
+            MediaTestContext {
+                MediaDetailScreen(
+                    initialMediaId = current.mediaId,
+                    sequence = sequence.value,
+                    tileBoundsForMediaId = { null },
+                    onBack = { closed = it },
+                    onCurrentItemChange = {},
+                )
+            }
         }
         // Coil completes outside Compose's idling resources. Wait for actual image pixels.
         rule.waitUntil(timeoutMillis = 10_000) {
@@ -229,13 +234,15 @@ class MediaDetailScreenTest {
         val neighbor = mediaItem("sdr")
         val sequence = mutableStateOf(sequenceOf(current, neighbor))
         rule.setContent {
-            MediaDetailScreen(
-                initialMediaId = current.mediaId,
-                sequence = sequence.value,
-                tileBoundsForMediaId = { null },
-                onBack = {},
-                onCurrentItemChange = {},
-            )
+            MediaTestContext {
+                MediaDetailScreen(
+                    initialMediaId = current.mediaId,
+                    sequence = sequence.value,
+                    tileBoundsForMediaId = { null },
+                    onBack = {},
+                    onCurrentItemChange = {},
+                )
+            }
         }
         rule.waitUntil(timeoutMillis = 10_000) {
             rule.activity.window.colorMode == ActivityInfo.COLOR_MODE_HDR
@@ -275,13 +282,15 @@ class MediaDetailScreenTest {
             pageIndexByMediaId = items.mapIndexed { index, item -> item.mediaId to index }.toMap(),
         )
         rule.setContent {
-            MediaDetailScreen(
-                initialMediaId = items.first().mediaId,
-                sequence = sequence,
-                tileBoundsForMediaId = { tileBounds },
-                onBack = onClose,
-                onCurrentItemChange = onCurrent,
-            )
+            MediaTestContext {
+                MediaDetailScreen(
+                    initialMediaId = items.first().mediaId,
+                    sequence = sequence,
+                    tileBoundsForMediaId = { tileBounds },
+                    onBack = onClose,
+                    onCurrentItemChange = onCurrent,
+                )
+            }
         }
         rule.waitForIdle()
     }

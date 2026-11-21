@@ -83,7 +83,7 @@ class UploadTransferTest {
         journal = UploadJournal(db)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         queue = UploadQueue(
-            sessions,
+            sessions.requireCredentials(),
             MediaLibraryIndex(),
             scope,
             journal,

@@ -23,7 +23,7 @@ class AlbumCatalogRepositoryTest {
                 }
             }
             val permission = MutableStateFlow<LocalMediaPermissionMode?>(null)
-            val vm = AlbumCatalogRepository(sessions, remote, local(), permission, backgroundScope)
+            val vm = AlbumCatalogRepository(sessions.requireCredentials(), remote, local(), permission, backgroundScope)
             
             permission.value = LocalMediaPermissionMode.Full
             runCurrent()

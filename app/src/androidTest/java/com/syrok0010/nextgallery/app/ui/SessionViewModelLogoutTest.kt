@@ -63,7 +63,7 @@ class SessionViewModelLogoutTest {
         db = UploadQueueDatabase.open(context, dbName)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         queue = UploadQueue(
-            sessions = sessions,
+            credentials = sessions.requireCredentials(),
             library = library,
             scope = scope,
             journal = UploadJournal(db),
@@ -74,9 +74,11 @@ class SessionViewModelLogoutTest {
             ),
             refreshLibrary = {},
         )
-        viewModel = SessionViewModel(sessions, queue) {
-            erasures.incrementAndGet()
-            if (eraseFails) throw IOException("The system did not erase the app data")
+        viewModel = SessionViewModel(sessions) {
+            queue.logout {
+                erasures.incrementAndGet()
+                if (eraseFails) throw IOException("The system did not erase the app data")
+            }
         }
     }
 

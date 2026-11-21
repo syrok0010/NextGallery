@@ -65,7 +65,7 @@ class AlbumUploadFollowUpTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
                 val catalog = AlbumCatalogRepository(
-                    SessionStore(FixedCredentials(fixture.credentials)),
+                    SessionStore(FixedCredentials(fixture.credentials)).requireCredentials(),
                     object : RemoteAlbumSource {
                         override suspend fun load(credentials: AccountCredentials) = RemoteAlbums(emptyList())
                     },

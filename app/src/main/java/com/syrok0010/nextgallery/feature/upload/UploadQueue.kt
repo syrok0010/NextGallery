@@ -4,8 +4,6 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import java.io.IOException
 import java.util.UUID
@@ -22,7 +20,7 @@ import kotlinx.coroutines.sync.withLock
  * next attempt to the worker's own backoff, which the user can cut short with [retryNow].
  */
 internal class UploadQueue(
-    private val sessions: SessionStore,
+    private val credentials: AccountCredentials,
     private val library: MediaLibraryIndex,
     private val scope: CoroutineScope,
     private val journal: UploadJournal,
@@ -85,24 +83,16 @@ internal class UploadQueue(
 
     init {
         scope.launch {
-            sessions.session
-                .map { it is SessionUiState.SignedIn }
-                .distinctUntilChanged()
-                .collectLatest { signedIn ->
-                    if (!signedIn) return@collectLatest
-                    // Claims of an earlier process died with it.
-                    journal.release { it != processId }
-                    // Covers a process that died between accepting jobs and scheduling them.
-                    if (journal.jobs().any { it.waiting }) scheduleWorker()
-                    journal.observe().collect { rows.value = it }
-                }
+            // Claims of an earlier process died with it.
+            journal.release { it != processId }
+            if (journal.jobs().any { it.waiting }) scheduleWorker()
+            journal.observe().collect { rows.value = it }
         }
     }
 
     /** Queues the phone-only objects among [mediaIds]; [album] gets them once they are uploaded. */
     suspend fun submit(mediaIds: Collection<MediaId>, album: UploadAlbum? = null): EnqueueResult =
         commands.withLock {
-            credentials() ?: return@withLock EnqueueResult.Rejected
             val index = library.state.value
             val files = mediaIds.distinct().mapNotNull { id -> index[id]?.let(::uploadSelection) }
             if (files.isEmpty()) return@withLock EnqueueResult.NothingToUpload
@@ -161,7 +151,6 @@ internal class UploadQueue(
     /** Runs [clearSession] unless some upload work is unfinished; null once it ran. */
     suspend fun logout(clearSession: () -> Unit): LogoutRefusal? =
         commands.withLock {
-            credentials() ?: return@withLock null
             try {
                 if (journal.hasUnfinished()) return@withLock LogoutRefusal.UnfinishedWork
                 clearSession()
@@ -182,7 +171,7 @@ internal class UploadQueue(
         put: suspend (AccountCredentials, UploadJob, (Long, Long) -> Unit) -> UploadedFile?,
     ): Boolean =
         passes.withLock {
-            val account = credentials() ?: return@withLock false
+            val account = credentials
             var reachedServer = false
             val deferred = HashSet<String>()
             // A pass that does not end normally makes the worker retry with backoff as well.
@@ -207,8 +196,7 @@ internal class UploadQueue(
         }
 
     /** Read from the journal, so it already counts the job [drain] finished last. */
-    suspend fun unseenResult(): UploadResult? =
-        credentials()?.let { uploadResult(journal.jobs().filterNot { it.hidden }) }
+    suspend fun unseenResult(): UploadResult? = uploadResult(journal.jobs().filterNot { it.hidden })
 
     /** The original name the job keeps across restarts, pinned on its first attempt. */
     suspend fun pin(claim: UploadJob, path: DavFilePath): DavFilePath =
@@ -315,7 +303,6 @@ internal class UploadQueue(
 
     private fun command(action: suspend () -> Unit) {
         scope.launch {
-            credentials() ?: return@launch
             try {
                 action()
             } catch (cancelled: CancellationException) {
@@ -345,8 +332,6 @@ internal class UploadQueue(
 
     private suspend fun sourceUnchanged(file: UploadSelection): Boolean =
         file.stamp != null && withContext(Dispatchers.IO) { stamp(file) } == file.stamp
-
-    private fun credentials() = (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
 /** Actual byte counts of the current attempt; a negative total means its size is unknown. */

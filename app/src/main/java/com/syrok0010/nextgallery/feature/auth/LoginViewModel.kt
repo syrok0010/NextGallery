@@ -146,6 +146,7 @@ class LoginViewModel(
         setAttempt(LoginAttempt.SavingCredentials, R.string.status_login_complete_loading_timeline)
         try {
             withContext(storageDispatcher) { credentialsStore.save(credentials) }
+            sessionStore.signIn(credentials)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -153,7 +154,6 @@ class LoginViewModel(
             return
         }
         pendingCredentials = null
-        sessionStore.signIn(credentials)
         mutableState.value = LoginScreenUiState()
     }
 

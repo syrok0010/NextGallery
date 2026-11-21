@@ -10,8 +10,6 @@ import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
@@ -79,7 +77,7 @@ internal fun writableAlbums(albums: List<AlbumSummary>, user: String): List<Albu
  * and keeps its state for the result message.
  */
 internal class AlbumAdditions(
-    private val sessions: SessionStore,
+    private val credentials: AccountCredentials,
     private val writer: MemoriesAlbumWriter,
     private val catalog: AlbumCatalogRepository,
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
@@ -93,15 +91,13 @@ internal class AlbumAdditions(
     private var job: Job? = null
 
     /**
-     * Returns false when the request is not accepted: another addition is running or nobody is
-     * signed in. The caller keeps the selection in that case.
+     * Returns false while another addition is running. The caller keeps the selection in that case.
      *
      * Local-only objects are queued for upload once the album exists, so they never race album
      * creation; they are not uploaded when the album cannot be written.
      */
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (job?.isActive == true) return false
-        val credentials = credentials() ?: return false
         mutableState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
         job = scope.launch {
             mutableState.value = try {
@@ -162,9 +158,6 @@ internal class AlbumAdditions(
     override fun consumeAll() {
         consume()
     }
-
-    private fun credentials(): AccountCredentials? =
-        (sessions.session.value as? SessionUiState.SignedIn)?.credentials
 }
 
 private fun albumOperationSnapshots(state: AlbumAdditionState): List<OperationStatusSnapshot> {

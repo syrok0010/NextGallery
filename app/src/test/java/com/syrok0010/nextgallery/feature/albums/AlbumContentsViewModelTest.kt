@@ -37,7 +37,7 @@ class AlbumContentsViewModelTest {
                     }
                 }
                 val firstViewModel = AlbumContentsViewModel(
-                    sessions(),
+                    sessions().requireCredentials(),
                     source,
                     MediaLibraryIndex(),
                     permission,
@@ -51,7 +51,7 @@ class AlbumContentsViewModelTest {
                 assertTrue(cancelled)
 
                 val secondViewModel = AlbumContentsViewModel(
-                    sessions(),
+                    sessions().requireCredentials(),
                     source,
                     MediaLibraryIndex(),
                     permission,
@@ -81,7 +81,7 @@ class AlbumContentsViewModelTest {
                 var cancellations = 0
                 val sessions = sessions()
                 val vm = AlbumContentsViewModel(
-                    sessions,
+                    sessions.requireCredentials(),
                     AlbumContentsSource { _, _ ->
                         flow {
                             calls++

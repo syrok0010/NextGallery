@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import com.syrok0010.nextgallery.di.MediaTestContext
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -38,6 +39,8 @@ class FilmstripTest {
         var selectedPage = -1
 
         composeRule.setContent {
+            MediaTestContext {
+
             Filmstrip(
                 state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
                     val index = items.indexOfFirst { it.mediaId == id }
@@ -46,6 +49,7 @@ class FilmstripTest {
                 }),
             )
         }
+}
 
         composeRule.onNodeWithTag(FilmstripTestTag).assertIsDisplayed()
         composeRule.onNodeWithTag(filmstripTileTestTag(0)).assertIsDisplayed()
@@ -69,12 +73,15 @@ class FilmstripTest {
         val newSelections = mutableListOf<MediaId>()
         val onSelected = mutableStateOf<(MediaId) -> Unit>({ oldSelections += it })
         composeRule.setContent {
+            MediaTestContext {
+
             val state = rememberViewerFilmstripState(items.value, current.value, onSelected.value)
             // The row must see the viewer's inputs in this composition, without a synchronization pass.
             assertEquals(items.value, state.items)
             assertEquals(current.value, state.currentMediaId)
             Filmstrip(state)
         }
+}
         composeRule.runOnIdle {
             items.value = listOf(second, first)
             current.value = second.mediaId
@@ -93,12 +100,15 @@ class FilmstripTest {
         val currentPage = mutableIntStateOf(20)
         val listState = LazyListState(firstVisibleItemIndex = 20)
         composeRule.setContent {
+            MediaTestContext {
+
             Filmstrip(
                 state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
                     currentPage.intValue = items.indexOfFirst { it.mediaId == id }
                 }, lazyListState = listState),
             )
         }
+}
         composeRule.waitForIdle()
         composeRule.mainClock.autoAdvance = false
 
@@ -159,6 +169,8 @@ class FilmstripTest {
             }
         }
         composeRule.setContent {
+            MediaTestContext {
+
             Filmstrip(
                 state = rememberViewerFilmstripState(items, items[currentPage.intValue].mediaId, { id ->
                     currentPage.intValue = items.indexOfFirst { it.mediaId == id }
@@ -169,6 +181,7 @@ class FilmstripTest {
                 uptimeMillis = { composeRule.mainClock.currentTime },
             )
         }
+}
         composeRule.waitForIdle()
         val initialLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 1 }.offset
         val neighborLeft = listState.layoutInfo.visibleItemsInfo.first { it.index == 2 }.offset
@@ -257,12 +270,15 @@ class FilmstripTest {
         }
         lateinit var state: ViewerFilmstripState
         composeRule.setContent {
+            MediaTestContext {
+
             state = rememberViewerFilmstripState(items.value, current.value, { current.value = it })
             Filmstrip(
                 state = state,
                 frameProvider = provider,
             )
         }
+}
         composeRule.onNodeWithTag(filmstripTileTestTag(1)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.8f) }
@@ -310,9 +326,12 @@ class FilmstripTest {
         }
         lateinit var state: ViewerFilmstripState
         composeRule.setContent {
+            MediaTestContext {
+
             state = rememberViewerFilmstripState(items, video.mediaId, {})
             if (shown.value) Filmstrip(state, frameProvider = provider)
         }
+}
         composeRule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         composeRule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.7f) }
@@ -347,6 +366,8 @@ class FilmstripTest {
         val currentPage = mutableIntStateOf(0)
         val listState = LazyListState()
         composeRule.setContent {
+            MediaTestContext {
+
             Filmstrip(
                 state = rememberViewerFilmstripState(items.value, items.value[currentPage.intValue].mediaId, { id ->
                     currentPage.intValue = items.value.indexOfFirst { it.mediaId == id }
@@ -354,6 +375,7 @@ class FilmstripTest {
                 frameProvider = VideoFrameProvider { kotlinx.coroutines.flow.emptyFlow() },
             )
         }
+}
         composeRule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         composeRule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
         composeRule.runOnIdle {
