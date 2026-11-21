@@ -15,9 +15,11 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -85,7 +87,7 @@ class AlbumAdditionTest {
                 else -> 404 to ""
             }
         }.use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 var refreshed = 0
@@ -140,7 +142,7 @@ class AlbumAdditionTest {
                 else -> 404 to ""
             }
         }.use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val additions = fixture.albums(scope, sessions = sessions)
@@ -211,7 +213,7 @@ class AlbumAdditionTest {
         respond: (Recorded) -> Pair<Int, String>,
     ): FailedAddition =
         NextcloudFixture(respond).use { fixture ->
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val enqueued = java.util.concurrent.atomic.AtomicInteger()
