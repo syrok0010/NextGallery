@@ -30,6 +30,16 @@ internal data class AlbumAddress(val owner: String, val name: String) {
 
 internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val failed: Int)
 
+/** Exact outcomes are retained until the album state has applied the confirmed changes. */
+internal data class AlbumWriteResult(val outcomes: Map<Long, AlbumCopyOutcome>) {
+    val summary get() = AlbumAddResult(
+        outcomes.values.count { it == AlbumCopyOutcome.Added },
+        outcomes.values.count { it == AlbumCopyOutcome.AlreadyPresent },
+        outcomes.values.count { it == AlbumCopyOutcome.Failed },
+    )
+    val presentIds get() = outcomes.filterValues { it != AlbumCopyOutcome.Failed }.keys
+}
+
 internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
 internal class AlbumAlreadyExistsException(name: String) : IOException("Album $name already exists")
@@ -50,7 +60,7 @@ internal class MemoriesAlbumWriter(
         return AlbumLocation.Remote("$user/$name")
     }
 
-    suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumAddResult {
+    suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult {
         val permits = Semaphore(PARALLEL_COPIES)
         val outcomes = coroutineScope {
             fileIds
@@ -58,7 +68,7 @@ internal class MemoriesAlbumWriter(
                 .map { fileId ->
                     async {
                         permits.withPermit {
-                            try {
+                            fileId to try {
                                 files.findFile(fileId)?.let { copy(it, album) }
                                     ?: AlbumCopyOutcome.Failed
                             } catch (cancelled: CancellationException) {
@@ -70,16 +80,10 @@ internal class MemoriesAlbumWriter(
                     }
                 }.awaitAll()
         }
-        val present = outcomes.count { it == AlbumCopyOutcome.AlreadyPresent }
-        val confirmed = present == 0 || albumExists(album)
-        return AlbumAddResult(
-            added = outcomes.count { it == AlbumCopyOutcome.Added },
-            alreadyPresent = if (confirmed) present else 0,
-            failed = outcomes.count {
-                it == AlbumCopyOutcome.Failed
-            } +
-                if (confirmed) 0 else present,
-        )
+        val confirmed = outcomes.none { it.second == AlbumCopyOutcome.AlreadyPresent } || albumExists(album)
+        return AlbumWriteResult(outcomes.associate { (id, outcome) ->
+            id to if (!confirmed && outcome == AlbumCopyOutcome.AlreadyPresent) AlbumCopyOutcome.Failed else outcome
+        })
     }
 
     /**

@@ -5,12 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
+import com.syrok0010.nextgallery.feature.albums.AlbumsRepository
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
-import org.koin.androidx.compose.koinViewModel
-import org.koin.core.parameter.parametersOf
+import org.koin.compose.koinInject
 
 @Composable
 internal fun AlbumScreen(
@@ -18,15 +18,17 @@ internal fun AlbumScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onOpenUploads: () -> Unit,
-    viewModel: AlbumContentsViewModel = koinViewModel { parametersOf(album.location) },
+    albums: AlbumsRepository = koinInject(),
 ) {
-    val contents by viewModel.state.collectAsState()
+    val contents by remember(album.location, albums) {
+        albums.observeContents(album.location)
+    }.collectAsStateWithLifecycle()
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
     val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
     MediaCollectionScreen(
         slots = slots,
-        emptyContent = { AlbumContentsStatus(contents, viewModel::refresh) },
+        emptyContent = { AlbumContentsStatus(contents, { albums.refresh(album.location) }) },
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
@@ -34,14 +36,13 @@ internal fun AlbumScreen(
             onLogout,
             onOpenUploads,
             viewerVisible = viewerVisible,
-            onRefresh = viewModel::refresh,
             onBack = onBack,
             title = album.title,
             operations = operations,
         ) {
             Column(Modifier.fillMaxSize()) {
                 if (contents.items.isNotEmpty() && (contents.loading || contents.failed)) {
-                    AlbumContentsStatus(contents, viewModel::refresh)
+                    AlbumContentsStatus(contents, { albums.refresh(album.location) })
                 }
                 Box(Modifier.weight(1f)) { content() }
             }
