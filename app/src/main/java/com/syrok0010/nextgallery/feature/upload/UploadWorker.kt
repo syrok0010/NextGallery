@@ -79,13 +79,7 @@ internal class UploadWorker(context: Context, params: WorkerParameters) :
     /** Android drops bursts of notification updates; the delay leaves room for the result. */
     private suspend fun publishProgress() {
         queue.activity.filterNotNull().collect { activity ->
-            val message = applicationContext.getString(
-                R.string.upload_progress,
-                (activity.processed + 1).coerceAtMost(activity.total),
-                activity.total,
-            )
-            // The server answers without progress: the bar spins until it does.
-            notifications.showProgress(message, activity.percent.takeUnless { activity.saving })
+            notifications.showProgress(activity)
             delay(500L)
         }
     }

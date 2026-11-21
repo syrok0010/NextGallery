@@ -54,8 +54,11 @@ internal class UploadQueue(
     // Sample bytes before projecting the UI. Journal outcomes are not sampled: even a
     // transfer shorter than the interval still publishes its completed/cancelled row.
     @OptIn(FlowPreview::class)
+    private val displayedProgress =
+        progress.sample(100L).stateIn(scope, SharingStarted.Eagerly, null)
+
     val entries: StateFlow<List<UploadEntry>> =
-        combine(rows, progress.sample(100L).onStart { emit(null) }, ::uploadEntries)
+        combine(rows, displayedProgress, ::uploadEntries)
             .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** Ids of the current pass: a file queued while others run joins it until none is active. */
@@ -64,9 +67,11 @@ internal class UploadQueue(
             val active = jobs.filter { it.active }.mapTo(HashSet()) { it.id }
             jobs to if (active.isEmpty()) emptySet() else ids + active
         }
+
     val activity: StateFlow<UploadActivity?> =
-        combine(pass, progress) { (jobs, ids), progress -> uploadActivity(jobs, ids, progress) }
-            .stateIn(scope, SharingStarted.Eagerly, null)
+        combine(pass, displayedProgress) { (jobs, ids), progress ->
+            uploadActivity(jobs, ids, progress)
+        }.stateIn(scope, SharingStarted.Eagerly, null)
 
     /** Files wait out the worker's backoff, and nothing runs: [retryNow] can start them. */
     val paused: StateFlow<Boolean> =

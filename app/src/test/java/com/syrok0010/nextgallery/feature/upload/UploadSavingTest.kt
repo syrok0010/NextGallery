@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.upload
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,6 +46,25 @@ class UploadSavingTest {
         assertEquals(1_048_576L, entry.sentBytes)
         assertEquals(4_294_967_296L, entry.totalBytes)
         assertFalse(entry.saving)
+    }
+
+    @Test fun `notification activity changes inside the same percent of one large file`() {
+        val first =
+            uploadActivity(listOf(job), setOf("job"), Progress("job", 1_048_576L, 4_294_967_296L))
+        val next =
+            uploadActivity(listOf(job), setOf("job"), Progress("job", 2_097_152L, 4_294_967_296L))
+        assertEquals(first?.percent, next?.percent)
+        assertNotEquals(first, next)
+        assertEquals(2_097_152L, next?.sentBytes)
+        assertEquals(4_294_967_296L, next?.totalBytes)
+    }
+
+    @Test fun `notification does not retain bytes of a previous file`() {
+        val activity =
+            checkNotNull(uploadActivity(listOf(job), setOf("job"), Progress("previous", 50L, 100L)))
+        assertNull(activity.sentBytes)
+        assertNull(activity.totalBytes)
+        assertNull(activity.percent)
     }
 
     private fun tileProgress(progress: Progress): Float? {
