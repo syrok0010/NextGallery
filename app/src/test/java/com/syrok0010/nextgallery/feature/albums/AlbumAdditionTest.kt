@@ -108,12 +108,13 @@ class AlbumAdditionTest {
                 val additions = AlbumAdditions(
                     sessions,
                     fixture.writer,
-                    catalog,
                     { ids, album ->
                         submittedAlbum.value = album
                         EnqueueResult.Accepted(ids.size)
                     },
                     scope,
+                    onAdded = { _, _, _ -> },
+                    onCreated = catalog::refresh,
                 )
                 val before = refreshed
                 var mkcolBeforeSubmit = false
@@ -163,9 +164,10 @@ class AlbumAdditionTest {
                 val additions = AlbumAdditions(
                     sessions,
                     fixture.writer,
-                    emptyCatalog(sessions, scope),
                     { ids, _ -> EnqueueResult.Accepted(ids.size) },
                     scope,
+                    onAdded = { _, _, _ -> },
+                    onCreated = {},
                 )
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
                 val request = AlbumAdditionRequest(listOf(1L))
@@ -226,8 +228,7 @@ class AlbumAdditionTest {
     )
 
     /**
-     * Adds a server copy and a phone-only photo to [target] as anna. Waits for the failure and the
-     * album list refresh that follows it, so a failed addition still shows the albums as they are.
+     * Adds a server copy and a phone-only photo to [target] as anna and waits for the failure.
      */
     private suspend fun failedAddition(
         target: AlbumTarget,
@@ -258,12 +259,13 @@ class AlbumAdditionTest {
                 val additions = AlbumAdditions(
                     sessions,
                     fixture.writer,
-                    catalog,
                     { _, _ ->
                         enqueued.incrementAndGet()
                         enqueue
                     },
                     scope,
+                    onAdded = { _, _, _ -> },
+                    onCreated = catalog::refresh,
                 )
                 withTimeout(5_000) { while (refreshes.get() == 0) kotlinx.coroutines.delay(10) }
                 val before = refreshes.get()
@@ -274,7 +276,6 @@ class AlbumAdditionTest {
                 val failed = withTimeout(5_000) {
                     additions.state.first { it is AlbumAdditionState.Failed }
                 } as AlbumAdditionState.Failed
-                withTimeout(5_000) { while (refreshes.get() == before) kotlinx.coroutines.delay(10) }
                 FailedAddition(
                     failed.reason,
                     fixture.requests.map { it.method },

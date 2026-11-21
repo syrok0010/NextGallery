@@ -56,7 +56,7 @@ class MemoriesAlbumWriterTest {
                 album = AlbumAddress("anna", "Лето & море"),
                 fileIds = listOf(1, 2, 3, 4, 1),
             )
-            assertEquals(AlbumAddResult(added = 1, alreadyPresent = 1, failed = 2), result)
+            assertEquals(AlbumAddResult(added = 1, alreadyPresent = 1, failed = 2), result.summary)
             val copy = fixture.requests.single { it.method == "COPY" && it.decodedTarget.endsWith("1.jpg") }
             assertEquals("/remote.php/dav/files/anna/Photos/Поход 1.jpg", copy.decodedTarget)
             assertEquals(
@@ -78,7 +78,7 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             assertEquals(
                 AlbumAddResult(added = 1, alreadyPresent = 0, failed = 0),
-                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(7)),
+                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(7)).summary,
             )
             val search = fixture.requests.first()
             assertEquals("/remote.php/dav/", search.target)
@@ -142,7 +142,7 @@ class MemoriesAlbumWriterTest {
             )
             assertEquals(
                 AlbumAddResult(added = 0, alreadyPresent = 0, failed = 1),
-                fixture.writer.add(album, listOf(1)),
+                fixture.writer.add(album, listOf(1)).summary,
             )
             assertTrue(fixture.requests.any { it.method == "PROPFIND" && it.headers["depth"] == "0" })
         }
@@ -160,7 +160,7 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             assertEquals(
                 AlbumAddResult(added = 1, alreadyPresent = 0, failed = 1),
-                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(1, 2)),
+                fixture.writer.add(AlbumAddress("anna", "Лето"), listOf(1, 2)).summary,
             )
         }
     }

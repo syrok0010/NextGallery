@@ -32,13 +32,11 @@ internal fun AddToAlbumSheet(
     request: AlbumAdditionRequest,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
-    additions: AlbumAdditions = koinInject(),
-    catalog: AlbumCatalogRepository = koinInject(),
+    repository: AlbumsRepository = koinInject(),
     sessions: SessionStore = koinInject(),
 ) {
-    val additionState by additions.state.collectAsStateWithLifecycle()
-    val busy = additionState is AlbumAdditionState.Running
-    val albums by catalog.state.collectAsStateWithLifecycle()
+    val busy by repository.adding.collectAsStateWithLifecycle()
+    val albums by repository.state.collectAsStateWithLifecycle()
     val session by sessions.session.collectAsStateWithLifecycle()
     val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
     val writable = remember(albums.remote.items, user) {
