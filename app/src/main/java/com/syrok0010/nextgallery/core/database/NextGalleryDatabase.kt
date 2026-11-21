@@ -10,14 +10,14 @@ import androidx.room.RoomDatabase
         MemoriesCacheMetadataEntity::class,
         TimelineDayEntity::class,
         MemoriesMediaEntity::class,
-        MediaIdentifierEntity::class,
+        MediaIdentityEntity::class,
         MediaIdentityConflictEntity::class,
         LocalMediaEntity::class,
         LocalMediaMetadataEntity::class,
         LoadedDayEntity::class,
         ThumbnailCacheEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = false,
 )
 abstract class NextGalleryDatabase : RoomDatabase() {
