@@ -367,6 +367,11 @@ class VideoPlaybackIntegrationTest {
         screenshot("hls-paused-quality-switch")
         rule.onNodeWithTag(VideoPlaybackPlayPauseTestTag, useUnmergedTree = true).performClick()
         waitForPlayer { player.isPlaying && player.currentPosition > 6500 }
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.waitUntil(20_000) {
+            rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).fetchSemanticsNode()
+                .config[SemanticsProperties.StateDescription] == rule.activity.getString(R.string.video_filmstrip_ready)
+        }
         rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.25f) }
         waitForPlayer { player.isPlaying && player.currentPosition in 3_000L..5_000L }
@@ -388,7 +393,7 @@ class VideoPlaybackIntegrationTest {
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_retry)).performClick()
         waitForPlayer { player.playbackState == androidx.media3.common.Player.STATE_READY }
         rule.runOnIdle {
-            assertFalse(player.playWhenReady)
+            assertTrue("HLS retry preserves the play intent from before the failure", player.playWhenReady)
             assertTrue(player.currentPosition > 6500)
         }
         assertTrue(fixture.requests.any { it[":request"]?.contains(".m4s") == true })
@@ -477,7 +482,7 @@ class VideoPlaybackIntegrationTest {
                         TestVideoPage(item, controller)
                         ViewerChrome(item, playback = controller, onBack = {}, filmstrip = {})
                     }
-                    Filmstrip(listOf(item), 0, {},
+                    Filmstrip(rememberViewerFilmstripState(listOf(item), item.mediaId, {}),
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
                         playback = playback.current ?: FilmstripPlayback.None)
                 }
@@ -545,7 +550,7 @@ class VideoPlaybackIntegrationTest {
                         TestVideoPage(remote, controller)
                         ViewerChrome(remote, playback = controller, onBack = {}, filmstrip = {})
                     }
-                    Filmstrip(listOf(remote), 0, { assertEquals(0, it) },
+                    Filmstrip(rememberViewerFilmstripState(listOf(remote), remote.mediaId, { assertEquals(remote.mediaId, it) }),
                         modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
                         playback = playback.current ?: FilmstripPlayback.None)
                 }
@@ -592,8 +597,9 @@ class VideoPlaybackIntegrationTest {
             val cache = rememberVideoFilmstripCache()
             val owner = rememberViewerPlaybackState(remote)
             owner.current?.let { playback = it }
+            val filmstrip = rememberViewerFilmstripState(listOf(remote), remote.mediaId, {})
             if (shown) MaterialTheme {
-                Filmstrip(listOf(remote), 0, {}, playback = owner.current ?: FilmstripPlayback.None, frameCache = cache)
+                Filmstrip(filmstrip, playback = owner.current ?: FilmstripPlayback.None, frameCache = cache)
             }
         }
         fun awaitFrames() {
@@ -625,7 +631,6 @@ class VideoPlaybackIntegrationTest {
         rule.runOnIdle { shown = false }
         rule.waitForIdle()
         rule.runOnIdle { shown = true }
-        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
         awaitFrames()
         assertEquals(loadedRequests, originalRequests())
     }
@@ -701,10 +706,12 @@ private fun TestPlaybackSurface(
     createPlayer: (Context) -> ExoPlayer = koinInject<VideoPlayerFactory>()::create,
 ) {
     val playback = rememberViewerPlaybackState(item, createPlayer = createPlayer)
-    playback.current?.let {
+    val filmstrip = rememberViewerFilmstripState(listOf(item), item.mediaId, {})
+    playback.current?.let { controller ->
         Box(modifier) {
-            TestVideoPage(item, it, onToggleChrome)
-            ViewerChrome(item, playback = it, onBack = {}, filmstrip = {}, modifier = Modifier.fillMaxSize())
+            TestVideoPage(item, controller, onToggleChrome)
+            ViewerChrome(item, playback = controller, onBack = {},
+                filmstrip = { Filmstrip(filmstrip, playback = controller) }, modifier = Modifier.fillMaxSize())
         }
     }
 }

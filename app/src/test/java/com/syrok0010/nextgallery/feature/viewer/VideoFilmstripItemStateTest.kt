@@ -68,6 +68,52 @@ class VideoFilmstripItemStateTest {
             assertEquals(2, cancellations)
         }
 
+    @Test fun disposingDuringScrubSendsFinalSeekAndFinishesPlayback() =
+        runTest {
+            val seeks = mutableListOf<Pair<Long, Boolean>>()
+            var finished = 0
+            var cancellations = 0
+            val playback = object : FilmstripPlayback {
+                override fun seek(id: MediaId, position: Long, finished: Boolean) {
+                    seeks += position to finished
+                }
+                override fun finish(id: MediaId) {
+                    finished++
+                }
+            }
+            val provider = VideoFrameProvider {
+                flow {
+                    try {
+                        emit(VideoFrameEvent.Duration(10_001))
+                        awaitCancellation()
+                    } finally {
+                        cancellations++
+                    }
+                }
+            }
+            val state =
+                VideoFilmstripItemState(
+                    mediaItem("video", 0),
+                    provider,
+                    playback,
+                    backgroundScope,
+                ) { 0L }
+            val placement = VideoFilmstripPlacement(true, true, true, 0.2f, false)
+            state.update(placement)
+            runCurrent()
+            state.update(placement.copy(scrolling = true))
+            // This position falls within the seek throttle, but still needs a final seek on disposal.
+            state.update(placement.copy(scrolling = true, fraction = 0.7f))
+            assertEquals(listOf(2000L to false), seeks)
+            state.close()
+            runCurrent()
+            assertEquals(listOf(2000L to false, 7000L to true), seeks)
+            assertEquals(1, finished)
+            assertEquals(1, cancellations)
+            state.close()
+            assertEquals(1, finished)
+        }
+
     private fun mediaItem(id: String, dayId: Int) =
         MediaItem(
             mediaId = MediaId(id),

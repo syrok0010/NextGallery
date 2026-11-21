@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +63,12 @@ internal fun MediaDetailScreen(
         ?: pagerState.currentPage.coerceAtMost(items.lastIndex)
     val currentItem = items.getOrNull(currentPage)
     val playback = rememberViewerPlaybackState(currentItem)
+    val latestSequence by rememberUpdatedState(sequence)
+    val filmstrip = rememberViewerFilmstripState(items, currentItem?.mediaId, onSelected = { id ->
+        coroutineScope.launch {
+            latestSequence.pageIndex(id)?.let { pagerState.scrollToPage(it) }
+        }
+    })
     val frameCache = rememberVideoFilmstripCache()
     val videoFullscreen = playback.current?.state?.isFullscreen == true
     // Entering and leaving fullscreen video shows the chrome again, in the same frame.
@@ -173,10 +180,8 @@ internal fun MediaDetailScreen(
                 filmstrip = {
                     Filmstrip(
                         frameCache = frameCache,
-                        items  = items,
-                        currentPage = currentPage,
+                        state = filmstrip,
                         playback = playback.current ?: FilmstripPlayback.None,
-                        onPageSelected = { page -> coroutineScope.launch { pagerState.scrollToPage(page) } },
                         // The action row under the filmstrip takes the navigation bar instead.
                         modifier = if (actions != null) {
                             Modifier.consumeWindowInsets(WindowInsets.navigationBars)

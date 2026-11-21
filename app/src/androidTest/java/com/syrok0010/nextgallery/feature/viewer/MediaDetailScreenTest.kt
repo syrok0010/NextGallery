@@ -108,6 +108,38 @@ class MediaDetailScreenTest {
     }
 
     @Test
+    fun hidingChromePreservesExpandedFilmstripAndPlayhead() {
+        showViewer(listOf(mediaItem("video", isVideo = true)), tileBounds = null, onClose = {})
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
+        rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
+        rule.onNodeWithTag(FilmstripTestTag).assertDoesNotExist()
+        rule.onRoot().performTouchInput { click(Offset(center.x, height * 0.3f)) }
+        rule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
+        rule.onNodeWithTag(VideoFilmstripTestTag, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun cancelledDismissPreservesExpandedFilmstrip() {
+        var closed: MediaItem? = null
+        showViewer(
+            listOf(mediaItem("video", isVideo = true)),
+            tileBounds = null,
+            onClose = { closed = it },
+        )
+        rule.onNodeWithTag(filmstripTileTestTag(0)).performClick()
+        rule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
+        rule.onRoot().performTouchInput {
+            down(Offset(center.x, height * 0.3f))
+            moveBy(Offset(0f, 300f), delayMillis = 400)
+        }
+        rule.onNodeWithTag(FilmstripTestTag).assertDoesNotExist()
+        rule.onRoot().performTouchInput { cancel() }
+        rule.onNodeWithTag("video_filmstrip_playhead").assertIsDisplayed()
+        rule.runOnIdle { assertNull(closed) }
+    }
+
+    @Test
     fun reorderingSequencePreservesActiveItemAndDismissal() {
         val first = mediaItem("first")
         val second = mediaItem("second")
