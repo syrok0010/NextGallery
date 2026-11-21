@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.session.AuthenticatedSession
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.di.AuthenticatedGraph
 import com.syrok0010.nextgallery.di.ProductionGraph
@@ -51,6 +52,7 @@ class AppCompositionTest {
                             }.requireScope(),
                     )
                     val queue = scope.get<UploadQueue>()
+                    assertEquals(account, scope.get<AuthenticatedSession>().credentials)
                     val sources = scope.getAll<OperationStatusSource>()
                     assertEquals(3, sources.size)
                     assertTrue(sources.any { it === queue })
