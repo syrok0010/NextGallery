@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 internal class AlbumsRepository(
     sessions: SessionStore,
     private val writer: MemoriesAlbumWriter,
+    remover: MemoriesAlbumRemover,
     remoteSource: RemoteAlbumSource,
     localSource: LocalAlbumSource,
     source: AlbumContentsSource,
@@ -44,6 +45,9 @@ internal class AlbumsRepository(
             catalog::refresh,
             mutations,
         )
+    private val removals = AlbumRemovals(sessions, remover, scope, mutations) { location, ids ->
+        if (!contents.removed(location, ids)) catalog.refresh()
+    }
 
     val state = combine(catalog.state, contents.snapshots) { catalog, snapshots ->
         catalog.copy(
@@ -68,7 +72,14 @@ internal class AlbumsRepository(
     val adding = additions.state
         .map { it is AlbumAdditionState.Running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations = additions.operations
+    val removing = removals.progress
+        .map { it != null }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    override val operations = combine(
+        additions.operations,
+        removals.operations,
+    ) { add, remove -> add + remove }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
         scope.launch {
@@ -86,6 +97,8 @@ internal class AlbumsRepository(
         contents.observe(location)
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean =
         additions.add(target, request)
+    fun removeMembers(location: AlbumLocation.Remote, name: String, ids: Set<Long>): Boolean =
+        removals.remove(location, name, ids)
 
     fun refresh() {
         catalog.refresh()
@@ -155,8 +168,10 @@ internal class AlbumsRepository(
 
     override fun consumeSucceeded() {
         additions.consumeSucceeded()
+        removals.consumeSucceeded()
     }
     override fun consumeAll() {
         additions.consumeAll()
+        removals.consumeAll()
     }
 }

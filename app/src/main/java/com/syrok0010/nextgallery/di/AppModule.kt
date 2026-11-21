@@ -29,6 +29,7 @@ import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
@@ -80,10 +81,11 @@ val appModule = module {
     single<LocalAlbumSource> { AndroidAlbumSource(androidContext().contentResolver) }
     single(named("libraryScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     single { MemoriesAlbumWriter(get<PhotosAlbumsDavClient>(), get<FilesDavClient>()) }
+    single { MemoriesAlbumRemover(get()) }
     single { MemoriesFiles(get<MemoriesApiClient>()) }
     single {
         AlbumsRepository(
-            get(), get(), get<RemoteAlbumSource>(), get<LocalAlbumSource>(), get(),
+            get(), get(), get(), get<RemoteAlbumSource>(), get<LocalAlbumSource>(), get(),
             get(), get<LocalMediaPermissionCoordinator>().mode, get(named("libraryScope")),
             enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
         )
