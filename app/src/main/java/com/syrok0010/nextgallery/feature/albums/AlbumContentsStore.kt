@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.core.session.SessionUiState
@@ -41,6 +44,8 @@ internal class AlbumContentsStore(
         // Every key is confirmed membership; a null value means metadata is still unknown.
         // Automatic reads preserve these facts. An explicit refresh is authoritative again.
         val confirmed = mutableMapOf<Long, MediaItem?>()
+        // A remote copy from an upload receipt does not make its phone metadata canonical.
+        val temporaryMetadata = mutableSetOf<Long>()
     }
 
     init {
@@ -56,6 +61,7 @@ internal class AlbumContentsStore(
                                 entry.request++
                                 entry.initialized = false
                                 entry.confirmed.clear()
+                                entry.temporaryMetadata.clear()
                                 entry.state.value = AlbumContentsState(permissionRequired = session is SessionUiState.SignedIn && location is AlbumLocation.Folder)
                                 complete.update { it - location }
                             } else if (!entry.initialized && entry.job?.isActive != true) {
@@ -70,13 +76,7 @@ internal class AlbumContentsStore(
                 synchronized(lock) {
                     val byFileId = known.values.associateBy { it.remoteFileId }
                     entries.forEach { (location, entry) ->
-                        val resolved = entry.confirmed.filterValues { it == null }.keys.mapNotNull { id ->
-                            byFileId[id]?.let { id to it }
-                        }.toMap()
-                        if (resolved.isNotEmpty()) {
-                            entry.confirmed.putAll(resolved)
-                            publish(location, entry, entry.state.value)
-                        }
+                        if (resolveMetadata(entry, byFileId)) publish(location, entry, entry.state.value)
                     }
                 }
             }
@@ -116,10 +116,13 @@ internal class AlbumContentsStore(
     }
 
     /** Membership is retained even when none of the confirmed file IDs has metadata yet. */
-    fun added(location: AlbumLocation.Remote, ids: Set<Long>, supplied: List<MediaItem>): Boolean = synchronized(lock) {
+    fun added(location: AlbumLocation.Remote, ids: Set<Long>, supplied: List<MediaItem>, temporaryMetadata: Boolean = false): Boolean = synchronized(lock) {
         val entry = entry(location)
         val known = (supplied + library.state.value.values + entry.state.value.items).associateBy { it.remoteFileId }
         ids.forEach { id -> entry.confirmed[id] = known[id] ?: entry.confirmed[id] }
+        if (temporaryMetadata) entry.temporaryMetadata.addAll(ids)
+        // The index may have published between the upload's lookup and this confirmation.
+        resolveMetadata(entry, library.state.value.values.associateBy { it.remoteFileId })
         publish(location, entry, entry.state.value)
         entry.initialized && entry.state.value.pendingMetadata == 0
     }
@@ -129,7 +132,10 @@ internal class AlbumContentsStore(
         if (location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full) return
         entry.job?.cancel()
         val request = ++entry.request
-        if (!preserveConfirmed) entry.confirmed.clear()
+        if (!preserveConfirmed) {
+            entry.confirmed.clear()
+            entry.temporaryMetadata.clear()
+        }
         val hadSnapshot = entry.initialized || entry.state.value.items.isNotEmpty()
         publish(location, entry, entry.state.value.copy(loading = true, failed = false, permissionRequired = false))
         entry.job = scope.launch {
@@ -162,9 +168,29 @@ internal class AlbumContentsStore(
     }
 
     private fun commitRead(location: AlbumLocation, entry: Entry, batch: AlbumContentsBatch, finished: Boolean) {
+        resolveMetadata(entry, batch.items.associateBy { it.remoteFileId })
         publish(location, entry, entry.state.value.copy(items = batch.items,
             total = batch.total, loaded = batch.loaded, loading = !finished,
         ))
+    }
+
+    /** Server reads and the canonical index may replace receipt metadata, preserving phone bytes. */
+    private fun resolveMetadata(entry: Entry, candidates: Map<Long?, MediaItem>): Boolean {
+        var changed = false
+        entry.confirmed.forEach { (id, previous) ->
+            if (previous == null || id in entry.temporaryMetadata) {
+                val canonical = candidates[id]?.takeIf { previous == null || it.mediaId == previous.mediaId }
+                if (canonical != null) {
+                    val local = previous?.localCopy
+                    entry.confirmed[id] = if (local != null) canonical.copy(
+                        assetRef = MediaAssetRef.LocalFirst(local, requireNotNull(canonical.remoteCopy)),
+                    ) else canonical
+                    entry.temporaryMetadata.remove(id)
+                    changed = true
+                }
+            }
+        }
+        return changed
     }
 
     private fun publish(location: AlbumLocation, entry: Entry, next: AlbumContentsState) {

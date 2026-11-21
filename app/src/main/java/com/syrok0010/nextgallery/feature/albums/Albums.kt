@@ -77,6 +77,7 @@ internal class Albums(
         }
     }
 
+    /** Reuses known membership; reopening also retries metadata still missing after a confirmed write. */
     fun observeContents(location: AlbumLocation): StateFlow<AlbumContentsState> =
         contents.observe(location)
     /**
@@ -141,15 +142,17 @@ internal class Albums(
 
 
 
+    /** Explicitly accepts a new server snapshot, including removal of pending local confirmations. */
     fun refresh() {
         catalog.refresh()
         contents.refresh()
     }
+    /** Authoritative refresh of one known album; automatic post-write reads preserve confirmations. */
     fun refresh(location: AlbumLocation) = contents.refresh(location)
 
-    private fun added(location: AlbumLocation.Remote, ids: Set<Long>, items: List<MediaItem>) {
+    private fun added(location: AlbumLocation.Remote, ids: Set<Long>, items: List<MediaItem>, temporaryMetadata: Boolean = false) {
         if (ids.isEmpty()) return
-        if (!contents.added(location, ids, items)) {
+        if (!contents.added(location, ids, items, temporaryMetadata)) {
             // Membership is confirmed, but unopened albums or unindexed files may lack metadata.
             contents.reconcile(location)
             catalog.refresh()
@@ -200,6 +203,7 @@ internal class Albums(
                             AlbumLocation.Remote("${album.owner}/${album.name}"),
                             setOf(id),
                             listOfNotNull(item),
+                            temporaryMetadata = known?.remoteFileId != id,
                         )
                     }
                 }
