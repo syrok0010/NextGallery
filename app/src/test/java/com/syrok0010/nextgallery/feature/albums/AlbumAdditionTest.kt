@@ -90,7 +90,7 @@ class AlbumAdditionTest {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 var refreshed = 0
                 val catalog = AlbumCatalogRepository(
-                    sessions,
+                    sessions.requireCredentials(),
                     object : RemoteAlbumSource {
                         override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
                             refreshed++
@@ -106,7 +106,7 @@ class AlbumAdditionTest {
                 )
                 val submittedAlbum = MutableStateFlow<UploadAlbum?>(null)
                 val additions = AlbumAdditions(
-                    sessions,
+                    sessions.requireCredentials(),
                     fixture.writer,
                     catalog,
                     { ids, album ->
@@ -161,7 +161,7 @@ class AlbumAdditionTest {
             try {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val additions = AlbumAdditions(
-                    sessions,
+                    sessions.requireCredentials(),
                     fixture.writer,
                     emptyCatalog(sessions, scope),
                     { ids, _ -> EnqueueResult.Accepted(ids.size) },
@@ -240,7 +240,7 @@ class AlbumAdditionTest {
                 val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val refreshes = java.util.concurrent.atomic.AtomicInteger()
                 val catalog = AlbumCatalogRepository(
-                    sessions,
+                    sessions.requireCredentials(),
                     object : RemoteAlbumSource {
                         override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
                             refreshes.incrementAndGet()
@@ -256,7 +256,7 @@ class AlbumAdditionTest {
                 )
                 val enqueued = java.util.concurrent.atomic.AtomicInteger()
                 val additions = AlbumAdditions(
-                    sessions,
+                    sessions.requireCredentials(),
                     fixture.writer,
                     catalog,
                     { _, _ ->
@@ -287,7 +287,7 @@ class AlbumAdditionTest {
 
     private fun emptyCatalog(sessions: SessionStore, scope: CoroutineScope) =
         AlbumCatalogRepository(
-            sessions,
+            sessions.requireCredentials(),
             object : RemoteAlbumSource {
                 override suspend fun load(credentials: AccountCredentials) = RemoteAlbums(emptyList())
             },

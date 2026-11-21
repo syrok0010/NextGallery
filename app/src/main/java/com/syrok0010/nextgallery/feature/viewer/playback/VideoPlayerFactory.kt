@@ -10,14 +10,12 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.memories.MemoriesVideoClient
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
-import java.io.InterruptedIOException
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 
 @OptIn(UnstableApi::class)
 internal class VideoPlayerFactory(
     private val transport: NextcloudTransport,
-    private val sessionStore: SessionStore,
+    private val credentials: AccountCredentials,
 ) {
     // Redirects must not carry app credentials to a different server or a login page.
     private val client = transport.baseClient
@@ -25,21 +23,12 @@ internal class VideoPlayerFactory(
         .followRedirects(false)
         .followSslRedirects(false)
         .addInterceptor(
-            AuthenticatedVideoSource(transport) {
-                // Logout disposes the viewer; cancel any request racing with that disposal.
-                val session = sessionStore.session.value as? SessionUiState.SignedIn
-                    ?: throw InterruptedIOException("Playback session ended")
-                session.credentials
-            },
+            AuthenticatedVideoSource(transport) { credentials },
         ).build()
     private val discovery = MemoriesVideoDiscovery(MemoriesVideoClient(transport, client))
 
-    fun sources(asset: MediaAssetRef): VideoSources {
-        val serverUrl = (sessionStore.session.value as? SessionUiState.SignedIn)
-            ?.credentials
-            ?.serverUrl
-        return VideoSources.from(asset, serverUrl)
-    }
+    fun sources(asset: MediaAssetRef): VideoSources =
+        VideoSources.from(asset, credentials.serverUrl)
 
     suspend fun qualities(
         original: RemoteVideoOriginal,

@@ -50,7 +50,7 @@ class UploadQueueRuntimeTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         processId = UUID.randomUUID().toString()
         queue = UploadQueue(
-            sessions, library, scope, journal,
+            sessions.requireCredentials(), library, scope, journal,
             { stamp ?: throw SecurityException() },
             UploadFollowUps(
                 link = { _, _, _, _ -> links++; true },
@@ -111,7 +111,7 @@ class UploadQueueRuntimeTest {
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
         var loggedOut = false
-        assertNull(queue.logout { loggedOut = true; sessions.signOut() })
+        assertNull(queue.logout { loggedOut = true })
         assertTrue(loggedOut)
     }
 
@@ -191,7 +191,7 @@ class UploadQueueRuntimeTest {
         assertEquals(2, journal.jobs().count { !it.hidden })
         queue.cancelAll()
         waitFor { phases().all { it == UploadPhase.Cancelled } }
-        assertNull(queue.logout { sessions.signOut() })
+        assertNull(queue.logout {})
     }
 
     @Test fun albumStepAfterReopenIsRecoveredAndNeverPutsAgain() = runBlocking {
@@ -247,7 +247,7 @@ class UploadQueueRuntimeTest {
         enqueue(listOf(ids.first()), album = "slice1")
         var albumCalls = 0
         queue = UploadQueue(
-            sessions, library, scope, journal, { stamp!! },
+            sessions.requireCredentials(), library, scope, journal, { stamp!! },
             UploadFollowUps(
                 link = { _, _, _, _ -> links++; true },
                 album = { _, _, _, recovered ->
@@ -455,7 +455,7 @@ class UploadQueueRuntimeTest {
         assertNull(queue.result.value)
         queue.cancelAll()
         waitFor { queue.result.value?.cancelled == 1 }
-        assertNull(queue.logout { sessions.signOut() })
+        assertNull(queue.logout {})
     }
 
     @Test fun emptySelectionIsNotAStorageFailureAndARejectedJournalPublishesNothing() = runBlocking {

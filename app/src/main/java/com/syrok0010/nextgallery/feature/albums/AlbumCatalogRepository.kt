@@ -1,7 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
@@ -34,7 +33,7 @@ internal data class AlbumsUiState(
 
 @OptIn(FlowPreview::class)
 internal class AlbumCatalogRepository(
-    sessionStore: SessionStore,
+    credentials: AccountCredentials,
     remoteSource: RemoteAlbumSource,
     localSource: LocalAlbumSource,
     private val permission: StateFlow<LocalMediaPermissionMode?>,
@@ -50,93 +49,89 @@ internal class AlbumCatalogRepository(
 
     init {
         scope.launch {
-            sessionStore.session.collectLatest { session ->
-                mutableState.value = AlbumsUiState(permission = permission.value)
-                if (session !is SessionUiState.SignedIn) return@collectLatest
-                coroutineScope {
-                    launch {
-                        refreshes.collectLatest {
+            coroutineScope {
+                launch {
+                    refreshes.collectLatest {
+                        mutableState.update {
+                            it.copy(
+                                remote = it.remote.copy(
+                                    loading = true,
+                                    failed = false,
+                                ),
+                            )
+                        }
+                        try {
+                            val result = remoteSource.load(credentials)
                             mutableState.update {
                                 it.copy(
-                                    remote = it.remote.copy(
-                                        loading = true,
-                                        failed = false,
+                                    remote = AlbumSourceState(
+                                        result.albums,
+                                        supported = result.supported,
                                     ),
                                 )
                             }
-                            try {
-                                val result = remoteSource.load(session.credentials)
-                                mutableState.update {
-                                    it.copy(
-                                        remote = AlbumSourceState(
-                                            result.albums,
-                                            supported = result.supported,
-                                        ),
-                                    )
-                                }
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                mutableState.update {
-                                    it.copy(
-                                        remote = it.remote.copy(
-                                            loading = false,
-                                            failed = true,
-                                        ),
-                                    )
-                                }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            mutableState.update {
+                                it.copy(
+                                    remote = it.remote.copy(
+                                        loading = false,
+                                        failed = true,
+                                    ),
+                                )
                             }
                         }
                     }
-                    launch {
-                        permission.collectLatest { mode ->
-                            mutableState.update {
-                                it.copy(
-                                    local = AlbumSourceState(),
-                                    permission = mode,
-                                )
+                }
+                launch {
+                    permission.collectLatest { mode ->
+                        mutableState.update {
+                            it.copy(
+                                local = AlbumSourceState(),
+                                permission = mode,
+                            )
+                        }
+                        if (mode != LocalMediaPermissionMode.Full) return@collectLatest
+                        coroutineScope {
+                            val localChanges = MutableStateFlow(0)
+                            launch {
+                                localSource
+                                    .changes()
+                                    .debounce(450.milliseconds)
+                                    .collect { localChanges.update { it + 1 } }
                             }
-                            if (mode != LocalMediaPermissionMode.Full) return@collectLatest
-                            coroutineScope {
-                                val localChanges = MutableStateFlow(0)
-                                launch {
-                                    localSource
-                                        .changes()
-                                        .debounce(450.milliseconds)
-                                        .collect { localChanges.update { it + 1 } }
+                            combine(
+                                refreshes,
+                                localChanges,
+                            ) { refresh, change -> refresh to change }.collectLatest {
+                                mutableState.update {
+                                    it.copy(
+                                        local = it.local.copy(
+                                            loading = true,
+                                            failed = false,
+                                        ),
+                                    )
                                 }
-                                combine(
-                                    refreshes,
-                                    localChanges,
-                                ) { refresh, change -> refresh to change }.collectLatest {
+                                try {
+                                    val albums = localSource.load()
                                     mutableState.update {
                                         it.copy(
-                                            local = it.local.copy(
-                                                loading = true,
-                                                failed = false,
+                                            local = AlbumSourceState(
+                                                albums,
                                             ),
                                         )
                                     }
-                                    try {
-                                        val albums = localSource.load()
-                                        mutableState.update {
-                                            it.copy(
-                                                local = AlbumSourceState(
-                                                    albums,
-                                                ),
-                                            )
-                                        }
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (_: Exception) {
-                                        mutableState.update {
-                                            it.copy(
-                                                local = it.local.copy(
-                                                    loading = false,
-                                                    failed = true,
-                                                ),
-                                            )
-                                        }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    mutableState.update {
+                                        it.copy(
+                                            local = it.local.copy(
+                                                loading = false,
+                                                failed = true,
+                                            ),
+                                        )
                                     }
                                 }
                             }

@@ -64,7 +64,7 @@ class UploadsScreenSectionsTest {
         val library = MediaLibraryIndex().apply { publish(files.mapIndexed(::media)) }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         queue = UploadQueue(
-            sessions = sessions,
+            credentials = sessions.requireCredentials(),
             library = library,
             scope = scope,
             journal = UploadJournal(db),

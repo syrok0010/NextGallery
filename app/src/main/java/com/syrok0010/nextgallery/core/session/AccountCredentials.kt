@@ -9,4 +9,6 @@ data class AccountCredentials(
     val appPassword: String,
     /** Nextcloud uid for DAV paths; Login Flow may hand out an e-mail as [loginName]. */
     val userId: String,
-)
+) {
+    override fun toString(): String = "AccountCredentials(redacted)"
+}

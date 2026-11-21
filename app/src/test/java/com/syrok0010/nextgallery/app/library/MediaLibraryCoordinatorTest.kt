@@ -50,7 +50,7 @@ class MediaLibraryCoordinatorTest {
     private val index = MediaLibraryIndex()
     private val coordinator = MediaLibraryCoordinator(
         index = index,
-        sessions = sessions,
+        credentials = account,
         remoteSource = remote,
         localMedia = LocalMediaSource(
             reader = LocalMediaReader {
@@ -68,26 +68,13 @@ class MediaLibraryCoordinatorTest {
 
     @Test fun signingInJoinsPhoneFilesAndTheAccountsCloud() =
         running {
-            sessions.signIn(account)
             waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
             assertEquals(shown(), index.state.value.keys.map(MediaId::value).toSet())
-        }
-
-    @Test fun signedOutLibraryHoldsNothingAndDoesNotScanThePhone() =
-        running {
-            waitFor { publications.isNotEmpty() }
-            delay(SETTLE_MS)
-
-            assertTrue(publications.all { it.library.items.isEmpty() })
-            assertTrue(index.state.value.isEmpty())
-            assertEquals(0, reads.get())
-            assertEquals(0, remote.initialLoads.get())
         }
 
     @Test fun withoutPhoneAccessOnlyCloudPhotosAreShown() =
         running {
             permissions.value = LocalMediaPermissionMode.Denied
-            sessions.signIn(account)
             waitFor { shown() == setOf(CLOUD_PHOTO) }
 
             permissions.value = LocalMediaPermissionMode.Full
@@ -96,7 +83,6 @@ class MediaLibraryCoordinatorTest {
 
     @Test fun refreshReloadsTheCloudAndRescansThePhone() =
         running {
-            sessions.signIn(account)
             waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
 
             phoneFiles = listOf(phoneFile(PHONE_FILE), phoneFile(LATER_PHONE_FILE))
