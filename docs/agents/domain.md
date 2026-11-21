@@ -2,10 +2,7 @@
 
 Проект использует single-context документацию.
 
-Перед изменением продуктового поведения читать:
-
-- `docs/product/vision.md`
-- `docs/product/mvp.md`
+Перед изменением продуктового поведения читать `README.md` и раздел `Продуктовые инварианты` в `AGENTS.md`.
 
 Перед изменением доменной модели или терминов читать `CONTEXT.md`.
 
@@ -16,7 +13,7 @@
 - `docs/research/api-nextcloud.md`
 - `docs/research/api-memories.md`
 
-Перед изменением session, credentials, logout или cloud cache читать раздел `Продуктовые границы` в `docs/product/vision.md` и ближайший ADR.
+Перед изменением session, credentials, logout или cloud cache читать раздел `Продуктовые инварианты` в `AGENTS.md` и ближайший ADR.
 
 Документация пишется по-русски, если пользователь не попросил иначе.
 
