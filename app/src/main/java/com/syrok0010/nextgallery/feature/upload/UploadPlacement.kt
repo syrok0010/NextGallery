@@ -15,7 +15,7 @@ import okio.source
  * Puts [selection] at [path] or, while that name holds a different file, at the first free
  * neighbour `name (2).ext`, the way the Nextcloud server names copies. A file already at a name
  * counts as this upload only when its bytes equal the phone file: then its id links both copies
- * (ADR 0017). Returns null when every name up to [MAX_NAMES] holds a different file.
+ * (ADR 0002). Returns null when every name up to [MAX_NAMES] holds a different file.
  *
  * Each name is checked before [create] sends the [length] bytes without overwriting: a web server
  * takes the whole body before Nextcloud answers `412`, so probing with `PUT` would send the file

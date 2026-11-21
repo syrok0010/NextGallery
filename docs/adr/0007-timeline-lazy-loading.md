@@ -28,21 +28,19 @@ Memories разделяет timeline index (`/days`) и metadata выбранн�
 
 ## Решение
 
-`TimelineSnapshot` содержит `TimelineDay` и virtual `TimelineSlot`. До загрузки metadata slot остаётся placeholder; materialized item получает ключ по persistent `MediaId`.
-
-`TimelineViewportController` получает видимый диапазон, расширяет prefetch window и загружает отсутствующие day IDs через `MemoriesRepository`. `AuthenticatedViewModel` объединяет результат с `UnifiedTimelineProjection`.
-
-Thumbnail lifecycle принадлежит Coil и композиции видимых tiles. Общий fetcher независимо объединяет cache misses в multipreview batches.
-
-Warm-start metadata и правила offline materialization определены ADR 0010.
+- `TimelineSnapshot` содержит упорядоченные virtual `MediaSlot` (общий тип слота для `MediaCollectionScreen`, ADR 0001). До загрузки metadata слот остаётся placeholder; материализованный элемент получает ключ по persistent `MediaId`.
+- Чистая функция `TimelineSnapshot.daysForSlots()` (`feature/timeline/TimelineViewportDays.kt`) принимает видимый диапазон слотов, расширяет prefetch window и возвращает уникальные `dayId`. `PhotosScreen` передаёт их в `MediaLibraryCoordinator.requestDays()`, который делегирует загрузку отсутствующих дней в `TimelineWorkflow` и публикует обновлённую проекцию в `TimelineProjectionStore` (ADR 0002).
+- `TimelineWorkflow` при ручном refresh начинает новое поколение, отменяет прежнюю hydration и явно сбрасывает список failed days.
+- Thumbnail lifecycle принадлежит Coil и композиции видимых tiles. Общий fetcher независимо объединяет cache misses в multipreview batches (ADR 0005).
+- Warm-start metadata и правила offline materialization определены ADR 0010.
 
 ## Последствия
 
-- Grid может показать структуру remote archive сразу после index.
-- Placeholder имеет позиционный ключ, materialized tile — identity key.
+- Grid может показать структуру remote archive сразу после получения index.
+- Placeholder имеет позиционный ключ, материализованный тайл — identity key (`MediaId`).
 - Ошибка загрузки дня отображается отдельно от уже доступной медиатеки.
 - Большой день по-прежнему загружается одним server response.
-- Scrollbar navigation и viewer prefetch используют ту же slot coordinate system.
+- Scrollbar navigation и viewer prefetch (`ViewerMediaIndex`, ADR 0001) используют ту же slot coordinate system.
 
 ## Открытые вопросы
 

@@ -2,7 +2,7 @@
 
 ## Статус
 
-Принято и расширено для unified timeline. Политика выхода изменена: выход удаляет все данные приложения, включая локальный индекс (решение в #53).
+Принято.
 
 ## Контекст
 
@@ -41,9 +41,11 @@
 - persistent media identity и conflicts;
 - remote thumbnail index.
 
+Журнал ручных загрузок (`upload-journal.db`, ADR 0019) вынесен в отдельную Room DB и не входит в эту disposable cache policy: сброс схемы `NextGalleryDatabase` не должен уничтожать активные задания загрузки, а `core/database` не владеет моделью `feature/upload`.
+
 Remote thumbnail bytes хранятся в `ThumbnailFileStore`. Local images читаются через MediaStore `content://`, а Coil cache key учитывает URI и `DATE_MODIFIED`.
 
-На старте cached local projection и cached Memories metadata публикуются без ожидания refresh. MediaStore reconciliation и Memories refresh независимо обновляют `UnifiedTimelineProjection`.
+На старте cached local projection и cached Memories metadata публикуются без ожидания refresh. MediaStore reconciliation и Memories refresh независимо обновляют `MediaLibraryCoordinator`, который публикует `MediaLibraryIndex` и `TimelineProjectionStore` (ADR 0002).
 
 Offline remote timeline включает только materialized objects с достаточными metadata. Index-only slots скрываются; отсутствие cached thumbnail оставляет объект в timeline как placeholder.
 
@@ -54,7 +56,7 @@ Offline remote timeline включает только materialized objects с д
 - albums, people, tags и places;
 - полный remote archive.
 
-Выход через `ActivityManager.clearApplicationUserData()` завершает процесс и очищает все данные приложения: credentials, Memories metadata, remote thumbnails, identity bindings, MediaStore projection и local `MediaId`. После выхода приложение в состоянии свежей установки. Раньше local index переживал выход; от этого отказались: сохранять его ради следующего входа незачем, а частичная очистка оставляла гонки с поздними записями.
+Выход через `ActivityManager.clearApplicationUserData()` завершает процесс и очищает все данные приложения: credentials, Memories metadata, remote thumbnails, identity bindings, MediaStore projection и local `MediaId`. После выхода приложение в состоянии свежей установки. Частичная очистка с сохранением local index отвергнута: сохранять его ради следующего входа незачем, а частичная очистка оставляет гонки с поздними записями.
 
 Версия миниатюры включает ETag файла и `indexed_at` Memories: переиндексация
 может пересоздать превью без изменения исходного файла. Эта версия сохраняется
