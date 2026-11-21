@@ -6,6 +6,7 @@ import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
+import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.capabilities.NextcloudCapabilitiesClient
@@ -34,6 +35,7 @@ import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
+import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
@@ -42,13 +44,16 @@ import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeOb
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
+import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesRepository
 import com.syrok0010.nextgallery.feature.upload.UploadFollowUps
 import com.syrok0010.nextgallery.feature.upload.UploadJournal
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
+import com.syrok0010.nextgallery.feature.upload.UploadQueueDatabase
 import com.syrok0010.nextgallery.feature.upload.UploadSource
 import com.syrok0010.nextgallery.feature.upload.UploadWorker
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
@@ -69,6 +74,14 @@ internal fun authenticatedModule() =
     module {
         scope<AuthenticatedGraph> {
             scoped<AccountCredentials> { checkNotNull(getSource<AccountCredentials>()) }
+            scoped { create(::libraryDatabase) } onClose { it?.close() }
+            scoped { create(::uploadDatabase) } onClose { it?.close() }
+            scoped<UploadJournal>()
+            scoped { create(::thumbnailFiles) }
+            scoped<RoomMediaIdentityRegistry>() bind MediaIdentityRegistry::class
+            scoped<TimelineCacheRepository>()
+            scoped<RemoteImageCache>()
+            scoped<LocalMediaProjectionRepository>() bind LocalMediaProjectionStore::class
             scoped {
                 CoroutineScope(
                     SupervisorJob() + Dispatchers.Main.immediate,
@@ -255,3 +268,7 @@ private fun imageLoader(
     thumbnails::ensureAvailable,
     files,
 )
+
+private fun libraryDatabase(context: Context) = NextGalleryDatabase.create(context)
+private fun uploadDatabase(context: Context) = UploadQueueDatabase.open(context)
+private fun thumbnailFiles(context: Context) = ThumbnailFileStore(context)
