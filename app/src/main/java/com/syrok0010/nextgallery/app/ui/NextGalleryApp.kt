@@ -5,6 +5,8 @@ import com.syrok0010.nextgallery.router.NextGalleryRoute
 import com.syrok0010.nextgallery.router.applyNavigationCommand
 import com.syrok0010.nextgallery.router.normalizedBackStack
 import com.syrok0010.nextgallery.router.topLevelRouteFromContentKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import android.app.Activity
 import android.content.ContextWrapper
@@ -163,9 +165,9 @@ private fun AuthenticatedApp(navigator: AppNavigator, onLogout: () -> Unit) {
         }
     }
     // UI and external links share the same retained command queue.
-    val navigationLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val navigationLifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(navigator, navigationLifecycle) {
-        navigationLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+        navigationLifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             navigator.commands.collect { pending ->
                 pending.firstOrNull()?.let { next ->
                     navigator.consume(next.id) { command ->
