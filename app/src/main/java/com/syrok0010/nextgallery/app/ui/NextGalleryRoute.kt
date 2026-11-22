@@ -6,15 +6,11 @@ import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import kotlinx.serialization.Serializable
 
 @Serializable
 internal sealed interface NextGalleryRoute : NavKey {
-    @Serializable
-    data object Login : NextGalleryRoute
-
     @Serializable
     data object Photos : NextGalleryRoute
 
@@ -29,8 +25,6 @@ internal sealed interface NextGalleryRoute : NavKey {
 
     fun navContentKey(): String =
         when (this) {
-            Login -> "login"
-
             Photos -> "photos"
 
             Albums -> "albums"
@@ -54,7 +48,6 @@ internal fun linkRoute(link: Uri): NextGalleryRoute? =
 
 internal fun topLevelRouteFromContentKey(contentKey: Any): NextGalleryRoute? =
     when (contentKey) {
-        "login" -> NextGalleryRoute.Login
         "photos" -> NextGalleryRoute.Photos
         "albums" -> NextGalleryRoute.Albums
         else -> null
@@ -73,26 +66,16 @@ internal enum class TopLevelDestination(
         get() = entries.indexOf(this)
 }
 
-internal fun SessionUiState.rootRoute(): NextGalleryRoute =
-    when (this) {
-        is SessionUiState.SignedOut -> NextGalleryRoute.Login
-        is SessionUiState.SignedIn -> NextGalleryRoute.Photos
-    }
-
-internal fun syncedBackStack(
-    currentBackStack: List<NavKey>,
-    session: SessionUiState,
-): List<NextGalleryRoute> {
+internal fun normalizedBackStack(currentBackStack: List<NavKey>): List<NextGalleryRoute> {
     val routes = currentBackStack.filterIsInstance<NextGalleryRoute>()
-    return when {
-        session is SessionUiState.SignedOut -> listOf(NextGalleryRoute.Login)
-
+    return if (
         routes.isNotEmpty() &&
-            routes.all { it != NextGalleryRoute.Login } &&
-            routes.distinct().size == routes.size &&
-            routes.size == currentBackStack.size -> routes
-
-        else -> listOf(NextGalleryRoute.Photos)
+        routes.distinct().size == routes.size &&
+        routes.size == currentBackStack.size
+    ) {
+        routes
+    } else {
+        listOf(NextGalleryRoute.Photos)
     }
 }
 

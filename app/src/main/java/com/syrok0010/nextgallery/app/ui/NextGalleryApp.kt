@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,38 +16,38 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.LocalContentColor
-import com.syrok0010.nextgallery.R
-import androidx.compose.ui.res.stringResource
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
-import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
+import com.syrok0010.nextgallery.di.AuthenticatedGraph
 import com.syrok0010.nextgallery.feature.auth.LoginScreen
 import com.syrok0010.nextgallery.feature.timeline.LocalMediaPermissionFlow
+import com.syrok0010.nextgallery.feature.upload.LogoutRefusal
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.scope.UnboundKoinScope
-import org.koin.core.annotation.KoinExperimentalAPI
 import org.koin.core.annotation.KoinDelicateAPI
-import com.syrok0010.nextgallery.di.AuthenticatedGraph
+import org.koin.core.annotation.KoinExperimentalAPI
 
 internal fun transitionDirection(
     from: NextGalleryRoute?,
@@ -75,11 +76,13 @@ private fun AnimatedContentTransitionScope<*>.horizontalTransition(
 private val subscreenTransitions =
     NavDisplay.transitionSpec {
         horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Left)
-    } + NavDisplay.popTransitionSpec {
-        horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
-    } + NavDisplay.predictivePopTransitionSpec {
-        horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
-    }
+    } +
+        NavDisplay.popTransitionSpec {
+            horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
+        } +
+        NavDisplay.predictivePopTransitionSpec {
+            horizontalTransition(AnimatedContentTransitionScope.SlideDirection.Right)
+        }
 
 @OptIn(KoinExperimentalAPI::class, KoinDelicateAPI::class)
 @Composable
@@ -110,15 +113,46 @@ internal fun NextGalleryApp(
             },
         )
     }
-    val backStack = rememberNavBackStack(session.rootRoute())
-    val routes = syncedBackStack(backStack.toList(), session)
-    val page = routes.last()
     val signedIn = session is SessionUiState.SignedIn
-    var viewerVisible by remember(session) { mutableStateOf(false) }
-    var selectionMode by remember(session) { mutableStateOf(false) }
-    // Tab state survives popping Albums, but never crosses the session boundary.
-    val screenStates = key(session) { rememberSaveableStateHolder() }
-    LaunchedEffect(session) {
+    NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
+        CompositionLocalProvider(
+            LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                Crossfade(
+                    targetState = signedIn,
+                    animationSpec = tween(200),
+                    label = "sessionBoundary",
+                ) { isSignedIn ->
+                    if (!isSignedIn) {
+                        LoginScreen()
+                    } else {
+                        UnboundKoinScope(graph.requireScope()) {
+                            AuthenticatedApp(
+                                links = links,
+                                onLogout = sessionViewModel::logout,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthenticatedApp(links: Flow<Uri>, onLogout: () -> Unit) {
+    val backStack = rememberNavBackStack(NextGalleryRoute.Photos)
+    val routes = normalizedBackStack(backStack.toList())
+    val page = routes.last()
+    var viewerVisible by remember { mutableStateOf(false) }
+    var selectionMode by remember { mutableStateOf(false) }
+    val screenStates = rememberSaveableStateHolder()
+    LaunchedEffect(routes) {
         if (backStack.toList() != routes) {
             backStack.clear()
             backStack.addAll(routes)
@@ -128,134 +162,126 @@ internal fun NextGalleryApp(
         if (backStack.lastOrNull() != route) backStack.add(route)
     }
     val openUploads = { open(NextGalleryRoute.Uploads) }
-    // Collected only while signed in: a link that arrives earlier waits for the session.
-    LaunchedEffect(links, signedIn) {
-        if (signedIn) links.collect { link -> linkRoute(link)?.let(open) }
+    LaunchedEffect(links) {
+        links.collect { link -> linkRoute(link)?.let(open) }
     }
-    if (signedIn) LibrarySystemBars()
-    val content: @Composable () -> Unit = {
-        if (signedIn) LocalMediaPermissionFlow(isSignedIn = true)
-        NextGalleryTheme(darkTheme = signedIn || isSystemInDarkTheme(), dynamicColor = !signedIn) {
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
+    LibrarySystemBars()
+    LocalMediaPermissionFlow(isSignedIn = true)
+    Box(Modifier.fillMaxSize()) {
+        NavDisplay(
+            backStack = routes,
+            onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+            entryDecorators = listOf(
+                rememberSaveableStateHolderNavEntryDecorator(),
+                rememberViewModelStoreNavEntryDecorator(),
+            ),
+            transitionSpec = {
+                horizontalTransition(
+                    transitionDirection(
+                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                    ),
+                )
+            },
+            popTransitionSpec = {
+                horizontalTransition(
+                    transitionDirection(
+                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                    ),
+                )
+            },
+            predictivePopTransitionSpec = {
+                horizontalTransition(
+                    transitionDirection(
+                        topLevelRouteFromContentKey(initialState.entries.last().contentKey),
+                        topLevelRouteFromContentKey(targetState.entries.last().contentKey),
+                    ),
+                )
+            },
+            entryProvider = entryProvider {
+                entry<NextGalleryRoute.Uploads>(
+                    clazzContentKey = { it.navContentKey() },
+                    metadata = subscreenTransitions,
                 ) {
-                    NavDisplay(
-                        backStack = routes,
-                        onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
-                        entryDecorators = listOf(
-                            rememberSaveableStateHolderNavEntryDecorator(),
-                            rememberViewModelStoreNavEntryDecorator(),
-                        ),
-                        transitionSpec = {
-                            horizontalTransition(
-                                transitionDirection(
-                                    topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                                    topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                                ),
-                            )
-                        },
-                        popTransitionSpec = {
-                            horizontalTransition(
-                                transitionDirection(
-                                    topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                                    topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                                ),
-                            )
-                        },
-                        predictivePopTransitionSpec = {
-                            horizontalTransition(
-                                transitionDirection(
-                                    topLevelRouteFromContentKey(initialState.entries.last().contentKey),
-                                    topLevelRouteFromContentKey(targetState.entries.last().contentKey),
-                                ),
-                            )
-                        },
-                        entryProvider = entryProvider {
-                            entry<NextGalleryRoute.Uploads>(
-                                clazzContentKey = { it.navContentKey() },
-                                metadata = subscreenTransitions,
-                            ) {
-                                if (signedIn) UploadsScreen(onBack = { backStack.removeLastOrNull() })
-                            }
-                            entry<NextGalleryRoute.Login>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) { LoginScreen() }
-                            entry<NextGalleryRoute.Photos>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) {
-                                if (signedIn) {
-                                    screenStates.SaveableStateProvider("photos") {
-                                        PhotosScreen(
-                                            onLogout = sessionViewModel::logout,
-                                            onOpenUploads = openUploads,
-                                            onViewerVisibilityChanged = { viewerVisible = it },
-                                            onSelectionModeChanged = { selectionMode = it },
-                                        )
-                                    }
-                                }
-                            }
-                            entry<NextGalleryRoute.Album>(
-                                clazzContentKey = { it.navContentKey() },
-                                metadata = subscreenTransitions,
-                            ) { album ->
-                                if (signedIn) AlbumScreen(album, onBack = { backStack.removeLastOrNull() }, onLogout = sessionViewModel::logout, onOpenUploads = openUploads)
-                            }
-                            entry<NextGalleryRoute.Albums>(
-                                clazzContentKey = { it.navContentKey() },
-                            ) {
-                                if (signedIn) {
-                                    screenStates.SaveableStateProvider("albums") {
-                                        AlbumsScreen(
-                                            onLogout = sessionViewModel::logout,
-                                            onOpenUploads = openUploads,
-                                            onOpen = { album ->
-                                                album.location?.let { location ->
-                                                    if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
-                                                        backStack.add(NextGalleryRoute.Album(location, album.name))
-                                                    }
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                    )
-                    if (signedIn && !selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
-                        // It floats over the pages and so over the viewer too: it steps down out of
-                        // the way while the viewer opens, and comes back once it has closed.
-                        AnimatedVisibility(
-                            visible = !viewerVisible,
-                            enter = slideInVertically(tween(IslandMoveMillis)) { it } + fadeIn(tween(IslandMoveMillis)),
-                            exit = slideOutVertically(tween(IslandMoveMillis)) { it } + fadeOut(tween(IslandMoveMillis)),
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .safeDrawingPadding()
-                                .padding(bottom = 16.dp),
-                        ) {
-                            LibraryIsland(
-                                page,
-                                { destination ->
-                                    val target = destinationBackStack(
-                                        backStack.toList().filterIsInstance<NextGalleryRoute>(),
-                                        destination.route,
-                                    )
-                                    if (backStack.toList() != target) {
-                                        backStack.clear()
-                                        backStack.addAll(target)
-                                    }
-                                },
-                            )
-                        }
+                    UploadsScreen(onBack = { backStack.removeLastOrNull() })
+                }
+                entry<NextGalleryRoute.Photos>(
+                    clazzContentKey = { it.navContentKey() },
+                ) {
+                    screenStates.SaveableStateProvider("photos") {
+                        PhotosScreen(
+                            onLogout = onLogout,
+                            onOpenUploads = openUploads,
+                            onViewerVisibilityChanged = { viewerVisible = it },
+                            onSelectionModeChanged = { selectionMode = it },
+                        )
                     }
                 }
+                entry<NextGalleryRoute.Album>(
+                    clazzContentKey = { it.navContentKey() },
+                    metadata = subscreenTransitions,
+                ) { album ->
+                    AlbumScreen(
+                        album,
+                        onBack = { backStack.removeLastOrNull() },
+                        onLogout = onLogout,
+                        onOpenUploads = openUploads,
+                    )
+                }
+                entry<NextGalleryRoute.Albums>(
+                    clazzContentKey = { it.navContentKey() },
+                ) {
+                    screenStates.SaveableStateProvider("albums") {
+                        AlbumsScreen(
+                            onLogout = onLogout,
+                            onOpenUploads = openUploads,
+                            onOpen = { album ->
+                                album.location?.let { location ->
+                                    if (backStack.lastOrNull() == NextGalleryRoute.Albums) {
+                                        backStack.add(NextGalleryRoute.Album(location, album.name))
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            },
+        )
+        if (!selectionMode && page !is NextGalleryRoute.Album && page != NextGalleryRoute.Uploads) {
+            // It floats over the pages and so over the viewer too: it steps down out of
+            // the way while the viewer opens, and comes back once it has closed.
+            AnimatedVisibility(
+                visible = !viewerVisible,
+                enter = slideInVertically(
+                    tween(IslandMoveMillis),
+                ) { it } +
+                    fadeIn(tween(IslandMoveMillis)),
+                exit = slideOutVertically(
+                    tween(IslandMoveMillis),
+                ) { it } +
+                    fadeOut(tween(IslandMoveMillis)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .safeDrawingPadding()
+                    .padding(bottom = 16.dp),
+            ) {
+                LibraryIsland(
+                    page,
+                    { destination ->
+                        val target = destinationBackStack(
+                            backStack.toList().filterIsInstance<NextGalleryRoute>(),
+                            destination.route,
+                        )
+                        if (backStack.toList() != target) {
+                            backStack.clear()
+                            backStack.addAll(target)
+                        }
+                    },
+                )
             }
         }
     }
-    if (signedIn) UnboundKoinScope(graph.requireScope(), content) else content()
 }
 
 @Composable

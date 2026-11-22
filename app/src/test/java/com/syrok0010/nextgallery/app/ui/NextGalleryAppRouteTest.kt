@@ -1,8 +1,7 @@
 package com.syrok0010.nextgallery.app.ui
 
 import androidx.compose.animation.AnimatedContentTransitionScope
-import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionUiState
+import androidx.navigation3.runtime.NavKey
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -13,49 +12,31 @@ import org.junit.Test
 
 class NextGalleryAppRouteTest {
     @Test
-    fun `a fresh back stack starts at login or photos`() {
-        assertEquals(NextGalleryRoute.Login, SessionUiState.SignedOut.rootRoute())
-        assertEquals(NextGalleryRoute.Photos, SessionUiState.SignedIn(credentials()).rootRoute())
-    }
-
-    @Test
-    fun `signed in session resets login back stack to authenticated`() {
-        val backStack = listOf(NextGalleryRoute.Login)
-
-        assertEquals(
-            listOf(NextGalleryRoute.Photos),
-            syncedBackStack(backStack, SessionUiState.SignedIn(credentials = credentials())),
-        )
-    }
-
-    @Test
-    fun `restored albums stay selected within signed in stack`() {
+    fun `restored albums stay selected within authenticated stack`() {
         val stack = listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums)
-        assertEquals(stack, syncedBackStack(stack, SessionUiState.SignedIn(credentials())))
+        assertEquals(stack, normalizedBackStack(stack))
     }
 
     @Test
-    fun `login and duplicated destinations are discarded on restoration`() {
-        val session = SessionUiState.SignedIn(credentials())
+    fun `empty, unknown, or duplicated destinations fall back to photos`() {
+        assertEquals(listOf(NextGalleryRoute.Photos), normalizedBackStack(emptyList()))
         assertEquals(
             listOf(NextGalleryRoute.Photos),
-            syncedBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Login), session),
+            normalizedBackStack(listOf(NextGalleryRoute.Photos, object : NavKey {})),
         )
         assertEquals(
             listOf(NextGalleryRoute.Photos),
-            syncedBackStack(
+            normalizedBackStack(
                 listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, NextGalleryRoute.Albums),
-                session,
             ),
         )
     }
 
     @Test
     fun `albums can be restored as the only authenticated destination`() {
-        val session = SessionUiState.SignedIn(credentials())
         assertEquals(
             listOf(NextGalleryRoute.Albums),
-            syncedBackStack(listOf(NextGalleryRoute.Albums), session),
+            normalizedBackStack(listOf(NextGalleryRoute.Albums)),
         )
     }
 
@@ -120,7 +101,8 @@ class NextGalleryAppRouteTest {
         )
     }
 
-    @Test fun `album destination survives serialization and is removed on logout`() {
+    @Test
+    fun `album destination survives serialization and normalization`() {
         val album = NextGalleryRoute.Album(
             AlbumLocation.Folder("external_primary", "Pictures/Отпуск/"),
             "Отпуск",
@@ -131,18 +113,6 @@ class NextGalleryAppRouteTest {
         val stack =
             destinationBackStack(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums), restored)
         assertEquals(listOf(NextGalleryRoute.Photos, NextGalleryRoute.Albums, album), stack)
-        assertEquals(stack, syncedBackStack(stack, SessionUiState.SignedIn(credentials())))
-        assertEquals(
-            listOf(NextGalleryRoute.Login),
-            syncedBackStack(stack, SessionUiState.SignedOut),
-        )
+        assertEquals(stack, normalizedBackStack(stack))
     }
-
-    private fun credentials(): AccountCredentials =
-        AccountCredentials(
-            serverUrl = "https://cloud.example.com",
-            loginName = "user",
-            appPassword = "secret",
-            userId = "user",
-        )
 }
