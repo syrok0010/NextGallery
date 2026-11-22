@@ -10,8 +10,6 @@ import androidx.compose.ui.unit.dp
 import com.syrok0010.nextgallery.AppLinks
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.di.ProductionGraph
 import com.syrok0010.nextgallery.string
 import kotlinx.coroutines.flow.flowOf
