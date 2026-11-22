@@ -136,7 +136,15 @@ internal fun authenticatedModule() =
                     location,
                 )
             }
-            scoped { ThumbnailBatchLoader(get<RemoteImageRepository>()::ensureThumbnails, get()) }
+            scoped(named<ThumbnailBatchLoader>()) {
+                CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            } onClose { it?.cancel() }
+            scoped {
+                ThumbnailBatchLoader(
+                    get<RemoteImageRepository>()::ensureThumbnails,
+                    get(named<ThumbnailBatchLoader>()),
+                )
+            }
             scoped<VideoPlayerFactory>()
             scoped<VideoFramesFactory>()
             scoped<MediaImageRequestFactory>()

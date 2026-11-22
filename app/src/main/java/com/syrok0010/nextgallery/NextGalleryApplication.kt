@@ -1,7 +1,7 @@
 package com.syrok0010.nextgallery
 
 import android.app.Application
-import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.di.AuthenticatedGraph
 import com.syrok0010.nextgallery.di.appModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -21,6 +21,6 @@ class NextGalleryApplication : Application() {
             workManagerFactory()
         }.koin
 
-        koin.get<SessionStore>()
+        koin.get<AuthenticatedGraph>().startIfSignedIn(koin.get())
     }
 }

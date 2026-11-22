@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.CredentialsStore
-import com.syrok0010.nextgallery.core.session.SessionStore
 import java.io.File
 import org.koin.android.ext.koin.androidContext
 import org.koin.compose.KoinIsolatedContext
@@ -40,7 +39,7 @@ internal class ProductionGraph(credentials: AccountCredentials? = null) : AutoCl
     }
     val koin get() = application.koin
     init {
-        koin.get<SessionStore>()
+        koin.get<AuthenticatedGraph>().startIfSignedIn(koin.get())
     }
     val scope get() = koin.get<AuthenticatedGraph>().requireScope()
 

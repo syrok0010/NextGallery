@@ -104,6 +104,30 @@ class AppCompositionTest {
         }
     }
 
+    @Test fun workerDefinitionSucceedsWithoutCrashingWhenSignedOut() {
+        ProductionGraph(credentials = null).use { graph ->
+            val factory = object : androidx.work.WorkerFactory() {
+                override fun createWorker(
+                    context: android.content.Context,
+                    name: String,
+                    params: androidx.work.WorkerParameters,
+                ): androidx.work.ListenableWorker? =
+                    graph.koin.getOrNull(
+                        qualifier = org.koin.core.qualifier.named(name),
+                    ) { parametersOf(params) }
+            }
+            val worker = androidx.work.testing
+                .TestListenableWorkerBuilder<com.syrok0010.nextgallery.feature.upload.UploadWorker>(
+                    graph.context,
+                ).setWorkerFactory(factory)
+                .build()
+            assertEquals(
+                androidx.work.ListenableWorker.Result.success(),
+                kotlinx.coroutines.runBlocking { worker.doWork() },
+            )
+        }
+    }
+
     @Test fun savedCredentialsStartGraphWithoutAnActivityAndCloseCancelsItsWork() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val graph = ProductionGraph(account)

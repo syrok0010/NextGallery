@@ -4,6 +4,8 @@ import com.syrok0010.nextgallery.app.library.LibraryPublicationStore
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.AuthenticatedSession
+import com.syrok0010.nextgallery.core.session.SessionStore
+import com.syrok0010.nextgallery.core.session.SessionUiState
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -34,6 +36,13 @@ internal class AuthenticatedGraph(private val koin: Koin) : AutoCloseable {
             scope.close()
             throw error
         }
+    }
+
+    @Synchronized
+    fun startIfSignedIn(sessions: SessionStore): Scope? {
+        val signedIn = sessions.session.value as? SessionUiState.SignedIn ?: return null
+        start(signedIn.credentials)
+        return current
     }
 
     @Synchronized
