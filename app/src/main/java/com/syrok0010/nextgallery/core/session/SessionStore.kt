@@ -5,7 +5,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SessionStore(credentialsStore: CredentialsStore) {
+class SessionStore(
+    credentialsStore: CredentialsStore,
+    private val prepare: (AccountCredentials) -> Unit = {},
+) {
     private val _session = MutableStateFlow(
         credentialsStore.load()?.let(SessionUiState::SignedIn) ?: SessionUiState.SignedOut,
     )
@@ -19,6 +22,7 @@ class SessionStore(credentialsStore: CredentialsStore) {
     val session: StateFlow<SessionUiState> = _session.asStateFlow()
 
     fun signIn(credentials: com.syrok0010.nextgallery.core.session.AccountCredentials) {
+        prepare(credentials)
         generation++
         _session.value = SessionUiState.SignedIn(credentials)
         changes.value = generation

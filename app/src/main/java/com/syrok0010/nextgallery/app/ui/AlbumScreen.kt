@@ -26,6 +26,10 @@ import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
+import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
+import com.syrok0010.nextgallery.feature.favorites.FavoriteError
+import com.syrok0010.nextgallery.feature.favorites.FavoriteItemNote
+import com.syrok0010.nextgallery.feature.favorites.FavoriteViewerAction
 import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.compose.koinInject
 
@@ -39,6 +43,7 @@ internal fun AlbumScreen(
     deletions: MediaDeletionRepository = koinInject(),
     sessions: SessionStore = koinInject(),
     trashBin: NextcloudTrashBin = koinInject(),
+    favorites: CloudFavorites = koinInject(),
 ) {
     val contents by remember(album.location, albums) {
         albums.observeContents(album.location)
@@ -61,6 +66,7 @@ internal fun AlbumScreen(
         if (deleteRequest?.plan?.hasCloudCopies == true) value = trashBin.status()
     }
     val delete = rememberDeleteAction(deletions::delete, onStarted = selection::clear)
+    FavoriteError(favorites)
     LaunchedEffect(contents.departedIds) { selection.remove(contents.departedIds) }
     val actions = if (!supported) {
         emptyList()
@@ -106,6 +112,8 @@ internal fun AlbumScreen(
         viewerActions = actions,
         // Members that left the album after a full refresh: the viewer stops holding them.
         deletedMediaIds = contents.departedIds,
+        viewerAccessory = { item, enabled -> FavoriteViewerAction(item, favorites, enabled) },
+        viewerItemNote = { FavoriteItemNote(it) },
         viewerStatus = { visible ->
             if (operations.active) {
                 OperationStatusPill(

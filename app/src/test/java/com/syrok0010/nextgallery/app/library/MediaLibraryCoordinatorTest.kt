@@ -50,7 +50,7 @@ class MediaLibraryCoordinatorTest {
     private val index = MediaLibraryIndex()
     private val coordinator = MediaLibraryCoordinator(
         index = index,
-        credentials = account,
+        sessions = sessions,
         remoteSource = remote,
         localMedia = LocalMediaSource(
             reader = LocalMediaReader {
@@ -96,6 +96,7 @@ class MediaLibraryCoordinatorTest {
 
     private fun running(block: suspend CoroutineScope.() -> Unit) =
         runBlocking {
+            sessions.signIn(account)
             val job: Job = launch { coordinator.run { publications += it } }
             try {
                 block()

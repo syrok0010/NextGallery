@@ -235,4 +235,5 @@
     <string name="favorite_filter_cached">Saved favorite photos. Refresh from server</string>
     <string name="favorite_loading">Loading cloud favorites…</string>
     <string name="favorite_no_cache">No saved favorite photos</string>
+    <string name="album_contents_pending_metadata">Added items are still being prepared: %1$d.</string>
 </resources>

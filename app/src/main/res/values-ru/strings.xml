@@ -251,4 +251,5 @@
     <string name="favorite_filter_cached">Сохранённые избранные фото. Обновить с сервера</string>
     <string name="favorite_loading">Загружаем избранное из облака…</string>
     <string name="favorite_no_cache">Нет сохранённых избранных фото</string>
+    <string name="album_contents_pending_metadata">Добавленные объекты ещё готовятся: %1$d.</string>
 </resources>
