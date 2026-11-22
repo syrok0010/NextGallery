@@ -34,7 +34,6 @@ import com.syrok0010.nextgallery.feature.timeline.daysForSlots
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import com.syrok0010.nextgallery.feature.upload.rememberUploadNotificationRequest
-import com.syrok0010.nextgallery.feature.viewer.ViewerDetailsLoader
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -48,7 +47,6 @@ internal fun PhotosScreen(
     uploads: UploadQueue = koinInject(),
     deletions: MediaDeletionRepository = koinInject(),
     trashBin: NextcloudTrashBin = koinInject(),
-    viewerDetailsLoader: ViewerDetailsLoader = koinInject(),
 ) {
     val state by timeline.state.collectAsStateWithLifecycle()
     val operations = rememberOperationStatus()
@@ -140,7 +138,6 @@ internal fun PhotosScreen(
                 )
             }
         },
-        viewerDetailsLoader = viewerDetailsLoader,
         deletedMediaIds = deletedMediaIds,
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
