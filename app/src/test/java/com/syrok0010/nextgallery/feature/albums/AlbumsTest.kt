@@ -1,7 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.*
-import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.*
@@ -299,16 +298,41 @@ class AlbumsTest {
         assertTrue(blocked.items.isEmpty())
     }
 
-    private fun scenario(block: suspend (NextcloudFixture, CoroutineScope) -> Unit) = runBlocking {
-        NextcloudFixture { request -> when (request.method) {
-            "PROPFIND" -> 207 to found()
-            "DELETE" -> (if (request.decodedTarget.endsWith("2-b.jpg")) 403 else 204) to ""
-            "SEARCH" -> 207 to found(request.searchedFileId to "Photos/${request.searchedFileId}.jpg")
-            "COPY" -> (if (request.decodedTarget.endsWith("3.jpg")) 403 else 201) to ""
-            else -> 500 to ""
-        } }.use { server ->
-            val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
-            try { withTimeout(5_000) { block(server, scope) } } finally { scope.cancel() }
+    private class Harness {
+        val credentials = AccountCredentials("https://cloud.example", "anna", "secret", "anna")
+        private val writer = object : AlbumWriter {
+            override suspend fun create(name: String) = AlbumLocation.Remote("anna/$name")
+            override suspend fun add(album: AlbumAddress, fileIds: List<Long>) =
+                AlbumWriteResult(fileIds.distinct().associateWith {
+                    if (it == 3L) AlbumCopyOutcome.Failed else AlbumCopyOutcome.Added
+                })
+            override suspend fun addFile(file: DavFilePath, album: AlbumAddress) = AlbumCopyOutcome.Added
+            override suspend fun containsFile(album: AlbumAddress, fileId: Long?) = fileId != null
+        }
+
+        fun albums(
+            scope: CoroutineScope,
+            source: AlbumContentsSource = AlbumContentsSource { _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) },
+            library: MediaLibraryIndex = MediaLibraryIndex(),
+            permission: MutableStateFlow<LocalMediaPermissionMode?> = MutableStateFlow(LocalMediaPermissionMode.Full),
+            catalog: suspend () -> RemoteAlbums = { RemoteAlbums(emptyList()) },
+            local: LocalAlbumSource = object : LocalAlbumSource {
+                override suspend fun load() = emptyList<AlbumSummary>()
+                override fun changes() = emptyFlow<Unit>()
+            },
+            enqueue: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult = { ids, _ -> EnqueueResult.Accepted(ids.size) },
+        ) = Albums(credentials, writer, object : RemoteAlbumSource {
+            override suspend fun load() = catalog()
+        }, local, source, library, permission, scope, enqueue)
+    }
+
+    private fun scenario(block: suspend (Harness, CoroutineScope) -> Unit) = runBlocking {
+        val server = Harness()
+        val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
+        try {
+            withTimeout(5_000) { block(server, scope) }
+        } finally {
+            scope.cancel()
         }
     }
 
