@@ -61,6 +61,8 @@ import com.syrok0010.nextgallery.feature.upload.UploadSource
 import com.syrok0010.nextgallery.feature.upload.UploadWorker
 import com.syrok0010.nextgallery.feature.upload.UploadedCopiesFollowUp
 import com.syrok0010.nextgallery.feature.viewer.VideoFramesFactory
+import com.syrok0010.nextgallery.feature.viewer.ViewerDetailsLoader
+import com.syrok0010.nextgallery.feature.viewer.ViewerMediaDetailsRepository
 import com.syrok0010.nextgallery.feature.viewer.playback.VideoPlayerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +97,14 @@ internal fun authenticatedModule() =
             scoped { create(::memoriesClient) }
             scoped { create(::albumsClient) }
             scoped { create(::filesClient) }
+            scoped<ViewerDetailsLoader> {
+                val credentials = get<AccountCredentials>()
+                ViewerMediaDetailsRepository(
+                    get<Context>().contentResolver,
+                    get<MemoriesApiClient>(),
+                    get<FilesDavClient>(),
+                ) { credentials }
+            }
             scoped { create(::capabilitiesClient) }
             scoped<MemoriesAlbumSource>() bind RemoteAlbumSource::class
             scoped {
