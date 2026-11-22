@@ -1,15 +1,16 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -31,7 +32,6 @@ internal data class AlbumsUiState(
 
 @OptIn(FlowPreview::class)
 internal class AlbumCatalogRepository(
-    private val credentials: AccountCredentials,
     private val remoteSource: RemoteAlbumSource,
     private val localSource: LocalAlbumSource,
     private val permission: StateFlow<LocalMediaPermissionMode?>,
@@ -76,14 +76,18 @@ internal class AlbumCatalogRepository(
             permission.collectLatest { mode ->
                 mutableState.update { it.copy(local = AlbumSourceState(), permission = mode) }
                 if (mode != LocalMediaPermissionMode.Full) return@collectLatest
-                localSource.changes().debounce(450.milliseconds).collectLatest {
-                    onLocalChanged()
-                    loadLocal()
+                coroutineScope {
+                    val localChanges = MutableStateFlow(0)
+                    launch {
+                        localSource.changes().debounce(450.milliseconds).collect {
+                            onLocalChanged()
+                            localChanges.update { it + 1 }
+                        }
+                    }
+                    combine(refreshes, localChanges) { refresh, change -> refresh to change }
+                        .collectLatest { loadLocal() }
                 }
             }
-        }
-        scope.launch {
-            permission.collectLatest { if (it == LocalMediaPermissionMode.Full) loadLocal() }
         }
     }
 

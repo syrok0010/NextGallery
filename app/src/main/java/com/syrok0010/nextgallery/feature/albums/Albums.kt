@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.annotation.MainThread
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
@@ -14,16 +15,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 @OptIn(FlowPreview::class)
 internal class Albums(
@@ -38,36 +40,30 @@ internal class Albums(
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
 ) : OperationStatusSource {
     private val mutations = Mutex()
-    private lateinit var contents: AlbumContentsStore
+    private val contents = AlbumContentsStore(source, library, permission, scope)
     private val catalogRepository = AlbumCatalogRepository(
-        credentials,
         remoteSource,
         localSource,
         permission,
         scope,
         onLocalChanged = { contents.refreshFolders() },
     )
-    private val catalogStore get() = catalogRepository
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
 
-    init {
-        contents = AlbumContentsStore(credentials, source, library, permission, scope)
-    }
-
     val catalog: StateFlow<AlbumsUiState> = combine(
-        catalogStore.state,
+        catalogRepository.state,
         contents.snapshots,
         ::albumCatalogProjection,
     ).stateIn(scope, SharingStarted.Eagerly, AlbumsUiState())
     val state: StateFlow<AlbumsUiState> get() = catalog
     val adding: StateFlow<Boolean> = additionState.map { it is AlbumAdditionState.Running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations: StateFlow<List<com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot>> =
+    override val operations: StateFlow<List<OperationStatusSnapshot>> =
         additionState.map(::albumOperationSnapshots).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     @MainThread
-    fun observeContents(location: AlbumLocation): kotlinx.coroutines.flow.Flow<AlbumContentsState> =
+    fun observeContents(location: AlbumLocation): Flow<AlbumContentsState> =
         contents.observe(location)
 
     @MainThread
@@ -130,19 +126,22 @@ internal class Albums(
     }
 
     suspend fun addUploaded(target: UploadAlbum, file: UploadedFile, recovered: Boolean): Boolean =
-        mutations.withLock {
-            val album = AlbumAddress(target.owner, target.name)
-            val accepted = if (recovered) {
-                writer.containsFile(album, file.fileId) || writer.addFile(file.path, album) == AlbumCopyOutcome.Added
-            } else {
-                writer.addFile(file.path, album) != AlbumCopyOutcome.Failed
+        withContext(scope.coroutineContext.minusKey(Job)) {
+            mutations.withLock {
+                require(target.owner == credentials.userId) { "Only owned albums support additions" }
+                val album = AlbumAddress(target.owner, target.name)
+                val accepted = if (recovered) {
+                    writer.containsFile(album, file.fileId) || writer.addFile(file.path, album) == AlbumCopyOutcome.Added
+                } else {
+                    writer.addFile(file.path, album) != AlbumCopyOutcome.Failed
+                }
+                if (accepted) {
+                    val id = file.fileId
+                    if (id == null) catalogRepository.refresh()
+                    else added(album.toLocation(), setOf(id))
+                }
+                accepted
             }
-            if (accepted) {
-                val id = file.fileId
-                if (id == null) catalogRepository.refresh()
-                else added(album.toLocation(), setOf(id))
-            }
-            accepted
         }
 
     @MainThread override fun consumeSucceeded() {

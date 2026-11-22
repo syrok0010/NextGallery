@@ -8,7 +8,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
-import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.router.AppNavigator
 import org.koin.compose.koinInject
 
@@ -22,7 +21,6 @@ internal fun LibraryScreenScaffold(
     title: String? = null,
     navigator: AppNavigator = koinInject(),
     library: MediaLibraryCoordinator = koinInject(),
-    albums: Albums = koinInject(),
     operations: OperationStatus = rememberOperationStatus(),
     content: @Composable BoxScope.() -> Unit,
 ) {
