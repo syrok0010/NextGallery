@@ -9,25 +9,24 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.library.MediaLibraryCoordinator
 import com.syrok0010.nextgallery.feature.albums.Albums
-import com.syrok0010.nextgallery.router.AppNavigator
 import org.koin.compose.koinInject
 
 /** Shared presentation for the library chrome and page content. */
 @Composable
 internal fun LibraryScreenScaffold(
     destination: TopLevelDestination,
+    onLogout: () -> Unit,
+    onOpenUploads: () -> Unit,
     viewerVisible: Boolean = false,
     onRefresh: () -> Unit = {},
-    isSubscreen: Boolean = false,
+    onBack: (() -> Unit)? = null,
     title: String? = null,
-    navigator: AppNavigator = koinInject(),
     library: MediaLibraryCoordinator = koinInject(),
     albums: Albums = koinInject(),
     operations: OperationStatus = rememberOperationStatus(),
     content: @Composable BoxScope.() -> Unit,
 ) {
     val context = LocalContext.current
-    val logout = LocalSessionLogout.current
     Column(
         Modifier
             .fillMaxSize()
@@ -43,7 +42,7 @@ internal fun LibraryScreenScaffold(
                     onRefresh()
                 },
                 onLogout = {
-                    if (!operations.tryLogout(logout)) {
+                    if (!operations.tryLogout(onLogout)) {
                         Toast
                             .makeText(
                                 context,
@@ -53,7 +52,7 @@ internal fun LibraryScreenScaffold(
                     }
                 },
                 logoutEnabled = !operations.running,
-                onBack = if (isSubscreen) navigator::back else null,
+                onBack = onBack,
                 title = title,
                 statusActive = operations.active,
                 status = {

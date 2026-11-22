@@ -158,6 +158,8 @@ private fun AuthenticatedApp(navigator: AppNavigator, onLogout: () -> Unit) {
     var viewerVisible by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     val screenStates = rememberSaveableStateHolder()
+    val open = { route: NextGalleryRoute -> navigator.open(route) }
+    val openUploads = { open(NextGalleryRoute.Uploads) }
     LaunchedEffect(routes) {
         if (backStack.toList() != routes) {
             backStack.clear()
@@ -231,6 +233,8 @@ private fun AuthenticatedApp(navigator: AppNavigator, onLogout: () -> Unit) {
                     ) {
                         screenStates.SaveableStateProvider("photos") {
                             PhotosScreen(
+                                onLogout = onLogout,
+                                onOpenUploads = openUploads,
                                 onViewerVisibilityChanged = { viewerVisible = it },
                                 onSelectionModeChanged = { selectionMode = it },
                             )
@@ -240,13 +244,24 @@ private fun AuthenticatedApp(navigator: AppNavigator, onLogout: () -> Unit) {
                         clazzContentKey = { it.navContentKey() },
                         metadata = subscreenTransitions,
                     ) { album ->
-                        AlbumScreen(album)
+                        AlbumScreen(
+                            album,
+                            onBack = { backStack.removeLastOrNull() },
+                            onLogout = onLogout,
+                            onOpenUploads = openUploads,
+                        )
                     }
                     entry<NextGalleryRoute.Albums>(
                         clazzContentKey = { it.navContentKey() },
                     ) {
                         screenStates.SaveableStateProvider("albums") {
-                            AlbumsScreen()
+                            AlbumsScreen(
+                                onLogout = onLogout,
+                                onOpenUploads = openUploads,
+                                onOpen = { target ->
+                                    target.location?.let { open(NextGalleryRoute.Album(it, target.name)) }
+                                },
+                            )
                         }
                     }
                 },

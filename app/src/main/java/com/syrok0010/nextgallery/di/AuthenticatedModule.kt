@@ -25,6 +25,7 @@ import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
 import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumRemover
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
@@ -102,10 +103,12 @@ internal fun authenticatedModule() =
             } bind LocalAlbumSource::class
             scoped<LocalMediaPermissionCoordinator>()
             scoped<MemoriesAlbumWriter>()
+            scoped<MemoriesAlbumRemover>()
             scoped<MemoriesFiles>()
             scoped { UploadSource(get<Context>().contentResolver) }
             scoped {
                 Albums(
+                    get(),
                     get(),
                     get(),
                     get<RemoteAlbumSource>(),

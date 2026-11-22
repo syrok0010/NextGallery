@@ -30,6 +30,7 @@ import org.koin.compose.koinInject
 @Composable
 internal fun AddToAlbumSheet(
     request: AlbumAdditionRequest,
+    excludedLocation: AlbumLocation? = null,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
     albums: Albums = koinInject(),
@@ -39,8 +40,12 @@ internal fun AddToAlbumSheet(
     val catalog by albums.state.collectAsStateWithLifecycle()
     val session by sessions.session.collectAsStateWithLifecycle()
     val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
-    val writable = remember(catalog.remote.items, user) {
-        user?.let { writableAlbums(catalog.remote.items, it) }.orEmpty()
+    val writable = remember(catalog.remote.items, user, excludedLocation) {
+        user
+            ?.let {
+                writableAlbums(catalog.remote.items, it)
+            }.orEmpty()
+            .filter { it.location != excludedLocation }
     }
     var creating by remember { mutableStateOf(false) }
 

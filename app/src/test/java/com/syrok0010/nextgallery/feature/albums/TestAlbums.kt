@@ -30,7 +30,7 @@ internal fun NextcloudFixture.albums(
         UploadAlbum,
     ) -> EnqueueResult = { ids, _ -> EnqueueResult.Accepted(ids.size) },
 ) = Albums(
-    sessions, writer,
+    sessions, writer, MemoriesAlbumRemover(transport),
     object : RemoteAlbumSource {
         override suspend fun load(credentials: AccountCredentials) = catalog()
     },

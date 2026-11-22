@@ -13,6 +13,12 @@ internal data class AlbumMembership(
         return copy(confirmed = confirmed + ids.associateWith { known[it] ?: confirmed[it] })
     }
 
+    fun removed(ids: Set<Long>): AlbumMembership =
+        copy(
+            snapshot = snapshot.copy(items = snapshot.items.filterNot { it.remoteFileId in ids }),
+            confirmed = confirmed - ids,
+        )
+
     fun resolve(metadata: Map<Long?, MediaItem>): AlbumMembership =
         copy(confirmed = confirmed.mapValues { (id, item) -> item ?: metadata[id] })
 
