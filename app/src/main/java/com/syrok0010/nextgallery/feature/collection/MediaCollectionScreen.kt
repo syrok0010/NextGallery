@@ -28,6 +28,8 @@ internal fun MediaCollectionScreen(
     selection: MediaSelection? = null,
     selectionActions: List<SelectionAction> = emptyList(),
     viewerActions: List<SelectionAction> = emptyList(),
+    viewerAccessory: @Composable (MediaItem, Boolean) -> Unit = { _, _ -> },
+    viewerItemNote: @Composable (MediaItem) -> Unit = {},
     viewerStatus: @Composable (visible: Boolean) -> Unit = {},
     deletedMediaIds: Set<MediaId> = emptySet(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
@@ -83,12 +85,14 @@ internal fun MediaCollectionScreen(
         if (viewerId != null) MediaDetailScreen(
             initialMediaId = viewerId,
             sequence = sequence,
-            actions = if (viewerActions.isEmpty()) {
-                null
-            } else {
-                { item -> ViewerSelectionActions(viewerActions, item) }
+            actions = { item ->
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    viewerAccessory(item, true)
+                    ViewerSelectionActions(viewerActions, item)
+                }
             },
             status = viewerStatus,
+            itemNote = viewerItemNote,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
             onEmpty = { transition.close(viewerId, false) },

@@ -16,6 +16,7 @@ import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.AuthenticatedSession
+import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
@@ -34,11 +35,15 @@ import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.MemoriesCloudTrash
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
+import com.syrok0010.nextgallery.feature.favorites.CloudFavorites
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoriteWriter
+import com.syrok0010.nextgallery.feature.favorites.MemoriesFavoritesSource
 import com.syrok0010.nextgallery.feature.images.MediaImageRequestFactory
 import com.syrok0010.nextgallery.feature.images.RemoteImageCache
 import com.syrok0010.nextgallery.feature.images.RemoteImageRepository
 import com.syrok0010.nextgallery.feature.images.ThumbnailBatchLoader
 import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
+import com.syrok0010.nextgallery.feature.library.CloudFavoriteMetadata
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
@@ -84,6 +89,7 @@ internal fun authenticatedModule() =
             scoped<ThumbnailFileStore>()
             scoped<RoomMediaIdentityRegistry>() bind MediaIdentityRegistry::class
             scoped<TimelineCacheRepository>()
+            scoped<CloudFavoriteMetadata>()
             scoped<RemoteImageCache>()
             scoped<LocalMediaProjectionRepository>() bind LocalMediaProjectionStore::class
             scoped {
@@ -140,7 +146,31 @@ internal fun authenticatedModule() =
             scoped<LocalMediaSource>()
             scoped<RemoteImageRepository>()
             scoped<MemoriesRepository>()
-            scoped<MemoriesAlbumContents>()
+            scoped<MemoriesFavoriteWriter>()
+            scoped { MemoriesFavoritesSource(get(), get(), get(), get()) }
+            scoped {
+                CloudFavorites(
+                    sessions = get(),
+                    metadata = get(),
+                    load = get<MemoriesFavoritesSource>()::load,
+                    library = get(),
+                    scope = get(),
+                    write = get<MemoriesFavoriteWriter>()::set,
+                    persist = { item ->
+                        get<TimelineCacheRepository>().saveDayDetails(
+                            listOf(item),
+                            emptySet(),
+                        )
+                    },
+                )
+            }
+            scoped {
+                MemoriesAlbumContents(
+                    get(),
+                    get(),
+                    get(),
+                ) { items -> get<TimelineCacheRepository>().saveDayDetails(items, emptySet()) }
+            }
             scoped { create(::localContents) }
             scoped<AlbumContentsSource> { create(::albumContents) }
             viewModel { AlbumsViewModel(get()) }
@@ -215,11 +245,12 @@ private fun mediaDeletion(
 )
 private fun libraryCoordinator(
     library: MediaLibraryIndex,
-    credentials: AccountCredentials,
+    sessions: SessionStore,
     remote: MemoriesRepository,
     local: LocalMediaSource,
     permissions: LocalMediaPermissionCoordinator,
-) = MediaLibraryCoordinator(library, credentials, remote, local, permissions.mode)
+    favorites: CloudFavoriteMetadata,
+) = MediaLibraryCoordinator(library, sessions, remote, local, permissions.mode, favorites)
 private fun mediaReader(
     context: Context,
     db: NextGalleryDatabase,
@@ -242,9 +273,9 @@ private fun localContents(
     local: LocalMediaProjectionStore,
 ) = AndroidAlbumContents(context.contentResolver, identities, local)
 private fun albumContents(remote: MemoriesAlbumContents, local: AndroidAlbumContents) =
-    AlbumContentsSource { location, _ ->
+    AlbumContentsSource { location, credentials ->
         when (location) {
-            is AlbumLocation.Remote -> remote.load(location)
+            is AlbumLocation.Remote -> remote.load(location, credentials)
             is AlbumLocation.Folder -> local.load(location)
         }
     }

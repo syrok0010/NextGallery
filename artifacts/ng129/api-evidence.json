@@ -1,0 +1,198 @@
+{
+  "server": "http://test.syrok/",
+  "account": "test",
+  "versions": {
+    "nextcloud": "34.0.5",
+    "memories": "10.1.0"
+  },
+  "requests": [
+    {
+      "method": "PROPPATCH",
+      "fileId": 321,
+      "favorite": 1,
+      "status": 207,
+      "body": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:favorite/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n",
+      "truthStatus": 207,
+      "truth": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:fileid>321</oc:fileid><oc:favorite>1</oc:favorite></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n"
+    },
+    {
+      "method": "PROPPATCH",
+      "fileId": 321,
+      "favorite": 0,
+      "status": 207,
+      "body": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:favorite/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n",
+      "truthStatus": 207,
+      "truth": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:fileid>321</oc:fileid><oc:favorite>0</oc:favorite></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n"
+    },
+    {
+      "method": "PROPPATCH",
+      "fileId": 321,
+      "favorite": 1,
+      "status": 207,
+      "body": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:favorite/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n",
+      "truthStatus": 207,
+      "truth": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/remote.php/dav/files/test/Photos/ng129-favorites/ng129-old.jpg</d:href><d:propstat><d:prop><oc:fileid>321</oc:fileid><oc:favorite>1</oc:favorite></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>\n"
+    }
+  ],
+  "favoriteIndex": {
+    "status": 200,
+    "days": [
+      {
+        "dayid": 14611,
+        "count": 1,
+        "detail": [
+          {
+            "fileid": 321,
+            "dayid": 14611,
+            "w": 640,
+            "h": 480,
+            "etag": "b02269bf78f6d5089d533c1f641efea5",
+            "basename": "ng129-old.jpg",
+            "size": 2028,
+            "epoch": 1262433601,
+            "mimetype": "image/jpeg",
+            "isfavorite": 1
+          }
+        ]
+      }
+    ],
+    "detailsStatus": 200,
+    "details": [
+      {
+        "fileid": 321,
+        "dayid": 14611,
+        "w": 640,
+        "h": 480,
+        "etag": "b02269bf78f6d5089d533c1f641efea5",
+        "basename": "ng129-old.jpg",
+        "size": 2028,
+        "epoch": 1262433601,
+        "mimetype": "image/jpeg",
+        "isfavorite": 1
+      }
+    ]
+  },
+  "uiServerTruth": [
+    {
+      "stage": "final-ui-mark",
+      "fileId": 320,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-ui-unmark",
+      "fileId": 320,
+      "status": 207,
+      "favorite": "0"
+    },
+    {
+      "stage": "final-ui-remark",
+      "fileId": 320,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-unseen-created-after-start",
+      "fileId": 334,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-filter-remove-current",
+      "fileId": 320,
+      "status": 207,
+      "favorite": "0"
+    },
+    {
+      "stage": "final-filter-remove-old",
+      "fileId": 321,
+      "status": 207,
+      "favorite": "0"
+    },
+    {
+      "stage": "final-filter-remove-last",
+      "fileId": 334,
+      "status": 207,
+      "favorite": "0"
+    },
+    {
+      "stage": "final-merged-mark",
+      "fileId": 322,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-album-shows-heart",
+      "fileId": 322,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-album-unmark",
+      "fileId": 322,
+      "status": 207,
+      "favorite": "0"
+    },
+    {
+      "stage": "final-album-remark",
+      "fileId": 322,
+      "status": 207,
+      "favorite": "1"
+    },
+    {
+      "stage": "final-error-file-deleted-before-tap",
+      "fileId": 323,
+      "status": 404,
+      "favorite": null
+    },
+    {
+      "stage": "final-after-process-relaunch",
+      "fileId": 322,
+      "status": 207,
+      "favorite": "1"
+    }
+  ],
+  "unseenBeforeFilter": {
+    "fileId": 334,
+    "absentFromAppMetadata": true,
+    "createdAfterAppStartup": true,
+    "checkedQuery": "SELECT COUNT(*) FROM memories_media WHERE fileId = 334",
+    "rowCount": 0
+  },
+  "mergedWarmMetadata": [
+    [
+      322,
+      1
+    ]
+  ],
+  "apkRevision": "480e2fd5e5305e6f0555390361a8c173dbf397c4",
+  "apkSha256": "13dc968e3dd580e7df1caf825d082489e9c21805a2dac7e0a6028ebef0f1ee87",
+  "mergedEvidence": {
+    "localAuid": "15bc5729ca9998ac7950dcc56438b36d",
+    "cloudAuid": "15bc5729ca9998ac7950dcc56438b36d",
+    "oneCanonicalTileWithBothCopyBadges": "06-merged-copy-badges.png"
+  },
+  "finalTaskMetadata": [
+    {
+      "fileId": 321,
+      "dayId": 14611,
+      "displayName": "ng129-old.jpg",
+      "takenAtEpochSeconds": 1262433601,
+      "isFavorite": 0
+    },
+    {
+      "fileId": 322,
+      "dayId": 20758,
+      "displayName": "ng129-merged.jpg",
+      "takenAtEpochSeconds": 1793534402,
+      "isFavorite": 1
+    },
+    {
+      "fileId": 334,
+      "dayId": 11324,
+      "displayName": "ng129-unseen-2001.jpg",
+      "takenAtEpochSeconds": 978436800,
+      "isFavorite": 0
+    }
+  ]
+}

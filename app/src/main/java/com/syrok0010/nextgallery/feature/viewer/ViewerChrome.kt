@@ -62,6 +62,7 @@ internal fun ViewerChrome(
     /** 0..1 while the details sheet opens: the filmstrip and actions fade out under it. */
     detailsProgress: () -> Float = { 0f },
     onHeaderBottomChange: (Float) -> Unit = {},
+    itemNote: @Composable (MediaItem) -> Unit = {},
 ) {
     Box(modifier = modifier) {
         playback?.let {
@@ -121,6 +122,7 @@ internal fun ViewerChrome(
                         // Mirrors the back button, so the title stays centred on the screen.
                         Spacer(Modifier.width(ViewerHeaderSideWidth))
                     }
+                    itemNote(item)
                     status(visible && playback?.state?.isFullscreen != true)
                 }
             }
