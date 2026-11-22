@@ -89,10 +89,9 @@ class AlbumAdditionTest {
         }.use { fixture ->
             val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
-                val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 var refreshed = 0
                 val submittedAlbum = MutableStateFlow<UploadAlbum?>(null)
-                val additions = fixture.albums(scope, sessions = sessions,
+                val additions = fixture.albums(scope,
                     catalog = { refreshed++; RemoteAlbums(emptyList()) },
                     enqueue = { ids, album ->
                         submittedAlbum.value = album
@@ -144,8 +143,7 @@ class AlbumAdditionTest {
         }.use { fixture ->
             val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
-                val sessions = SessionStore(FixedCredentials(fixture.credentials))
-                val additions = fixture.albums(scope, sessions = sessions)
+                val additions = fixture.albums(scope)
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
                 val request = AlbumAdditionRequest(listOf(1L))
                 assertTrue(additions.add(album, request))
@@ -215,9 +213,8 @@ class AlbumAdditionTest {
         NextcloudFixture(respond).use { fixture ->
             val scope = CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
             try {
-                val sessions = SessionStore(FixedCredentials(fixture.credentials))
                 val enqueued = java.util.concurrent.atomic.AtomicInteger()
-                val additions = fixture.albums(scope, sessions = sessions, enqueue = { _, _ ->
+                val additions = fixture.albums(scope, enqueue = { _, _ ->
                     enqueued.incrementAndGet()
                     enqueue
                 })

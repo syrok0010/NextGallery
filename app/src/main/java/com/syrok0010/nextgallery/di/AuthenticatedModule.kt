@@ -17,8 +17,10 @@ import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.AuthenticatedSession
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
+import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
+import com.syrok0010.nextgallery.feature.albums.AlbumWriter
 import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
@@ -101,7 +103,7 @@ internal fun authenticatedModule() =
                 )
             } bind LocalAlbumSource::class
             scoped<LocalMediaPermissionCoordinator>()
-            scoped<MemoriesAlbumWriter>()
+            scoped<MemoriesAlbumWriter>() bind AlbumWriter::class
             scoped<MemoriesFiles>()
             scoped { UploadSource(get<Context>().contentResolver) }
             scoped {
@@ -141,6 +143,7 @@ internal fun authenticatedModule() =
             scoped { create(::localContents) }
             scoped<AlbumContentsSource> { create(::albumContents) }
             viewModel { AlbumsViewModel(get()) }
+            viewModel { (location: AlbumLocation) -> AlbumContentsViewModel(location, get()) }
             scoped(named<ThumbnailBatchLoader>()) {
                 CoroutineScope(SupervisorJob() + Dispatchers.IO)
             } onClose { it?.cancel() }
@@ -239,7 +242,7 @@ private fun localContents(
     local: LocalMediaProjectionStore,
 ) = AndroidAlbumContents(context.contentResolver, identities, local)
 private fun albumContents(remote: MemoriesAlbumContents, local: AndroidAlbumContents) =
-    AlbumContentsSource { location, _ ->
+    AlbumContentsSource { location ->
         when (location) {
             is AlbumLocation.Remote -> remote.load(location)
             is AlbumLocation.Folder -> local.load(location)

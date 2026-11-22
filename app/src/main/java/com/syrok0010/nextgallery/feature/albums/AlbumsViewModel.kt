@@ -4,5 +4,5 @@ import androidx.lifecycle.ViewModel
 
 internal class AlbumsViewModel(private val albums: Albums) : ViewModel() {
     val state = albums.state
-    fun refresh() = albums.refresh()
+    fun refresh() = albums.refreshCatalog()
 }

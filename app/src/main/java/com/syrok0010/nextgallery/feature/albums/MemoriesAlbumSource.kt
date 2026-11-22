@@ -2,10 +2,9 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 
 internal class MemoriesAlbumSource(private val memories: MemoriesApiClient) : RemoteAlbumSource {
-    override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
+    override suspend fun load(): RemoteAlbums {
         val config = memories.config()
         if (!config.albumsEnabled) return RemoteAlbums(emptyList(), supported = false)
         return RemoteAlbums(

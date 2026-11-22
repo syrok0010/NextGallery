@@ -20,7 +20,7 @@ class MemoriesAlbumWriterTest {
     @Test fun `create sends MKCOL to encoded own album and maps 405 to existing album`() = runBlocking {
         var exists = false
         NextcloudFixture { if (exists) 405 to "" else 201 to "" }.use { fixture ->
-            val location = fixture.writer.create(fixture.credentials, "Лето & море")
+            val location = fixture.writer.create("Лето & море")
             assertEquals(AlbumLocation.Remote("anna/Лето & море"), location)
             val request = fixture.requests.single()
             assertEquals("MKCOL", request.method)
@@ -31,7 +31,7 @@ class MemoriesAlbumWriterTest {
             )
             exists = true
             try {
-                fixture.writer.create(fixture.credentials, "Лето & море")
+                fixture.writer.create("Лето & море")
                 fail("Expected existing album")
             } catch (_: AlbumAlreadyExistsException) {
             }
@@ -100,7 +100,7 @@ class MemoriesAlbumWriterTest {
         }.use { fixture ->
             try {
                 val write = launch(Dispatchers.IO) {
-                    fixture.writer.create(fixture.credentials, "Медленный")
+                    fixture.writer.create("Медленный")
                 }
                 withTimeout(5_000) { while (fixture.requests.isEmpty()) delay(10) }
                 withTimeout(1_000) { write.cancelAndJoin() }
@@ -177,7 +177,7 @@ class MemoriesAlbumWriterTest {
 
 /** The album writer of the fixture's account. */
 internal val NextcloudFixture.writer: MemoriesAlbumWriter
-    get() = MemoriesAlbumWriter(PhotosAlbumsDavClient(transport) { credentials }, dav)
+    get() = MemoriesAlbumWriter(credentials, PhotosAlbumsDavClient(transport) { credentials }, dav)
 
 /** DAV SEARCH multistatus listing each file id at its encoded path under `files/anna`. */
 internal fun found(vararg files: Pair<Long, String>): String =

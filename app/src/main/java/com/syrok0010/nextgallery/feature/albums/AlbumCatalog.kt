@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 
@@ -22,7 +21,7 @@ internal sealed interface AlbumCover {
 
 internal data class RemoteAlbums(val albums: List<AlbumSummary>, val supported: Boolean = true)
 internal interface RemoteAlbumSource {
-    suspend fun load(credentials: AccountCredentials): RemoteAlbums
+    suspend fun load(): RemoteAlbums
 }
 
 internal interface LocalAlbumSource {

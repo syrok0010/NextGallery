@@ -2,48 +2,75 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaItem
 
-/** Last accepted membership plus confirmations not yet acknowledged by a complete read. */
+/** Versioned local overlay over the last server snapshot. */
+internal data class PendingAddition(val item: MediaItem?, val version: Long)
+
 internal data class AlbumMembership(
     val snapshot: AlbumContentsBatch = AlbumContentsBatch(emptyList(), 0),
     val initialized: Boolean = false,
-    private val confirmed: Map<Long, MediaItem?> = emptyMap(),
+    val version: Long = 0,
+    val pendingAdded: Map<Long, PendingAddition> = emptyMap(),
 ) {
+    val hasPendingMetadata: Boolean get() = pendingAdded.values.any { it.item == null }
+
     fun added(ids: Set<Long>, supplied: List<MediaItem>): AlbumMembership {
-        val known = (snapshot.items + supplied).associateBy { it.remoteFileId }
-        return copy(confirmed = confirmed + ids.associateWith { known[it] ?: confirmed[it] })
+        if (ids.isEmpty()) return this
+        val nextVersion = version + 1
+        val known = (snapshot.items + supplied + pendingAdded.values.mapNotNull { it.item })
+            .mapNotNull { item -> item.remoteFileId?.let { it to item } }
+            .toMap()
+        return copy(
+            version = nextVersion,
+            pendingAdded = pendingAdded +
+                ids.associateWith {
+                    PendingAddition(known[it] ?: pendingAdded[it]?.item, nextVersion)
+                },
+        )
     }
 
     fun resolve(metadata: Map<Long?, MediaItem>): AlbumMembership =
-        copy(confirmed = confirmed.mapValues { (id, item) -> item ?: metadata[id] })
+        copy(
+            pendingAdded = pendingAdded.mapValues { (id, addition) ->
+                addition.copy(item = addition.item ?: metadata[id])
+            },
+        )
 
-    fun read(batch: AlbumContentsBatch, finished: Boolean): AlbumMembership {
-        val metadata = batch.items.associateBy { it.remoteFileId }
-        val retained = if (finished) confirmed.filterKeys { it !in metadata } else confirmed
+    fun applyRead(
+        batch: AlbumContentsBatch,
+        startedAtVersion: Long,
+        authoritative: Boolean,
+        finished: Boolean,
+    ): AlbumMembership {
+        val batchIds = batch.items.mapNotNullTo(mutableSetOf()) { it.remoteFileId }
+        val retained = pendingAdded.filter { (id, addition) ->
+            if (!finished || addition.version > startedAtVersion) {
+                true
+            } else if (id in batchIds) {
+                false
+            } else {
+                !authoritative
+            }
+        }
         return copy(
             snapshot = batch,
-            initialized = finished,
-            confirmed = retained,
-        ).resolve(metadata)
-    }
-
-    /** A refresh retires confirmations, retaining visible cards until a complete replacement arrives. */
-    fun authoritative(): AlbumMembership {
-        val visible = contents()
-        return copy(
-            snapshot = AlbumContentsBatch(visible.items, visible.total),
-            confirmed = emptyMap(),
-        )
+            initialized = if (finished) true else initialized,
+            pendingAdded = retained,
+        ).resolve(batch.items.associateBy { it.remoteFileId })
     }
 
     fun contents(): AlbumContentsState {
-        val items = (snapshot.items + confirmed.values.filterNotNull()).distinctBy { it.mediaId }
+        val items = (snapshot.items + pendingAdded.values.mapNotNull { it.item })
+            .distinctBy { it.mediaId }
         val materialized = items.mapNotNullTo(mutableSetOf()) { it.remoteFileId }
-        val pending = confirmed.keys.count { it !in materialized }
-        return AlbumContentsState(
-            items = items,
-            loaded = items.size,
-            total = maxOf(if (initialized) 0 else snapshot.total, items.size + pending),
-            pendingMetadata = pending,
-        )
+        val pending = pendingAdded.keys.count { it !in materialized }
+        val total = if (initialized) {
+            items.size + pending
+        } else {
+            maxOf(
+                snapshot.total,
+                items.size + pending,
+            )
+        }
+        return AlbumContentsState(items, total, items.size, pendingMetadata = pending)
     }
 }

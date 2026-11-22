@@ -39,7 +39,6 @@ internal fun LibraryScreenScaffold(
                 destination = destination,
                 onRefresh = {
                     library.refresh()
-                    albums.refresh()
                     onRefresh()
                 },
                 onLogout = {

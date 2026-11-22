@@ -12,14 +12,10 @@ import kotlinx.coroutines.flow.*
 internal fun NextcloudFixture.albums(
     scope: CoroutineScope,
     source: AlbumContentsSource =
-        AlbumContentsSource { _, _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) },
+        AlbumContentsSource { _ -> flowOf(AlbumContentsBatch(emptyList(), 0)) },
     library: MediaLibraryIndex = MediaLibraryIndex(),
     permission: MutableStateFlow<LocalMediaPermissionMode?> =
         MutableStateFlow(LocalMediaPermissionMode.Full),
-    sessions: SessionStore = SessionStore(object : CredentialsStore {
-        override fun load() = credentials
-        override fun save(credentials: AccountCredentials) = Unit
-    }),
     catalog: suspend () -> RemoteAlbums = { RemoteAlbums(emptyList()) },
     local: LocalAlbumSource = object : LocalAlbumSource {
         override suspend fun load() = emptyList<AlbumSummary>()
@@ -30,9 +26,9 @@ internal fun NextcloudFixture.albums(
         UploadAlbum,
     ) -> EnqueueResult = { ids, _ -> EnqueueResult.Accepted(ids.size) },
 ) = Albums(
-    sessions, writer,
+    credentials, writer,
     object : RemoteAlbumSource {
-        override suspend fun load(credentials: AccountCredentials) = catalog()
+        override suspend fun load() = catalog()
     },
     local, source, library, permission, scope, enqueue,
 )
