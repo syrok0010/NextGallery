@@ -16,12 +16,10 @@ import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.AuthenticatedSession
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.AlbumCatalogRepository
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
 import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
@@ -103,17 +101,28 @@ internal fun authenticatedModule() =
                 )
             } bind LocalAlbumSource::class
             scoped<LocalMediaPermissionCoordinator>()
-            scoped<AlbumCatalogRepository> { create(::albumCatalog) }
             scoped<MemoriesAlbumWriter>()
             scoped<MemoriesFiles>()
             scoped { UploadSource(get<Context>().contentResolver) }
+            scoped {
+                Albums(
+                    get(),
+                    get(),
+                    get<RemoteAlbumSource>(),
+                    get<LocalAlbumSource>(),
+                    get(),
+                    get(),
+                    get<LocalMediaPermissionCoordinator>().mode,
+                    get(),
+                    enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
+                )
+            }
             scoped { create(::uploadQueue) }
-            scoped { create(::albumAdditions) }
             scoped<MemoriesCloudTrash>() bind CloudTrash::class
             scoped<NextcloudTrashBin>()
             scoped { create(::mediaDeletion) }
             scoped<OperationStatusSource>(named<UploadQueue>()) { get<UploadQueue>() }
-            scoped<OperationStatusSource>(named<AlbumAdditions>()) { get<AlbumAdditions>() }
+            scoped<OperationStatusSource>(named<Albums>()) { get<Albums>() }
             scoped<OperationStatusSource>(
                 named<MediaDeletionRepository>(),
             ) { get<MediaDeletionRepository>() }
@@ -132,15 +141,6 @@ internal fun authenticatedModule() =
             scoped { create(::localContents) }
             scoped<AlbumContentsSource> { create(::albumContents) }
             viewModel { AlbumsViewModel(get()) }
-            viewModel { (location: AlbumLocation) ->
-                AlbumContentsViewModel(
-                    get(),
-                    get(),
-                    get(),
-                    get<LocalMediaPermissionCoordinator>().mode,
-                    location,
-                )
-            }
             scoped(named<ThumbnailBatchLoader>()) {
                 CoroutineScope(SupervisorJob() + Dispatchers.IO)
             } onClose { it?.cancel() }
@@ -167,13 +167,6 @@ private fun filesClient(transport: NextcloudTransport, credentials: AccountCrede
     FilesDavClient(transport) { credentials }
 private fun capabilitiesClient(transport: NextcloudTransport, credentials: AccountCredentials) =
     NextcloudCapabilitiesClient(transport) { credentials }
-private fun albumCatalog(
-    credentials: AccountCredentials,
-    remote: RemoteAlbumSource,
-    local: LocalAlbumSource,
-    permissions: LocalMediaPermissionCoordinator,
-    scope: CoroutineScope,
-) = AlbumCatalogRepository(credentials, remote, local, permissions.mode, scope)
 private fun uploadQueue(
     credentials: AccountCredentials,
     library: MediaLibraryIndex,
@@ -181,8 +174,7 @@ private fun uploadQueue(
     journal: UploadJournal,
     source: UploadSource,
     identities: MediaIdentityRegistry,
-    catalog: AlbumCatalogRepository,
-    writer: MemoriesAlbumWriter,
+    albums: Albums,
     context: Context,
     coordinator: MediaLibraryCoordinator,
 ): UploadQueue =
@@ -194,26 +186,12 @@ private fun uploadQueue(
         source::snapshot,
         UploadFollowUps(
             UploadedCopiesFollowUp(identities),
-            AlbumUploadFollowUp(writer, catalog),
+            AlbumUploadFollowUp(albums),
         ),
         refreshLibrary = coordinator::refresh,
         schedule = { UploadWorker.schedule(context) },
         restart = { UploadWorker.schedule(context, now = true) },
     )
-
-private fun albumAdditions(
-    credentials: AccountCredentials,
-    writer: MemoriesAlbumWriter,
-    catalog: AlbumCatalogRepository,
-    uploads: UploadQueue,
-    scope: CoroutineScope,
-) = AlbumAdditions(
-    credentials,
-    writer,
-    catalog,
-    { ids, album -> uploads.submit(ids, album) },
-    scope,
-)
 
 private fun mediaDeletion(
     credentials: AccountCredentials,
