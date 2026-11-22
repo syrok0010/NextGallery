@@ -10,16 +10,11 @@ import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
 import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.compose.koinInject
 
 @Composable
-internal fun AlbumScreen(
-    album: NextGalleryRoute.Album,
-    onBack: () -> Unit,
-    onLogout: () -> Unit,
-    onOpenUploads: () -> Unit,
-    albums: Albums = koinInject(),
-) {
+internal fun AlbumScreen(album: NextGalleryRoute.Album, albums: Albums = koinInject()) {
     val contents by remember(album.location, albums) {
         albums.observeContents(album.location)
     }.collectAsStateWithLifecycle()
@@ -28,21 +23,22 @@ internal fun AlbumScreen(
     val tileActivity = remember(operations) { operations::tileActivity }
     MediaCollectionScreen(
         slots = slots,
-        emptyContent = { AlbumContentsStatus(contents, { albums.refresh(album.location) }) },
+        emptyContent = { AlbumContentsStatus(contents) { albums.refresh(album.location) } },
         tileActivity = tileActivity,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Albums,
-            onLogout,
-            onOpenUploads,
             viewerVisible = viewerVisible,
-            onBack = onBack,
+            onRefresh = { albums.refresh(album.location) },
+            isSubscreen = true,
             title = album.title,
             operations = operations,
         ) {
             Column(Modifier.fillMaxSize()) {
-                if (contents.items.isNotEmpty() && (contents.loading || contents.failed || contents.pendingMetadata > 0)) {
-                    AlbumContentsStatus(contents, { albums.refresh(album.location) })
+                if (contents.items.isNotEmpty() &&
+                    (contents.loading || contents.failed || contents.pendingMetadata > 0)
+                ) {
+                    AlbumContentsStatus(contents) { albums.refresh(album.location) }
                 }
                 Box(Modifier.weight(1f)) { content() }
             }

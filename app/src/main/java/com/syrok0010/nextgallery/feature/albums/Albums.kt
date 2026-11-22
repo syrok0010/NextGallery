@@ -34,7 +34,8 @@ internal class Albums(
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
 ) : OperationStatusSource {
     private val mutations = Mutex()
-    private val catalog = AlbumCatalogRepository(sessions, remoteSource, localSource, permission, scope)
+    private val catalog =
+        AlbumCatalogRepository(sessions.requireCredentials(), remoteSource, localSource, permission, scope)
     private val contents = AlbumContentsStore(sessions, source, library, permission, scope)
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
