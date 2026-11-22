@@ -167,7 +167,11 @@ internal fun AlbumCardRow(
 }
 
 @Composable
-internal fun AlbumCoverImage(album: AlbumSummary, credentials: AccountCredentials = koinInject()) {
+internal fun AlbumCoverImage(
+    album: AlbumSummary,
+    credentials: AccountCredentials = koinInject(),
+    imageLoader: coil3.ImageLoader = koinInject(),
+) {
     val context = LocalContext.current
     val request = remember(album.cover, credentials, context) {
         when (val cover = album.cover) {
@@ -183,7 +187,7 @@ internal fun AlbumCoverImage(album: AlbumSummary, credentials: AccountCredential
     }
     if (request != null) AsyncImage(
         request,
-        imageLoader = koinInject<coil3.ImageLoader>(),
+        imageLoader = imageLoader,
         contentDescription = null,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,

@@ -43,10 +43,12 @@ import com.syrok0010.nextgallery.feature.images.ThumbnailFileStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionCoordinator
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaReader
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.timeline.persistence.TimelineCacheRepository
 import com.syrok0010.nextgallery.feature.timeline.remote.MemoriesFiles
@@ -79,7 +81,7 @@ internal fun authenticatedModule() =
             scoped { NextGalleryDatabase.create(get()) } onClose { it?.close() }
             scoped { UploadQueueDatabase.open(get()) } onClose { it?.close() }
             scoped<UploadJournal>()
-            scoped { ThumbnailFileStore(get()) }
+            scoped<ThumbnailFileStore>()
             scoped<RoomMediaIdentityRegistry>() bind MediaIdentityRegistry::class
             scoped<TimelineCacheRepository>()
             scoped<RemoteImageCache>()
@@ -99,7 +101,7 @@ internal fun authenticatedModule() =
                     get<Context>().contentResolver,
                 )
             } bind LocalAlbumSource::class
-            scoped { LocalMediaPermissionCoordinator(get()) }
+            scoped<LocalMediaPermissionCoordinator>()
             scoped<AlbumCatalogRepository> { create(::albumCatalog) }
             scoped<MemoriesAlbumWriter>()
             scoped<MemoriesFiles>()
@@ -118,9 +120,11 @@ internal fun authenticatedModule() =
             scoped<LibraryPublicationStore>()
             scoped<TimelineProjectionStore>()
             scoped { create(::libraryCoordinator) }
-            scoped { create(::mediaReader) }
-            scoped { AndroidMediaStoreChangeObserver(get<Context>().contentResolver) }
-            scoped { create(::localMedia) }
+            scoped<LocalMediaReader> { create(::mediaReader) }
+            scoped<LocalMediaChangeObserver> {
+                AndroidMediaStoreChangeObserver(get<Context>().contentResolver)
+            }
+            scoped<LocalMediaSource>()
             scoped<RemoteImageRepository>()
             scoped<MemoriesRepository>()
             scoped<MemoriesAlbumContents>()
@@ -179,20 +183,23 @@ private fun uploadQueue(
     catalog: AlbumCatalogRepository,
     writer: MemoriesAlbumWriter,
     context: Context,
-    koinScope: org.koin.core.scope.Scope,
+    coordinator: MediaLibraryCoordinator,
 ): UploadQueue =
     UploadQueue(
-        credentials, library, scope, journal, source::snapshot,
+        credentials,
+        library,
+        scope,
+        journal,
+        source::snapshot,
         UploadFollowUps(
             UploadedCopiesFollowUp(identities),
             AlbumUploadFollowUp(writer, catalog),
         ),
-        refreshLibrary = {
-            koinScope.get<MediaLibraryCoordinator>().refresh()
-        }, schedule = {
-            UploadWorker.schedule(context)
-        }, restart = { UploadWorker.schedule(context, now = true) },
+        refreshLibrary = coordinator::refresh,
+        schedule = { UploadWorker.schedule(context) },
+        restart = { UploadWorker.schedule(context, now = true) },
     )
+
 private fun albumAdditions(
     credentials: AccountCredentials,
     writer: MemoriesAlbumWriter,
@@ -206,6 +213,7 @@ private fun albumAdditions(
     { ids, album -> uploads.submit(ids, album) },
     scope,
 )
+
 private fun mediaDeletion(
     credentials: AccountCredentials,
     library: MediaLibraryIndex,
@@ -213,7 +221,7 @@ private fun mediaDeletion(
     identities: MediaIdentityRegistry,
     context: Context,
     scope: CoroutineScope,
-    koinScope: org.koin.core.scope.Scope,
+    coordinator: MediaLibraryCoordinator,
 ) = MediaDeletionRepository(
     credentials,
     library,
@@ -221,9 +229,8 @@ private fun mediaDeletion(
     identities,
     AndroidPhoneTrash(context.contentResolver),
     scope,
-) {
-    koinScope.get<MediaLibraryCoordinator>().refresh()
-}
+    coordinator::refresh,
+)
 private fun libraryCoordinator(
     library: MediaLibraryIndex,
     credentials: AccountCredentials,
@@ -247,12 +254,6 @@ private fun mediaReader(
             check(it.isNotEmpty()) { "No mounted media volumes" }
         }
 })
-private fun localMedia(
-    reader: AndroidMediaStoreReader,
-    projection: LocalMediaProjectionStore,
-    identities: MediaIdentityRegistry,
-    changes: AndroidMediaStoreChangeObserver,
-) = LocalMediaSource(reader, projection, identities, changes)
 private fun localContents(
     context: Context,
     identities: MediaIdentityRegistry,
