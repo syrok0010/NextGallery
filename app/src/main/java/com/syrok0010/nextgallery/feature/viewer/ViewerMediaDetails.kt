@@ -2,8 +2,8 @@ package com.syrok0010.nextgallery.feature.viewer
 
 import android.content.ContentResolver
 import android.provider.MediaStore
-import androidx.exifinterface.media.ExifInterface
 import androidx.core.net.toUri
+import androidx.exifinterface.media.ExifInterface
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.media.remoteCopy
@@ -45,17 +45,18 @@ class ViewerMediaDetailsRepository(
     private val albumMutex = Mutex()
     private var remoteAlbumNames: Map<Long, List<String>>? = null
 
-    override suspend fun load(item: MediaItem): ViewerMediaDetails = withContext(Dispatchers.IO) {
-        val local = item.localCopy?.let { readLocal(item) }
-        val remote = item.remoteCopy?.let { readRemote(it.photoFileId, item.isVideo) }
-        val merged = merge(local, remote)
-        merged.copy(
-            albums = (local?.albums.orEmpty() + remote?.albums.orEmpty()).distinct(),
-            fileSizeBytes = merged.fileSizeBytes
-                ?: item.localCopy?.sizeBytes
-                ?: remote?.fileSizeBytes,
-        )
-    }
+    override suspend fun load(item: MediaItem): ViewerMediaDetails =
+        withContext(Dispatchers.IO) {
+            val local = item.localCopy?.let { readLocal(item) }
+            val remote = item.remoteCopy?.let { readRemote(it.photoFileId, item.isVideo) }
+            val merged = merge(local, remote)
+            merged.copy(
+                albums = (local?.albums.orEmpty() + remote?.albums.orEmpty()).distinct(),
+                fileSizeBytes = merged.fileSizeBytes
+                    ?: item.localCopy?.sizeBytes
+                    ?: remote?.fileSizeBytes,
+            )
+        }
 
     private fun readLocal(item: MediaItem): ViewerMediaDetails? {
         val local = item.localCopy ?: return null
@@ -64,15 +65,16 @@ class ViewerMediaDetailsRepository(
             contentResolver.openFileDescriptor(uri, "r")?.use { ExifInterface(it.fileDescriptor) }
         }.getOrNull()
         val relativePath = runCatching {
-            contentResolver.query(
-                uri,
-                arrayOf(MediaStore.MediaColumns.RELATIVE_PATH),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
-            }
+            contentResolver
+                .query(
+                    uri,
+                    arrayOf(MediaStore.MediaColumns.RELATIVE_PATH),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+                }
         }.getOrNull()
         return exif.toViewerDetails().copy(
             fileSizeBytes = local.sizeBytes,
@@ -92,16 +94,18 @@ class ViewerMediaDetailsRepository(
         val account = credentials()
         val exif = if (isVideo) {
             ViewerMediaDetails()
-        } else runCatching {
-            val result = files.readFile(
-                DavFilePath.of(account.userId, info.filename),
-                info.etag,
-            ) { input -> ExifInterface(input).toViewerDetails() }
-            when (result) {
-                is ReadFileResult.Read -> result.value
-                ReadFileResult.Changed -> ViewerMediaDetails()
-            }
-        }.getOrElse { ViewerMediaDetails() }
+        } else {
+            runCatching {
+                val result = files.readFile(
+                    DavFilePath.of(account.userId, info.filename),
+                    info.etag,
+                ) { input -> ExifInterface(input).toViewerDetails() }
+                when (result) {
+                    is ReadFileResult.Read -> result.value
+                    ReadFileResult.Changed -> ViewerMediaDetails()
+                }
+            }.getOrElse { ViewerMediaDetails() }
+        }
         return exif.copy(
             fileSizeBytes = exif.fileSizeBytes ?: info.size,
             path = info.filename,
@@ -112,17 +116,25 @@ class ViewerMediaDetailsRepository(
     private suspend fun remoteAlbumsFor(fileId: Long): List<String> {
         val cached = albumMutex.withLock { remoteAlbumNames } ?: run {
             val loaded = runCatching {
-                memories.albums().mapNotNull { album ->
-                    val name = album.name.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    val location = album.clusterId ?: album.user?.let { "$it/$name" } ?: return@mapNotNull null
-                    val days = memories.albumDays(location)
-                    val ids = days.flatMap { it.detail }.map { it.fileid }.toMutableSet()
-                    val missingDays = days.filter { it.count > it.detail.size }.map { it.dayid }
-                    missingDays.chunked(10).forEach { chunk ->
-                        ids += memories.albumPhotos(chunk.joinToString(","), location).map { it.fileid }
-                    }
-                    fileId.takeIf { it in ids }?.let { fileId to name }
-                }.groupBy({ it.first }, { it.second })
+                memories
+                    .albums()
+                    .mapNotNull { album ->
+                        val name = album.name.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                        val location = album.clusterId ?: album.user?.let {
+                            "$it/$name"
+                        } ?: return@mapNotNull null
+                        val days = memories.albumDays(location)
+                        val ids = days.flatMap { it.detail }.map { it.fileid }.toMutableSet()
+                        val missingDays = days.filter { it.count > it.detail.size }.map { it.dayid }
+                        missingDays.chunked(10).forEach { chunk ->
+                            ids += memories
+                                .albumPhotos(
+                                    chunk.joinToString(","),
+                                    location,
+                                ).map { it.fileid }
+                        }
+                        fileId.takeIf { it in ids }?.let { fileId to name }
+                    }.groupBy({ it.first }, { it.second })
             }.getOrDefault(emptyMap())
             albumMutex.withLock {
                 remoteAlbumNames = loaded
@@ -150,8 +162,14 @@ private fun ExifInterface?.toViewerDetails(): ViewerMediaDetails {
     if (this == null) return ViewerMediaDetails()
     val make = getAttribute(ExifInterface.TAG_MAKE)?.trim().orEmpty()
     val model = getAttribute(ExifInterface.TAG_MODEL)?.trim().orEmpty()
-    val camera = listOf(make, model).filter(String::isNotBlank).distinct().joinToString(" ").ifBlank { null }
-    val lens = getAttribute(ExifInterface.TAG_LENS_MODEL)?.trim()
+    val camera = listOf(
+        make,
+        model,
+    ).filter(String::isNotBlank).distinct().joinToString(" ").ifBlank {
+        null
+    }
+    val lens = getAttribute(ExifInterface.TAG_LENS_MODEL)
+        ?.trim()
         ?.takeIf(String::isNotBlank)
     val point = latLong?.takeIf { it.size == 2 }?.let { ViewerGeoPoint(it[0], it[1]) }
     return ViewerMediaDetails(
