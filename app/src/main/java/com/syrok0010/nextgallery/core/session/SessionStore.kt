@@ -15,11 +15,7 @@ class SessionStore(
 
     val session: StateFlow<SessionUiState> = _session.asStateFlow()
 
-    init {
-        (_session.value as? SessionUiState.SignedIn)?.credentials?.let(prepare)
-    }
-
-    fun signIn(credentials: com.syrok0010.nextgallery.core.session.AccountCredentials) {
+    fun signIn(credentials: AccountCredentials) {
         prepare(credentials)
         _session.value = SessionUiState.SignedIn(credentials)
     }

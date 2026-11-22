@@ -29,9 +29,9 @@ import kotlinx.coroutines.launch
 internal class UploadWorker(
     context: Context,
     params: WorkerParameters,
-    private val queue: UploadQueue,
-    private val transport: NextcloudTransport,
-    private val memories: MemoriesApiClient,
+    private val queue: UploadQueue?,
+    private val transport: NextcloudTransport?,
+    private val memories: MemoriesApiClient?,
 ) : CoroutineWorker(context, params) {
     private val notifications = UploadNotifications(context)
 
@@ -49,6 +49,9 @@ internal class UploadWorker(
 
     /** Returns true when a job waits for another attempt. */
     private suspend fun run(): Boolean {
+        val queue = queue ?: return false
+        val transport = transport ?: return false
+        val memories = memories ?: return false
         notifications.createChannel()
         val foreground = try {
             setForeground(getForegroundInfo())
@@ -61,7 +64,7 @@ internal class UploadWorker(
         val transfer =
             UploadTransfer(applicationContext.contentResolver, transport, memories, queue)
         val retry = coroutineScope {
-            val progress = launch { if (foreground) publishProgress() }
+            val progress = launch { if (foreground) publishProgress(queue) }
             queue.drain(transfer::upload).also { progress.cancel() }
         }
         queue.unseenResult()?.let(notifications::showResult)
@@ -76,7 +79,7 @@ internal class UploadWorker(
         )
 
     /** Android drops bursts of notification updates; the delay leaves room for the result. */
-    private suspend fun publishProgress() {
+    private suspend fun publishProgress(queue: UploadQueue) {
         queue.activity.filterNotNull().collect { activity ->
             notifications.showProgress(activity)
             delay(500L)
