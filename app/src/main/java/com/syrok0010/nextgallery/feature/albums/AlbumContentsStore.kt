@@ -2,19 +2,18 @@ package com.syrok0010.nextgallery.feature.albums
 
 import androidx.annotation.MainThread
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 
@@ -31,7 +30,6 @@ internal data class AlbumContentsState(
 /** Lazily reads only locations that are opened or already cached by a mutation. */
 @MainThread
 internal class AlbumContentsStore(
-    private val credentials: AccountCredentials,
     private val source: AlbumContentsSource,
     private val library: MediaLibraryIndex,
     private val permission: StateFlow<LocalMediaPermissionMode?>,
@@ -142,7 +140,7 @@ internal class AlbumContentsStore(
                     entry.state.value = entry.state.value.copy(loading = false)
                     publish(location, entry)
                 }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 if (entry.request == request) entry.state.value = entry.state.value.copy(loading = false, failed = true)

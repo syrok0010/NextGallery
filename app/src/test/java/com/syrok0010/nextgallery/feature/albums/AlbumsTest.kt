@@ -298,6 +298,32 @@ class AlbumsTest {
         assertTrue(blocked.items.isEmpty())
     }
 
+    @Test fun `adding to an unopened album refreshes catalog without reading contents`() = scenario { server, scope ->
+        val reads = AtomicInteger()
+        val refreshes = AtomicInteger()
+        val albums = server.albums(
+            scope,
+            source = AlbumContentsSource { _ -> reads.incrementAndGet(); flowOf(AlbumContentsBatch(emptyList(), 0)) },
+            catalog = { refreshes.incrementAndGet(); RemoteAlbums(emptyList()) },
+        )
+        val initial = refreshes.get()
+        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+        albums.operations.first { it.singleOrNull()?.running == false }
+        while (refreshes.get() == initial) delay(10)
+        assertEquals(0, reads.get())
+    }
+
+    @Test fun `completed read with mismatched total succeeds without failing`() = scenario { server, scope ->
+        val albums = server.albums(
+            scope,
+            source = AlbumContentsSource { _ -> flowOf(AlbumContentsBatch(listOf(first), total = 2, loaded = 1)) },
+        )
+        val state = albums.observeContents(album).first { !it.loading }
+        assertFalse(state.failed)
+        assertEquals(listOf(first), state.items)
+        assertEquals(1, state.total)
+    }
+
     private class Harness {
         val credentials = AccountCredentials("https://cloud.example", "anna", "secret", "anna")
         private val writer = object : AlbumWriter {
