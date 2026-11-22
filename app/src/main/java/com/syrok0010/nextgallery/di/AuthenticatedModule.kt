@@ -66,12 +66,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import org.koin.core.module.dsl.viewModel as explicitViewModel
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.bind
 import org.koin.dsl.module
 import org.koin.dsl.onClose
-import org.koin.plugin.module.dsl.*
+import org.koin.plugin.module.dsl.create
+import org.koin.plugin.module.dsl.scoped
 
 internal fun authenticatedModule() =
     module {
@@ -130,8 +131,8 @@ internal fun authenticatedModule() =
             scoped<MemoriesAlbumContents>()
             scoped { create(::localContents) }
             scoped<AlbumContentsSource> { create(::albumContents) }
-            explicitViewModel { AlbumsViewModel(get()) }
-            explicitViewModel { (location: AlbumLocation) ->
+            viewModel { AlbumsViewModel(get()) }
+            viewModel { (location: AlbumLocation) ->
                 AlbumContentsViewModel(
                     get(),
                     get(),
