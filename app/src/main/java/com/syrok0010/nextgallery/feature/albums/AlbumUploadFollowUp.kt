@@ -12,5 +12,9 @@ internal class AlbumUploadFollowUp(private val albums: Albums) : UploadFollowUp 
         job: UploadJob,
         file: UploadedFile,
         recovered: Boolean,
-    ): Boolean = albums.addUploaded(account, checkNotNull(job.album), file, recovered)
+    ): Boolean {
+        val album = checkNotNull(job.album)
+        require(album.owner == account.userId) { "Only owned albums support additions" }
+        return albums.addUploaded(album, file, recovered)
+    }
 }

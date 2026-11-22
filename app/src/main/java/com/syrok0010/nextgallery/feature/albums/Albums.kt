@@ -5,26 +5,30 @@ import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.core.session.SessionUiState
-import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Owns album reads and writes. Synchronous commands run on main, as does [scope]; upload workers
- * enter that dispatcher through [addUploaded]. The mutex serializes writes across suspension.
- */
 @OptIn(FlowPreview::class)
 internal class Albums(
-    private val sessions: SessionStore,
-    private val writer: MemoriesAlbumWriter,
+    private val credentials: AccountCredentials,
+    private val writer: AlbumWriter,
     remoteSource: RemoteAlbumSource,
     localSource: LocalAlbumSource,
     source: AlbumContentsSource,
@@ -34,59 +38,64 @@ internal class Albums(
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
 ) : OperationStatusSource {
     private val mutations = Mutex()
-    private val catalog =
-        AlbumCatalogRepository(sessions.requireCredentials(), remoteSource, localSource, permission, scope)
-    private val contents = AlbumContentsStore(sessions, source, library, permission, scope)
+    private lateinit var contents: AlbumContentsStore
+    private val catalogRepository = AlbumCatalogRepository(
+        credentials,
+        remoteSource,
+        localSource,
+        permission,
+        scope,
+        onLocalChanged = { contents.refreshFolders() },
+    )
+    private val catalogStore get() = catalogRepository
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
 
-    val state = combine(catalog.state, contents.snapshots, ::albumCatalogProjection)
-        .stateIn(scope, SharingStarted.Eagerly, AlbumsUiState())
-    val adding = additionState.map { it is AlbumAdditionState.Running }
-        .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations = additionState.map(::albumOperationSnapshots)
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
-
     init {
-        scope.launch {
-            permission.collectLatest { access ->
-                if (access == LocalMediaPermissionMode.Full) {
-                    localSource.changes().debounce(450).collect { contents.refreshFolders() }
-                }
-            }
-        }
+        contents = AlbumContentsStore(credentials, source, library, permission, scope)
     }
 
-    /** Reuses membership; reopening retries metadata still missing after a confirmed write. */
-    @MainThread
-    fun observeContents(location: AlbumLocation): StateFlow<AlbumContentsState> = contents.observe(location)
+    val catalog: StateFlow<AlbumsUiState> = combine(
+        catalogStore.state,
+        contents.snapshots,
+        ::albumCatalogProjection,
+    ).stateIn(scope, SharingStarted.Eagerly, AlbumsUiState())
+    val state: StateFlow<AlbumsUiState> get() = catalog
+    val adding: StateFlow<Boolean> = additionState.map { it is AlbumAdditionState.Running }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    override val operations: StateFlow<List<com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot>> =
+        additionState.map(::albumOperationSnapshots).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Returns false if another addition is running or nobody is signed in; keep the selection then. */
+    @MainThread
+    fun observeContents(location: AlbumLocation): kotlinx.coroutines.flow.Flow<AlbumContentsState> =
+        contents.observe(location)
+
+    @MainThread
+    fun canModify(location: AlbumLocation): Boolean =
+        location is AlbumLocation.Remote && AlbumAddress.of(location)?.owner == credentials.userId
+
+    fun writableAlbums(state: AlbumsUiState): List<AlbumSummary> =
+        writableAlbums(state.remote.items, credentials.userId)
+
     @MainThread
     fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
         if (additionJob?.isActive == true) return false
-        val credentials = (sessions.session.value as? SessionUiState.SignedIn)?.credentials ?: return false
         additionState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
         additionJob = scope.launch {
-            mutations.withLock { additionState.value = performAddition(credentials, target, request) }
+            mutations.withLock { additionState.value = performAddition(target, request) }
         }
         return true
     }
 
-    private suspend fun performAddition(
-        credentials: AccountCredentials,
-        target: AlbumTarget,
-        request: AlbumAdditionRequest,
-    ): AlbumAdditionState = try {
+    private suspend fun performAddition(target: AlbumTarget, request: AlbumAdditionRequest): AlbumAdditionState = try {
         val location = when (target) {
             is AlbumTarget.Existing -> target.location
-            is AlbumTarget.New -> writer.create(credentials, target.name.trim()).also { catalog.refresh() }
+            is AlbumTarget.New -> writer.create(target.name.trim()).also { catalogRepository.refresh() }
         }
         val address = AlbumAddress.of(location)
         if (address == null || address.owner != credentials.userId) {
             AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
         } else {
-            // Queue phone-only objects after creation and ownership validation, before any COPY.
             val queued = enqueue(request.uploads, UploadAlbum(address.owner, address.name))
             val result = writer.add(address, request.fileIds)
             added(location, result.presentIds, request.items)
@@ -109,58 +118,38 @@ internal class Albums(
             EnqueueResult.Rejected -> throw UploadEnqueueRejected()
         }
 
-    /** Accepts a new source snapshot, including removal of pending local confirmations. */
-    @MainThread
-    fun refresh() {
-        catalog.refresh()
-        contents.refresh()
-    }
+    @MainThread fun refreshCatalog() = catalogRepository.refresh()
 
-    /** Authoritative refresh of one album; automatic post-write reads preserve confirmations. */
-    @MainThread
-    fun refresh(location: AlbumLocation) = contents.refresh(location)
+    @MainThread fun refresh(location: AlbumLocation) = contents.refresh(location)
 
     private fun added(location: AlbumLocation.Remote, ids: Set<Long>, items: List<MediaItem> = emptyList()) {
-        if (ids.isNotEmpty() && !contents.added(location, ids, items)) reconcile(location)
+        if (ids.isNotEmpty() && !contents.added(location, ids, items)) {
+            contents.reconcile(location)
+            catalogRepository.refresh()
+        }
     }
 
-    private fun reconcile(location: AlbumLocation.Remote) {
-        contents.reconcile(location)
-        catalog.refresh()
-    }
-
-    /** Worker entry point. Replay checks exact membership before COPY and never repeats the upload. */
-    suspend fun addUploaded(
-        account: AccountCredentials,
-        target: UploadAlbum,
-        file: UploadedFile,
-        recovered: Boolean,
-    ): Boolean = withContext(scope.coroutineContext.minusKey(Job)) {
+    suspend fun addUploaded(target: UploadAlbum, file: UploadedFile, recovered: Boolean): Boolean =
         mutations.withLock {
-            require(target.owner == account.userId) { "Only owned albums support additions" }
             val album = AlbumAddress(target.owner, target.name)
             val accepted = if (recovered) {
-                writer.containsFile(file.path, album, file.fileId) ||
-                    writer.addFile(file.path, album) == AlbumCopyOutcome.Added
+                writer.containsFile(album, file.fileId) || writer.addFile(file.path, album) == AlbumCopyOutcome.Added
             } else {
                 writer.addFile(file.path, album) != AlbumCopyOutcome.Failed
             }
             if (accepted) {
-                val location = AlbumLocation.Remote("${album.owner}/${album.name}")
                 val id = file.fileId
-                if (id == null) reconcile(location) else added(location, setOf(id))
+                if (id == null) catalogRepository.refresh()
+                else added(album.toLocation(), setOf(id))
             }
             accepted
         }
-    }
 
-    @MainThread
-    override fun consumeSucceeded() {
+    @MainThread override fun consumeSucceeded() {
         if ((additionState.value as? AlbumAdditionState.Done)?.result?.failed == 0) consumeAll()
     }
 
-    @MainThread
-    override fun consumeAll() {
+    @MainThread override fun consumeAll() {
         if (additionState.value !is AlbumAdditionState.Running) additionState.value = AlbumAdditionState.Idle
     }
 }

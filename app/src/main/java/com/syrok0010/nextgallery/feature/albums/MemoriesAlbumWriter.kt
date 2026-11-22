@@ -28,6 +28,16 @@ internal data class AlbumAddress(val owner: String, val name: String) {
     }
 }
 
+internal fun AlbumAddress.toLocation(): AlbumLocation.Remote =
+    AlbumLocation.Remote("$owner/$name")
+
+internal interface AlbumWriter {
+    suspend fun create(name: String): AlbumLocation.Remote
+    suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult
+    suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome
+    suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean
+}
+
 internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val failed: Int)
 
 /** Exact outcomes are retained until the album state has applied the confirmed changes. */
@@ -49,10 +59,11 @@ internal class AlbumAlreadyExistsException(name: String) : IOException("Album $n
  * fresh upload can be added before Memories indexes it.
  */
 internal class MemoriesAlbumWriter(
+    private val credentials: AccountCredentials,
     private val dav: PhotosAlbumsDavClient,
     private val files: FilesDavClient,
-) {
-    suspend fun create(credentials: AccountCredentials, name: String): AlbumLocation.Remote {
+) : AlbumWriter {
+    override suspend fun create(name: String): AlbumLocation.Remote {
         val user = credentials.userId
         if (dav.createAlbum(AlbumPath(user, name)) == CreateAlbumResult.AlreadyExists) {
             throw AlbumAlreadyExistsException(name)
@@ -60,7 +71,7 @@ internal class MemoriesAlbumWriter(
         return AlbumLocation.Remote("$user/$name")
     }
 
-    suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult {
+    override suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult {
         val permits = Semaphore(PARALLEL_COPIES)
         val outcomes = coroutineScope {
             fileIds
@@ -90,7 +101,7 @@ internal class MemoriesAlbumWriter(
      * Adds a file by its DAV path, as an upload knows it, without a lookup. A temporary failure
      * (no network, 5xx, 423, 429) is thrown, so the upload step tries again later.
      */
-    suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome {
+    override suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome {
         val outcome = copy(file, album)
         val path = AlbumPath(album.owner, album.name)
         return if (outcome == AlbumCopyOutcome.AlreadyPresent && !dav.albumExists(path)) {
@@ -101,7 +112,7 @@ internal class MemoriesAlbumWriter(
     }
 
     /** Reads album membership for recovery; it never performs COPY. */
-    suspend fun containsFile(file: DavFilePath, album: AlbumAddress, fileId: Long?): Boolean =
+    override suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean =
         fileId != null && dav.containsFile(AlbumPath(album.owner, album.name), fileId)
 
     /**

@@ -67,7 +67,7 @@ class MemoriesAlbumSourceTest {
         suspend fun load() =
             MemoriesAlbumSource(
                 MemoriesApiClient(server.transport) { credentials },
-            ).load(credentials)
+            ).load()
 
         override fun close() {
             server.close()

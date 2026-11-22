@@ -1,7 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.session.AccountCredentials
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 
@@ -19,5 +18,5 @@ internal data class AlbumContentsBatch(
     val loaded: Int = items.size,
 )
 internal fun interface AlbumContentsSource {
-    fun load(location: AlbumLocation, credentials: AccountCredentials): Flow<AlbumContentsBatch>
+    fun load(location: AlbumLocation): Flow<AlbumContentsBatch>
 }

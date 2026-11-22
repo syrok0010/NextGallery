@@ -17,7 +17,7 @@ class AlbumCatalogRepositoryTest {
             val sessions = sessions()
             var fail = true
             val remote = object : RemoteAlbumSource {
-                override suspend fun load(credentials: AccountCredentials): RemoteAlbums {
+                override suspend fun load(): RemoteAlbums {
                     if (fail) error("offline")
                     return RemoteAlbums(listOf(album("remote", AlbumOrigin.Nextcloud)))
                 }

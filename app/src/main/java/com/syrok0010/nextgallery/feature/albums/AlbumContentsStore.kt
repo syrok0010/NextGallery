@@ -2,12 +2,21 @@ package com.syrok0010.nextgallery.feature.albums
 
 import androidx.annotation.MainThread
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
+import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 
 internal data class AlbumContentsState(
     val items: List<MediaItem> = emptyList(),
@@ -16,14 +25,13 @@ internal data class AlbumContentsState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val permissionRequired: Boolean = false,
-    /** Confirmed members whose metadata has not reached Memories or the shared index yet. */
     val pendingMetadata: Int = 0,
 )
 
-/** Read lifecycle and publication, confined to the scope's main dispatcher. */
+/** Lazily reads only locations that are opened or already cached by a mutation. */
 @MainThread
 internal class AlbumContentsStore(
-    private val sessions: SessionStore,
+    private val credentials: AccountCredentials,
     private val source: AlbumContentsSource,
     private val library: MediaLibraryIndex,
     private val permission: StateFlow<LocalMediaPermissionMode?>,
@@ -31,41 +39,40 @@ internal class AlbumContentsStore(
 ) {
     private val entries = mutableMapOf<AlbumLocation, Entry>()
     private val complete = MutableStateFlow<Map<AlbumLocation, AlbumContentsState>>(emptyMap())
-    val snapshots = complete.asStateFlow()
+    val snapshots: StateFlow<Map<AlbumLocation, AlbumContentsState>> = complete.asStateFlow()
 
     private class Entry(initial: AlbumContentsState) {
         var membership = AlbumMembership()
         val state = MutableStateFlow(initial)
-        lateinit var projected: StateFlow<AlbumContentsState>
         var job: Job? = null
         var request = 0L
     }
 
     init {
         scope.launch {
-            combine(sessions.session, permission) { session, access -> session to access }
-                .collect { (session, access) ->
-                    entries.forEach { (location, entry) ->
-                        if (session !is SessionUiState.SignedIn ||
-                            (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full)
-                        ) {
-                            entry.job?.cancel()
-                            entry.request++
-                            entry.membership = AlbumMembership()
-                            entry.state.value = AlbumContentsState(permissionRequired = session is SessionUiState.SignedIn && location is AlbumLocation.Folder)
-                            complete.value -= location
-                        } else if (!entry.membership.initialized && entry.job?.isActive != true) {
-                            load(location, entry, preserveConfirmed = true)
-                        }
-                    }
-                }
-        }
-        scope.launch {
             library.state.collect { known ->
+                if (entries.values.none { it.membership.hasPendingMetadata }) return@collect
                 val metadata = known.values.associateBy { it.remoteFileId }
                 entries.forEach { (location, entry) ->
-                    entry.membership = entry.membership.resolve(metadata)
-                    publish(location, entry)
+                    if (entry.membership.hasPendingMetadata) {
+                        entry.membership = entry.membership.resolve(metadata)
+                        publish(location, entry)
+                    }
+                }
+            }
+        }
+        scope.launch {
+            permission.collectLatest { access ->
+                entries.forEach { (location, entry) ->
+                    if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
+                        entry.job?.cancel()
+                        entry.request++
+                        entry.membership = AlbumMembership()
+                        entry.state.value = AlbumContentsState(permissionRequired = true)
+                        complete.value -= location
+                    } else if (location is AlbumLocation.Folder && entry.job?.isActive != true && !entry.membership.initialized) {
+                        load(location, entry, authoritative = false)
+                    }
                 }
             }
         }
@@ -73,72 +80,69 @@ internal class AlbumContentsStore(
 
     private fun entry(location: AlbumLocation): Entry = entries.getOrPut(location) {
         val blocked = location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full
-        Entry(AlbumContentsState(loading = !blocked, permissionRequired = blocked)).also { entry ->
-            entry.projected = combine(entry.state, library.state, permission) { state, known, access ->
+        Entry(AlbumContentsState(loading = !blocked, permissionRequired = blocked))
+    }
+
+    fun observe(location: AlbumLocation): Flow<AlbumContentsState> = flow {
+        val entry = entry(location)
+        if ((!entry.membership.initialized || entry.membership.hasPendingMetadata) && entry.job?.isActive != true) {
+            load(location, entry, authoritative = false)
+        }
+        emitAll(
+            combine(entry.state, library.state, permission) { state, known, access ->
                 if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
                     AlbumContentsState(permissionRequired = true)
                 } else {
                     state.copy(items = albumMediaProjection(state.items, known, access == LocalMediaPermissionMode.Full))
                 }
-            }.stateIn(scope, SharingStarted.Eagerly, entry.state.value)
-        }
-    }
-
-    fun observe(location: AlbumLocation): StateFlow<AlbumContentsState> {
-        val entry = entry(location)
-        if ((!entry.membership.initialized || entry.state.value.pendingMetadata > 0) && entry.job?.isActive != true) {
-            load(location, entry, preserveConfirmed = true)
-        }
-        return entry.projected
+            },
+        )
     }
 
     fun refresh(location: AlbumLocation? = null) {
-        entries.forEach { (key, entry) -> if (location == null || key == location) load(key, entry) }
+        entries.forEach { (key, entry) -> if (location == null || key == location) load(key, entry, authoritative = true) }
     }
 
     fun reconcile(location: AlbumLocation) {
-        entries[location]?.let { load(location, it, preserveConfirmed = true) }
+        entries[location]?.let { load(location, it, authoritative = false) }
     }
 
     fun refreshFolders() {
-        entries.forEach { (location, entry) -> if (location is AlbumLocation.Folder) load(location, entry) }
+        entries.forEach { (location, entry) -> if (location is AlbumLocation.Folder) load(location, entry, authoritative = true) }
     }
 
     fun added(location: AlbumLocation.Remote, ids: Set<Long>, supplied: List<MediaItem>): Boolean {
-        val entry = entry(location)
+        val entry = entries[location] ?: return false
         val metadata = library.state.value.values.associateBy { it.remoteFileId }
         entry.membership = entry.membership.added(ids, supplied).resolve(metadata)
         publish(location, entry)
-        return entry.membership.initialized && entry.state.value.pendingMetadata == 0
+        return entry.membership.initialized && !entry.membership.hasPendingMetadata
     }
 
-    private fun load(location: AlbumLocation, entry: Entry, preserveConfirmed: Boolean = false) {
-        val credentials = (sessions.session.value as? SessionUiState.SignedIn)?.credentials ?: return
+    private fun load(location: AlbumLocation, entry: Entry, authoritative: Boolean) {
         if (location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full) return
         entry.job?.cancel()
         val request = ++entry.request
-        if (!preserveConfirmed) entry.membership = entry.membership.authoritative()
+        val startedAtVersion = entry.membership.version
         val hadSnapshot = entry.membership.initialized || entry.membership.snapshot.items.isNotEmpty()
-        // Retain the last visible snapshot until a complete replacement succeeds.
         entry.state.value = entry.state.value.copy(loading = true, failed = false, permissionRequired = false)
         entry.job = scope.launch {
             try {
-                var latest = AlbumContentsBatch(emptyList(), 0)
-                source.load(location, credentials).collect { batch ->
+                var latest: AlbumContentsBatch? = null
+                source.load(location).collect { batch ->
                     if (entry.request != request) return@collect
                     latest = batch
                     if (!hadSnapshot) {
-                        entry.membership = entry.membership.read(batch, finished = false)
+                        entry.membership = entry.membership.applyRead(batch, startedAtVersion, authoritative, finished = false)
                         publish(location, entry)
                     }
                 }
-                if (entry.request == request) {
-                    check(latest.loaded == latest.total) { "Incomplete album membership" }
-                    entry.membership = entry.membership.read(latest, finished = true)
+                if (entry.request == request && latest != null) {
+                    entry.membership = entry.membership.applyRead(requireNotNull(latest), startedAtVersion, authoritative, finished = true)
                     entry.state.value = entry.state.value.copy(loading = false)
                     publish(location, entry)
                 }
-            } catch (cancelled: CancellationException) {
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 if (entry.request == request) entry.state.value = entry.state.value.copy(loading = false, failed = true)
@@ -156,4 +160,5 @@ internal class AlbumContentsStore(
         entry.state.value = state
         if (entry.membership.initialized) complete.value += location to state
     }
+
 }

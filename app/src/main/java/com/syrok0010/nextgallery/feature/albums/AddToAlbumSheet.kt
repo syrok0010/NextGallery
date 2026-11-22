@@ -21,8 +21,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.session.SessionStore
-import com.syrok0010.nextgallery.core.session.SessionUiState
 import org.koin.compose.koinInject
 
 /** Album picker for a selection snapshot; the caller owns the selection and its lifetime. */
@@ -33,15 +31,10 @@ internal fun AddToAlbumSheet(
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
     albums: Albums = koinInject(),
-    sessions: SessionStore = koinInject(),
 ) {
     val busy by albums.adding.collectAsStateWithLifecycle()
     val catalog by albums.state.collectAsStateWithLifecycle()
-    val session by sessions.session.collectAsStateWithLifecycle()
-    val user = (session as? SessionUiState.SignedIn)?.credentials?.userId
-    val writable = remember(catalog.remote.items, user) {
-        user?.let { writableAlbums(catalog.remote.items, it) }.orEmpty()
-    }
+    val writable = remember(catalog.remote.items) { albums.writableAlbums(catalog) }
     var creating by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -91,13 +84,13 @@ internal fun AddToAlbumSheet(
             item {
                 AlbumChoiceRow(
                     title = stringResource(R.string.album_add_new),
-                    enabled = user != null && !busy,
+                    enabled = !busy,
                     onClick = { creating = true },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
-            if (user != null && !catalog.remote.loading && writable.isEmpty()) {
+            if (!catalog.remote.loading && writable.isEmpty()) {
                 item {
                     Text(
                         stringResource(R.string.album_add_list_empty),

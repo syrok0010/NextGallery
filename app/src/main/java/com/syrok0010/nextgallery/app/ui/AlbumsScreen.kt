@@ -19,7 +19,7 @@ internal fun AlbumsScreen(
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
     var filter by rememberSaveable { mutableStateOf<AlbumOrigin?>(null) }
-    LibraryScreenScaffold(TopLevelDestination.Albums) {
+    LibraryScreenScaffold(TopLevelDestination.Albums, onRefresh = viewModel::refresh) {
         AlbumsPanel(state, listState, filter, {
             filter = it
         }, viewModel::refresh, { album ->
