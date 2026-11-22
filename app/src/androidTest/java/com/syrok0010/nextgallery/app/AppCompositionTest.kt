@@ -16,9 +16,7 @@ import com.syrok0010.nextgallery.core.session.AuthenticatedSession
 import com.syrok0010.nextgallery.core.session.SessionStore
 import com.syrok0010.nextgallery.di.AuthenticatedGraph
 import com.syrok0010.nextgallery.di.ProductionGraph
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditions
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
-import com.syrok0010.nextgallery.feature.albums.AlbumLocation
+import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
 import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
@@ -41,8 +39,8 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.koin.core.parameter.parametersOf
 import org.koin.core.qualifier.named
+import org.koin.core.parameter.parametersOf
 
 @RunWith(AndroidJUnit4::class)
 class AppCompositionTest {
@@ -88,18 +86,13 @@ class AppCompositionTest {
                     val sources = scope.getAll<OperationStatusSource>()
                     assertEquals(3, sources.size)
                     assertTrue(sources.any { it === queue })
-                    assertTrue(sources.any { it === scope.get<AlbumAdditions>() })
+                    assertTrue(sources.any { it === scope.get<Albums>() })
                     assertTrue(sources.any { it === scope.get<MediaDeletionRepository>() })
 
                     assertNull(graph.koin.getOrNull<UploadJournal>())
                     assertNotNull(scope.get<UploadJournal>())
                     store.put("albums", scope.get<AlbumsViewModel>())
-                    store.put(
-                        "album",
-                        scope.get<AlbumContentsViewModel> {
-                            parametersOf(AlbumLocation.Remote("a"))
-                        },
-                    )
+                    assertNotNull(scope.get<Albums>())
                     assertNotNull(scope.get<ThumbnailBatchLoader>())
                     assertNotNull(scope.get<MediaImageRequestFactory>())
                     assertNotNull(scope.get<ImageLoader>())
