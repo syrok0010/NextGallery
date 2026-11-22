@@ -39,8 +39,8 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.koin.core.parameter.parametersOf
 import org.koin.core.qualifier.named
+import org.koin.core.parameter.parametersOf
 
 @RunWith(AndroidJUnit4::class)
 class AppCompositionTest {
