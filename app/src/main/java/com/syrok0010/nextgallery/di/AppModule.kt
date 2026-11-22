@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.di
 
-import android.content.Context
 import com.syrok0010.nextgallery.app.ui.AppDataEraser
 import com.syrok0010.nextgallery.app.ui.SessionViewModel
 import com.syrok0010.nextgallery.app.ui.SystemAppDataEraser
@@ -32,19 +31,17 @@ private fun bootstrapModule() =
         single<NextcloudTransport>()
         single<NextcloudAuthClient>()
         single<NextcloudLoginRepository>() bind LoginGateway::class
-        single<CredentialsStore> { create(::credentialsStore) }
+        single<KeystoreCredentialsStore>() bind CredentialsStore::class
         single { AuthenticatedGraph(getKoin()) } onClose { it?.close() }
         single { create(::sessionStore) }
-        single<AppDataEraser> { create(::appDataEraser) }
+        single<SystemAppDataEraser>() bind AppDataEraser::class
         explicitViewModel { create(::sessionViewModel) }
         viewModel<LoginViewModel>()
     }
 
-private fun credentialsStore(context: Context, json: Json): CredentialsStore =
-    KeystoreCredentialsStore(context, json)
-private fun appDataEraser(context: Context): AppDataEraser = SystemAppDataEraser(context)
 private fun sessionStore(store: CredentialsStore, graph: AuthenticatedGraph) =
     SessionStore(store, graph::start)
+
 private fun sessionViewModel(
     store: SessionStore,
     graph: AuthenticatedGraph,

@@ -56,8 +56,9 @@ internal fun MediaViewerPage(
     onActivePageStateChange: (ActiveViewerPageState) -> Unit,
     onSurfaceBoundsChange: (Rect?) -> Unit,
     playbackController: VideoPlaybackController? = null,
+    requestFactory: MediaImageRequestFactory = koinInject(),
+    imageLoader: ImageLoader = koinInject(),
 ) {
-    val requestFactory: MediaImageRequestFactory = koinInject()
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -140,7 +141,6 @@ internal fun MediaViewerPage(
                     .fillMaxSize()
                     .then(pageTransformModifier),
             ) {
-                val imageLoader: ImageLoader = koinInject()
                 ZoomableAsyncImage(
                     imageLoader = imageLoader,
                     model = originalRequest,
