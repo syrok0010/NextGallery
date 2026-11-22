@@ -104,6 +104,7 @@ data class MemoriesImageInfoDto(
     val filename: String,
     val basename: String,
     val etag: String? = null,
+    val size: Long? = null,
 )
 
 @Serializable

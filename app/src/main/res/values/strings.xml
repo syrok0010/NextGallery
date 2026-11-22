@@ -50,6 +50,11 @@
     <string name="viewer_details_date_pattern">MMMM d, yyyy</string>
     <string name="viewer_details_time_pattern">h:mm a</string>
     <string name="viewer_details_weekday_pattern">EEEE</string>
+    <string name="viewer_details_loading">Loading details…</string>
+    <string name="viewer_details_capture_settings">Capture settings</string>
+    <string name="viewer_details_path">Path</string>
+    <string name="viewer_details_albums">Albums</string>
+    <string name="viewer_details_location">Location</string>
     <string name="error_save_credentials">Couldn\'t save the connection. Try signing in again.</string>
     <string name="video_playback_seek">Video position</string>
     <string name="video_playback_play">Play video</string>

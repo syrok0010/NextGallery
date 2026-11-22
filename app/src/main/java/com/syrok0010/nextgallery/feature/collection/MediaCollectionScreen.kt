@@ -14,6 +14,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.viewer.MediaDetailScreen
+import com.syrok0010.nextgallery.feature.viewer.ViewerDetailsLoader
 
 /** Shared grid, scroll restoration and viewer transitions; callers own loading and chrome. */
 @Composable
@@ -29,6 +30,7 @@ internal fun MediaCollectionScreen(
     selectionActions: List<SelectionAction> = emptyList(),
     viewerActions: List<SelectionAction> = emptyList(),
     viewerStatus: @Composable (visible: Boolean) -> Unit = {},
+    viewerDetailsLoader: ViewerDetailsLoader? = null,
     deletedMediaIds: Set<MediaId> = emptySet(),
     /** Running operations on a tile's object; reads snapshot state, see [MediaSlotTile]. */
     tileActivity: (MediaItem) -> MediaTileActivity? = { null },
@@ -89,6 +91,7 @@ internal fun MediaCollectionScreen(
                 { item -> ViewerSelectionActions(viewerActions, item) }
             },
             status = viewerStatus,
+            detailsLoader = viewerDetailsLoader,
             tileBoundsForMediaId = transition::timelineTileBounds,
             onBack = { transition.close(it.mediaId, index.slotIndex(it.mediaId) != null) },
             onEmpty = { transition.close(viewerId, false) },

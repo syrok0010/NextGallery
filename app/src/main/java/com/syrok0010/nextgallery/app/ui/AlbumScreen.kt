@@ -9,13 +9,16 @@ import com.syrok0010.nextgallery.feature.albums.AlbumContentsStatus
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.toMediaSlots
+import com.syrok0010.nextgallery.feature.viewer.ViewerDetailsLoader
 import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun AlbumScreen(
     album: NextGalleryRoute.Album,
+    viewerDetailsLoader: ViewerDetailsLoader = koinInject(),
     viewModel: AlbumContentsViewModel = koinViewModel { parametersOf(album.location) },
 ) {
     val contents by viewModel.state.collectAsState()
@@ -26,6 +29,7 @@ internal fun AlbumScreen(
         slots = slots,
         emptyContent = { AlbumContentsStatus(contents, viewModel::refresh) },
         tileActivity = tileActivity,
+        viewerDetailsLoader = viewerDetailsLoader,
     ) { viewerVisible, content ->
         LibraryScreenScaffold(
             TopLevelDestination.Albums,

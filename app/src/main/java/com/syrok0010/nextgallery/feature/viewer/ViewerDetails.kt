@@ -3,6 +3,8 @@ package com.syrok0010.nextgallery.feature.viewer
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
@@ -12,16 +14,21 @@ import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,15 +42,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import android.content.Intent
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasLocalCopy
@@ -52,6 +63,7 @@ import java.time.Instant
 import java.time.ZoneId
 import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -132,6 +144,8 @@ internal fun viewerDetailsPhotoTarget(
 internal fun ViewerDetailsSheet(
     item: MediaItem,
     state: ViewerDetailsState,
+    details: ViewerMediaDetails? = null,
+    detailsLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -149,6 +163,7 @@ internal fun ViewerDetailsSheet(
                 flingBehavior = AnchoredDraggableDefaults.flingBehavior(state.anchors, animationSpec = SheetSpring),
             ).windowInsetsPadding(WindowInsets.navigationBars)
             .padding(bottom = 16.dp)
+            .verticalScroll(rememberScrollState())
             .testTag(ViewerDetailsTestTag)
             // A closed sheet waits off screen to be measured; screen readers must not reach it.
             .then(if (state.engaged) Modifier else Modifier.clearAndSetSemantics {}),
@@ -220,8 +235,129 @@ internal fun ViewerDetailsSheet(
                     },
                 )
             }
+            if (detailsLoading) {
+                DetailsRow(
+                    icon = rememberVectorPainter(Icons.Default.DateRange),
+                    title = stringResource(R.string.viewer_details_loading),
+                    subtitle = null,
+                )
+            }
+            details?.let { RichDetails(it) }
         }
     }
+}
+
+@Composable
+private fun RichDetails(details: ViewerMediaDetails) {
+    val context = LocalContext.current
+    details.cameraModel?.let {
+        DetailsRow(
+            icon = rememberVectorPainter(Icons.Default.DateRange),
+            title = it,
+            subtitle = details.lensModel,
+        )
+    }
+    val exposure = listOfNotNull(
+        details.exposureTimeSeconds?.let(::formatExposure),
+        details.aperture?.let { "f/${formatDecimal(it)}" },
+        details.iso?.let { "ISO $it" },
+    ).filter(String::isNotBlank).joinToString(" · ").ifBlank { null }
+    exposure?.let {
+        DetailsRow(
+            icon = rememberVectorPainter(Icons.Default.DateRange),
+            title = stringResource(R.string.viewer_details_capture_settings),
+            subtitle = it,
+        )
+    }
+    details.fileSizeBytes?.let {
+        DetailsRow(
+            icon = painterResource(R.drawable.ic_albums),
+            title = formatFileSize(it),
+            subtitle = details.path,
+        )
+    } ?: details.path?.let {
+        DetailsRow(
+            icon = painterResource(R.drawable.ic_albums),
+            title = stringResource(R.string.viewer_details_path),
+            subtitle = it,
+        )
+    }
+    if (details.albums.isNotEmpty()) {
+        DetailsRow(
+            icon = painterResource(R.drawable.ic_albums),
+            title = stringResource(R.string.viewer_details_albums),
+            subtitle = details.albums.joinToString(" · "),
+        )
+    }
+    details.location?.let { point ->
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    rememberVectorPainter(Icons.Default.LocationOn),
+                    contentDescription = null,
+                    tint = SecondaryText,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    stringResource(R.string.viewer_details_location),
+                    color = PrimaryText,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            MiniMap(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .clickable {
+                        val uri = "geo:${point.latitude},${point.longitude}?q=${point.latitude},${point.longitude}".toUri()
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                    },
+            )
+            Text(
+                "%.5f, %.5f".format(point.latitude, point.longitude),
+                color = SecondaryText,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniMap(modifier: Modifier = Modifier) {
+    Canvas(modifier.background(Color(0xFF30363B), RoundedCornerShape(14.dp))) {
+        val road = Color(0xFF555D61)
+        repeat(5) { index ->
+            val y = size.height * (index + 1) / 6f
+            drawLine(road, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 2f)
+        }
+        repeat(4) { index ->
+            val x = size.width * (index + 1) / 5f
+            drawLine(road, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 2f)
+        }
+        drawCircle(Color(0xFFE86A5B), radius = 10.dp.toPx(), center = center)
+        drawCircle(Color.White, radius = 10.dp.toPx(), center = center, style = Stroke(width = 2.dp.toPx()))
+    }
+}
+
+private fun formatExposure(seconds: Double): String = when {
+    seconds <= 0.0 -> ""
+    seconds >= 1.0 -> "%.1fs".format(seconds)
+    else -> "1/%d s".format((1.0 / seconds).roundToInt())
+}
+
+private fun formatDecimal(value: Double): String = "%.1f".format(value).trimEnd('0').trimEnd('.')
+
+private fun formatFileSize(bytes: Long): String = when {
+    bytes < 1_024L -> "$bytes B"
+    bytes < 1_024L * 1_024L -> "%.1f KB".format(bytes / 1_024.0)
+    bytes < 1_024L * 1_024L * 1_024L -> "%.1f MB".format(bytes / (1_024.0 * 1_024.0))
+    else -> "%.1f GB".format(bytes / (1_024.0 * 1_024.0 * 1_024.0))
 }
 
 @Composable

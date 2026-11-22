@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -44,6 +45,7 @@ internal fun MediaDetailScreen(
     tileBoundsForMediaId: (mediaId: MediaId) -> Rect?,
     onBack: (MediaItem) -> Unit,
     onCurrentItemChange: (MediaItem) -> Unit,
+    detailsLoader: ViewerDetailsLoader? = null,
     /** Nothing is left to show, e.g. the only object was deleted. */
     onEmpty: () -> Unit = {},
     /** Labeled actions for the current object; null hides the action row. */
@@ -62,6 +64,17 @@ internal fun MediaDetailScreen(
         // Deleted pages have no surviving key; show the page that took their place.
         ?: pagerState.currentPage.coerceAtMost(items.lastIndex)
     val currentItem = items.getOrNull(currentPage)
+    val details = rememberViewerDetailsState()
+    var richDetails by remember(currentItem?.mediaId) { mutableStateOf<ViewerMediaDetails?>(null) }
+    var detailsLoading by remember(currentItem?.mediaId) { mutableStateOf(false) }
+    LaunchedEffect(currentItem?.mediaId, detailsLoader, details.engaged) {
+        if (!details.engaged) return@LaunchedEffect
+        detailsLoading = detailsLoader != null && currentItem != null
+        richDetails = currentItem?.let { item ->
+            detailsLoader?.let { loader -> runCatching { loader.load(item) }.getOrNull() }
+        }
+        detailsLoading = false
+    }
     val playback = rememberViewerPlaybackState(currentItem)
     val latestSequence by rememberUpdatedState(sequence)
     val filmstrip = rememberViewerFilmstripState(items, currentItem?.mediaId, onSelected = { id ->
@@ -85,7 +98,6 @@ internal fun MediaDetailScreen(
     )
     val chromeShown by remember(motion) { derivedStateOf { motion.chromeAlpha > 0f } }
     ViewerWindowHdrEffect(enabled = activePageState.hasHdr)
-    val details = rememberViewerDetailsState()
     // Registered after the viewer's own handler, so back closes the sheet before the viewer.
     BackHandler(enabled = details.isOpen) { details.close() }
     val density = LocalDensity.current
@@ -198,6 +210,8 @@ internal fun MediaDetailScreen(
             ViewerDetailsSheet(
                 item = currentItem,
                 state = details,
+                details = richDetails,
+                detailsLoading = detailsLoading,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
