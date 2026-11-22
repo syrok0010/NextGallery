@@ -128,7 +128,7 @@ internal class AlbumContentsStore(
         entry.state.value = entry.state.value.copy(loading = true, failed = false, permissionRequired = false)
         entry.job = scope.launch {
             try {
-                var latest: AlbumContentsBatch? = null
+                var latest = entry.membership.snapshot
                 source.load(location).collect { batch ->
                     if (entry.request != request) return@collect
                     latest = batch
@@ -137,8 +137,8 @@ internal class AlbumContentsStore(
                         publish(location, entry)
                     }
                 }
-                if (entry.request == request && latest != null) {
-                    entry.membership = entry.membership.applyRead(requireNotNull(latest), startedAtVersion, authoritative, finished = true)
+                if (entry.request == request) {
+                    entry.membership = entry.membership.applyRead(latest, startedAtVersion, authoritative, finished = true)
                     entry.state.value = entry.state.value.copy(loading = false)
                     publish(location, entry)
                 }
