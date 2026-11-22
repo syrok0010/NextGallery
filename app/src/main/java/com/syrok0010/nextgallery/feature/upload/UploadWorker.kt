@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 internal class UploadWorker(
     context: Context,
     params: WorkerParameters,
-    private val queue: UploadQueue?,
+    internal val queue: UploadQueue?,
     private val transport: NextcloudTransport?,
     private val memories: MemoriesApiClient?,
 ) : CoroutineWorker(context, params) {
