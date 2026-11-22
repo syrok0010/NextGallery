@@ -238,4 +238,5 @@
     <string name="album_remove_failed">Не удалось убрать: %1$d</string>
     <string name="album_remove_busy">Дождитесь завершения предыдущего удаления из альбома.</string>
     <string name="delete_album_note">Удаление облачной копии уберёт её из всех серверных альбомов, в которые она входит.</string>
+    <string name="album_contents_pending_metadata">Добавленные объекты ещё готовятся: %1$d.</string>
 </resources>

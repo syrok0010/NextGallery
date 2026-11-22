@@ -222,4 +222,5 @@
     <string name="album_remove_failed">Couldn\'t remove: %1$d</string>
     <string name="album_remove_busy">Wait for the previous album removal to finish.</string>
     <string name="delete_album_note">Deleting the cloud copy will remove it from every server album it belongs to.</string>
+    <string name="album_contents_pending_metadata">Added items are still being prepared: %1$d.</string>
 </resources>

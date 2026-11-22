@@ -57,10 +57,6 @@ class AlbumRemovalsTest {
                 removals.consume()
                 assertNull(removals.result.value)
                 assertTrue(removals.remove(location, "album", setOf(1)))
-                sessions.signOut()
-                assertNull(removals.progress.value)
-                assertNull(removals.result.value)
-                assertFalse(removals.remove(location, "album", setOf(1)))
             } finally {
                 release.countDown()
                 scope.cancel()

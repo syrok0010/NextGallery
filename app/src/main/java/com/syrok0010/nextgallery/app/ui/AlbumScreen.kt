@@ -26,6 +26,7 @@ import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
+import com.syrok0010.nextgallery.router.NextGalleryRoute
 import org.koin.compose.koinInject
 
 @Composable
@@ -110,7 +111,6 @@ internal fun AlbumScreen(
                 OperationStatusPill(
                     operations,
                     visible = visible,
-                    onOpenUploads = onOpenUploads,
                     fillWidth = false,
                 )
             }
