@@ -33,9 +33,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -66,6 +68,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 /**
  * The details sheet pulled up from under the photo. [progress] is 0 when closed and 1 when open.
@@ -144,10 +147,17 @@ internal fun viewerDetailsPhotoTarget(
 internal fun ViewerDetailsSheet(
     item: MediaItem,
     state: ViewerDetailsState,
-    details: ViewerMediaDetails? = null,
-    detailsLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val detailsLoader: ViewerDetailsLoader = koinInject()
+    var details by remember(item.mediaId) { mutableStateOf<ViewerMediaDetails?>(null) }
+    var detailsLoading by remember(item.mediaId) { mutableStateOf(false) }
+    LaunchedEffect(item.mediaId, state.engaged) {
+        if (!state.engaged) return@LaunchedEffect
+        detailsLoading = true
+        details = runCatching { detailsLoader.load(item) }.getOrNull()
+        detailsLoading = false
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
