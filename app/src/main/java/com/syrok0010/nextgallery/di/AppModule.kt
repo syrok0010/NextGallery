@@ -13,11 +13,13 @@ import com.syrok0010.nextgallery.feature.auth.LoginViewModel
 import com.syrok0010.nextgallery.feature.auth.NextcloudLoginRepository
 import com.syrok0010.nextgallery.feature.upload.UploadQueue
 import kotlinx.serialization.json.Json
-import org.koin.core.module.dsl.viewModel as explicitViewModel
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.bind
 import org.koin.dsl.module
 import org.koin.dsl.onClose
-import org.koin.plugin.module.dsl.*
+import org.koin.plugin.module.dsl.create
+import org.koin.plugin.module.dsl.single
+import org.koin.plugin.module.dsl.viewModel
 
 private fun bootstrapModule() =
     module {
@@ -35,7 +37,7 @@ private fun bootstrapModule() =
         single { AuthenticatedGraph(getKoin()) } onClose { it?.close() }
         single { create(::sessionStore) }
         single<SystemAppDataEraser>() bind AppDataEraser::class
-        explicitViewModel { create(::sessionViewModel) }
+        viewModel { create(::sessionViewModel) }
         viewModel<LoginViewModel>()
     }
 
