@@ -147,9 +147,9 @@ internal fun viewerDetailsPhotoTarget(
 internal fun ViewerDetailsSheet(
     item: MediaItem,
     state: ViewerDetailsState,
+    detailsLoader: ViewerDetailsLoader = koinInject(),
     modifier: Modifier = Modifier,
 ) {
-    val detailsLoader: ViewerDetailsLoader = koinInject()
     var details by remember(item.mediaId) { mutableStateOf<ViewerMediaDetails?>(null) }
     var detailsLoading by remember(item.mediaId) { mutableStateOf(false) }
     LaunchedEffect(item.mediaId, state.engaged) {
