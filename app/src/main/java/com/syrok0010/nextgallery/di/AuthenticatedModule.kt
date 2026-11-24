@@ -98,12 +98,12 @@ internal fun authenticatedModule() =
             scoped { create(::albumsClient) }
             scoped { create(::filesClient) }
             scoped<ViewerDetailsLoader> {
-                val credentials = get<AccountCredentials>()
                 ViewerMediaDetailsRepository(
                     get<Context>().contentResolver,
                     get<MemoriesApiClient>(),
                     get<FilesDavClient>(),
-                ) { credentials }
+                    get<AccountCredentials>(),
+                )
             }
             scoped { create(::capabilitiesClient) }
             scoped<MemoriesAlbumSource>() bind RemoteAlbumSource::class

@@ -40,7 +40,7 @@ class ViewerMediaDetailsRepository(
     private val contentResolver: ContentResolver,
     private val memories: MemoriesApiClient,
     private val files: FilesDavClient,
-    private val credentials: () -> AccountCredentials,
+    private val credentials: AccountCredentials,
 ) : ViewerDetailsLoader {
     private val albumMutex = Mutex()
     private var remoteAlbumNames: Map<Long, List<String>>? = null
@@ -91,7 +91,7 @@ class ViewerMediaDetailsRepository(
     private suspend fun readRemote(fileId: Long, isVideo: Boolean): ViewerMediaDetails {
         val info = memories.imageInfo(fileId)
         if (info.filename.isBlank()) return ViewerMediaDetails(fileSizeBytes = info.size)
-        val account = credentials()
+        val account = credentials
         val exif = if (isVideo) {
             ViewerMediaDetails()
         } else {
