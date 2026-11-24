@@ -127,11 +127,16 @@ class FilesDavClientTest {
 
     @Test fun `propfind body names the three properties in their namespaces`() {
         val body = encodeDav(PropFind())
+        assertFalse(
+            "SabreDAV rejects XML 1.1 declarations: $body",
+            body.trimStart().startsWith("<?xml"),
+        )
         val document = javax.xml.parsers.DocumentBuilderFactory
             .newInstance()
             .apply { isNamespaceAware = true }
             .newDocumentBuilder()
             .parse(body.byteInputStream())
+        assertEquals("1.0", document.xmlVersion)
         val root = document.documentElement
         assertEquals("DAV:" to "propfind", root.namespaceURI to root.localName)
         val prop = root.getElementsByTagNameNS("DAV:", "prop").item(0)
@@ -210,11 +215,17 @@ class FilesDavClientTest {
         }
 
     @Test fun `search body is a namespaced basic search`() {
+        val body = encodeDav(SearchRequest.fileId("anna", 295))
+        assertFalse(
+            "SabreDAV rejects XML 1.1 declarations: $body",
+            body.trimStart().startsWith("<?xml"),
+        )
         val document = javax.xml.parsers.DocumentBuilderFactory
             .newInstance()
             .apply { isNamespaceAware = true }
             .newDocumentBuilder()
-            .parse(encodeDav(SearchRequest.fileId("anna", 295)).byteInputStream())
+            .parse(body.byteInputStream())
+        assertEquals("1.0", document.xmlVersion)
         val root = document.documentElement
         assertEquals("DAV:" to "searchrequest", root.namespaceURI to root.localName)
         val ids = document.getElementsByTagNameNS("http://owncloud.org/ns", "fileid")

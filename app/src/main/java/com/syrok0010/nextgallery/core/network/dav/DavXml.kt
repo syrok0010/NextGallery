@@ -8,8 +8,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.QName
+import nl.adaptivity.xmlutil.XmlDeclMode
 import nl.adaptivity.xmlutil.XmlException
 import nl.adaptivity.xmlutil.core.KtXmlReader
+import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
 import nl.adaptivity.xmlutil.serialization.XmlElement
 import nl.adaptivity.xmlutil.serialization.XmlSerialName
@@ -138,8 +140,9 @@ internal data class FileProps(
 )
 
 private val davXml = XML.v1 {
-    // Keep the previous DAV compatibility policy while using xmlutil 1.0 API.
-
+    // Nextcloud's SabreDAV (libxml2) rejects XML 1.1 declarations with HTTP 400.
+    xmlVersion = XmlVersion.XML10
+    xmlDeclMode = XmlDeclMode.None
     // The pure Kotlin parser: the same code on Android and in JVM tests, and it never loads
     // external entities.
     defaultToGenericParser = true
