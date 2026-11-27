@@ -1,8 +1,11 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.network.NextcloudFixture
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
+import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import kotlinx.coroutines.runBlocking
 import okhttp3.Credentials
 import org.junit.Assert.*
@@ -65,9 +68,13 @@ class MemoriesAlbumSourceTest {
             AccountCredentials("${server.origin}/nextcloud", "fixture", "password", "fixture")
 
         suspend fun load() =
-            MemoriesAlbumSource(
+            MemoriesAlbums(
+                credentials,
                 MemoriesApiClient(server.transport) { credentials },
-            ).load()
+                PhotosAlbumsDavClient(server.transport) { credentials },
+                FilesDavClient(server.transport) { credentials },
+                InMemoryMediaIdentityRegistry(),
+            ).loadCatalog()
 
         override fun close() {
             server.close()

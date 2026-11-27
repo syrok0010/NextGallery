@@ -15,20 +15,28 @@ internal fun AlbumContentsStatus(
     onRetry: () -> Unit,
 ) {
     Column(Modifier.testTag("album_contents")) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.album_contents_progress, state.loaded, state.total), style = MaterialTheme.typography.bodySmall)
+        Column(
+            Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.album_contents_progress, state.loaded, state.total),
+                style = MaterialTheme.typography.bodySmall,
+            )
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (state.pendingMetadata > 0) {
-                Text(stringResource(R.string.album_contents_pending_metadata, state.pendingMetadata))
-                TextButton(onClick = onRetry, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_refresh)) }
-            }
             if (state.permissionRequired) Text(stringResource(R.string.albums_permission))
             if (state.failed) {
-                Text(stringResource(R.string.album_contents_error), color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = onRetry, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_refresh)) }
+                Text(
+                    stringResource(R.string.album_contents_error),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onRetry, contentPadding = PaddingValues(0.dp)) {
+                    Text(stringResource(R.string.action_refresh))
+                }
             }
-            if (!state.loading && !state.permissionRequired && !state.failed && state.pendingMetadata == 0 && state.items.isEmpty())
+            if (!state.loading && !state.permissionRequired && !state.failed && state.items.isEmpty()) {
                 Text(stringResource(R.string.album_contents_empty))
+            }
         }
     }
 }

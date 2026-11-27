@@ -19,21 +19,6 @@ import org.junit.runner.RunWith
 class AlbumCatalogUiTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun confirmedMemberWithoutMetadataShowsWaitingAndRefreshInsteadOfEmptyAlbum() {
-        var refreshed = false
-        rule.setContent {
-            NextGalleryTheme {
-                AlbumContentsStatus(
-                    AlbumContentsState(total = 1, pendingMetadata = 1),
-                ) { refreshed = true }
-            }
-        }
-        rule.onNodeWithText(string(R.string.album_contents_pending_metadata, 1)).assertIsDisplayed()
-        rule.onNodeWithText(string(R.string.album_contents_empty)).assertDoesNotExist()
-        rule.onNodeWithText(string(R.string.action_refresh)).performClick()
-        rule.runOnIdle { assertTrue(refreshed) }
-    }
-
     @Test fun cardsStretchToTallestInRowWithoutMovingCoversAndOpenTheirOwnAlbum() {
         var opened: AlbumSummary? = null
         val albums = listOf(

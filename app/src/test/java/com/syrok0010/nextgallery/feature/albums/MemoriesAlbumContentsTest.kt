@@ -1,10 +1,12 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import app.cash.turbine.test
-import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
-import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.network.NextcloudFixture
+import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
+import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import java.net.URLDecoder
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -58,10 +60,13 @@ class MemoriesAlbumContentsTest {
         private val credentials =
             AccountCredentials("${server.origin}/nextcloud", "fixture", "password", "fixture")
 
-        fun contents() = MemoriesAlbumContents(
+        fun contents() = MemoriesAlbums(
+            credentials,
             MemoriesApiClient(server.transport) { credentials },
+            PhotosAlbumsDavClient(server.transport) { credentials },
+            FilesDavClient(server.transport) { credentials },
             InMemoryMediaIdentityRegistry(),
-        ).load(AlbumLocation.Remote("anna/Лето & море"))
+        ).loadContents(AlbumLocation.Remote("anna/Лето & море"))
 
         suspend fun load() = contents().toList()
 

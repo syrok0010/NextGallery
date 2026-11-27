@@ -3,6 +3,8 @@ package com.syrok0010.nextgallery.feature.albums
 import com.syrok0010.nextgallery.core.network.NextcloudFixture
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import java.net.URLDecoder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -175,9 +177,15 @@ class MemoriesAlbumWriterTest {
     }
 }
 
-/** The album writer of the fixture's account. */
-internal val NextcloudFixture.writer: MemoriesAlbumWriter
-    get() = MemoriesAlbumWriter(credentials, PhotosAlbumsDavClient(transport) { credentials }, dav)
+/** The remote albums adapter of the fixture's account. */
+internal val NextcloudFixture.writer: MemoriesAlbums
+    get() = MemoriesAlbums(
+        credentials,
+        MemoriesApiClient(transport) { credentials },
+        PhotosAlbumsDavClient(transport) { credentials },
+        dav,
+        InMemoryMediaIdentityRegistry(),
+    )
 
 /** DAV SEARCH multistatus listing each file id at its encoded path under `files/anna`. */
 internal fun found(vararg files: Pair<Long, String>): String =
