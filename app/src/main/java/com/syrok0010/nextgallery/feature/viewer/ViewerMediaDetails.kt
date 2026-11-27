@@ -4,59 +4,73 @@ import android.content.ContentResolver
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.media.remoteCopy
-import com.syrok0010.nextgallery.core.network.dav.DavFilePath
-import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
-import com.syrok0010.nextgallery.core.network.dav.ReadFileResult
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
-import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.network.memories.MemoriesImageInfoDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 
 data class ViewerGeoPoint(val latitude: Double, val longitude: Double)
 
 data class ViewerMediaDetails(
     val cameraModel: String? = null,
     val lensModel: String? = null,
+    val focalLengthMm: Double? = null,
     val exposureTimeSeconds: Double? = null,
     val aperture: Double? = null,
     val iso: Int? = null,
     val fileSizeBytes: Long? = null,
-    val path: String? = null,
+    val localPath: String? = null,
+    val remotePath: String? = null,
     val albums: List<String> = emptyList(),
     val location: ViewerGeoPoint? = null,
+    val locationLabel: String? = null,
 )
 
 fun interface ViewerDetailsLoader {
     suspend fun load(item: MediaItem): ViewerMediaDetails
 }
 
-/** Loads the expensive metadata only when the details sheet is opened. */
+/** Loads and caches viewer metadata from local EXIF and Memories `image/info`. */
 class ViewerMediaDetailsRepository(
     private val contentResolver: ContentResolver,
     private val memories: MemoriesApiClient,
-    private val files: FilesDavClient,
-    private val credentials: AccountCredentials,
 ) : ViewerDetailsLoader {
-    private val albumMutex = Mutex()
-    private var remoteAlbumNames: Map<Long, List<String>>? = null
+    private val cacheMutex = Mutex()
+    private val cache = object : LinkedHashMap<MediaId, ViewerMediaDetails>(
+        CACHE_CAPACITY,
+        0.75f,
+        true,
+    ) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<MediaId, ViewerMediaDetails>,
+        ): Boolean = size > CACHE_CAPACITY
+    }
 
-    override suspend fun load(item: MediaItem): ViewerMediaDetails =
-        withContext(Dispatchers.IO) {
+    override suspend fun load(item: MediaItem): ViewerMediaDetails {
+        cacheMutex.withLock { cache[item.mediaId] }?.let { return it }
+        val loaded = withContext(Dispatchers.IO) {
             val local = item.localCopy?.let { readLocal(item) }
-            val remote = item.remoteCopy?.let { readRemote(it.photoFileId, item.isVideo) }
-            val merged = merge(local, remote)
-            merged.copy(
-                albums = (local?.albums.orEmpty() + remote?.albums.orEmpty()).distinct(),
-                fileSizeBytes = merged.fileSizeBytes
-                    ?: item.localCopy?.sizeBytes
-                    ?: remote?.fileSizeBytes,
-            )
+            val remote = item.remoteCopy?.let { readRemote(it.photoFileId) }
+            mergeViewerMediaDetails(local, remote).let { merged ->
+                merged.copy(
+                    fileSizeBytes = merged.fileSizeBytes ?: item.localCopy?.sizeBytes,
+                )
+            }
         }
+        cacheMutex.withLock { cache[item.mediaId] = loaded }
+        return loaded
+    }
 
     private fun readLocal(item: MediaItem): ViewerMediaDetails? {
         val local = item.localCopy ?: return null
@@ -76,98 +90,158 @@ class ViewerMediaDetailsRepository(
                     if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
                 }
         }.getOrNull()
+        val directory = normalizeLocalDirectory(relativePath)
         return exif.toViewerDetails().copy(
             fileSizeBytes = local.sizeBytes,
-            path = relativePath ?: local.contentUri,
-            albums = relativePath
-                ?.trimEnd('/')
-                ?.substringAfterLast('/')
-                ?.takeIf(String::isNotBlank)
-                ?.let(::listOf)
-                .orEmpty(),
+            localPath = directory,
+            albums = listOfNotNull(localAlbumName(directory)),
         )
     }
 
-    private suspend fun readRemote(fileId: Long, isVideo: Boolean): ViewerMediaDetails {
-        val info = memories.imageInfo(fileId)
-        if (info.filename.isBlank()) return ViewerMediaDetails(fileSizeBytes = info.size)
-        val account = credentials
-        val exif = if (isVideo) {
-            ViewerMediaDetails()
-        } else {
-            runCatching {
-                val result = files.readFile(
-                    DavFilePath.of(account.userId, info.filename),
-                    info.etag,
-                ) { input -> ExifInterface(input).toViewerDetails() }
-                when (result) {
-                    is ReadFileResult.Read -> result.value
-                    ReadFileResult.Changed -> ViewerMediaDetails()
-                }
-            }.getOrElse { ViewerMediaDetails() }
-        }
-        return exif.copy(
-            fileSizeBytes = exif.fileSizeBytes ?: info.size,
-            path = info.filename,
-            albums = remoteAlbumsFor(fileId),
-        )
-    }
+    private suspend fun readRemote(fileId: Long): ViewerMediaDetails? =
+        runCatching {
+            memories.imageInfo(fileId, clusters = "albums").toViewerDetails()
+        }.getOrNull()
 
-    private suspend fun remoteAlbumsFor(fileId: Long): List<String> {
-        val cached = albumMutex.withLock { remoteAlbumNames } ?: run {
-            val loaded = runCatching {
-                memories
-                    .albums()
-                    .mapNotNull { album ->
-                        val name = album.name.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                        val location = album.clusterId ?: album.user?.let {
-                            "$it/$name"
-                        } ?: return@mapNotNull null
-                        val days = memories.albumDays(location)
-                        val ids = days.flatMap { it.detail }.map { it.fileid }.toMutableSet()
-                        val missingDays = days.filter { it.count > it.detail.size }.map { it.dayid }
-                        missingDays.chunked(10).forEach { chunk ->
-                            ids += memories
-                                .albumPhotos(
-                                    chunk.joinToString(","),
-                                    location,
-                                ).map { it.fileid }
-                        }
-                        fileId.takeIf { it in ids }?.let { fileId to name }
-                    }.groupBy({ it.first }, { it.second })
-            }.getOrDefault(emptyMap())
-            albumMutex.withLock {
-                remoteAlbumNames = loaded
-                loaded
-            }
-        }
-        return cached[fileId].orEmpty()
+    private companion object {
+        const val CACHE_CAPACITY = 64
     }
-
-    private fun merge(first: ViewerMediaDetails?, second: ViewerMediaDetails?): ViewerMediaDetails =
-        ViewerMediaDetails(
-            cameraModel = first?.cameraModel ?: second?.cameraModel,
-            lensModel = first?.lensModel ?: second?.lensModel,
-            exposureTimeSeconds = first?.exposureTimeSeconds ?: second?.exposureTimeSeconds,
-            aperture = first?.aperture ?: second?.aperture,
-            iso = first?.iso ?: second?.iso,
-            fileSizeBytes = second?.fileSizeBytes ?: first?.fileSizeBytes,
-            path = second?.path ?: first?.path,
-            location = first?.location ?: second?.location,
-        )
 }
+
+internal fun MemoriesImageInfoDto.toViewerDetails(): ViewerMediaDetails {
+    val exifDetails = exif.toViewerDetails()
+    val albums = clusters
+        ?.albums
+        .orEmpty()
+        .mapNotNull { it.name.trim().takeIf(String::isNotBlank) }
+        .distinct()
+    return exifDetails.copy(
+        fileSizeBytes = size,
+        remotePath = normalizeRemoteDirectory(filename),
+        albums = albums,
+        locationLabel = address?.trim()?.takeIf(String::isNotBlank),
+    )
+}
+
+internal fun JsonObject?.toViewerDetails(): ViewerMediaDetails {
+    if (this == null) return ViewerMediaDetails()
+    val make = stringValue("Make")
+    val model = stringValue("Model")
+    val camera = formatCameraName(make, model)
+    val lens = stringValue("LensModel")
+    val focalLength = doubleValue("FocalLength")
+    val exposure = exposureValue("ExposureTime")
+        ?: exposureValue("ShutterSpeed")
+        ?: exposureValue("ShutterSpeedValue")
+    val aperture = doubleValue("FNumber")
+        ?: doubleValue("Aperture")
+        ?: doubleValue("ApertureValue")
+    val iso = intValue("ISO")
+    val latitude = doubleValue("GPSLatitude")
+    val longitude = doubleValue("GPSLongitude")
+    val location = if (latitude != null && longitude != null) {
+        ViewerGeoPoint(latitude, longitude)
+    } else {
+        null
+    }
+    return ViewerMediaDetails(
+        cameraModel = camera,
+        lensModel = lens,
+        focalLengthMm = focalLength,
+        exposureTimeSeconds = exposure,
+        aperture = aperture,
+        iso = iso,
+        location = location,
+    )
+}
+
+internal fun formatCameraName(make: String?, model: String?): String? {
+    val cleanMake = make?.trim().orEmpty()
+    val cleanModel = model?.trim().orEmpty()
+    return when {
+        cleanMake.isBlank() && cleanModel.isBlank() -> null
+        cleanMake.isBlank() -> cleanModel
+        cleanModel.isBlank() -> cleanMake
+        cleanModel.startsWith(cleanMake, ignoreCase = true) -> cleanModel
+        else -> "$cleanMake $cleanModel"
+    }
+}
+
+internal fun normalizeLocalDirectory(relativePath: String?): String? =
+    relativePath?.trim()?.trim('/')?.takeIf(String::isNotBlank)
+
+internal fun normalizeRemoteDirectory(filePath: String?): String? {
+    val trimmed = filePath?.trim()?.takeIf(String::isNotBlank) ?: return null
+    val slashIndex = trimmed.lastIndexOf('/')
+    if (slashIndex < 0) return null
+    val parent = trimmed.substring(0, slashIndex).trim('/')
+    return parent.ifBlank { "/" }
+}
+
+internal fun localAlbumName(localDirectory: String?): String? =
+    localDirectory?.substringAfterLast('/')?.takeIf(String::isNotBlank)
+
+internal fun mergeViewerMediaDetails(
+    local: ViewerMediaDetails?,
+    remote: ViewerMediaDetails?,
+): ViewerMediaDetails =
+    ViewerMediaDetails(
+        cameraModel = local?.cameraModel ?: remote?.cameraModel,
+        lensModel = local?.lensModel ?: remote?.lensModel,
+        focalLengthMm = local?.focalLengthMm ?: remote?.focalLengthMm,
+        exposureTimeSeconds = local?.exposureTimeSeconds ?: remote?.exposureTimeSeconds,
+        aperture = local?.aperture ?: remote?.aperture,
+        iso = local?.iso ?: remote?.iso,
+        fileSizeBytes = local?.fileSizeBytes ?: remote?.fileSizeBytes,
+        localPath = local?.localPath,
+        remotePath = remote?.remotePath,
+        albums = (local?.albums.orEmpty() + remote?.albums.orEmpty()).distinct(),
+        location = local?.location ?: remote?.location,
+        locationLabel = local?.locationLabel ?: remote?.locationLabel,
+    )
+
+private fun JsonObject.stringValue(key: String): String? =
+    (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotBlank)
+
+private fun JsonObject.doubleValue(key: String): Double? {
+    val primitive = this[key] as? JsonPrimitive ?: return null
+    primitive.doubleOrNull?.takeIf { it.isFinite() }?.let { return it }
+    val raw = primitive.contentOrNull?.trim() ?: return null
+    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.takeIf { it.isFinite() }
+}
+
+private fun JsonObject.intValue(key: String): Int? {
+    val primitive = this[key] as? JsonPrimitive ?: return null
+    primitive.intOrNull?.takeIf { it > 0 }?.let { return it }
+    val raw = primitive.contentOrNull?.trim() ?: return null
+    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.toInt()?.takeIf { it > 0 }
+}
+
+private fun JsonObject.exposureValue(key: String): Double? {
+    val primitive = this[key] as? JsonPrimitive ?: return null
+    primitive.doubleOrNull?.takeIf { it.isFinite() && it > 0.0 }?.let { return it }
+    val raw = primitive.contentOrNull?.trim() ?: return null
+    val fraction = FRACTION_PATTERN.find(raw)
+    if (fraction != null) {
+        val numerator = fraction.groupValues[1].toDoubleOrNull()
+        val denominator = fraction.groupValues[2].toDoubleOrNull()
+        if (numerator != null && denominator != null && denominator > 0.0) {
+            return (numerator / denominator).takeIf { it.isFinite() && it > 0.0 }
+        }
+    }
+    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
+}
+
+private val NUMBER_PATTERN = Regex("""-?\d+(?:\.\d+)?""")
+private val FRACTION_PATTERN = Regex("""(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)""")
 
 @Suppress("DEPRECATION")
 private fun ExifInterface?.toViewerDetails(): ViewerMediaDetails {
     if (this == null) return ViewerMediaDetails()
-    val make = getAttribute(ExifInterface.TAG_MAKE)?.trim().orEmpty()
-    val model = getAttribute(ExifInterface.TAG_MODEL)?.trim().orEmpty()
-    val camera = listOf(
-        make,
-        model,
-    ).filter(String::isNotBlank).distinct().joinToString(" ").ifBlank {
-        null
-    }
+    val camera = formatCameraName(
+        getAttribute(ExifInterface.TAG_MAKE),
+        getAttribute(ExifInterface.TAG_MODEL),
+    )
     val lens = getAttribute(ExifInterface.TAG_LENS_MODEL)
         ?.trim()
         ?.takeIf(String::isNotBlank)
@@ -175,10 +249,12 @@ private fun ExifInterface?.toViewerDetails(): ViewerMediaDetails {
     return ViewerMediaDetails(
         cameraModel = camera,
         lensModel = lens,
+        focalLengthMm = getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, Double.NaN)
+            .takeUnless { it.isNaN() || it <= 0.0 },
         exposureTimeSeconds = getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, Double.NaN)
-            .takeUnless(Double::isNaN),
+            .takeUnless { it.isNaN() || it <= 0.0 },
         aperture = getAttributeDouble(ExifInterface.TAG_F_NUMBER, Double.NaN)
-            .takeUnless(Double::isNaN),
+            .takeUnless { it.isNaN() || it <= 0.0 },
         iso = getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, 0).takeIf { it > 0 }
             ?: getAttributeInt(ExifInterface.TAG_ISO_SPEED_RATINGS, 0).takeIf { it > 0 },
         location = point,

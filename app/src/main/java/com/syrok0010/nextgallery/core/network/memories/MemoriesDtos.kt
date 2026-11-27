@@ -4,6 +4,7 @@ import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class MemoriesDescribeDto(
@@ -100,11 +101,17 @@ data class MemoriesPhotoDto(
 }
 
 @Serializable
+data class MemoriesImageClustersDto(val albums: List<MemoriesAlbumDto> = emptyList())
+
+@Serializable
 data class MemoriesImageInfoDto(
     val filename: String,
     val basename: String,
     val etag: String? = null,
     val size: Long? = null,
+    val address: String? = null,
+    val exif: JsonObject? = null,
+    val clusters: MemoriesImageClustersDto? = null,
 )
 
 @Serializable
