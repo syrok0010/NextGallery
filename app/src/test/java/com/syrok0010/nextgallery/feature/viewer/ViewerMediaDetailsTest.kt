@@ -1,15 +1,14 @@
 package com.syrok0010.nextgallery.feature.viewer
 
-import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
-import com.syrok0010.nextgallery.core.network.memories.MemoriesImageClustersDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesImageInfoDto
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ViewerMediaDetailsTest {
+    private val json = Json { ignoreUnknownKeys = true }
+
     @Test
     fun normalizeLocalDirectory_stripsSlashesAndBlank() {
         assertEquals("DCIM/Camera", normalizeLocalDirectory("DCIM/Camera/"))
@@ -44,32 +43,35 @@ class ViewerMediaDetailsTest {
     }
 
     @Test
-    fun memoriesImageInfo_parsesExifAlbumsAndAddress() {
-        val dto = MemoriesImageInfoDto(
-            filename = "/Photos/20261111_193233.heic",
-            basename = "20261111_193233.heic",
-            size = 4_000_000L,
-            address = "Нижний Новгород, Россия",
-            exif = buildJsonObject {
-                put("Make", "samsung")
-                put("Model", "Galaxy S24 Ultra")
-                put("LensModel", "Wide 23mm")
-                put("FocalLength", "6.3 mm")
-                put("ExposureTime", "1/100")
-                put("FNumber", 1.7)
-                put("ISO", "250")
-                put("GPSLatitude", 56.22937)
-                put("GPSLongitude", "43.41004")
-            },
-            clusters = MemoriesImageClustersDto(
-                albums = listOf(
-                    MemoriesAlbumDto(albumId = 1, name = "ДР Ефим 14 лет"),
-                    MemoriesAlbumDto(albumId = 2, name = "ДР Ефим 14 лет"),
-                ),
-            ),
-        )
+    fun memoriesImageInfo_deserializesTypedExifDtoAlbumsAndAddress() {
+        val raw = """
+            {
+              "filename": "/Photos/20261111_193233.heic",
+              "basename": "20261111_193233.heic",
+              "size": 4000000,
+              "address": "Нижний Новгород, Россия",
+              "exif": {
+                "Make": "samsung",
+                "Model": "Galaxy S24 Ultra",
+                "LensModel": "Wide 23mm",
+                "FocalLength": "6.3 mm",
+                "ExposureTime": "1/100",
+                "FNumber": 1.7,
+                "ISO": "250",
+                "GPSLatitude": 56.22937,
+                "GPSLongitude": "43.41004",
+                "UnknownTag": "ignored"
+              },
+              "clusters": {
+                "albums": [
+                  { "album_id": 1, "name": "ДР Ефим 14 лет" },
+                  { "album_id": 2, "name": "ДР Ефим 14 лет" }
+                ]
+              }
+            }
+        """.trimIndent()
 
-        val details = dto.toViewerDetails()
+        val details = json.decodeFromString<MemoriesImageInfoDto>(raw).toViewerDetails()
 
         assertEquals("samsung Galaxy S24 Ultra", details.cameraModel)
         assertEquals("Wide 23mm", details.lensModel)

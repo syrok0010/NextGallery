@@ -9,16 +9,12 @@ import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
+import com.syrok0010.nextgallery.core.network.memories.MemoriesExifDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesImageInfoDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
 
 data class ViewerGeoPoint(val latitude: Double, val longitude: Double)
 
@@ -47,14 +43,9 @@ class ViewerMediaDetailsRepository(
     private val memories: MemoriesApiClient,
 ) : ViewerDetailsLoader {
     private val cacheMutex = Mutex()
-    private val cache = object : LinkedHashMap<MediaId, ViewerMediaDetails>(
-        CACHE_CAPACITY,
-        0.75f,
-        true,
-    ) {
-        override fun removeEldestEntry(
-            eldest: MutableMap.MutableEntry<MediaId, ViewerMediaDetails>,
-        ): Boolean = size > CACHE_CAPACITY
+    private val cache = object : LinkedHashMap<MediaId, ViewerMediaDetails>(CACHE_CAPACITY, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<MediaId, ViewerMediaDetails>): Boolean =
+            size > CACHE_CAPACITY
     }
 
     override suspend fun load(item: MediaItem): ViewerMediaDetails {
@@ -123,34 +114,20 @@ internal fun MemoriesImageInfoDto.toViewerDetails(): ViewerMediaDetails {
     )
 }
 
-internal fun JsonObject?.toViewerDetails(): ViewerMediaDetails {
+internal fun MemoriesExifDto?.toViewerDetails(): ViewerMediaDetails {
     if (this == null) return ViewerMediaDetails()
-    val make = stringValue("Make")
-    val model = stringValue("Model")
-    val camera = formatCameraName(make, model)
-    val lens = stringValue("LensModel")
-    val focalLength = doubleValue("FocalLength")
-    val exposure = exposureValue("ExposureTime")
-        ?: exposureValue("ShutterSpeed")
-        ?: exposureValue("ShutterSpeedValue")
-    val aperture = doubleValue("FNumber")
-        ?: doubleValue("Aperture")
-        ?: doubleValue("ApertureValue")
-    val iso = intValue("ISO")
-    val latitude = doubleValue("GPSLatitude")
-    val longitude = doubleValue("GPSLongitude")
-    val location = if (latitude != null && longitude != null) {
-        ViewerGeoPoint(latitude, longitude)
+    val location = if (gpsLatitude != null && gpsLongitude != null) {
+        ViewerGeoPoint(gpsLatitude, gpsLongitude)
     } else {
         null
     }
     return ViewerMediaDetails(
-        cameraModel = camera,
-        lensModel = lens,
-        focalLengthMm = focalLength,
-        exposureTimeSeconds = exposure,
-        aperture = aperture,
-        iso = iso,
+        cameraModel = formatCameraName(make, model),
+        lensModel = lensModel?.trim()?.takeIf(String::isNotBlank),
+        focalLengthMm = focalLengthMm?.takeIf { it > 0.0 },
+        exposureTimeSeconds = exposureTimeSeconds ?: shutterSpeedSeconds ?: shutterSpeedValueSeconds,
+        aperture = (fNumber ?: aperture ?: apertureValue)?.takeIf { it > 0.0 },
+        iso = iso?.takeIf { it > 0 },
         location = location,
     )
 }
@@ -199,41 +176,6 @@ internal fun mergeViewerMediaDetails(
         location = local?.location ?: remote?.location,
         locationLabel = local?.locationLabel ?: remote?.locationLabel,
     )
-
-private fun JsonObject.stringValue(key: String): String? =
-    (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotBlank)
-
-private fun JsonObject.doubleValue(key: String): Double? {
-    val primitive = this[key] as? JsonPrimitive ?: return null
-    primitive.doubleOrNull?.takeIf { it.isFinite() }?.let { return it }
-    val raw = primitive.contentOrNull?.trim() ?: return null
-    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.takeIf { it.isFinite() }
-}
-
-private fun JsonObject.intValue(key: String): Int? {
-    val primitive = this[key] as? JsonPrimitive ?: return null
-    primitive.intOrNull?.takeIf { it > 0 }?.let { return it }
-    val raw = primitive.contentOrNull?.trim() ?: return null
-    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.toInt()?.takeIf { it > 0 }
-}
-
-private fun JsonObject.exposureValue(key: String): Double? {
-    val primitive = this[key] as? JsonPrimitive ?: return null
-    primitive.doubleOrNull?.takeIf { it.isFinite() && it > 0.0 }?.let { return it }
-    val raw = primitive.contentOrNull?.trim() ?: return null
-    val fraction = FRACTION_PATTERN.find(raw)
-    if (fraction != null) {
-        val numerator = fraction.groupValues[1].toDoubleOrNull()
-        val denominator = fraction.groupValues[2].toDoubleOrNull()
-        if (numerator != null && denominator != null && denominator > 0.0) {
-            return (numerator / denominator).takeIf { it.isFinite() && it > 0.0 }
-        }
-    }
-    return NUMBER_PATTERN.find(raw)?.value?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
-}
-
-private val NUMBER_PATTERN = Regex("""-?\d+(?:\.\d+)?""")
-private val FRACTION_PATTERN = Regex("""(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)""")
 
 @Suppress("DEPRECATION")
 private fun ExifInterface?.toViewerDetails(): ViewerMediaDetails {
