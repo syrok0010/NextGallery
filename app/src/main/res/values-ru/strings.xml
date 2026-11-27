@@ -50,9 +50,7 @@
     <string name="viewer_details_date_pattern">d MMMM yyyy</string>
     <string name="viewer_details_time_pattern">HH:mm</string>
     <string name="viewer_details_weekday_pattern">EEEE</string>
-    <string name="viewer_details_loading">Загрузка сведений…</string>
     <string name="viewer_details_capture_settings">Параметры съёмки</string>
-    <string name="viewer_details_path">Путь</string>
     <string name="viewer_details_albums">Альбомы</string>
     <string name="viewer_details_location">Место съёмки</string>
     <string name="error_save_credentials">Не удалось сохранить подключение. Попробуйте войти заново.</string>
