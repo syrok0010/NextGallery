@@ -54,12 +54,12 @@ class ViewerMediaDetailsTest {
                 "Make": "samsung",
                 "Model": "Galaxy S24 Ultra",
                 "LensModel": "Wide 23mm",
-                "FocalLength": "6.3 mm",
-                "ExposureTime": "1/100",
+                "FocalLength": 6.3,
+                "ExposureTime": 0.01,
                 "FNumber": 1.7,
-                "ISO": "250",
+                "ISO": 250,
                 "GPSLatitude": 56.22937,
-                "GPSLongitude": "43.41004",
+                "GPSLongitude": 43.41004,
                 "UnknownTag": "ignored"
               },
               "clusters": {

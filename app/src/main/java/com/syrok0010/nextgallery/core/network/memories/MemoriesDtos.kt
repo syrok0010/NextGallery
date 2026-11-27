@@ -107,36 +107,16 @@ data class MemoriesExifDto(
     @SerialName("Make") val make: String? = null,
     @SerialName("Model") val model: String? = null,
     @SerialName("LensModel") val lensModel: String? = null,
-    @SerialName("FocalLength")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val focalLengthMm: Double? = null,
-    @SerialName("ExposureTime")
-    @Serializable(with = ExifExposureSerializer::class)
-    val exposureTimeSeconds: Double? = null,
-    @SerialName("ShutterSpeed")
-    @Serializable(with = ExifExposureSerializer::class)
-    val shutterSpeedSeconds: Double? = null,
-    @SerialName("ShutterSpeedValue")
-    @Serializable(with = ExifExposureSerializer::class)
-    val shutterSpeedValueSeconds: Double? = null,
-    @SerialName("FNumber")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val fNumber: Double? = null,
-    @SerialName("Aperture")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val aperture: Double? = null,
-    @SerialName("ApertureValue")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val apertureValue: Double? = null,
-    @SerialName("ISO")
-    @Serializable(with = ExifIntSerializer::class)
-    val iso: Int? = null,
-    @SerialName("GPSLatitude")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val gpsLatitude: Double? = null,
-    @SerialName("GPSLongitude")
-    @Serializable(with = ExifDoubleSerializer::class)
-    val gpsLongitude: Double? = null,
+    @SerialName("FocalLength") val focalLengthMm: Double? = null,
+    @SerialName("ExposureTime") val exposureTimeSeconds: Double? = null,
+    @SerialName("ShutterSpeed") val shutterSpeedSeconds: Double? = null,
+    @SerialName("ShutterSpeedValue") val shutterSpeedValueSeconds: Double? = null,
+    @SerialName("FNumber") val fNumber: Double? = null,
+    @SerialName("Aperture") val aperture: Double? = null,
+    @SerialName("ApertureValue") val apertureValue: Double? = null,
+    @SerialName("ISO") val iso: Int? = null,
+    @SerialName("GPSLatitude") val gpsLatitude: Double? = null,
+    @SerialName("GPSLongitude") val gpsLongitude: Double? = null,
 )
 
 @Serializable
