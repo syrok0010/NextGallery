@@ -101,8 +101,6 @@ internal fun authenticatedModule() =
                 ViewerMediaDetailsRepository(
                     get<Context>().contentResolver,
                     get<MemoriesApiClient>(),
-                    get<FilesDavClient>(),
-                    get<AccountCredentials>(),
                 )
             }
             scoped { create(::capabilitiesClient) }

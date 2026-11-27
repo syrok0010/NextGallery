@@ -46,7 +46,8 @@ class MemoriesApiClient(
 
     suspend fun albums(): List<MemoriesAlbumDto> = api().albums()
 
-    suspend fun imageInfo(fileId: Long): MemoriesImageInfoDto = api().imageInfo(fileId)
+    suspend fun imageInfo(fileId: Long, clusters: String? = null): MemoriesImageInfoDto =
+        api().imageInfo(fileId, clusters)
 
     /**
      * Streams previews of [fileIds] at [width]×[height], aspect ratio kept, in server order as
@@ -143,5 +144,8 @@ private interface MemoriesApi {
     ): ResponseBody
 
     @GET("apps/memories/api/image/info/{id}")
-    suspend fun imageInfo(@Path("id") fileId: Long): MemoriesImageInfoDto
+    suspend fun imageInfo(
+        @Path("id") fileId: Long,
+        @Query("clusters") clusters: String? = null,
+    ): MemoriesImageInfoDto
 }
