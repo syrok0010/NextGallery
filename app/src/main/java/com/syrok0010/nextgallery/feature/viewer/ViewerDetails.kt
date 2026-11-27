@@ -35,11 +35,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -170,14 +169,17 @@ internal fun ViewerDetailsSheet(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var details by remember(item.mediaId) { mutableStateOf<ViewerMediaDetails?>(null) }
-    var detailsLoading by remember(item.mediaId) { mutableStateOf(false) }
     // Preload as soon as the item is displayed so opening the sheet rarely waits for network/EXIF.
-    LaunchedEffect(item.mediaId) {
-        detailsLoading = true
-        details = runCatching { detailsLoader.load(item) }.getOrNull()
-        detailsLoading = false
+    val loadState by produceState<ViewerDetailsLoadState>(
+        initialValue = ViewerDetailsLoadState.Loading,
+        key1 = item.mediaId,
+        key2 = detailsLoader,
+    ) {
+        value = ViewerDetailsLoadState.Loaded(
+            runCatching { detailsLoader.load(item) }.getOrNull(),
+        )
     }
+    val details = (loadState as? ViewerDetailsLoadState.Loaded)?.details
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -220,7 +222,7 @@ internal fun ViewerDetailsSheet(
                 color = PrimaryText,
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (detailsLoading && state.engaged) {
+            if (loadState is ViewerDetailsLoadState.Loading && state.engaged) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     color = SecondaryText,
@@ -385,6 +387,12 @@ private fun DetailsRow(
             }
         }
     }
+}
+
+private sealed interface ViewerDetailsLoadState {
+    data object Loading : ViewerDetailsLoadState
+
+    data class Loaded(val details: ViewerMediaDetails?) : ViewerDetailsLoadState
 }
 
 internal const val ViewerDetailsTestTag = "viewer_details"
