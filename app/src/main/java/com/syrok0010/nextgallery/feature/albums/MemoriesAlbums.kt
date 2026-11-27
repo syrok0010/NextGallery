@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.network.NextcloudTransport
 import com.syrok0010.nextgallery.core.network.dav.AddToAlbumResult
 import com.syrok0010.nextgallery.core.network.dav.AlbumPath
 import com.syrok0010.nextgallery.core.network.dav.CreateAlbumResult
@@ -9,6 +10,8 @@ import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.dav.DavHttpException
 import com.syrok0010.nextgallery.core.network.dav.FilesDavClient
 import com.syrok0010.nextgallery.core.network.dav.PhotosAlbumsDavClient
+import com.syrok0010.nextgallery.core.network.dav.awaitUse
+import com.syrok0010.nextgallery.core.network.dav.davRoot
 import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
@@ -16,6 +19,8 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.ingestRemotePhotos
 import com.syrok0010.nextgallery.feature.upload.temporary
 import java.io.IOException
+import java.io.StringReader
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -26,6 +31,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.w3c.dom.Element
+import org.xml.sax.InputSource
 
 internal data class AlbumAddResult(val added: Int, val alreadyPresent: Int, val failed: Int)
 
@@ -43,6 +54,12 @@ internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
 internal class AlbumAlreadyExistsException(name: String) : IOException("Album $name already exists")
 
+internal data class AlbumRemovalBatch(val removedIds: Set<Long>, val failed: Int) {
+    val summary get() = AlbumRemovalResult(removedIds.size, failed)
+}
+
+internal data class AlbumRemovalResult(val removed: Int, val failed: Int)
+
 /** Port for Nextcloud Photos/Memories albums: reading catalog/contents and writing membership. */
 internal interface RemoteAlbums {
     suspend fun loadCatalog(): RemoteAlbumsCatalog
@@ -51,16 +68,20 @@ internal interface RemoteAlbums {
     suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult
     suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome
     suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean
+    suspend fun remove(location: AlbumLocation.Remote, fileIds: Set<Long>): AlbumRemovalBatch
 }
 
 /** Nextcloud Memories + Photos DAV adapter for [RemoteAlbums]. */
 internal class MemoriesAlbums(
     private val credentials: AccountCredentials,
+    private val transport: NextcloudTransport,
     private val memories: MemoriesApiClient,
     private val dav: PhotosAlbumsDavClient,
     private val files: FilesDavClient,
     private val identities: MediaIdentityRegistry,
 ) : RemoteAlbums {
+    private val removalClient =
+        transport.baseClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
     override suspend fun loadCatalog(): RemoteAlbumsCatalog {
         val config = memories.config()
         if (!config.albumsEnabled) return RemoteAlbumsCatalog(emptyList(), supported = false)
@@ -157,6 +178,48 @@ internal class MemoriesAlbums(
     override suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean =
         fileId != null && dav.containsFile(AlbumPath(album.owner, album.name), fileId)
 
+    /** Removing membership never addresses the original in DAV files or the album collection itself. */
+    override suspend fun remove(
+        location: AlbumLocation.Remote,
+        fileIds: Set<Long>,
+    ): AlbumRemovalBatch = withContext(Dispatchers.IO) {
+        val address = requireNotNull(AlbumAddress.of(location))
+        require(address.owner == credentials.userId) { "Only owned albums support removal" }
+        val root = albumUrl(credentials.serverUrl, address)
+        val request = transport.authenticatedRequestBuilder(credentials, root.toString(), "application/xml")
+            .method("PROPFIND", MEMBERSHIP_PROPERTIES.toRequestBody("application/xml".toMediaType()))
+            .header("Depth", "1")
+            .build()
+        val members = removalClient.newCall(request).awaitUse {
+            if (it.code != 207) throw IOException("HTTP ${it.code} listing album membership")
+            albumMemberUrls(root, it.body.string())
+        }
+        val permits = Semaphore(PARALLEL_COPIES)
+        val outcomes = coroutineScope {
+            fileIds.map { id ->
+                async {
+                    permits.withPermit {
+                        val url = members[id] ?: return@withPermit id to true
+                        id to try {
+                            val delete = transport.authenticatedRequestBuilder(credentials, url.toString(), "*/*")
+                                .delete()
+                                .build()
+                            removalClient.newCall(delete).awaitUse { it.isSuccessful }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        AlbumRemovalBatch(
+            outcomes.filter { it.second }.mapTo(mutableSetOf()) { it.first },
+            outcomes.count { !it.second },
+        )
+    }
+
     private suspend fun albumExists(album: AlbumAddress): Boolean =
         try {
             dav.albumExists(AlbumPath(album.owner, album.name))
@@ -183,6 +246,56 @@ internal class MemoriesAlbums(
 
     private companion object {
         const val PARALLEL_COPIES = 4
+        const val MEMBERSHIP_PROPERTIES =
+            """<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>"""
+    }
+}
+
+internal fun albumUrl(serverUrl: String, address: AlbumAddress): HttpUrl =
+    davRoot(serverUrl)
+        .addPathSegment("photos")
+        .addPathSegment(address.owner)
+        .addPathSegment("albums")
+        .addPathSegment(address.name)
+        .build()
+
+/** Accept only exact immediate children of this album on this server, even for hostile DAV XML. */
+internal fun albumMemberUrls(root: HttpUrl, xml: String): Map<Long, HttpUrl> {
+    require(!xml.contains("<!DOCTYPE", ignoreCase = true) && !xml.contains("<!ENTITY", ignoreCase = true))
+    val builder = DocumentBuilderFactory.newInstance().apply {
+        isNamespaceAware = true
+        isExpandEntityReferences = false
+    }.newDocumentBuilder().apply {
+        setEntityResolver { _, _ -> throw IOException("External XML entities are forbidden") }
+    }
+    val doc = builder.parse(InputSource(StringReader(xml)))
+    require(doc.documentElement.localName == "multistatus" && doc.documentElement.namespaceURI == "DAV:")
+    val responses = doc.getElementsByTagNameNS("DAV:", "response")
+    val parent = root.encodedPath.trimEnd('/') + "/"
+    return buildMap {
+        for (index in 0 until responses.length) {
+            val response = responses.item(index) as Element
+            val href = response.getElementsByTagNameNS("DAV:", "href").item(0)?.textContent
+                ?: throw IOException("Missing membership href")
+            val url = root.resolve(href) ?: throw IOException("Invalid membership href")
+            require(url.scheme == root.scheme && url.host == root.host && url.port == root.port)
+            if (url.encodedPath.trimEnd('/') == root.encodedPath.trimEnd('/')) continue
+            require(url.encodedPath.startsWith(parent) && '/' !in url.encodedPath.removePrefix(parent))
+            require(url.query == null && url.fragment == null)
+            val propstats = response.getElementsByTagNameNS("DAV:", "propstat")
+            var fileId: Long? = null
+            for (propIndex in 0 until propstats.length) {
+                val propstat = propstats.item(propIndex) as Element
+                val status = propstat.getElementsByTagNameNS("DAV:", "status").item(0)?.textContent
+                if (status?.split(' ')?.getOrNull(1) == "200") {
+                    fileId = propstat.getElementsByTagNameNS("http://owncloud.org/ns", "fileid")
+                        .item(0)?.textContent?.toLongOrNull() ?: fileId
+                }
+            }
+            val id = requireNotNull(fileId) { "Missing membership file id" }
+            require(id > 0 && url.pathSegments.last().startsWith("$id-"))
+            require(put(id, url) == null) { "Duplicate membership file id" }
+        }
     }
 }
 

@@ -30,11 +30,15 @@ internal fun AddToAlbumSheet(
     addition: AlbumAdditionPreparation,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
+    excludedLocation: AlbumLocation? = null,
     albums: Albums = koinInject(),
 ) {
     val busy by albums.adding.collectAsStateWithLifecycle()
     val catalog by albums.state.collectAsStateWithLifecycle()
     val writable = remember(catalog.remote.items) { albums.writableAlbums(catalog) }
+    val choices = remember(writable, excludedLocation) {
+        writable.filterNot { it.location == excludedLocation }
+    }
     var creating by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -90,7 +94,7 @@ internal fun AddToAlbumSheet(
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
-            if (!catalog.remote.loading && writable.isEmpty()) {
+            if (!catalog.remote.loading && choices.isEmpty()) {
                 item {
                     Text(
                         stringResource(R.string.album_add_list_empty),
@@ -99,7 +103,7 @@ internal fun AddToAlbumSheet(
                     )
                 }
             }
-            items(writable, key = { it.id }) { album ->
+            items(choices, key = { it.id }) { album ->
                 val location = album.location as AlbumLocation.Remote
                 AlbumChoiceRow(
                     title = album.name,

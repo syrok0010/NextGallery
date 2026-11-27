@@ -1,12 +1,16 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import androidx.annotation.MainThread
+import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.remoteCopy
+import com.syrok0010.nextgallery.core.operation.OperationKind
+import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
@@ -51,14 +55,21 @@ internal class Albums(
     private val entries = mutableMapOf<AlbumLocation.Remote, Entry>()
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
+    private val removalState = MutableStateFlow<RemovalState>(RemovalState.Idle)
+    private var removalJob: Job? = null
 
     val catalog: StateFlow<AlbumsUiState> = mutableCatalog.asStateFlow()
     val state: StateFlow<AlbumsUiState> get() = catalog
     val adding: StateFlow<Boolean> = additionState
         .map { it is AlbumAdditionState.Running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations: StateFlow<List<OperationStatusSnapshot>> = additionState
-        .map(::albumOperationSnapshots)
+    val removing: StateFlow<Boolean> = removalState
+        .map { it is RemovalState.Running }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    override val operations: StateFlow<List<OperationStatusSnapshot>> = combine(
+        additionState.map(::albumOperationSnapshots),
+        removalState.map(::removalOperationSnapshots),
+    ) { add, remove -> add + remove }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private class Entry(initial: AlbumContentsState) {
@@ -163,6 +174,27 @@ internal class Albums(
         return true
     }
 
+    @MainThread
+    fun removeMembers(location: AlbumLocation.Remote, name: String, ids: Set<Long>): Boolean {
+        if (ids.isEmpty() || removalJob?.isActive == true || !canModify(location)) return false
+        removalState.value = RemovalState.Running(name, ids)
+        removalJob = scope.launch {
+            mutations.withLock {
+                val result = try {
+                    val batch = remote.remove(location, ids)
+                    applyRemoved(location, batch.removedIds)
+                    batch.summary
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    AlbumRemovalResult(0, ids.size)
+                }
+                removalState.value = RemovalState.Done(name, result)
+            }
+        }
+        return true
+    }
+
     /** Worker entry point. Replay checks exact membership before COPY and never repeats the upload. */
     suspend fun addUploaded(target: UploadAlbum, file: UploadedFile, recovered: Boolean): Boolean =
         withContext(scope.coroutineContext.minusKey(Job)) {
@@ -194,12 +226,18 @@ internal class Albums(
         if ((additionState.value as? AlbumAdditionState.Done)?.result?.failed == 0) {
             additionState.value = AlbumAdditionState.Idle
         }
+        if ((removalState.value as? RemovalState.Done)?.result?.failed == 0) {
+            removalState.value = RemovalState.Idle
+        }
     }
 
     @MainThread
     override fun consumeAll() {
         if (additionState.value !is AlbumAdditionState.Running) {
             additionState.value = AlbumAdditionState.Idle
+        }
+        if (removalState.value !is RemovalState.Running) {
+            removalState.value = RemovalState.Idle
         }
     }
 
@@ -269,6 +307,31 @@ internal class Albums(
             entry.stale = true
             refreshCatalog()
             if (entry.state.subscriptionCount.value > 0) load(location, entry)
+        }
+    }
+
+    private fun applyRemoved(location: AlbumLocation.Remote, ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        val entry = entries[location]
+        if (entry == null) {
+            refreshCatalog()
+            return
+        }
+        entry.job?.cancel()
+        entry.generation++
+        val remaining = entry.state.value.items.filterNot { it.remoteFileId in ids }
+        val removedCount = entry.state.value.items.size - remaining.size
+        entry.state.value = entry.state.value.copy(
+            items = remaining,
+            loaded = remaining.size,
+            total = if (entry.loaded) remaining.size else (entry.state.value.total - removedCount).coerceAtLeast(remaining.size),
+            loading = false,
+        )
+        if (entry.loaded) {
+            updateCatalogSummary(location, remaining)
+        } else {
+            entry.stale = true
+            refreshCatalog()
         }
     }
 
@@ -372,6 +435,39 @@ private fun AlbumSummary.withContents(items: List<MediaItem>): AlbumSummary {
         item.remoteFileId?.let { AlbumCover.Remote(it, item.etag) }
     }
     return copy(count = items.size, cover = cover)
+}
+
+private sealed interface RemovalState {
+    data object Idle : RemovalState
+    data class Running(val name: String, val fileIds: Set<Long>) : RemovalState
+    data class Done(val name: String, val result: AlbumRemovalResult) : RemovalState
+}
+
+private fun removalOperationSnapshots(state: RemovalState): List<OperationStatusSnapshot> = when (state) {
+    RemovalState.Idle -> emptyList()
+    is RemovalState.Running -> listOf(
+        OperationStatusSnapshot(
+            kind = OperationKind.RemoveFromAlbum,
+            title = uiText(R.string.album_remove_running, state.name),
+            running = true,
+            media = state.fileIds.map {
+                OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
+            },
+        ),
+    )
+
+    is RemovalState.Done -> listOf(
+        OperationStatusSnapshot(
+            kind = OperationKind.RemoveFromAlbum,
+            title = uiText(R.string.album_remove_done, state.result.removed),
+            details = if (state.result.failed == 0) {
+                emptyList()
+            } else {
+                listOf(uiText(R.string.album_remove_failed, state.result.failed))
+            },
+            failed = state.result.failed > 0,
+        ),
+    )
 }
 
 private class UploadEnqueueRejected : Exception()

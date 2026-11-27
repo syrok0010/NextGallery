@@ -181,6 +181,7 @@ class MemoriesAlbumWriterTest {
 internal val NextcloudFixture.writer: MemoriesAlbums
     get() = MemoriesAlbums(
         credentials,
+        transport,
         MemoriesApiClient(transport) { credentials },
         PhotosAlbumsDavClient(transport) { credentials },
         dav,

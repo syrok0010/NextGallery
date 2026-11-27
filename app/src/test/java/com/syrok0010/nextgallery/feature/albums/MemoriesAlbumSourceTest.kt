@@ -70,6 +70,7 @@ class MemoriesAlbumSourceTest {
         suspend fun load() =
             MemoriesAlbums(
                 credentials,
+                server.transport,
                 MemoriesApiClient(server.transport) { credentials },
                 PhotosAlbumsDavClient(server.transport) { credentials },
                 FilesDavClient(server.transport) { credentials },

@@ -144,6 +144,7 @@ internal fun DeleteSelectionDialog(
                 }
                 if (plan.touchesCloud(scope)) {
                     CloudTrashNote(cloudTrash)
+                    Note(stringResource(R.string.delete_album_note)) {}
                 }
             }
         },

@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
@@ -35,6 +36,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -343,6 +346,105 @@ class AlbumsTest {
         assertFalse(restored.failed)
     }
 
+    @Test fun `removing from an unopened album refreshes catalog without reading contents`() = scenario { harness, scope ->
+        val reads = AtomicInteger()
+        val refreshes = AtomicInteger()
+        val albums = harness.albums(
+            scope,
+            remoteContents = {
+                reads.incrementAndGet()
+                flowOf(AlbumContentsBatch(emptyList(), 0))
+            },
+            catalog = {
+                refreshes.incrementAndGet()
+                RemoteAlbumsCatalog(emptyList())
+            },
+        )
+        val initial = refreshes.get()
+        assertTrue(albums.removeMembers(album, "album", setOf(1L)))
+        albums.operations.first { it.singleOrNull()?.running == false }
+        while (refreshes.get() == initial) delay(10)
+        assertEquals(0, reads.get())
+    }
+
+    @Test fun `partial removal updates open album and catalog and cancels an older in-flight read`() = scenario { harness, scope ->
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val reads = AtomicInteger()
+        val albums = harness.albums(
+            scope,
+            catalog = { RemoteAlbumsCatalog(listOf(summary)) },
+            remoteContents = {
+                flow {
+                    if (reads.incrementAndGet() == 2) {
+                        started.complete(Unit)
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            cancelled.complete(Unit)
+                        }
+                    }
+                    emit(AlbumContentsBatch(listOf(first, second), 2))
+                }
+            },
+            remove = { _, fileIds ->
+                AlbumRemovalBatch(removedIds = fileIds - 2L, failed = if (2L in fileIds) 1 else 0)
+            },
+        )
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading && it.loaded == 2 }
+        albums.refresh(album)
+        started.await()
+        assertTrue(albums.removeMembers(album, "album", setOf(1L, 2L)))
+        cancelled.await()
+        val after = contents.first { !it.loading && it.items.map { item -> item.mediaId } == listOf(second.mediaId) }
+        assertEquals(1, after.total)
+        val projected = albums.catalog.first { it.remote.items.singleOrNull()?.count == 1 }.remote.items.single()
+        assertEquals(AlbumCover.Remote(2L, null), projected.cover)
+    }
+
+    @Test fun `consumeSucceeded clears succeeded addition while keeping failed removal`() = scenario { harness, scope ->
+        val albums = harness.albums(
+            scope,
+            remove = { _, fileIds -> AlbumRemovalBatch(removedIds = emptySet(), failed = fileIds.size) },
+        )
+        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+        assertTrue(albums.removeMembers(album, "album", setOf(2L)))
+        albums.operations.first { ops -> ops.size == 2 && ops.all { !it.running } }
+        albums.consumeSucceeded()
+        val remaining = albums.operations.first { it.size == 1 }.single()
+        assertTrue(remaining.failed)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `viewModel tracks departed items and allows actions on folders and owned albums only`() = scenario { harness, scope ->
+        Dispatchers.setMain(Dispatchers.Unconfined)
+        try {
+            val albums = harness.albums(
+                scope,
+                remoteContents = { flowOf(AlbumContentsBatch(listOf(first, second), 2)) },
+            )
+            val ownedVm = AlbumContentsViewModel(album, albums)
+            val folderVm = AlbumContentsViewModel(AlbumLocation.Folder("external_primary", "Pictures/"), albums)
+            val foreignVm = AlbumContentsViewModel(AlbumLocation.Remote("bob/shared"), albums)
+            assertTrue(ownedVm.canModify)
+            assertTrue(ownedVm.supportsActions)
+            assertFalse(folderVm.canModify)
+            assertTrue(folderVm.supportsActions)
+            assertFalse(foreignVm.canModify)
+            assertFalse(foreignVm.supportsActions)
+            ownedVm.state.first { !it.loading && it.items.size == 2 }
+            assertTrue(ownedVm.removeMembers("album", setOf(1L)))
+            val departed = ownedVm.departedIds.first { first.mediaId in it }
+            assertEquals(setOf(first.mediaId), departed)
+            assertTrue(ownedVm.addToOtherAlbum(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+            val restored = ownedVm.departedIds.first { first.mediaId !in it }
+            assertTrue(restored.isEmpty())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     private class Harness {
         val credentials = AccountCredentials("https://cloud.example", "anna", "secret", "anna")
 
@@ -359,6 +461,9 @@ class AlbumsTest {
                 EnqueueResult.Accepted(ids.size)
             },
             refreshLocal: () -> Unit = {},
+            remove: suspend (AlbumLocation.Remote, Set<Long>) -> AlbumRemovalBatch = { _, ids ->
+                AlbumRemovalBatch(ids, 0)
+            },
         ): Albums {
             val remote = object : RemoteAlbums {
                 override suspend fun loadCatalog() = catalog()
@@ -376,6 +481,9 @@ class AlbumsTest {
 
                 override suspend fun containsFile(album: AlbumAddress, fileId: Long?) =
                     fileId != null
+
+                override suspend fun remove(location: AlbumLocation.Remote, fileIds: Set<Long>) =
+                    remove(location, fileIds)
             }
             return Albums(credentials, remote, library, scope, enqueue, refreshLocal)
         }
