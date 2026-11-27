@@ -4,7 +4,6 @@ import com.syrok0010.nextgallery.core.media.MemoriesMediaIdentity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class MemoriesDescribeDto(
@@ -104,13 +103,50 @@ data class MemoriesPhotoDto(
 data class MemoriesImageClustersDto(val albums: List<MemoriesAlbumDto> = emptyList())
 
 @Serializable
+data class MemoriesExifDto(
+    @SerialName("Make") val make: String? = null,
+    @SerialName("Model") val model: String? = null,
+    @SerialName("LensModel") val lensModel: String? = null,
+    @SerialName("FocalLength")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val focalLengthMm: Double? = null,
+    @SerialName("ExposureTime")
+    @Serializable(with = ExifExposureSerializer::class)
+    val exposureTimeSeconds: Double? = null,
+    @SerialName("ShutterSpeed")
+    @Serializable(with = ExifExposureSerializer::class)
+    val shutterSpeedSeconds: Double? = null,
+    @SerialName("ShutterSpeedValue")
+    @Serializable(with = ExifExposureSerializer::class)
+    val shutterSpeedValueSeconds: Double? = null,
+    @SerialName("FNumber")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val fNumber: Double? = null,
+    @SerialName("Aperture")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val aperture: Double? = null,
+    @SerialName("ApertureValue")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val apertureValue: Double? = null,
+    @SerialName("ISO")
+    @Serializable(with = ExifIntSerializer::class)
+    val iso: Int? = null,
+    @SerialName("GPSLatitude")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val gpsLatitude: Double? = null,
+    @SerialName("GPSLongitude")
+    @Serializable(with = ExifDoubleSerializer::class)
+    val gpsLongitude: Double? = null,
+)
+
+@Serializable
 data class MemoriesImageInfoDto(
     val filename: String,
     val basename: String,
     val etag: String? = null,
     val size: Long? = null,
     val address: String? = null,
-    val exif: JsonObject? = null,
+    val exif: MemoriesExifDto? = null,
     val clusters: MemoriesImageClustersDto? = null,
 )
 
