@@ -1,34 +1,36 @@
 package com.syrok0010.nextgallery.feature.viewer
 
+import android.content.Intent
+import android.text.format.Formatter
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -53,17 +54,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import android.content.Intent
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.hasLocalCopy
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
+import com.syrok0010.nextgallery.core.media.localCopy
+import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import java.time.Instant
 import java.time.ZoneId
-import com.syrok0010.nextgallery.core.ui.rememberDateFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -82,7 +86,15 @@ internal class ViewerDetailsState(private val scope: CoroutineScope) {
         private set
 
     val progress: Float
-        get() = if (sheetHeightPx > 0f && !anchors.offset.isNaN()) 1f - anchors.offset / sheetHeightPx else 0f
+        get() {
+            val closed = anchors.anchors.positionOf(false)
+            val offset = anchors.offset
+            return if (closed > 0f && !closed.isNaN() && !offset.isNaN()) {
+                (1f - offset / closed).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+        }
 
     /** Back and taps on the photo close a sheet that is open or on its way there. */
     val isOpen: Boolean get() = anchors.targetValue
@@ -91,7 +103,13 @@ internal class ViewerDetailsState(private val scope: CoroutineScope) {
 
     fun onSheetHeight(heightPx: Float) {
         sheetHeightPx = heightPx
-        anchors.updateAnchors(DraggableAnchors { false at heightPx; true at 0f })
+        anchors.updateAnchors(
+            newAnchors = DraggableAnchors {
+                false at heightPx
+                true at 0f
+            },
+            newTarget = anchors.targetValue,
+        )
     }
 
     fun dragBy(deltaPx: Float) {
@@ -111,6 +129,7 @@ internal class ViewerDetailsState(private val scope: CoroutineScope) {
 }
 
 private val SheetSpring = spring<Float>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
+private val SheetSizeSpring = spring<IntSize>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
 
 @Composable
 internal fun rememberViewerDetailsState(): ViewerDetailsState {
@@ -150,10 +169,11 @@ internal fun ViewerDetailsSheet(
     detailsLoader: ViewerDetailsLoader = koinInject(),
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var details by remember(item.mediaId) { mutableStateOf<ViewerMediaDetails?>(null) }
     var detailsLoading by remember(item.mediaId) { mutableStateOf(false) }
-    LaunchedEffect(item.mediaId, state.engaged) {
-        if (!state.engaged) return@LaunchedEffect
+    // Preload as soon as the item is displayed so opening the sheet rarely waits for network/EXIF.
+    LaunchedEffect(item.mediaId) {
         detailsLoading = true
         details = runCatching { detailsLoader.load(item) }.getOrNull()
         detailsLoading = false
@@ -172,8 +192,8 @@ internal fun ViewerDetailsSheet(
                 enabled = state.engaged,
                 flingBehavior = AnchoredDraggableDefaults.flingBehavior(state.anchors, animationSpec = SheetSpring),
             ).windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(bottom = 16.dp)
-            .verticalScroll(rememberScrollState())
+            .padding(bottom = 12.dp)
+            .then(if (state.engaged) Modifier.animateContentSize(animationSpec = SheetSizeSpring) else Modifier)
             .testTag(ViewerDetailsTestTag)
             // A closed sheet waits off screen to be measured; screen readers must not reach it.
             .then(if (state.engaged) Modifier else Modifier.clearAndSetSemantics {}),
@@ -190,13 +210,25 @@ internal fun ViewerDetailsSheet(
                     ).background(HandleColor, RoundedCornerShape(2.dp)),
             )
         }
-        Text(
-            text = stringResource(R.string.viewer_details),
-            color = PrimaryText,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        )
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.viewer_details),
+                color = PrimaryText,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (detailsLoading && state.engaged) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = SecondaryText,
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
+        Column(Modifier.padding(vertical = 4.dp)) {
             // Memories supplies the photo's calendar day separately from its capture instant.
             // If the device uses a different timezone, omit a clock that contradicts that day.
             val time = item.takenAtEpochSeconds
@@ -211,11 +243,13 @@ internal fun ViewerDetailsSheet(
                 title = listOfNotNull(item.day.format(date), time?.format(clock)).joinToString(", "),
                 subtitle = item.day.format(weekday),
             )
+            val fileSize = details?.fileSizeBytes ?: item.localCopy?.sizeBytes
             DetailsRow(
                 icon = painterResource(R.drawable.ic_photos),
                 title = item.displayName,
                 subtitle = listOfNotNull(
                     resolution(item),
+                    fileSize?.let { Formatter.formatShortFileSize(context, it) },
                     item.videoDurationSeconds?.let { "%d:%02d".format(it / 60, it % 60) },
                 ).joinToString(" · ").ifEmpty { null },
             )
@@ -223,36 +257,33 @@ internal fun ViewerDetailsSheet(
                 DetailsRow(
                     icon = painterResource(R.drawable.ic_phone),
                     title = stringResource(R.string.viewer_details_on_phone),
-                    subtitle = if (item.hasRemoteCopy) {
-                        null
-                    } else {
-                        stringResource(
-                            R.string.viewer_details_not_in_cloud,
-                        )
-                    },
+                    subtitle = listOfNotNull(
+                        details?.localPath,
+                        if (item.hasRemoteCopy) null else stringResource(R.string.viewer_details_not_in_cloud),
+                    ).joinToString(" · ").ifEmpty { null },
                 )
             }
             if (item.hasRemoteCopy) {
                 DetailsRow(
                     icon = painterResource(R.drawable.ic_cloud),
                     title = stringResource(R.string.viewer_details_in_cloud),
-                    subtitle = if (item.hasLocalCopy) {
-                        null
-                    } else {
-                        stringResource(
-                            R.string.viewer_details_cloud_only,
-                        )
-                    },
+                    subtitle = listOfNotNull(
+                        details?.remotePath,
+                        if (item.hasLocalCopy) null else stringResource(R.string.viewer_details_cloud_only),
+                    ).joinToString(" · ").ifEmpty { null },
                 )
             }
-            if (detailsLoading) {
-                DetailsRow(
-                    icon = rememberVectorPainter(Icons.Default.DateRange),
-                    title = stringResource(R.string.viewer_details_loading),
-                    subtitle = null,
-                )
+            if (state.engaged) {
+                AnimatedVisibility(
+                    visible = details != null,
+                    enter = fadeIn(animationSpec = SheetSpring) +
+                        expandVertically(animationSpec = SheetSizeSpring),
+                ) {
+                    details?.let { RichDetails(it) }
+                }
+            } else {
+                details?.let { RichDetails(it) }
             }
-            details?.let { RichDetails(it) }
         }
     }
 }
@@ -260,98 +291,47 @@ internal fun ViewerDetailsSheet(
 @Composable
 private fun RichDetails(details: ViewerMediaDetails) {
     val context = LocalContext.current
-    details.cameraModel?.let {
-        DetailsRow(
-            icon = rememberVectorPainter(Icons.Default.DateRange),
-            title = it,
-            subtitle = details.lensModel,
-        )
-    }
-    val exposure = listOfNotNull(
-        details.exposureTimeSeconds?.let(::formatExposure),
-        details.aperture?.let { "f/${formatDecimal(it)}" },
-        details.iso?.let { "ISO $it" },
-    ).filter(String::isNotBlank).joinToString(" · ").ifBlank { null }
-    exposure?.let {
-        DetailsRow(
-            icon = rememberVectorPainter(Icons.Default.DateRange),
-            title = stringResource(R.string.viewer_details_capture_settings),
-            subtitle = it,
-        )
-    }
-    details.fileSizeBytes?.let {
-        DetailsRow(
-            icon = painterResource(R.drawable.ic_albums),
-            title = formatFileSize(it),
-            subtitle = details.path,
-        )
-    } ?: details.path?.let {
-        DetailsRow(
-            icon = painterResource(R.drawable.ic_albums),
-            title = stringResource(R.string.viewer_details_path),
-            subtitle = it,
-        )
-    }
-    if (details.albums.isNotEmpty()) {
-        DetailsRow(
-            icon = painterResource(R.drawable.ic_albums),
-            title = stringResource(R.string.viewer_details_albums),
-            subtitle = details.albums.joinToString(" · "),
-        )
-    }
-    details.location?.let { point ->
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    rememberVectorPainter(Icons.Default.LocationOn),
-                    contentDescription = null,
-                    tint = SecondaryText,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    stringResource(R.string.viewer_details_location),
-                    color = PrimaryText,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            MiniMap(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
-                    .clickable {
+    Column {
+        val exposure = listOfNotNull(
+            details.focalLengthMm?.let { "${formatDecimal(it)} mm" },
+            details.exposureTimeSeconds?.let(::formatExposure),
+            details.aperture?.let { "f/${formatDecimal(it)}" },
+            details.iso?.let { "ISO $it" },
+        ).filter(String::isNotBlank).joinToString(" · ").ifBlank { null }
+        val cameraSubtitle = listOfNotNull(details.lensModel, exposure)
+            .filter(String::isNotBlank)
+            .joinToString(" · ")
+            .ifBlank { null }
+        if (details.cameraModel != null || cameraSubtitle != null) {
+            DetailsRow(
+                icon = painterResource(R.drawable.ic_camera),
+                title = details.cameraModel ?: stringResource(R.string.viewer_details_capture_settings),
+                subtitle = cameraSubtitle,
+            )
+        }
+        if (details.albums.isNotEmpty()) {
+            DetailsRow(
+                icon = painterResource(R.drawable.ic_albums),
+                title = stringResource(R.string.viewer_details_albums),
+                subtitle = details.albums.joinToString(" · "),
+            )
+        }
+        val locationPoint = details.location
+        val locationLabel = details.locationLabel
+        if (locationPoint != null || locationLabel != null) {
+            val coordinates = locationPoint?.let { "%.5f, %.5f".format(it.latitude, it.longitude) }
+            DetailsRow(
+                icon = rememberVectorPainter(Icons.Default.LocationOn),
+                title = locationLabel ?: stringResource(R.string.viewer_details_location),
+                subtitle = coordinates,
+                onClick = locationPoint?.let { point ->
+                    {
                         val uri = "geo:${point.latitude},${point.longitude}?q=${point.latitude},${point.longitude}".toUri()
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-                    },
-            )
-            Text(
-                "%.5f, %.5f".format(point.latitude, point.longitude),
-                color = SecondaryText,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp),
+                    }
+                },
             )
         }
-    }
-}
-
-@Composable
-private fun MiniMap(modifier: Modifier = Modifier) {
-    Canvas(modifier.background(Color(0xFF30363B), RoundedCornerShape(14.dp))) {
-        val road = Color(0xFF555D61)
-        repeat(5) { index ->
-            val y = size.height * (index + 1) / 6f
-            drawLine(road, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 2f)
-        }
-        repeat(4) { index ->
-            val x = size.width * (index + 1) / 5f
-            drawLine(road, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 2f)
-        }
-        drawCircle(Color(0xFFE86A5B), radius = 10.dp.toPx(), center = center)
-        drawCircle(Color.White, radius = 10.dp.toPx(), center = center, style = Stroke(width = 2.dp.toPx()))
     }
 }
 
@@ -363,13 +343,6 @@ private fun formatExposure(seconds: Double): String = when {
 
 private fun formatDecimal(value: Double): String = "%.1f".format(value).trimEnd('0').trimEnd('.')
 
-private fun formatFileSize(bytes: Long): String = when {
-    bytes < 1_024L -> "$bytes B"
-    bytes < 1_024L * 1_024L -> "%.1f KB".format(bytes / 1_024.0)
-    bytes < 1_024L * 1_024L * 1_024L -> "%.1f MB".format(bytes / (1_024.0 * 1_024.0))
-    else -> "%.1f GB".format(bytes / (1_024.0 * 1_024.0 * 1_024.0))
-}
-
 @Composable
 private fun resolution(item: MediaItem): String? {
     val width = item.width ?: return null
@@ -378,20 +351,36 @@ private fun resolution(item: MediaItem): String? {
 }
 
 @Composable
-private fun DetailsRow(icon: Painter, title: String, subtitle: String?) {
+private fun DetailsRow(
+    icon: Painter,
+    title: String,
+    subtitle: String?,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = SecondaryText, modifier = Modifier.size(20.dp))
         Column {
-            Text(title, color = PrimaryText, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = title,
+                color = PrimaryText,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             subtitle?.let {
                 Text(
-                    it,
+                    text = it,
                     color = SecondaryText,
                     style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
