@@ -113,24 +113,28 @@ class RoomMediaIdentityRegistryTest {
         val second = first.copy(
             assetRef = (first.assetRef as MediaAssetRef.LocalContent).copy(contentUri = OTHER_CONTENT_URI),
         )
-        database.mediaIdentityDao().upsertIdentifiers(
-            listOf(
-                MediaIdentifierEntity(MediaSourceKind.Local, LOCAL_CONTENT_URI, sharedId.value, "shared-auid"),
-                MediaIdentifierEntity(MediaSourceKind.Local, OTHER_CONTENT_URI, sharedId.value, "shared-auid"),
-                MediaIdentifierEntity(MediaSourceKind.Memories, FILE_ID.toString(), sharedId.value, "shared-auid"),
-            ),
+        database.mediaIdentityDao().insert(
+            listOf(MediaIdentityEntity(sharedId.value, LOCAL_CONTENT_URI, FILE_ID, localAuid = "shared-auid", remoteAuid = "shared-auid")),
         )
         LocalMediaProjectionRepository(database).saveLocalMediaBatch(listOf(first, second))
         cacheRepository.saveTimelineSnapshot(credentials, snapshot(mediaItem(sharedId)))
-        assertEquals(listOf(sharedId, sharedId), LocalMediaProjectionRepository(database).loadLocalMediaProjection().map { it.mediaId })
-        // Version 13 has the same tables, but permits the old many-local-files identity.
-        database.openHelper.writableDatabase.version = 13
+        // Build the legacy identity table: version 14 stored one row per source copy and
+        // could retain a MediaId shared by several local URIs. Other cache tables are unchanged.
+        database.openHelper.writableDatabase.apply {
+            execSQL("DROP TABLE media_identities")
+            execSQL("CREATE TABLE media_identifiers (source TEXT NOT NULL, sourceKey TEXT NOT NULL, mediaId TEXT NOT NULL, auid TEXT, buid TEXT, PRIMARY KEY(source, sourceKey))")
+            listOf(LOCAL_CONTENT_URI, OTHER_CONTENT_URI).forEach { uri ->
+                execSQL("INSERT INTO media_identifiers VALUES ('Local', ?, ?, 'shared-auid', NULL)", arrayOf(uri, sharedId.value))
+            }
+            execSQL("INSERT INTO media_identifiers VALUES ('Memories', ?, ?, 'shared-auid', NULL)", arrayOf(FILE_ID.toString(), sharedId.value))
+            version = 14
+        }
         database.close()
         openDatabase(mediaIdFactory = MediaId::generate)
 
         assertTrue(LocalMediaProjectionRepository(database).loadLocalMediaProjection().isEmpty())
         assertNull(cacheRepository.loadTimelineSnapshot(credentials))
-        assertTrue(database.mediaIdentityDao().identifiersForMediaIds(listOf(sharedId.value)).isEmpty())
+        assertTrue(database.mediaIdentityDao().byMediaIds(listOf(sharedId.value)).isEmpty())
 
         val source = LocalMediaSource(
             reader = LocalMediaReader {

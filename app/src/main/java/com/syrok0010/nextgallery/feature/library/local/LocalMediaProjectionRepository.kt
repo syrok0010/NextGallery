@@ -4,7 +4,6 @@ import androidx.room.withTransaction
 import com.syrok0010.nextgallery.core.database.IdentifiedLocalMedia
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.MediaSourceKind
 import com.syrok0010.nextgallery.feature.timeline.persistence.toLocalMediaEntity
 import com.syrok0010.nextgallery.feature.timeline.persistence.toMediaItem
 
@@ -25,11 +24,11 @@ class LocalMediaProjectionRepository(private val database: NextGalleryDatabase) 
         database.withTransaction {
             val identityDao = database.mediaIdentityDao()
             identityDao
-                .sourceKeysWithAliases(MediaSourceKind.Local)
+                .localUrisWithAliases()
                 .filterNot { it in contentUris }
                 .chunked(500)
                 .forEach { stale ->
-                    identityDao.clearAliases(MediaSourceKind.Local, stale)
+                    identityDao.clearLocalAliases(stale)
                 }
             dao.contentUris().filterNot { it in contentUris }.chunked(500).forEach { stale ->
                 dao.deleteUris(stale)
