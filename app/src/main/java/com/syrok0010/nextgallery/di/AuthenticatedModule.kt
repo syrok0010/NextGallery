@@ -16,20 +16,15 @@ import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.core.session.AuthenticatedSession
-import com.syrok0010.nextgallery.feature.albums.AlbumContentsSource
 import com.syrok0010.nextgallery.feature.albums.AlbumContentsViewModel
 import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
-import com.syrok0010.nextgallery.feature.albums.AlbumWriter
 import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
-import com.syrok0010.nextgallery.feature.albums.AndroidAlbumContents
-import com.syrok0010.nextgallery.feature.albums.AndroidAlbumSource
-import com.syrok0010.nextgallery.feature.albums.LocalAlbumSource
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumContents
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumSource
-import com.syrok0010.nextgallery.feature.albums.MemoriesAlbumWriter
-import com.syrok0010.nextgallery.feature.albums.RemoteAlbumSource
+import com.syrok0010.nextgallery.feature.albums.AndroidFolders
+import com.syrok0010.nextgallery.feature.albums.LocalFolders
+import com.syrok0010.nextgallery.feature.albums.MemoriesAlbums
+import com.syrok0010.nextgallery.feature.albums.RemoteAlbums
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
 import com.syrok0010.nextgallery.feature.deletion.CloudTrash
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
@@ -96,26 +91,25 @@ internal fun authenticatedModule() =
             scoped { create(::albumsClient) }
             scoped { create(::filesClient) }
             scoped { create(::capabilitiesClient) }
-            scoped<MemoriesAlbumSource>() bind RemoteAlbumSource::class
+            scoped<MemoriesAlbums>() bind RemoteAlbums::class
             scoped {
-                AndroidAlbumSource(
+                AndroidFolders(
                     get<Context>().contentResolver,
+                    get(),
+                    get(),
                 )
-            } bind LocalAlbumSource::class
+            } bind LocalFolders::class
             scoped<LocalMediaPermissionCoordinator>()
-            scoped<MemoriesAlbumWriter>() bind AlbumWriter::class
             scoped<MemoriesFiles>()
             scoped { UploadSource(get<Context>().contentResolver) }
             scoped {
                 Albums(
-                    get(),
-                    get(),
-                    get<RemoteAlbumSource>(),
-                    get<LocalAlbumSource>(),
-                    get(),
-                    get(),
-                    get<LocalMediaPermissionCoordinator>().mode,
-                    get(),
+                    credentials = get(),
+                    remote = get(),
+                    local = get(),
+                    library = get(),
+                    permission = get<LocalMediaPermissionCoordinator>().mode,
+                    scope = get(),
                     enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
                 )
             }
@@ -139,9 +133,6 @@ internal fun authenticatedModule() =
             scoped<LocalMediaSource>()
             scoped<RemoteImageRepository>()
             scoped<MemoriesRepository>()
-            scoped<MemoriesAlbumContents>()
-            scoped { create(::localContents) }
-            scoped<AlbumContentsSource> { create(::albumContents) }
             viewModel { AlbumsViewModel(get()) }
             viewModel { (location: AlbumLocation) -> AlbumContentsViewModel(location, get()) }
             scoped(named<ThumbnailBatchLoader>()) {
@@ -236,18 +227,6 @@ private fun mediaReader(
             check(it.isNotEmpty()) { "No mounted media volumes" }
         }
 })
-private fun localContents(
-    context: Context,
-    identities: MediaIdentityRegistry,
-    local: LocalMediaProjectionStore,
-) = AndroidAlbumContents(context.contentResolver, identities, local)
-private fun albumContents(remote: MemoriesAlbumContents, local: AndroidAlbumContents) =
-    AlbumContentsSource { location ->
-        when (location) {
-            is AlbumLocation.Remote -> remote.load(location)
-            is AlbumLocation.Folder -> local.load(location)
-        }
-    }
 private fun imageLoader(
     context: Context,
     thumbnails: ThumbnailBatchLoader,

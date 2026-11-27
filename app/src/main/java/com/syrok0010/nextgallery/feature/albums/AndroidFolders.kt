@@ -4,30 +4,83 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.provider.MediaStore
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
-import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaIdentityCandidate
+import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
 import com.syrok0010.nextgallery.core.media.MediaSourceKind
-import com.syrok0010.nextgallery.core.media.MediaId
-import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.network.bestEffort
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.localCaptureEpochSeconds
+import com.syrok0010.nextgallery.feature.library.local.localMediaDayId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import com.syrok0010.nextgallery.feature.library.local.localCaptureEpochSeconds
-import com.syrok0010.nextgallery.feature.library.local.localMediaDayId
+import kotlinx.coroutines.withContext
 
-/** Reads only the selected folder, without running a second EXIF index. */
-internal class AndroidAlbumContents(
+/** Port for on-device MediaStore folders: catalog, folder contents, and change notifications. */
+internal interface LocalFolders {
+    suspend fun loadCatalog(): List<AlbumSummary>
+    fun loadContents(location: AlbumLocation.Folder): Flow<AlbumContentsBatch>
+    fun changes(): Flow<Unit>
+}
+
+/** Android MediaStore adapter for [LocalFolders]. */
+internal class AndroidFolders(
     private val resolver: ContentResolver,
     private val identities: MediaIdentityRegistry,
     private val projectionStore: LocalMediaProjectionStore,
-) {
-    fun load(location: AlbumLocation.Folder) = flow {
+) : LocalFolders {
+    override fun changes(): Flow<Unit> = AndroidMediaStoreChangeObserver(resolver).changes()
+
+    override suspend fun loadCatalog(): List<AlbumSummary> = withContext(Dispatchers.IO) {
+        val columns = arrayOf("_id", "volume_name", "relative_path", "media_type", "date_modified")
+        val selection = "media_type IN (?, ?) AND is_pending = 0 AND is_trashed = 0"
+        val args = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+        )
+        val context = currentCoroutineContext()
+        resolver.query(
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),
+            columns,
+            selection,
+            args,
+            "date_modified DESC, _id DESC",
+        )?.use { cursor ->
+            localAlbumSummaries(
+                sequence {
+                    while (cursor.moveToNext()) {
+                        context.ensureActive()
+                        val volume = cursor.getString(1) ?: continue
+                        val path = cursor.getString(2) ?: continue
+                        val collection = if (cursor.getInt(3) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) {
+                            MediaStore.Video.Media.getContentUri(volume)
+                        } else {
+                            MediaStore.Images.Media.getContentUri(volume)
+                        }
+                        yield(
+                            LocalAlbumEntry(
+                                volume,
+                                path,
+                                ContentUris.withAppendedId(collection, cursor.getLong(0)).toString(),
+                                cursor.getLong(4),
+                            ),
+                        )
+                    }
+                },
+            )
+        } ?: error("MediaStore returned no catalog cursor")
+    }
+
+    /** Reads only the selected folder, without running a second EXIF index. */
+    override fun loadContents(location: AlbumLocation.Folder): Flow<AlbumContentsBatch> = flow {
         val cached = bestEffort { projectionStore.loadLocalMediaProjection() }
             .getOrDefault(emptyList())
             .associateBy { it.localCopy?.contentUri }
@@ -56,8 +109,11 @@ internal class AndroidAlbumContents(
                 currentCoroutineContext().ensureActive()
                 val id = cursor.getLong(0)
                 val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                val collection = if (video) MediaStore.Video.Media.getContentUri(location.volume)
-                else MediaStore.Images.Media.getContentUri(location.volume)
+                val collection = if (video) {
+                    MediaStore.Video.Media.getContentUri(location.volume)
+                } else {
+                    MediaStore.Images.Media.getContentUri(location.volume)
+                }
                 val uri = ContentUris.withAppendedId(collection, id).toString()
                 val modified = cursor.getLong(7)
                 val epoch = localCaptureEpochSeconds(null, cursor.getLong(6))
@@ -67,16 +123,17 @@ internal class AndroidAlbumContents(
                 val publishedId = MediaId.generate()
                 // Use the same aggregate URI identity as the device index; bytes use the exact volume.
                 val identityUri = ContentUris.withAppendedId(
-                    if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                    else MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    if (video) {
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    } else {
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    },
                     id,
                 ).toString()
                 candidates += MediaIdentityCandidate(
-                    MediaSourceIdentity(
-                        MediaSourceKind.Local,
-                        identityUri,
-                    ),
-                    publishedId, emptySet(),
+                    MediaSourceIdentity(MediaSourceKind.Local, identityUri),
+                    publishedId,
+                    emptySet(),
                 )
                 items += MediaItem(
                     mediaId = publishedId,
@@ -109,7 +166,8 @@ internal class AndroidAlbumContents(
                 mediaId = resolved.getValue(source),
                 dayId = canonical?.dayId ?: item.dayId,
                 takenAtEpochSeconds = canonical?.takenAtEpochSeconds ?: item.takenAtEpochSeconds,
-                auid = canonical?.auid, buid = canonical?.buid,
+                auid = canonical?.auid,
+                buid = canonical?.buid,
             )
         }
         emit(

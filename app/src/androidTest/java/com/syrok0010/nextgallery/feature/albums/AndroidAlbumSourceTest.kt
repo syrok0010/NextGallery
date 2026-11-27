@@ -54,13 +54,14 @@ class AndroidAlbumSourceTest {
         try {
             insert("$prefix/one/Отпуск/"); insert("$prefix/one/Отпуск/"); insert("$prefix/two/Отпуск/")
             insert("$prefix/one/Отпуск/Nested/")
-            val albums = AndroidAlbumSource(resolver).load().filter { it.detail.contains(prefix) && it.name == "Отпуск" }
+            val folders = AndroidFolders(resolver, GlobalContext.get().get(), GlobalContext.get().get())
+            val albums = folders.loadCatalog().filter { it.detail.contains(prefix) && it.name == "Отпуск" }
             assertEquals(2, albums.size)
             assertEquals(setOf(1, 2), albums.map { it.count }.toSet())
             assertEquals(2, albums.map { it.id }.toSet().size)
             assertTrue(albums.all { it.name == "Отпуск" })
             albums.forEach { album ->
-                val contents = AndroidAlbumContents(resolver, GlobalContext.get().get(), GlobalContext.get().get()).load(album.location as AlbumLocation.Folder).last()
+                val contents = folders.loadContents(album.location as AlbumLocation.Folder).last()
                 assertEquals(album.count, contents.items.size)
                 assertEquals(album.count, contents.total)
                 contents.items.forEach { item ->
@@ -79,8 +80,8 @@ class AndroidAlbumSourceTest {
                     override suspend fun saveLocalMediaBatch(items: List<MediaItem>) = error("Read only")
                     override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) = error("Read only")
                 }
-                val cachedContents = AndroidAlbumContents(resolver, GlobalContext.get().get(), cache)
-                    .load(album.location).last()
+                val cachedContents = AndroidFolders(resolver, GlobalContext.get().get(), cache)
+                    .loadContents(album.location).last()
                 assertTrue(cachedContents.items.all { it.dayId == 42 && it.takenAtEpochSeconds == 42 * 86_400L })
                 contents.items.forEach { item ->
                     resolver.openInputStream(Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri))!!.close()

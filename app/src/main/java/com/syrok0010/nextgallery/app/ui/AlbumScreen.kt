@@ -37,9 +37,7 @@ internal fun AlbumScreen(
             operations = operations,
         ) {
             Column(Modifier.fillMaxSize()) {
-                if (contents.items.isNotEmpty() &&
-                    (contents.loading || contents.failed || contents.pendingMetadata > 0)
-                ) {
+                if (contents.items.isNotEmpty() && (contents.loading || contents.failed)) {
                     AlbumContentsStatus(contents, viewModel::refresh)
                 }
                 Box(Modifier.weight(1f)) { content() }

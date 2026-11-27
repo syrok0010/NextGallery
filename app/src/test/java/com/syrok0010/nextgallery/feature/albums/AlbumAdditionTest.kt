@@ -92,7 +92,7 @@ class AlbumAdditionTest {
                 var refreshed = 0
                 val submittedAlbum = MutableStateFlow<UploadAlbum?>(null)
                 val additions = fixture.albums(scope,
-                    catalog = { refreshed++; RemoteAlbums(emptyList()) },
+                    catalog = { refreshed++; RemoteAlbumsCatalog(emptyList()) },
                     enqueue = { ids, album ->
                         submittedAlbum.value = album
                         EnqueueResult.Accepted(ids.size)

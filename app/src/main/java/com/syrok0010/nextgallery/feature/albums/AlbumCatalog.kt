@@ -1,9 +1,33 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import java.util.Locale
-import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
 
 internal enum class AlbumOrigin { Nextcloud, Phone }
+
+/** Source address, independent of display labels and catalog ordering. */
+@Serializable
+internal sealed interface AlbumLocation {
+    @Serializable data class Remote(val clusterId: String) : AlbumLocation
+
+    @Serializable data class Folder(val volume: String, val path: String) : AlbumLocation
+}
+
+/** Owner and collection name of a Photos album addressed by Memories `cluster_id`. */
+internal data class AlbumAddress(val owner: String, val name: String) {
+    fun toLocation(): AlbumLocation.Remote = AlbumLocation.Remote("$owner/$name")
+
+    companion object {
+        fun of(location: AlbumLocation.Remote): AlbumAddress? {
+            val owner = location.clusterId.substringBefore('/', "")
+            val name = location.clusterId.substringAfter('/', "")
+            return if (owner.isEmpty() || name.isEmpty()) null else AlbumAddress(owner, name)
+        }
+    }
+}
+
 internal data class AlbumSummary(
     val id: String,
     val name: String,
@@ -19,15 +43,40 @@ internal sealed interface AlbumCover {
     data class Local(val uri: String, val modified: Long) : AlbumCover
 }
 
-internal data class RemoteAlbums(val albums: List<AlbumSummary>, val supported: Boolean = true)
-internal interface RemoteAlbumSource {
-    suspend fun load(): RemoteAlbums
+internal data class RemoteAlbumsCatalog(
+    val albums: List<AlbumSummary>,
+    val supported: Boolean = true,
+)
+
+internal data class AlbumSourceState(
+    val items: List<AlbumSummary> = emptyList(),
+    val loading: Boolean = false,
+    val failed: Boolean = false,
+    val supported: Boolean = true,
+)
+
+internal data class AlbumsUiState(
+    val remote: AlbumSourceState = AlbumSourceState(),
+    val local: AlbumSourceState = AlbumSourceState(),
+    val permission: LocalMediaPermissionMode? = null,
+) {
+    val items: List<AlbumSummary> get() = albumCatalog(remote.items, local.items)
 }
 
-internal interface LocalAlbumSource {
-    suspend fun load(): List<AlbumSummary>
-    fun changes(): Flow<Unit>
-}
+internal data class AlbumContentsBatch(
+    val items: List<MediaItem>,
+    val total: Int,
+    val loaded: Int = items.size,
+)
+
+internal data class AlbumContentsState(
+    val items: List<MediaItem> = emptyList(),
+    val total: Int = 0,
+    val loaded: Int = 0,
+    val loading: Boolean = false,
+    val failed: Boolean = false,
+    val permissionRequired: Boolean = false,
+)
 
 /** Containers are never reconciled through media identity or display names. */
 internal fun albumCatalog(
@@ -65,22 +114,3 @@ internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<Album
     }
     return groups.values.toList()
 }
-
-/** Loaded membership supplies catalog counts and covers without another catalog read. */
-internal fun albumCatalogProjection(
-    catalog: AlbumsUiState,
-    contents: Map<AlbumLocation, AlbumContentsState>,
-): AlbumsUiState =
-    catalog.copy(
-        remote = catalog.remote.copy(
-            items = catalog.remote.items.map { album ->
-                val membership = contents[album.location] ?: return@map album
-                val cover = (album.cover as? AlbumCover.Remote)?.takeIf { cover ->
-                    membership.items.any { it.remoteFileId == cover.fileId }
-                } ?: membership.items.firstOrNull { it.remoteFileId != null }?.let {
-                    AlbumCover.Remote(requireNotNull(it.remoteFileId), it.etag)
-                }
-                album.copy(count = membership.total, cover = cover)
-            },
-        ),
-    )
