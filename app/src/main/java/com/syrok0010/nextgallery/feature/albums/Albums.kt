@@ -3,7 +3,6 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.annotation.MainThread
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -51,14 +50,21 @@ internal class Albums(
     private val entries = mutableMapOf<AlbumLocation.Remote, Entry>()
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
+    private val removalState = MutableStateFlow<AlbumRemovalState>(AlbumRemovalState.Idle)
+    private var removalJob: Job? = null
 
     val catalog: StateFlow<AlbumsUiState> = mutableCatalog.asStateFlow()
     val state: StateFlow<AlbumsUiState> get() = catalog
     val adding: StateFlow<Boolean> = additionState
         .map { it is AlbumAdditionState.Running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    override val operations: StateFlow<List<OperationStatusSnapshot>> = additionState
-        .map(::albumOperationSnapshots)
+    val removing: StateFlow<Boolean> = removalState
+        .map { it is AlbumRemovalState.Running }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    override val operations: StateFlow<List<OperationStatusSnapshot>> = combine(
+        additionState.map(::albumOperationSnapshots),
+        removalState.map(::removalOperationSnapshots),
+    ) { add, remove -> add + remove }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private class Entry(initial: AlbumContentsState) {
@@ -163,6 +169,66 @@ internal class Albums(
         return true
     }
 
+    @MainThread
+    fun removeMembers(
+        location: AlbumLocation.Remote,
+        name: String,
+        mediaIds: Collection<MediaId>,
+    ): Boolean {
+        val address = AlbumAddress
+            .of(
+                location,
+            )?.takeIf { it.owner == credentials.userId } ?: return false
+        if (removalJob?.isActive == true) return false
+        val members = resolveRemovalMembers(location, mediaIds)
+        if (members.isEmpty()) return false
+        val fileIds = members.mapTo(LinkedHashSet()) { it.fileId }
+        removalState.value = AlbumRemovalState.Running(
+            name,
+            members.mapTo(LinkedHashSet()) { it.mediaId },
+        )
+        removalJob = scope.launch {
+            mutations.withLock {
+                val result = try {
+                    val batch = remote.remove(address, fileIds)
+                    applyRemoved(location, batch.removedIds)
+                    batch.summary
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    AlbumRemovalResult(0, fileIds.size)
+                }
+                removalState.value = AlbumRemovalState.Done(name, result)
+            }
+        }
+        return true
+    }
+
+    /** Drops cloud files confirmed deleted from cached remote albums and refreshes catalog counts. */
+    @MainThread
+    fun onCloudDeleted(fileIds: Set<Long>) {
+        if (fileIds.isEmpty()) return
+        entries.forEach { (location, entry) ->
+            if (entry.state.value.items.any { it.remoteFileId in fileIds }) {
+                applyRemoved(location, fileIds)
+            } else if (!entry.loaded) {
+                entry.stale = true
+            }
+        }
+        refreshCatalog()
+    }
+
+    private fun resolveRemovalMembers(
+        location: AlbumLocation.Remote,
+        mediaIds: Collection<MediaId>,
+    ): List<AlbumAdditionPreparation.CloudMember> {
+        val cached = entries[location]?.state?.value?.items?.associateBy { it.mediaId }.orEmpty()
+        return mediaIds.distinct().mapNotNull { mediaId ->
+            val item = library[mediaId] ?: cached[mediaId]
+            item?.remoteFileId?.let { AlbumAdditionPreparation.CloudMember(mediaId, it) }
+        }
+    }
+
     /** Worker entry point. Replay checks exact membership before COPY and never repeats the upload. */
     suspend fun addUploaded(target: UploadAlbum, file: UploadedFile, recovered: Boolean): Boolean =
         withContext(scope.coroutineContext.minusKey(Job)) {
@@ -194,12 +260,18 @@ internal class Albums(
         if ((additionState.value as? AlbumAdditionState.Done)?.result?.failed == 0) {
             additionState.value = AlbumAdditionState.Idle
         }
+        if ((removalState.value as? AlbumRemovalState.Done)?.result?.failed == 0) {
+            removalState.value = AlbumRemovalState.Idle
+        }
     }
 
     @MainThread
     override fun consumeAll() {
         if (additionState.value !is AlbumAdditionState.Running) {
             additionState.value = AlbumAdditionState.Idle
+        }
+        if (removalState.value !is AlbumRemovalState.Running) {
+            removalState.value = AlbumRemovalState.Idle
         }
     }
 
@@ -269,6 +341,38 @@ internal class Albums(
             entry.stale = true
             refreshCatalog()
             if (entry.state.subscriptionCount.value > 0) load(location, entry)
+        }
+    }
+
+    private fun applyRemoved(location: AlbumLocation.Remote, ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        val entry = entries[location]
+        if (entry == null) {
+            refreshCatalog()
+            return
+        }
+        entry.job?.cancel()
+        entry.generation++
+        val remaining = entry.state.value.items.filterNot { it.remoteFileId in ids }
+        val removedCount = entry.state.value.items.size - remaining.size
+        entry.state.value = entry.state.value.copy(
+            items = remaining,
+            loaded = remaining.size,
+            total = if (entry.loaded) {
+                remaining.size
+            } else {
+                (entry.state.value.total - removedCount)
+                    .coerceAtLeast(
+                        remaining.size,
+                    )
+            },
+            loading = false,
+        )
+        if (entry.loaded) {
+            updateCatalogSummary(location, remaining)
+        } else {
+            entry.stale = true
+            refreshCatalog()
         }
     }
 

@@ -470,6 +470,31 @@ class MediaDeletionTest {
         }
     }
 
+    @Test fun `confirmed cloud deletions notify onCloudDeleted with only deleted file ids`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val deleted = mutableListOf<Set<Long>>()
+            val finished = AtomicInteger()
+            val repository = MediaDeletionRepository(
+                SessionStore(FixedCredentials(AccountCredentials("https://cloud.example", "anna", "password", "anna"))).requireCredentials(),
+                MediaLibraryIndex(),
+                CloudTrash { _, fileId -> fileId == 1L },
+                InMemoryMediaIdentityRegistry(),
+                { it },
+                scope,
+                onCloudDeleted = { deleted += it },
+                onDeleted = { finished.incrementAndGet() },
+            )
+
+            repository.delete(targets(emptyList(), listOf(1L, 2L)))
+
+            withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
+            assertEquals(listOf(setOf(1L)), deleted)
+        } finally {
+            scope.cancel()
+        }
+    }
+
 
     private fun resourceName(text: com.syrok0010.nextgallery.core.ui.UiText): String {
         val id = (text as com.syrok0010.nextgallery.core.ui.UiText.Resource).id

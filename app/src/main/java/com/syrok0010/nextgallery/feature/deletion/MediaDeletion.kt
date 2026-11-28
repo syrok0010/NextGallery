@@ -190,6 +190,7 @@ internal class MediaDeletionRepository(
     private val identities: MediaIdentityRegistry,
     private val phoneTrash: PhoneTrashCheck,
     private val scope: CoroutineScope,
+    private val onCloudDeleted: (Set<Long>) -> Unit = {},
     private val onDeleted: () -> Unit,
 ) : OperationStatusSource {
     private val mutableState = MutableStateFlow(DeletionState())
@@ -269,6 +270,7 @@ internal class MediaDeletionRepository(
                         unseen = state.unseen?.plus(done) ?: done,
                     )
                 }
+                if (deletedCloudIds.isNotEmpty()) onCloudDeleted(deletedCloudIds)
                 onDeleted()
             }
         }

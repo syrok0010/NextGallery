@@ -43,6 +43,12 @@ internal enum class AlbumCopyOutcome { Added, AlreadyPresent, Failed }
 
 internal class AlbumAlreadyExistsException(name: String) : IOException("Album $name already exists")
 
+internal data class AlbumRemovalBatch(val removedIds: Set<Long>, val failed: Int) {
+    val summary get() = AlbumRemovalResult(removedIds.size, failed)
+}
+
+internal data class AlbumRemovalResult(val removed: Int, val failed: Int)
+
 /** Port for Nextcloud Photos/Memories albums: reading catalog/contents and writing membership. */
 internal interface RemoteAlbums {
     suspend fun loadCatalog(): RemoteAlbumsCatalog
@@ -51,6 +57,7 @@ internal interface RemoteAlbums {
     suspend fun add(album: AlbumAddress, fileIds: List<Long>): AlbumWriteResult
     suspend fun addFile(file: DavFilePath, album: AlbumAddress): AlbumCopyOutcome
     suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean
+    suspend fun remove(album: AlbumAddress, fileIds: Set<Long>): AlbumRemovalBatch
 }
 
 /** Nextcloud Memories + Photos DAV adapter for [RemoteAlbums]. */
@@ -156,6 +163,11 @@ internal class MemoriesAlbums(
     /** Reads album membership for recovery; it never performs COPY. */
     override suspend fun containsFile(album: AlbumAddress, fileId: Long?): Boolean =
         fileId != null && dav.containsFile(AlbumPath(album.owner, album.name), fileId)
+
+    override suspend fun remove(album: AlbumAddress, fileIds: Set<Long>): AlbumRemovalBatch {
+        val removed = dav.removeFiles(AlbumPath(album.owner, album.name), fileIds)
+        return AlbumRemovalBatch(removedIds = removed, failed = fileIds.size - removed.size)
+    }
 
     private suspend fun albumExists(album: AlbumAddress): Boolean =
         try {

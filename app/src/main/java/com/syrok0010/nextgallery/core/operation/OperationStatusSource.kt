@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal enum class OperationKind {
     Upload,
     AddToAlbum,
+    RemoveFromAlbum,
     Delete,
 }
 
