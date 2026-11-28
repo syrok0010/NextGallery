@@ -9,6 +9,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflow
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflowState
 import kotlinx.coroutines.coroutineScope
@@ -94,7 +95,7 @@ internal class MediaLibraryCoordinator(
 }
 
 private data class ProjectedLibrary(
-    val snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?,
+    val snapshot: TimelineSnapshot?,
     val library: CanonicalMediaLibrary,
 )
 

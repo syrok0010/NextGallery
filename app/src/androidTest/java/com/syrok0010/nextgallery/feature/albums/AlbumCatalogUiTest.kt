@@ -10,6 +10,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.app.ui.*
 import com.syrok0010.nextgallery.core.ui.theme.NextGalleryTheme
+import com.syrok0010.nextgallery.feature.library.LocalLibraryStatus
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
 import com.syrok0010.nextgallery.string
 import org.junit.Assert.*
 import org.junit.Rule
@@ -70,14 +72,13 @@ class AlbumCatalogUiTest {
                     )
                     if (!reindexing) {
                         LocalIndexingBanner(
-                            com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
+                            LocalLibraryStatus(
                                 loading = true,
                                 initial = true,
-                                progress = com.syrok0010.nextgallery.feature.library.local
-                                    .LocalMediaIndexProgress(
-                                        indexedCount = 200,
-                                        totalCount = 1_000,
-                                    ),
+                                progress = LocalMediaIndexProgress(
+                                    indexedCount = 200,
+                                    totalCount = 1_000,
+                                ),
                             ),
                         )
                     }

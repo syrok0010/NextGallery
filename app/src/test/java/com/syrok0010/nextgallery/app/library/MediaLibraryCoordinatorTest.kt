@@ -23,6 +23,7 @@ import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshotAssembler
 import com.syrok0010.nextgallery.feature.timeline.remote.InMemoryMediaIdentityRegistry
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -96,7 +97,7 @@ class MediaLibraryCoordinatorTest {
     @Test fun loadingDaysStatusChangeReusesProjectedLibraryWithoutRecomputing() =
         running {
             waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
-            val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
             remote.pendingDayId = 19_699
             remote.dayLoadGate = release
             coordinator.refresh()
@@ -147,7 +148,7 @@ class MediaLibraryCoordinatorTest {
 
         @Volatile var pendingDayId: Int? = null
 
-        @Volatile var dayLoadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        @Volatile var dayLoadGate: CompletableDeferred<Unit>? = null
 
         override suspend fun loadCachedTimeline(
             credentials: AccountCredentials,
