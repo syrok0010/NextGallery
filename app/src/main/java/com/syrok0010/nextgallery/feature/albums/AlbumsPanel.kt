@@ -69,40 +69,12 @@ internal fun AlbumsPanel(
         item {
             val remoteLoading = state.remote.loading && filter != AlbumOrigin.Phone
             val localLoading = state.local.loading && filter != AlbumOrigin.Nextcloud
-            val localProgress = state.local.progress
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (remoteLoading || localLoading) {
-                    if (localLoading && !remoteLoading && localProgress != null && localProgress.total > 0) {
-                        LinearProgressIndicator(
-                            progress = {
-                                (localProgress.loaded.toFloat() / localProgress.total).coerceIn(0f, 1f)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("albums_loader"),
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            Modifier
-                                .fillMaxWidth()
-                                .testTag("albums_loader"),
-                        )
-                    }
-                }
-                if (localLoading) {
-                    Text(
-                        if (localProgress != null && localProgress.total > 0) {
-                            stringResource(
-                                R.string.albums_local_indexing_progress,
-                                localProgress.loaded,
-                                localProgress.total,
-                            )
-                        } else {
-                            stringResource(R.string.albums_local_indexing)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("albums_local_indexing"),
+                if (remoteLoading) {
+                    LinearProgressIndicator(
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("albums_loader"),
                     )
                 }
                 if (!state.remote.supported && filter != AlbumOrigin.Phone) Text(stringResource(R.string.albums_unsupported))

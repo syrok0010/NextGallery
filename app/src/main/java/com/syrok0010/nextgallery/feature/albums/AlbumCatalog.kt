@@ -49,14 +49,11 @@ internal data class RemoteAlbumsCatalog(
     val supported: Boolean = true,
 )
 
-internal data class AlbumLoadingProgress(val loaded: Int, val total: Int)
-
 internal data class AlbumSourceState(
     val items: List<AlbumSummary> = emptyList(),
     val loading: Boolean = false,
     val failed: Boolean = false,
     val supported: Boolean = true,
-    val progress: AlbumLoadingProgress? = null,
 )
 
 internal data class AlbumsUiState(
@@ -110,7 +107,7 @@ internal fun localAlbumSummaries(items: Collection<MediaItem>): List<AlbumSummar
                 name = path.trimEnd('/').substringAfterLast('/').ifEmpty { volume },
                 origin = AlbumOrigin.Phone,
                 count = members.size,
-                detail = "$path · $volume",
+                detail = localFolderDetail(volume, path),
                 cover = AlbumCover.Local(cover.contentUri, cover.modifiedAtEpochSeconds ?: 0L),
                 location = AlbumLocation.Folder(volume, path),
             )
@@ -130,6 +127,17 @@ internal val albumItemOrder: Comparator<MediaItem> =
     compareByDescending<MediaItem> { it.dayId }
         .thenByDescending { it.takenAtEpochSeconds }
         .thenBy { it.mediaId.value }
+
+private const val PRIMARY_VOLUME = "external_primary"
+
+private fun localFolderDetail(volume: String, path: String): String {
+    val cleanPath = path.trimEnd('/')
+    return when {
+        cleanPath.isEmpty() -> volume
+        volume == PRIMARY_VOLUME -> cleanPath
+        else -> "$cleanPath · $volume"
+    }
+}
 
 private val localCoverOrder: Comparator<MediaItem> =
     compareBy<MediaItem> {

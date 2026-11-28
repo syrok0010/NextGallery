@@ -101,6 +101,7 @@ private fun LocalMediaIndexState.toLibraryStatus(
     } else {
         LocalLibraryStatus(
             loading = progress != null || (!failure && processed == null),
+            initial = initial,
             progress = progress,
             failed = failure,
         )

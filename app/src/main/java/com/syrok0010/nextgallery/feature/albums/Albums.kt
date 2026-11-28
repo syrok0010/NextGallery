@@ -83,12 +83,6 @@ internal class Albums(
                         items = localAlbumSummaries(known.values),
                         loading = status.loading,
                         failed = status.failed,
-                        progress = status.progress?.let {
-                            AlbumLoadingProgress(
-                                it.indexedCount,
-                                it.totalCount,
-                            )
-                        },
                     )
                 }
                 local to mode

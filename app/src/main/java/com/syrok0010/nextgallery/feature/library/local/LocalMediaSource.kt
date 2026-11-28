@@ -68,6 +68,7 @@ data class LocalMediaIndexState(
     val progress: LocalMediaIndexProgress?,
     val failure: Boolean = false,
     val processed: LocalMediaIndexProgress? = progress,
+    val initial: Boolean = false,
 )
 
 fun interface LocalMediaReader {
@@ -112,7 +113,8 @@ class LocalMediaSource(
             var publishedItems = runCatching {
                 projectionStore.loadLocalMediaProjection()
             }.getOrDefault(emptyList())
-            send(LocalMediaIndexState(items = publishedItems, progress = null))
+            var initialScan = publishedItems.isEmpty()
+            send(LocalMediaIndexState(items = publishedItems, progress = null, initial = initialScan))
 
             suspend fun reconcile() {
                 val itemsByUri = publishedItems.associateByTo(linkedMapOf()) { it.localContentUri() }
@@ -144,11 +146,14 @@ class LocalMediaSource(
                         dirty = false
                         lastPublication = TimeSource.Monotonic.markNow()
                     }
+                    val scanningInitial = initialScan
+                    if (completed) initialScan = false
                     send(
                         LocalMediaIndexState(
                             publishedItems,
                             if (completed) null else batch.progress,
                             processed = batch.progress,
+                            initial = !completed && scanningInitial,
                         ),
                     )
                 }
