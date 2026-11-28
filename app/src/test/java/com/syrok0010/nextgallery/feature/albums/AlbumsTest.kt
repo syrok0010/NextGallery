@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import androidx.lifecycle.ViewModelStore
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.localCopy
@@ -25,6 +26,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -420,29 +422,70 @@ class AlbumsTest {
     @Test fun `viewModel tracks departed items and allows actions on folders and owned albums only`() = scenario { harness, scope ->
         Dispatchers.setMain(Dispatchers.Unconfined)
         try {
+            val reads = AtomicInteger()
             val albums = harness.albums(
                 scope,
-                remoteContents = { flowOf(AlbumContentsBatch(listOf(first, second), 2)) },
+                remoteContents = {
+                    reads.incrementAndGet()
+                    flowOf(AlbumContentsBatch(listOf(first, second), 2))
+                },
             )
-            val ownedVm = AlbumContentsViewModel(album, albums)
-            val folderVm = AlbumContentsViewModel(AlbumLocation.Folder("external_primary", "Pictures/"), albums)
+            val store = ViewModelStore()
+            val ownedVm = AlbumContentsViewModel(album, albums).also { store.put("owned", it) }
+            val folderVm = AlbumContentsViewModel(
+                AlbumLocation.Folder("external_primary", "Pictures/"),
+                albums,
+            ).also { store.put("folder", it) }
             val foreignVm = AlbumContentsViewModel(AlbumLocation.Remote("bob/shared"), albums)
+                .also { store.put("foreign", it) }
             assertTrue(ownedVm.canModify)
             assertTrue(ownedVm.supportsActions)
             assertFalse(folderVm.canModify)
             assertTrue(folderVm.supportsActions)
             assertFalse(foreignVm.canModify)
             assertFalse(foreignVm.supportsActions)
-            ownedVm.state.first { !it.loading && it.items.size == 2 }
-            assertTrue(ownedVm.removeMembers("album", setOf(1L)))
-            val departed = ownedVm.departedIds.first { first.mediaId in it }
-            assertEquals(setOf(first.mediaId), departed)
-            assertTrue(ownedVm.addToOtherAlbum(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
-            val restored = ownedVm.departedIds.first { first.mediaId !in it }
-            assertTrue(restored.isEmpty())
+            // Constructing the ViewModel must not keep an eager subscription to album contents.
+            assertEquals(0, reads.get())
+            val departedCollector = scope.launch { ownedVm.departedIds.collect {} }
+            try {
+                ownedVm.state.first { !it.loading && it.items.size == 2 }
+                assertTrue(ownedVm.removeMembers("album", listOf(first)))
+                val departed = ownedVm.departedIds.first { first.mediaId in it }
+                assertEquals(setOf(first.mediaId), departed)
+                assertTrue(ownedVm.addToAlbum(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+                val restored = ownedVm.departedIds.first { first.mediaId !in it }
+                assertTrue(restored.isEmpty())
+            } finally {
+                departedCollector.cancelAndJoin()
+                store.clear()
+            }
         } finally {
             Dispatchers.resetMain()
         }
+    }
+
+    @Test fun `cloud deletion removes confirmed items from open remote albums and updates catalog`() = scenario { harness, scope ->
+        val catalogReads = AtomicInteger()
+        val albums = harness.albums(
+            scope,
+            catalog = {
+                catalogReads.incrementAndGet()
+                RemoteAlbumsCatalog(listOf(summary))
+            },
+            remoteContents = { flowOf(AlbumContentsBatch(listOf(first, second), 2)) },
+        )
+        val contents = albums.observeContents(album)
+        contents.first { !it.loading && it.loaded == 2 }
+        albums.catalog.first { it.remote.items.singleOrNull()?.count == 2 }
+        val before = catalogReads.get()
+
+        albums.onCloudDeleted(setOf(1L))
+
+        val after = contents.first { it.items.map { item -> item.mediaId } == listOf(second.mediaId) }
+        assertEquals(1, after.total)
+        while (catalogReads.get() == before) delay(10)
+        val projected = albums.catalog.first { it.remote.items.singleOrNull()?.count == 1 }.remote.items.single()
+        assertEquals(AlbumCover.Remote(2L, null), projected.cover)
     }
 
     private class Harness {
@@ -461,7 +504,7 @@ class AlbumsTest {
                 EnqueueResult.Accepted(ids.size)
             },
             refreshLocal: () -> Unit = {},
-            remove: suspend (AlbumLocation.Remote, Set<Long>) -> AlbumRemovalBatch = { _, ids ->
+            remove: suspend (AlbumAddress, Set<Long>) -> AlbumRemovalBatch = { _, ids ->
                 AlbumRemovalBatch(ids, 0)
             },
         ): Albums {
@@ -482,8 +525,8 @@ class AlbumsTest {
                 override suspend fun containsFile(album: AlbumAddress, fileId: Long?) =
                     fileId != null
 
-                override suspend fun remove(location: AlbumLocation.Remote, fileIds: Set<Long>) =
-                    remove(location, fileIds)
+                override suspend fun remove(album: AlbumAddress, fileIds: Set<Long>) =
+                    remove(album, fileIds)
             }
             return Albums(credentials, remote, library, scope, enqueue, refreshLocal)
         }

@@ -13,6 +13,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.feature.albums.*
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
@@ -24,7 +25,9 @@ import com.syrok0010.nextgallery.feature.deletion.DeletionPreparation
 import com.syrok0010.nextgallery.feature.deletion.MediaDeletionRepository
 import com.syrok0010.nextgallery.feature.deletion.NextcloudTrashBin
 import com.syrok0010.nextgallery.feature.deletion.rememberDeleteAction
+import com.syrok0010.nextgallery.feature.upload.rememberUploadNotificationRequest
 import com.syrok0010.nextgallery.router.NextGalleryRoute
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -40,12 +43,14 @@ internal fun AlbumScreen(
     val slots = remember(contents.items) { contents.items.toMediaSlots() }
     val operations = rememberOperationStatus()
     val tileActivity = remember(operations) { operations::tileActivity }
+    val scope = rememberCoroutineScope()
+    val askForNotifications = rememberUploadNotificationRequest()
     val selection = rememberMediaSelection()
     val supported = viewModel.supportsActions
-    val remote = album.location as? AlbumLocation.Remote
+    val canRemove = viewModel.canModify
     var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
-    var removeRequest by remember { mutableStateOf<Pair<Set<Long>, () -> Unit>?>(null) }
+    var removeRequest by remember { mutableStateOf<Pair<List<MediaItem>, () -> Unit>?>(null) }
     val removing by viewModel.removing.collectAsStateWithLifecycle()
     val departedIds by viewModel.departedIds.collectAsStateWithLifecycle()
     // Asked on every dialog, so the answer is fresh when the user decides.
@@ -59,22 +64,27 @@ internal fun AlbumScreen(
         emptyList()
     } else {
         buildList {
-            if (remote != null) {
+            if (canRemove) {
                 add(
                     SelectionAction(
                         icon = painterResource(R.drawable.ic_album_remove),
                         label = stringResource(R.string.album_remove_action),
                         isPrimary = true,
                     ) { items, onDone ->
-                        removeRequest = items.mapNotNull { it.remoteFileId }.toSet() to onDone
+                        items
+                            .filter { it.remoteFileId != null }
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { removeRequest = it to onDone }
                     },
                 )
             }
             add(
                 SelectionAction(
                     icon = painterResource(R.drawable.ic_albums),
-                    label = stringResource(R.string.album_add_other),
-                    inOverflow = remote != null,
+                    label = stringResource(
+                        if (canRemove) R.string.album_add_other else R.string.album_add_action,
+                    ),
+                    inOverflow = canRemove,
                 ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
             )
             add(
@@ -82,7 +92,7 @@ internal fun AlbumScreen(
                     icon = rememberVectorPainter(Icons.Default.Delete),
                     label = stringResource(R.string.delete_action),
                     isDestructive = true,
-                    inOverflow = remote != null,
+                    inOverflow = canRemove,
                 ) { items, _ ->
                     // Album members may not have been hydrated into the timeline index yet.
                     deleteRequest = DeletionPreparation.of(items)
@@ -125,12 +135,12 @@ internal fun AlbumScreen(
             }
         }
     }
-    removeRequest?.let { (fileIds, onDone) ->
+    removeRequest?.let { (items, onDone) ->
         AlertDialog(
             onDismissRequest = { removeRequest = null },
             title = {
                 Text(
-                    stringResource(R.string.album_remove_title, album.title, fileIds.size),
+                    stringResource(R.string.album_remove_title, album.title, items.size),
                 )
             },
             text = {
@@ -142,9 +152,9 @@ internal fun AlbumScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = !removing && fileIds.isNotEmpty(),
+                    enabled = !removing,
                     onClick = {
-                        if (remote != null && viewModel.removeMembers(album.title, fileIds)) {
+                        if (viewModel.removeMembers(album.title, items)) {
                             removeRequest = null
                             onDone()
                         }
@@ -175,9 +185,10 @@ internal fun AlbumScreen(
             excludedLocation = album.location,
             onDismiss = { albumRequest = null },
             onPick = { target ->
-                if (viewModel.addToOtherAlbum(target, request)) {
+                if (viewModel.addToAlbum(target, request)) {
                     albumRequest = null
                     onDone()
+                    if (request.uploads.isNotEmpty()) scope.launch { askForNotifications() }
                 }
             },
         )

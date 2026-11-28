@@ -193,6 +193,7 @@ private fun mediaDeletion(
     context: Context,
     scope: CoroutineScope,
     coordinator: MediaLibraryCoordinator,
+    albums: Albums,
 ) = MediaDeletionRepository(
     credentials,
     library,
@@ -200,7 +201,8 @@ private fun mediaDeletion(
     identities,
     AndroidPhoneTrash(context.contentResolver),
     scope,
-    coordinator::refresh,
+    onCloudDeleted = albums::onCloudDeleted,
+    onDeleted = coordinator::refresh,
 )
 private fun libraryCoordinator(
     library: MediaLibraryIndex,

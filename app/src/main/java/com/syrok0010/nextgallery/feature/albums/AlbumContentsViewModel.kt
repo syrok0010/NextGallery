@@ -3,12 +3,13 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syrok0010.nextgallery.core.media.MediaId
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.syrok0010.nextgallery.core.media.MediaItem
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 internal class AlbumContentsViewModel(
     private val location: AlbumLocation,
@@ -20,31 +21,22 @@ internal class AlbumContentsViewModel(
     val canModify: Boolean = albums.canModify(location)
     val supportsActions: Boolean = location is AlbumLocation.Folder || canModify
     val removing: StateFlow<Boolean> = albums.removing
-    private val mutableDepartedIds = MutableStateFlow<Set<MediaId>>(emptySet())
-    val departedIds: StateFlow<Set<MediaId>> = mutableDepartedIds.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            var previous = emptySet<MediaId>()
-            state.collect { current ->
-                val ids = current.items.mapTo(mutableSetOf()) { it.mediaId }
-                mutableDepartedIds.value = (mutableDepartedIds.value + (previous - ids)) - ids
-                previous = ids
-            }
-        }
-    }
+    val departedIds: StateFlow<Set<MediaId>> = state
+        .runningFold(emptySet<MediaId>() to emptySet<MediaId>()) { (previous, departed), current ->
+            val ids = current.items.mapTo(mutableSetOf()) { it.mediaId }
+            ids to (departed + (previous - ids)) - ids
+        }.map { (_, departed) -> departed }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     fun refresh() = albums.refresh(location)
 
-    fun addToOtherAlbum(target: AlbumTarget, request: AlbumAdditionRequest): Boolean =
+    fun addToAlbum(target: AlbumTarget, request: AlbumAdditionRequest): Boolean =
         albums.add(target, request)
 
-    fun removeMembers(albumTitle: String, ids: Set<Long>): Boolean =
-        (location as? AlbumLocation.Remote)?.let {
-            albums.removeMembers(
-                it,
-                albumTitle,
-                ids,
-            )
-        } == true
+    fun removeMembers(albumTitle: String, items: List<MediaItem>): Boolean {
+        val remote = location as? AlbumLocation.Remote ?: return false
+        val ids = items.mapNotNull { it.remoteFileId }.toSet()
+        return albums.removeMembers(remote, albumTitle, ids)
+    }
 }

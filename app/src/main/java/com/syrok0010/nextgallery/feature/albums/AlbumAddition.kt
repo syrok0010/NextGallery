@@ -151,3 +151,38 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
             ),
         )
     }
+
+internal sealed interface AlbumRemovalState {
+    data object Idle : AlbumRemovalState
+    data class Running(val name: String, val fileIds: Set<Long>) : AlbumRemovalState
+    data class Done(val name: String, val result: AlbumRemovalResult) : AlbumRemovalState
+}
+
+internal fun removalOperationSnapshots(state: AlbumRemovalState): List<OperationStatusSnapshot> =
+    when (state) {
+        AlbumRemovalState.Idle -> emptyList()
+
+        is AlbumRemovalState.Running -> listOf(
+            OperationStatusSnapshot(
+                kind = OperationKind.RemoveFromAlbum,
+                title = uiText(R.string.album_remove_running, state.name),
+                running = true,
+                media = state.fileIds.map {
+                    OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
+                },
+            ),
+        )
+
+        is AlbumRemovalState.Done -> listOf(
+            OperationStatusSnapshot(
+                kind = OperationKind.RemoveFromAlbum,
+                title = uiText(R.string.album_remove_done, state.result.removed),
+                details = if (state.result.failed == 0) {
+                    emptyList()
+                } else {
+                    listOf(uiText(R.string.album_remove_failed, state.result.failed))
+                },
+                failed = state.result.failed > 0,
+            ),
+        )
+    }

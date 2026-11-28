@@ -62,7 +62,6 @@ class MemoriesAlbumContentsTest {
 
         fun contents() = MemoriesAlbums(
             credentials,
-            server.transport,
             MemoriesApiClient(server.transport) { credentials },
             PhotosAlbumsDavClient(server.transport) { credentials },
             FilesDavClient(server.transport) { credentials },
