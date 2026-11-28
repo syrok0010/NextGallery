@@ -2,6 +2,7 @@ package com.syrok0010.nextgallery.app.library
 
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.ui.uiText
+import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,18 +17,35 @@ internal class TimelineProjectionStore(
     publication: LibraryPublicationStore,
     scope: CoroutineScope,
 ) {
+    private data class ProjectionInput(
+        val snapshot: TimelineSnapshot?,
+        val library: CanonicalMediaLibrary,
+    )
+
+    private data class ProjectedTimeline(
+        val input: ProjectionInput,
+        val timeline: TimelineSnapshot?,
+    )
+
     private val projected = publication.state
-        .map { it.remote.snapshot to it.library }
-        .distinctUntilChanged { a, b -> a.first === b.first && a.second === b.second }
-        .map { (snapshot, library) ->
-            Triple(snapshot, library, TimelineSnapshotProjection.project(snapshot, library))
+        .map { ProjectionInput(it.remote.snapshot, it.library) }
+        .distinctUntilChanged { a, b -> a.snapshot === b.snapshot && a.library === b.library }
+        .map { input ->
+            ProjectedTimeline(
+                input,
+                TimelineSnapshotProjection.project(input.snapshot, input.library),
+            )
         }
 
-    val state = combine(publication.state, projected) { current, (snapshot, library, timeline) ->
-        if (current.remote.snapshot !== snapshot || current.library !== library) return@combine null
+    val state = combine(publication.state, projected) { current, projected ->
+        if (current.remote.snapshot !== projected.input.snapshot ||
+            current.library !== projected.input.library
+        ) {
+            return@combine null
+        }
         val failed = current.remote.failedDayIds
         TimelineUiState(
-            timeline,
+            projected.timeline,
             current.remote.loadingDayIds,
             failed,
             failed.takeIf { it.isNotEmpty() }?.let {

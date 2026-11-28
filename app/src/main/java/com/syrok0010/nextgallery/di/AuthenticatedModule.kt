@@ -106,7 +106,6 @@ internal fun authenticatedModule() =
                     credentials = get(),
                     remote = get(),
                     library = get(),
-                    permission = get<LocalMediaPermissionCoordinator>().mode,
                     scope = get(),
                     enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
                     refreshLocal = { get<MediaLibraryCoordinator>().refreshLocal() },

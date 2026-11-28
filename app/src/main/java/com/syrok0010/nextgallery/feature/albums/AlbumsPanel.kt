@@ -24,7 +24,6 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.feature.images.thumbnailRequest
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import org.koin.compose.koinInject
 
 @Composable
@@ -78,7 +77,7 @@ internal fun AlbumsPanel(
                     )
                 }
                 if (!state.remote.supported && filter != AlbumOrigin.Phone) Text(stringResource(R.string.albums_unsupported))
-                if (state.permission != LocalMediaPermissionMode.Full && filter != AlbumOrigin.Nextcloud)
+                if (!state.localAccess && filter != AlbumOrigin.Nextcloud)
                     Text(
                         stringResource(R.string.albums_permission),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

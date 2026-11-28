@@ -8,7 +8,6 @@ import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
@@ -20,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
@@ -41,7 +41,6 @@ internal class Albums(
     private val credentials: AccountCredentials,
     private val remote: RemoteAlbums,
     private val library: MediaLibraryIndex,
-    private val permission: StateFlow<LocalMediaPermissionMode?>,
     private val scope: CoroutineScope,
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
     private val refreshLocal: () -> Unit = {},
@@ -75,8 +74,8 @@ internal class Albums(
             catalogRefreshes.collectLatest { loadRemoteCatalog() }
         }
         scope.launch {
-            combine(library.state, library.localStatus, permission) { known, status, mode ->
-                val local = if (mode != LocalMediaPermissionMode.Full) {
+            combine(library.state, library.localStatus) { known, status ->
+                val local = if (!status.hasAccess) {
                     AlbumSourceState()
                 } else {
                     AlbumSourceState(
@@ -85,10 +84,8 @@ internal class Albums(
                         failed = status.failed,
                     )
                 }
-                local to mode
-            }.collect { (local, mode) ->
-                mutableCatalog.update { it.copy(local = local, permission = mode) }
-            }
+                mutableCatalog.update { it.copy(local = local, localAccess = status.hasAccess) }
+            }.collect()
         }
     }
 
@@ -98,9 +95,8 @@ internal class Albums(
             is AlbumLocation.Folder -> combine(
                 library.state,
                 library.localStatus,
-                permission,
-            ) { known, status, access ->
-                if (access != LocalMediaPermissionMode.Full) {
+            ) { known, status ->
+                if (!status.hasAccess) {
                     AlbumContentsState(permissionRequired = true)
                 } else {
                     val items = folderItems(known.values, location)
@@ -120,21 +116,10 @@ internal class Albums(
                     load(location, entry)
                 }
                 emitAll(
-                    combine(entry.state, library.state, permission) { current, known, access ->
-                        val allowLocal = access == LocalMediaPermissionMode.Full
+                    combine(entry.state, library.state) { current, known ->
                         val projected = current.items
-                            .map { member ->
-                                val resolved = known[member.mediaId] ?: member
-                                if (allowLocal) {
-                                    resolved
-                                } else {
-                                    resolved.remoteCopy?.let {
-                                        resolved.copy(
-                                            assetRef = it,
-                                        )
-                                    } ?: resolved
-                                }
-                            }.distinctBy { it.mediaId }
+                            .map { member -> known[member.mediaId] ?: member }
+                            .distinctBy { it.mediaId }
                             .sortedWith(albumItemOrder)
                         current.copy(items = projected)
                     },

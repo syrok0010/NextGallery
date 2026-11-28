@@ -2,7 +2,6 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.media.localCopy
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import java.util.Locale
 import kotlinx.serialization.Serializable
 
@@ -59,7 +58,7 @@ internal data class AlbumSourceState(
 internal data class AlbumsUiState(
     val remote: AlbumSourceState = AlbumSourceState(),
     val local: AlbumSourceState = AlbumSourceState(),
-    val permission: LocalMediaPermissionMode? = null,
+    val localAccess: Boolean = false,
 ) {
     val items: List<AlbumSummary> get() = albumCatalog(remote.items, local.items)
 }

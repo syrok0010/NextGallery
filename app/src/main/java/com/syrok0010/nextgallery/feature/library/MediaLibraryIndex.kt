@@ -21,6 +21,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** Indexing state of the single device-wide MediaStore scan published alongside [MediaLibraryIndex.state]. */
 internal data class LocalLibraryStatus(
+    val hasAccess: Boolean = false,
     val loading: Boolean = false,
     val initial: Boolean = false,
     val progress: LocalMediaIndexProgress? = null,

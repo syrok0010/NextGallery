@@ -10,7 +10,6 @@ import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.LocalLibraryStatus
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
@@ -50,18 +49,16 @@ class AlbumsTest {
         val library = MediaLibraryIndex().apply {
             publish(listOf(localFolderItem("cam-1", "external_primary", "DCIM/Camera/", 10)))
         }
-        val permission = MutableStateFlow<LocalMediaPermissionMode?>(null)
         val albums = harness.albums(
             scope,
             library = library,
-            permission = permission,
             catalog = {
                 if (failRemote) error("offline")
                 RemoteAlbumsCatalog(listOf(summary))
             },
             refreshLocal = { localRefreshes.incrementAndGet() },
         )
-        permission.value = LocalMediaPermissionMode.Full
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = true))
         val partial = albums.catalog.first { it.remote.failed && it.local.items.size == 1 }
         assertEquals(listOf("Camera"), partial.items.map { it.name })
 
@@ -71,7 +68,7 @@ class AlbumsTest {
         assertEquals(2, recovered.items.size)
         assertEquals(1, localRefreshes.get())
 
-        permission.value = LocalMediaPermissionMode.Partial
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = false))
         val withoutLocal = albums.catalog.first { it.local.items.isEmpty() }
         assertEquals(1, withoutLocal.remote.items.size)
     }
@@ -83,6 +80,7 @@ class AlbumsTest {
 
         library.publishLocalStatus(
             LocalLibraryStatus(
+                hasAccess = true,
                 loading = true,
                 initial = true,
                 progress = LocalMediaIndexProgress(indexedCount = 200, totalCount = 1_000),
@@ -95,7 +93,7 @@ class AlbumsTest {
         assertTrue(folderLoading.items.isEmpty())
 
         library.publish(listOf(localFolderItem("pic-1", "external_primary", "Pictures/", 20)))
-        library.publishLocalStatus(LocalLibraryStatus(loading = false))
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = true, loading = false))
 
         val catalogReady = albums.catalog.first { !it.local.loading && it.local.items.size == 1 }
         assertEquals("Pictures", catalogReady.local.items.single().name)
@@ -309,35 +307,36 @@ class AlbumsTest {
     }
 
     @Test fun `permission loss hides folder contents and gaining permission restores them`() = scenario { harness, scope ->
-        val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Denied)
         val library = MediaLibraryIndex().apply {
             publish(listOf(localFolderItem("pic-1", "external_primary", "Pictures/", 10)))
+            publishLocalStatus(LocalLibraryStatus(hasAccess = false))
         }
         val albums = harness.albums(
             scope,
             library = library,
-            permission = permission,
         )
         val contents = albums.observeContents(AlbumLocation.Folder("external_primary", "Pictures/"))
         contents.first { it.permissionRequired }
-        permission.value = LocalMediaPermissionMode.Full
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = true))
         contents.first { it.loaded == 1 }
-        permission.value = LocalMediaPermissionMode.Partial
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = false))
         val blocked = contents.first { it.permissionRequired }
         assertTrue(blocked.items.isEmpty())
     }
 
     @Test fun `empty folder clears permission requirement after full access is restored`() = scenario { harness, scope ->
-        val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Full)
+        val library = MediaLibraryIndex().apply {
+            publishLocalStatus(LocalLibraryStatus(hasAccess = true))
+        }
         val albums = harness.albums(
             scope,
-            permission = permission,
+            library = library,
         )
         val contents = albums.observeContents(AlbumLocation.Folder("external_primary", "Pictures/"))
         contents.first { !it.loading && !it.permissionRequired }
-        permission.value = LocalMediaPermissionMode.Partial
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = false))
         contents.first { it.permissionRequired }
-        permission.value = LocalMediaPermissionMode.Full
+        library.publishLocalStatus(LocalLibraryStatus(hasAccess = true))
         val restored = contents.first { !it.loading && !it.permissionRequired }
         assertTrue(restored.items.isEmpty())
         assertEquals(0, restored.total)
@@ -349,9 +348,9 @@ class AlbumsTest {
 
         fun albums(
             scope: CoroutineScope,
-            library: MediaLibraryIndex = MediaLibraryIndex(),
-            permission: MutableStateFlow<LocalMediaPermissionMode?> =
-                MutableStateFlow(LocalMediaPermissionMode.Full),
+            library: MediaLibraryIndex = MediaLibraryIndex().apply {
+                publishLocalStatus(LocalLibraryStatus(hasAccess = true))
+            },
             catalog: suspend () -> RemoteAlbumsCatalog = { RemoteAlbumsCatalog(emptyList()) },
             remoteContents: (AlbumLocation.Remote) -> Flow<AlbumContentsBatch> = {
                 flowOf(AlbumContentsBatch(emptyList(), 0))
@@ -378,7 +377,7 @@ class AlbumsTest {
                 override suspend fun containsFile(album: AlbumAddress, fileId: Long?) =
                     fileId != null
             }
-            return Albums(credentials, remote, library, permission, scope, enqueue, refreshLocal)
+            return Albums(credentials, remote, library, scope, enqueue, refreshLocal)
         }
     }
 
