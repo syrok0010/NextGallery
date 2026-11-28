@@ -89,6 +89,8 @@
     <string name="albums_permission">Phone folders appear with full access to photos and videos. Limited access isn\'t supported yet.</string>
     <string name="albums_remote_error">Couldn\'t refresh Nextcloud albums. The list may be out of date.</string>
     <string name="albums_local_error">Couldn\'t refresh phone folders. The list may be out of date.</string>
+    <string name="albums_local_indexing">Indexing phone folders…</string>
+    <string name="albums_local_indexing_progress">Indexing phone folders… (%1$d/%2$d)</string>
     <string name="albums_empty">No albums in this section</string>
     <string name="album_contents_progress">Loaded %1$d of %2$d items</string>
     <string name="album_contents_empty">This album has no photos or videos yet</string>

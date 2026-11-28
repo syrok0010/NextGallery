@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.feature.albums
 import androidx.annotation.MainThread
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.session.AccountCredentials
@@ -11,12 +12,9 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
 import com.syrok0010.nextgallery.feature.upload.UploadAlbum
 import com.syrok0010.nextgallery.feature.upload.UploadedFile
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,7 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -36,23 +33,23 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Owns session-scoped album catalog, loaded album contents cache, and confirmed album mutations.
+ * Owns session-scoped album catalog, loaded remote album contents cache, and confirmed album mutations.
+ * Device folders are projected directly from [library] without running a second MediaStore scan.
  * Synchronous commands run on main, as does [scope]; upload workers enter it through [addUploaded].
  */
-@OptIn(FlowPreview::class)
 internal class Albums(
     private val credentials: AccountCredentials,
     private val remote: RemoteAlbums,
-    private val local: LocalFolders,
     private val library: MediaLibraryIndex,
     private val permission: StateFlow<LocalMediaPermissionMode?>,
     private val scope: CoroutineScope,
     private val enqueueUploads: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult,
+    private val refreshLocal: () -> Unit = {},
 ) : OperationStatusSource {
     private val mutations = Mutex()
     private val catalogRefreshes = MutableStateFlow(0)
     private val mutableCatalog = MutableStateFlow(AlbumsUiState())
-    private val entries = mutableMapOf<AlbumLocation, Entry>()
+    private val entries = mutableMapOf<AlbumLocation.Remote, Entry>()
     private val additionState = MutableStateFlow<AlbumAdditionState>(AlbumAdditionState.Idle)
     private var additionJob: Job? = null
 
@@ -78,50 +75,78 @@ internal class Albums(
             catalogRefreshes.collectLatest { loadRemoteCatalog() }
         }
         scope.launch {
-            permission.collectLatest { mode ->
-                mutableCatalog.update { it.copy(local = AlbumSourceState(), permission = mode) }
-                if (mode != LocalMediaPermissionMode.Full) {
-                    clearFolders()
-                    return@collectLatest
+            combine(library.state, library.localStatus, permission) { known, status, mode ->
+                val local = if (mode != LocalMediaPermissionMode.Full) {
+                    AlbumSourceState()
+                } else {
+                    AlbumSourceState(
+                        items = localAlbumSummaries(known.values),
+                        loading = status.loading,
+                        failed = status.failed,
+                        progress = status.progress?.let {
+                            AlbumLoadingProgress(
+                                it.indexedCount,
+                                it.totalCount,
+                            )
+                        },
+                    )
                 }
-                reloadEmptyFolders()
-                coroutineScope {
-                    val localChanges = MutableStateFlow(0)
-                    launch {
-                        local.changes().debounce(450.milliseconds).collect {
-                            refreshFolders()
-                            localChanges.update { it + 1 }
-                        }
-                    }
-                    combine(catalogRefreshes, localChanges) { refresh, change -> refresh to change }
-                        .collectLatest { loadLocalCatalog() }
-                }
+                local to mode
+            }.collect { (local, mode) ->
+                mutableCatalog.update { it.copy(local = local, permission = mode) }
             }
         }
     }
 
     @MainThread
-    fun observeContents(location: AlbumLocation): Flow<AlbumContentsState> = flow {
-        val entry = entry(location)
-        if ((!entry.loaded || entry.stale) && entry.job?.isActive != true) {
-            load(location, entry)
-        }
-        emitAll(
-            combine(entry.state, library.state, permission) { current, known, access ->
-                if (location is AlbumLocation.Folder && access != LocalMediaPermissionMode.Full) {
+    fun observeContents(location: AlbumLocation): Flow<AlbumContentsState> =
+        when (location) {
+            is AlbumLocation.Folder -> combine(
+                library.state,
+                library.localStatus,
+                permission,
+            ) { known, status, access ->
+                if (access != LocalMediaPermissionMode.Full) {
                     AlbumContentsState(permissionRequired = true)
                 } else {
-                    current.copy(
-                        items = albumMediaProjection(
-                            current.items,
-                            known,
-                            access == LocalMediaPermissionMode.Full,
-                        ),
+                    val items = folderItems(known.values, location)
+                    AlbumContentsState(
+                        items = items,
+                        total = items.size,
+                        loaded = items.size,
+                        loading = status.loading,
+                        failed = status.failed,
                     )
                 }
-            },
-        )
-    }
+            }
+
+            is AlbumLocation.Remote -> flow {
+                val entry = entry(location)
+                if ((!entry.loaded || entry.stale) && entry.job?.isActive != true) {
+                    load(location, entry)
+                }
+                emitAll(
+                    combine(entry.state, library.state, permission) { current, known, access ->
+                        val allowLocal = access == LocalMediaPermissionMode.Full
+                        val projected = current.items
+                            .map { member ->
+                                val resolved = known[member.mediaId] ?: member
+                                if (allowLocal) {
+                                    resolved
+                                } else {
+                                    resolved.remoteCopy?.let {
+                                        resolved.copy(
+                                            assetRef = it,
+                                        )
+                                    } ?: resolved
+                                }
+                            }.distinctBy { it.mediaId }
+                            .sortedWith(albumItemOrder)
+                        current.copy(items = projected)
+                    },
+                )
+            }
+        }
 
     @MainThread
     fun canModify(location: AlbumLocation): Boolean =
@@ -133,11 +158,15 @@ internal class Albums(
     @MainThread
     fun refreshCatalog() {
         catalogRefreshes.update { it + 1 }
+        refreshLocal()
     }
 
     @MainThread
     fun refresh(location: AlbumLocation) {
-        entries[location]?.let { load(location, it) }
+        when (location) {
+            is AlbumLocation.Folder -> refreshLocal()
+            is AlbumLocation.Remote -> entries[location]?.let { load(location, it) }
+        }
     }
 
     @MainThread
@@ -154,7 +183,9 @@ internal class Albums(
     suspend fun addUploaded(target: UploadAlbum, file: UploadedFile, recovered: Boolean): Boolean =
         withContext(scope.coroutineContext.minusKey(Job)) {
             mutations.withLock {
-                require(target.owner == credentials.userId) { "Only owned albums support additions" }
+                require(
+                    target.owner == credentials.userId,
+                ) { "Only owned albums support additions" }
                 val album = AlbumAddress(target.owner, target.name)
                 val accepted = if (recovered) {
                     remote.containsFile(album, file.fileId) ||
@@ -191,29 +222,30 @@ internal class Albums(
     private suspend fun performAddition(
         target: AlbumTarget,
         request: AlbumAdditionRequest,
-    ): AlbumAdditionState = try {
-        val location = when (target) {
-            is AlbumTarget.Existing -> target.location
-            is AlbumTarget.New -> remote.create(target.name.trim()).also { refreshCatalog() }
+    ): AlbumAdditionState =
+        try {
+            val location = when (target) {
+                is AlbumTarget.Existing -> target.location
+                is AlbumTarget.New -> remote.create(target.name.trim()).also { refreshCatalog() }
+            }
+            val address = AlbumAddress.of(location)
+            if (address == null || address.owner != credentials.userId) {
+                AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
+            } else {
+                val queued = enqueue(request.uploads, UploadAlbum(address.owner, address.name))
+                val result = remote.add(address, request.fileIds)
+                applyAdded(location, result.presentIds, request.items)
+                AlbumAdditionState.Done(target.name, result.summary, queued)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: UploadEnqueueRejected) {
+            AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
+        } catch (_: AlbumAlreadyExistsException) {
+            AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
+        } catch (_: Exception) {
+            AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.Network)
         }
-        val address = AlbumAddress.of(location)
-        if (address == null || address.owner != credentials.userId) {
-            AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
-        } else {
-            val queued = enqueue(request.uploads, UploadAlbum(address.owner, address.name))
-            val result = remote.add(address, request.fileIds)
-            applyAdded(location, result.presentIds, request.items)
-            AlbumAdditionState.Done(target.name, result.summary, queued)
-        }
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: UploadEnqueueRejected) {
-        AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.QueueStorage)
-    } catch (_: AlbumAlreadyExistsException) {
-        AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.AlbumExists)
-    } catch (_: Exception) {
-        AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.Network)
-    }
 
     private suspend fun enqueue(ids: Collection<MediaId>, album: UploadAlbum): Int =
         if (ids.isEmpty()) {
@@ -271,27 +303,25 @@ internal class Albums(
         refreshCatalog()
     }
 
-    private fun entry(location: AlbumLocation): Entry = entries.getOrPut(location) {
-        val blocked = location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full
-        Entry(AlbumContentsState(loading = !blocked, permissionRequired = blocked))
-    }
+    private fun entry(location: AlbumLocation.Remote): Entry =
+        entries.getOrPut(location) { Entry(AlbumContentsState(loading = true)) }
 
-    private fun load(location: AlbumLocation, entry: Entry) {
-        if (location is AlbumLocation.Folder && permission.value != LocalMediaPermissionMode.Full) return
+    private fun load(location: AlbumLocation.Remote, entry: Entry) {
         entry.job?.cancel()
         val generation = ++entry.generation
         val hadItems = entry.loaded || entry.state.value.items.isNotEmpty()
-        entry.state.value = entry.state.value.copy(loading = true, failed = false, permissionRequired = false)
-        val stream = when (location) {
-            is AlbumLocation.Remote -> remote.loadContents(location)
-            is AlbumLocation.Folder -> local.loadContents(location)
-        }
+        entry.state.value = entry.state.value.copy(
+            loading = true,
+            failed = false,
+            permissionRequired = false,
+        )
+        val stream = remote.loadContents(location)
         entry.job = scope.launch {
             try {
                 var latest: AlbumContentsBatch? = null
                 stream.collect { batch ->
                     if (entry.generation != generation) return@collect
-                    if (location is AlbumLocation.Remote) library.observeRemote(batch.items)
+                    library.observeRemote(batch.items)
                     latest = batch
                     if (!hadItems) {
                         entry.state.value = entry.state.value.copy(
@@ -310,7 +340,7 @@ internal class Albums(
                         total = items.size,
                         loaded = items.size,
                     )
-                    if (location is AlbumLocation.Remote) updateCatalogSummary(location, items)
+                    updateCatalogSummary(location, items)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -325,13 +355,7 @@ internal class Albums(
     private fun updateCatalogSummary(location: AlbumLocation.Remote, items: List<MediaItem>) {
         mutableCatalog.update { current ->
             val updated = current.remote.items.map { album ->
-                if (album.location != location) return@map album
-                val cover = (album.cover as? AlbumCover.Remote)?.takeIf { existing ->
-                    items.any { it.remoteFileId == existing.fileId }
-                } ?: items.firstNotNullOfOrNull { item ->
-                    item.remoteFileId?.let { AlbumCover.Remote(it, item.etag) }
-                }
-                album.copy(count = items.size, cover = cover)
+                if (album.location == location) album.withContents(items) else album
             }
             current.copy(remote = current.remote.copy(items = updated))
         }
@@ -343,14 +367,10 @@ internal class Albums(
             val result = remote.loadCatalog()
             val synced = result.albums.map { album ->
                 val location = album.location as? AlbumLocation.Remote ?: return@map album
-                val cached = entries[location]?.takeIf { it.loaded && !it.stale } ?: return@map album
-                val items = cached.state.value.items
-                val cover = (album.cover as? AlbumCover.Remote)?.takeIf { existing ->
-                    items.any { it.remoteFileId == existing.fileId }
-                } ?: items.firstNotNullOfOrNull { item ->
-                    item.remoteFileId?.let { AlbumCover.Remote(it, item.etag) }
-                }
-                album.copy(count = items.size, cover = cover)
+                val cached = entries[location]?.takeIf {
+                    it.loaded && !it.stale
+                } ?: return@map album
+                album.withContents(cached.state.value.items)
             }
             mutableCatalog.update {
                 it.copy(remote = AlbumSourceState(synced, supported = result.supported))
@@ -358,47 +378,22 @@ internal class Albums(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            mutableCatalog.update { it.copy(remote = it.remote.copy(loading = false, failed = true)) }
-        }
-    }
-
-    private suspend fun loadLocalCatalog() {
-        mutableCatalog.update { it.copy(local = it.local.copy(loading = true, failed = false)) }
-        try {
-            val folders = local.loadCatalog()
-            mutableCatalog.update { it.copy(local = AlbumSourceState(folders)) }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            mutableCatalog.update { it.copy(local = it.local.copy(loading = false, failed = true)) }
-        }
-    }
-
-    private fun clearFolders() {
-        entries.forEach { (location, entry) ->
-            if (location is AlbumLocation.Folder) {
-                entry.job?.cancel()
-                entry.generation++
-                entry.loaded = false
-                entry.stale = false
-                entry.state.value = AlbumContentsState(permissionRequired = true)
+            mutableCatalog.update {
+                it.copy(
+                    remote = it.remote.copy(loading = false, failed = true),
+                )
             }
         }
     }
+}
 
-    private fun reloadEmptyFolders() {
-        entries.forEach { (location, entry) ->
-            if (location is AlbumLocation.Folder && !entry.loaded && entry.job?.isActive != true) {
-                load(location, entry)
-            }
-        }
+private fun AlbumSummary.withContents(items: List<MediaItem>): AlbumSummary {
+    val cover = (cover as? AlbumCover.Remote)?.takeIf { existing ->
+        items.any { it.remoteFileId == existing.fileId }
+    } ?: items.firstNotNullOfOrNull { item ->
+        item.remoteFileId?.let { AlbumCover.Remote(it, item.etag) }
     }
-
-    private fun refreshFolders() {
-        entries.forEach { (location, entry) ->
-            if (location is AlbumLocation.Folder) load(location, entry)
-        }
-    }
+    return copy(count = items.size, cover = cover)
 }
 
 private class UploadEnqueueRejected : Exception()

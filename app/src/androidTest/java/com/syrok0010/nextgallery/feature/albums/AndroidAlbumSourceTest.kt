@@ -1,6 +1,5 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import android.content.ContentUris
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.net.Uri
@@ -11,15 +10,18 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
 import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaAssetRef
-import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.library.local.AndroidMediaStoreReader
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaChangeObserver
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import java.time.Instant
 import java.time.LocalDate
 import java.util.TimeZone
-import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidAlbumSourceTest {
@@ -53,47 +55,46 @@ class AndroidAlbumSourceTest {
                     saveAttributes()
                 }
             }
-            resolver.update(uri, ContentValues().apply {
-                put(MediaStore.Images.Media.IS_PENDING, 0)
-                put(MediaStore.Images.Media.DATE_TAKEN, epoch * 1_000)
-            }, null, null)
+            resolver.update(
+                uri,
+                ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                    put(MediaStore.Images.Media.DATE_TAKEN, epoch * 1_000)
+                },
+                null,
+                null,
+            )
         }
         try {
-            insert("$prefix/one/Отпуск/"); insert("$prefix/one/Отпуск/"); insert("$prefix/two/Отпуск/")
+            insert("$prefix/one/Отпуск/")
+            insert("$prefix/one/Отпуск/")
+            insert("$prefix/two/Отпуск/")
             insert("$prefix/one/Отпуск/Nested/")
-            val folders = AndroidFolders(resolver, identities, projections)
-            val albums = folders.loadCatalog().filter { it.detail.contains(prefix) && it.name == "Отпуск" }
+            val source = LocalMediaSource(
+                reader = AndroidMediaStoreReader(resolver, database.localMediaMetadataDao()),
+                projectionStore = projections,
+                identityRegistry = identities,
+                changeObserver = LocalMediaChangeObserver { emptyFlow() },
+            )
+            val indexed = source.updates().first { it.progress == null && it.processed != null }.items
+            val persisted = projections.loadLocalMediaProjection()
+            assertEquals(indexed.size, persisted.size)
+            val albums = localAlbumSummaries(persisted).filter { it.detail.contains(prefix) && it.name == "Отпуск" }
             assertEquals(2, albums.size)
             assertEquals(setOf(1, 2), albums.map { it.count }.toSet())
             assertEquals(2, albums.map { it.id }.toSet().size)
             assertTrue(albums.all { it.name == "Отпуск" })
             albums.forEach { album ->
-                val contents = folders.loadContents(album.location as AlbumLocation.Folder).last()
-                assertEquals(album.count, contents.items.size)
-                assertEquals(album.count, contents.total)
-                contents.items.forEach { item ->
+                val contents = folderItems(persisted, album.location as AlbumLocation.Folder)
+                assertEquals(album.count, contents.size)
+                contents.forEach { item ->
                     assertEquals(epoch, item.takenAtEpochSeconds)
                     assertEquals(LocalDate.parse("2026-11-08"), item.day)
-                }
-                val indexed = contents.items.map { item ->
-                    val asset = item.assetRef as MediaAssetRef.LocalContent
-                    val aggregateUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        Uri.parse(asset.contentUri).lastPathSegment!!.toLong()).toString()
-                    item.copy(dayId = 42, takenAtEpochSeconds = 42 * 86_400L,
-                        assetRef = asset.copy(contentUri = aggregateUri))
-                }
-                val cache = object : LocalMediaProjectionStore {
-                    override suspend fun loadLocalMediaProjection() = indexed
-                    override suspend fun saveLocalMediaBatch(items: List<MediaItem>) = error("Read only")
-                    override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) = error("Read only")
-                }
-                val cachedContents = AndroidFolders(resolver, identities, cache)
-                    .loadContents(album.location).last()
-                assertTrue(cachedContents.items.all { it.dayId == 42 && it.takenAtEpochSeconds == 42 * 86_400L })
-                contents.items.forEach { item ->
                     resolver.openInputStream(Uri.parse((item.assetRef as MediaAssetRef.LocalContent).contentUri))!!.close()
                 }
-                resolver.openInputStream(Uri.parse((album.cover as AlbumCover.Local).uri))!!.use { assertTrue(it.read() >= 0) }
+                resolver.openInputStream(Uri.parse((album.cover as AlbumCover.Local).uri))!!.use {
+                    assertTrue(it.read() >= 0)
+                }
             }
         } finally {
             database.close()

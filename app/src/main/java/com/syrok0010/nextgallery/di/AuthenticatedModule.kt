@@ -21,8 +21,6 @@ import com.syrok0010.nextgallery.feature.albums.AlbumLocation
 import com.syrok0010.nextgallery.feature.albums.AlbumUploadFollowUp
 import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.albums.AlbumsViewModel
-import com.syrok0010.nextgallery.feature.albums.AndroidFolders
-import com.syrok0010.nextgallery.feature.albums.LocalFolders
 import com.syrok0010.nextgallery.feature.albums.MemoriesAlbums
 import com.syrok0010.nextgallery.feature.albums.RemoteAlbums
 import com.syrok0010.nextgallery.feature.deletion.AndroidPhoneTrash
@@ -100,13 +98,6 @@ internal fun authenticatedModule() =
             }
             scoped { create(::capabilitiesClient) }
             scoped<MemoriesAlbums>() bind RemoteAlbums::class
-            scoped {
-                AndroidFolders(
-                    get<Context>().contentResolver,
-                    get(),
-                    get(),
-                )
-            } bind LocalFolders::class
             scoped<LocalMediaPermissionCoordinator>()
             scoped<MemoriesFiles>()
             scoped { UploadSource(get<Context>().contentResolver) }
@@ -114,11 +105,11 @@ internal fun authenticatedModule() =
                 Albums(
                     credentials = get(),
                     remote = get(),
-                    local = get(),
                     library = get(),
                     permission = get<LocalMediaPermissionCoordinator>().mode,
                     scope = get(),
                     enqueueUploads = { ids, album -> get<UploadQueue>().submit(ids, album) },
+                    refreshLocal = { get<MediaLibraryCoordinator>().refreshLocal() },
                 )
             }
             scoped { create(::uploadQueue) }

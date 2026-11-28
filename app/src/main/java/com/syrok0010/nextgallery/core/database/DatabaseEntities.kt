@@ -97,6 +97,8 @@ data class LocalMediaEntity(
     val auid: String?,
     val buid: String?,
     val dayId: Int,
+    val volumeName: String? = null,
+    val relativePath: String? = null,
 )
 
 data class IdentifiedLocalMedia(@Embedded val media: LocalMediaEntity, val mediaId: String)

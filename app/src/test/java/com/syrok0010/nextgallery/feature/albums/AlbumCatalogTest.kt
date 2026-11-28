@@ -1,5 +1,8 @@
 package com.syrok0010.nextgallery.feature.albums
 
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaId
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
@@ -10,11 +13,11 @@ class AlbumCatalogTest {
 
     @Test fun `same names and matching covers do not merge containers`() {
         val local = localAlbumSummaries(
-            sequenceOf(
-                LocalAlbumEntry("external_primary", "Pictures/Отпуск/", "content://1", 9),
-                LocalAlbumEntry("external_primary", "Pictures/Отпуск/", "content://2", 8),
-                LocalAlbumEntry("sd", "Pictures/Отпуск/", "content://3", 7),
-                LocalAlbumEntry("external_primary", "Download/Отпуск/", "content://4", 6),
+            listOf(
+                localItem("1", "external_primary", "Pictures/Отпуск/", "content://1", 9),
+                localItem("2", "external_primary", "Pictures/Отпуск/", "content://2", 8),
+                localItem("3", "sd", "Pictures/Отпуск/", "content://3", 7),
+                localItem("4", "external_primary", "Download/Отпуск/", "content://4", 6),
             ),
         )
         val remote =
@@ -50,4 +53,31 @@ class AlbumCatalogTest {
             ).cover,
         )
     }
+
+    private fun localItem(id: String, volume: String, path: String, uri: String, modified: Long) =
+        MediaItem(
+            mediaId = MediaId(id),
+            dayId = 1,
+            displayName = "$id.jpg",
+            mimeType = "image/jpeg",
+            width = 10,
+            height = 10,
+            etag = null,
+            livePhotoId = null,
+            auid = null,
+            buid = null,
+            sharedBy = null,
+            takenAtEpochSeconds = modified,
+            isVideo = false,
+            videoDurationSeconds = null,
+            isFavorite = false,
+            isHidden = false,
+            assetRef = MediaAssetRef.LocalContent(
+                contentUri = uri,
+                modifiedAtEpochSeconds = modified,
+                sizeBytes = 1,
+                volumeName = volume,
+                relativePath = path,
+            ),
+        )
 }

@@ -7,7 +7,9 @@ import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.network.dav.DavFilePath
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.library.LocalLibraryStatus
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
 import com.syrok0010.nextgallery.feature.upload.EnqueueResult
@@ -44,35 +46,60 @@ import org.junit.Test
 class AlbumsTest {
     @Test fun `remote catalog failure preserves local folders and refresh recovers both`() = scenario { harness, scope ->
         var failRemote = true
-        val localLoads = AtomicInteger()
+        val localRefreshes = AtomicInteger()
+        val library = MediaLibraryIndex().apply {
+            publish(listOf(localFolderItem("cam-1", "external_primary", "DCIM/Camera/", 10)))
+        }
         val permission = MutableStateFlow<LocalMediaPermissionMode?>(null)
         val albums = harness.albums(
             scope,
+            library = library,
             permission = permission,
             catalog = {
                 if (failRemote) error("offline")
                 RemoteAlbumsCatalog(listOf(summary))
             },
-            localCatalog = {
-                localLoads.incrementAndGet()
-                listOf(AlbumSummary("local:1", "Camera", AlbumOrigin.Phone, 3, ""))
-            },
+            refreshLocal = { localRefreshes.incrementAndGet() },
         )
         permission.value = LocalMediaPermissionMode.Full
         val partial = albums.catalog.first { it.remote.failed && it.local.items.size == 1 }
-        assertEquals(listOf("local:1"), partial.items.map { it.id })
-        assertEquals(1, localLoads.get())
+        assertEquals(listOf("Camera"), partial.items.map { it.name })
 
         failRemote = false
         albums.refreshCatalog()
         val recovered = albums.catalog.first { !it.remote.failed && it.items.size == 2 }
         assertEquals(2, recovered.items.size)
-        while (localLoads.get() < 2) delay(10)
-        assertEquals(2, localLoads.get())
+        assertEquals(1, localRefreshes.get())
 
         permission.value = LocalMediaPermissionMode.Partial
         val withoutLocal = albums.catalog.first { it.local.items.isEmpty() }
         assertEquals(1, withoutLocal.remote.items.size)
+    }
+
+    @Test fun `local indexing status exposes loader progress in catalog and open folder`() = scenario { harness, scope ->
+        val library = MediaLibraryIndex()
+        val albums = harness.albums(scope, library = library)
+        val folder = AlbumLocation.Folder("external_primary", "Pictures/")
+
+        library.publishLocalStatus(
+            LocalLibraryStatus(
+                loading = true,
+                progress = LocalMediaIndexProgress(indexedCount = 200, totalCount = 1_000),
+            ),
+        )
+        val catalogLoading = albums.catalog.first { it.local.loading }
+        assertEquals(AlbumLoadingProgress(200, 1_000), catalogLoading.local.progress)
+
+        val folderLoading = albums.observeContents(folder).first { it.loading }
+        assertTrue(folderLoading.items.isEmpty())
+
+        library.publish(listOf(localFolderItem("pic-1", "external_primary", "Pictures/", 20)))
+        library.publishLocalStatus(LocalLibraryStatus(loading = false))
+
+        val catalogReady = albums.catalog.first { !it.local.loading && it.local.items.size == 1 }
+        assertEquals("Pictures", catalogReady.local.items.single().name)
+        val folderReady = albums.observeContents(folder).first { !it.loading && it.loaded == 1 }
+        assertEquals(listOf(MediaId("pic-1")), folderReady.items.map { it.mediaId })
     }
 
     @Test fun `partial addition applies only confirmed ids and cancels an older in-flight read`() = scenario { harness, scope ->
@@ -267,45 +294,30 @@ class AlbumsTest {
         assertEquals(1, state.total)
     }
 
-    @Test fun `permission loss cancels folder read and gaining permission reloads it`() = scenario { harness, scope ->
+    @Test fun `permission loss hides folder contents and gaining permission restores them`() = scenario { harness, scope ->
         val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Denied)
-        val cancelled = CompletableDeferred<Unit>()
+        val library = MediaLibraryIndex().apply {
+            publish(listOf(localFolderItem("pic-1", "external_primary", "Pictures/", 10)))
+        }
         val albums = harness.albums(
             scope,
+            library = library,
             permission = permission,
-            localContents = {
-                flow {
-                    emit(AlbumContentsBatch(listOf(first), 1))
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        cancelled.complete(Unit)
-                    }
-                }
-            },
         )
         val contents = albums.observeContents(AlbumLocation.Folder("external_primary", "Pictures/"))
         contents.first { it.permissionRequired }
         permission.value = LocalMediaPermissionMode.Full
         contents.first { it.loaded == 1 }
         permission.value = LocalMediaPermissionMode.Partial
-        cancelled.await()
         val blocked = contents.first { it.permissionRequired }
         assertTrue(blocked.items.isEmpty())
     }
 
     @Test fun `empty folder clears permission requirement after full access is restored`() = scenario { harness, scope ->
         val permission = MutableStateFlow<LocalMediaPermissionMode?>(LocalMediaPermissionMode.Full)
-        val reads = AtomicInteger()
         val albums = harness.albums(
             scope,
             permission = permission,
-            localContents = {
-                flow {
-                    reads.incrementAndGet()
-                    emit(AlbumContentsBatch(emptyList(), 0))
-                }
-            },
         )
         val contents = albums.observeContents(AlbumLocation.Folder("external_primary", "Pictures/"))
         contents.first { !it.loading && !it.permissionRequired }
@@ -316,7 +328,6 @@ class AlbumsTest {
         assertTrue(restored.items.isEmpty())
         assertEquals(0, restored.total)
         assertFalse(restored.failed)
-        assertEquals(2, reads.get())
     }
 
     private class Harness {
@@ -331,13 +342,10 @@ class AlbumsTest {
             remoteContents: (AlbumLocation.Remote) -> Flow<AlbumContentsBatch> = {
                 flowOf(AlbumContentsBatch(emptyList(), 0))
             },
-            localCatalog: suspend () -> List<AlbumSummary> = { emptyList() },
-            localContents: (AlbumLocation.Folder) -> Flow<AlbumContentsBatch> = {
-                flowOf(AlbumContentsBatch(emptyList(), 0))
-            },
             enqueue: suspend (Collection<MediaId>, UploadAlbum) -> EnqueueResult = { ids, _ ->
                 EnqueueResult.Accepted(ids.size)
             },
+            refreshLocal: () -> Unit = {},
         ): Albums {
             val remote = object : RemoteAlbums {
                 override suspend fun loadCatalog() = catalog()
@@ -356,12 +364,7 @@ class AlbumsTest {
                 override suspend fun containsFile(album: AlbumAddress, fileId: Long?) =
                     fileId != null
             }
-            val local = object : LocalFolders {
-                override suspend fun loadCatalog() = localCatalog()
-                override fun loadContents(location: AlbumLocation.Folder) = localContents(location)
-                override fun changes() = emptyFlow<Unit>()
-            }
-            return Albums(credentials, remote, local, library, permission, scope, enqueue)
+            return Albums(credentials, remote, library, permission, scope, enqueue, refreshLocal)
         }
     }
 
@@ -389,5 +392,18 @@ class AlbumsTest {
             AlbumCover.Remote(1, null),
             album,
         )
+
+        fun localFolderItem(id: String, volume: String, path: String, modified: Long) =
+            first.copy(
+                mediaId = MediaId(id),
+                takenAtEpochSeconds = modified,
+                assetRef = MediaAssetRef.LocalContent(
+                    contentUri = "content://media/external/images/media/$id",
+                    modifiedAtEpochSeconds = modified,
+                    sizeBytes = 1,
+                    volumeName = volume,
+                    relativePath = path,
+                ),
+            )
     }
 }

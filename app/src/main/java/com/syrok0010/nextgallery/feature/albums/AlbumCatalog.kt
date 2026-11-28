@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import java.util.Locale
 import kotlinx.serialization.Serializable
@@ -48,11 +49,14 @@ internal data class RemoteAlbumsCatalog(
     val supported: Boolean = true,
 )
 
+internal data class AlbumLoadingProgress(val loaded: Int, val total: Int)
+
 internal data class AlbumSourceState(
     val items: List<AlbumSummary> = emptyList(),
     val loading: Boolean = false,
     val failed: Boolean = false,
     val supported: Boolean = true,
+    val progress: AlbumLoadingProgress? = null,
 )
 
 internal data class AlbumsUiState(
@@ -89,28 +93,62 @@ internal fun albumCatalog(
         }.thenBy { it.id },
     )
 
-internal data class LocalAlbumEntry(
-    val volume: String,
-    val path: String,
-    val uri: String,
-    val modified: Long,
-)
+/** Groups indexed local copies into device folders without a second MediaStore scan. */
+internal fun localAlbumSummaries(items: Collection<MediaItem>): List<AlbumSummary> {
+    class Bucket(
+        var count: Int,
+        var coverItem: MediaItem,
+    )
 
-internal fun localAlbumSummaries(entries: Sequence<LocalAlbumEntry>): List<AlbumSummary> {
-    val groups = linkedMapOf<Pair<String, String>, AlbumSummary>()
-    entries.forEach { entry ->
-        val key = entry.volume to entry.path
-        val previous = groups[key]
-        groups[key] = previous?.copy(count = requireNotNull(previous.count) + 1)
-            ?: AlbumSummary(
-                id = "local:${entry.volume.length}:${entry.volume}:${entry.path}",
-                name = entry.path.trimEnd('/').substringAfterLast('/').ifEmpty { entry.volume },
-                origin = AlbumOrigin.Phone,
-                count = 1,
-                detail = "${entry.path} · ${entry.volume}",
-                cover = AlbumCover.Local(entry.uri, entry.modified),
-                location = AlbumLocation.Folder(entry.volume, entry.path),
-            )
+    val groups = linkedMapOf<Pair<String, String>, Bucket>()
+    items.forEach { item ->
+        val local = item.localCopy ?: return@forEach
+        val volume = local.volumeName ?: return@forEach
+        val path = local.relativePath ?: return@forEach
+        val key = volume to path
+        val bucket = groups[key]
+        if (bucket == null) {
+            groups[key] = Bucket(1, item)
+        } else {
+            bucket.count += 1
+            if (isNewerCover(item, bucket.coverItem)) bucket.coverItem = item
+        }
     }
-    return groups.values.toList()
+    return groups.map { (key, bucket) ->
+        val (volume, path) = key
+        val local = requireNotNull(bucket.coverItem.localCopy)
+        AlbumSummary(
+            id = "local:${volume.length}:$volume:$path",
+            name = path.trimEnd('/').substringAfterLast('/').ifEmpty { volume },
+            origin = AlbumOrigin.Phone,
+            count = bucket.count,
+            detail = "$path · $volume",
+            cover = AlbumCover.Local(local.contentUri, local.modifiedAtEpochSeconds ?: 0L),
+            location = AlbumLocation.Folder(volume, path),
+        )
+    }
+}
+
+internal fun folderItems(
+    items: Collection<MediaItem>,
+    location: AlbumLocation.Folder,
+): List<MediaItem> =
+    items
+        .filter { item ->
+            val local = item.localCopy
+            local != null && local.volumeName == location.volume && local.relativePath == location.path
+        }.sortedWith(albumItemOrder)
+
+internal val albumItemOrder: Comparator<MediaItem> =
+    compareByDescending<MediaItem> { it.dayId }
+        .thenByDescending { it.takenAtEpochSeconds }
+        .thenBy { it.mediaId.value }
+
+private fun isNewerCover(candidate: MediaItem, current: MediaItem): Boolean {
+    val candidateTime = candidate.localCopy?.modifiedAtEpochSeconds ?: candidate.takenAtEpochSeconds ?: Long.MIN_VALUE
+    val currentTime = current.localCopy?.modifiedAtEpochSeconds ?: current.takenAtEpochSeconds ?: Long.MIN_VALUE
+    if (candidateTime != currentTime) return candidateTime > currentTime
+    val candidateUri = candidate.localCopy?.contentUri.orEmpty()
+    val currentUri = current.localCopy?.contentUri.orEmpty()
+    return candidateUri > currentUri
 }

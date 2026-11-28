@@ -467,6 +467,34 @@ class LocalMediaSourceTest {
         }
     }
 
+    @Test
+    fun `retries scan automatically when MediaStore volumes change mid-scan`() = runBlocking {
+        var attempts = 0
+        val source = LocalMediaSource(
+            reader = LocalMediaReader {
+                flow {
+                    attempts += 1
+                    if (attempts == 1) throw MediaStoreChangedDuringScanException()
+                    emit(
+                        LocalMediaBatch(
+                            metadata = listOf(metadata("content://images/1", taken = 300_000)),
+                            progress = LocalMediaIndexProgress(1, 1),
+                        ),
+                    )
+                }
+            },
+            projectionStore = InMemoryLocalMediaProjectionStore(),
+            identityRegistry = InMemoryMediaIdentityRegistry(),
+            changeObserver = LocalMediaChangeObserver { emptyFlow() },
+        )
+
+        val states = source.updates().take(2).toList()
+
+        assertEquals(2, attempts)
+        assertEquals(false, states.last().failure)
+        assertEquals(listOf("content://images/1"), states.last().items.map(MediaItem::localContentUri))
+    }
+
     private class InMemoryLocalMediaProjectionStore(
         initialItems: List<MediaItem> = emptyList(),
     ) : LocalMediaProjectionStore {

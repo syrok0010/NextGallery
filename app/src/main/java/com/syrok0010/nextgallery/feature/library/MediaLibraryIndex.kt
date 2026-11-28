@@ -10,12 +10,20 @@ import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.media.remoteCopy
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+
+/** Indexing state of the single device-wide MediaStore scan published alongside [MediaLibraryIndex.state]. */
+internal data class LocalLibraryStatus(
+    val loading: Boolean = false,
+    val progress: LocalMediaIndexProgress? = null,
+    val failed: Boolean = false,
+)
 
 /**
  * Session-scoped catalog of known media objects keyed by [MediaId].
@@ -29,7 +37,9 @@ internal class MediaLibraryIndex {
     private var published: Map<MediaId, MediaItem> = emptyMap()
     private val observedRemote = LinkedHashMap<MediaId, MediaItem>()
     private val mutableState = MutableStateFlow<Map<MediaId, MediaItem>>(emptyMap())
+    private val mutableLocalStatus = MutableStateFlow(LocalLibraryStatus())
     val state = mutableState.asStateFlow()
+    val localStatus = mutableLocalStatus.asStateFlow()
 
     operator fun get(mediaId: MediaId): MediaItem? = state.value[mediaId]
 
@@ -41,6 +51,10 @@ internal class MediaLibraryIndex {
             published = items.associateBy { it.mediaId }
             mutableState.value = rebuildLocked()
         }
+    }
+
+    internal fun publishLocalStatus(status: LocalLibraryStatus) {
+        mutableLocalStatus.value = status
     }
 
     /** Records remote copies loaded outside the timeline and merges them with known local copies. */
@@ -87,6 +101,7 @@ internal class MediaLibraryIndex {
             published = emptyMap()
             observedRemote.clear()
             mutableState.value = emptyMap()
+            mutableLocalStatus.value = LocalLibraryStatus()
         }
     }
 
