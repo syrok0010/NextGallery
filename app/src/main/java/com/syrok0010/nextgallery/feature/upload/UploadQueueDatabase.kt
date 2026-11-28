@@ -47,7 +47,7 @@ internal interface UploadJournalDao {
 }
 
 /** Bump [version] on every schema change: the destructive fallback runs only when it changes. */
-@Database(entities = [UploadJob::class], version = 3, exportSchema = false)
+@Database(entities = [UploadJob::class], version = 4, exportSchema = false)
 @TypeConverters(UploadConverters::class)
 internal abstract class UploadQueueDatabase : RoomDatabase() {
     abstract fun journal(): UploadJournalDao

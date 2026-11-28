@@ -58,10 +58,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.localCopy
 import com.syrok0010.nextgallery.core.operation.OperationKind
-import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.ui.asString
@@ -95,25 +94,29 @@ internal class OperationStatus(
     private val sources: List<OperationStatusSource>,
     private val snapshots: State<List<OperationStatusSnapshot>>,
 ) {
+    private var cachedSnapshots: List<OperationStatusSnapshot>? = null
+    private var cachedActivities: Map<MediaId, MediaTileActivity> = emptyMap()
+
     /** Reads snapshot state: a tile recomposes only when its own activity changes. */
-    fun tileActivity(item: MediaItem): MediaTileActivity? {
-        val activities = currentSnapshots()
-            .sortedBy { it.kind.priority }
-            .flatMap { snapshot ->
-                snapshot.media.map { snapshot.kind.toTileOperation() to it }
-            }
-        val localUri = item.localCopy?.contentUri
-        val remoteFileId = item.remoteFileId
-        activities
-            .firstOrNull { (_, activity) ->
-                when (val reference = activity.reference) {
-                    is OperationMediaReference.LocalUri -> reference.value == localUri
-                    is OperationMediaReference.RemoteFileId -> reference.value == remoteFileId
+    fun tileActivity(item: MediaItem): MediaTileActivity? = activities()[item.mediaId]
+
+    private fun activities(): Map<MediaId, MediaTileActivity> {
+        val current = currentSnapshots()
+        if (current !== cachedSnapshots) {
+            val map = LinkedHashMap<MediaId, MediaTileActivity>()
+            current.sortedBy { it.kind.priority }.forEach { snapshot ->
+                val operation = snapshot.kind.toTileOperation()
+                snapshot.media.forEach { activity ->
+                    map.putIfAbsent(
+                        activity.mediaId,
+                        MediaTileActivity(operation, activity.progress),
+                    )
                 }
-            }?.let { (operation, activity) ->
-                return MediaTileActivity(operation, activity.progress)
             }
-        return null
+            cachedSnapshots = current
+            cachedActivities = map
+        }
+        return cachedActivities
     }
 
     @Composable

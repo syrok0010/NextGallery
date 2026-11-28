@@ -3,10 +3,9 @@ package com.syrok0010.nextgallery.feature.albums
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.hasRemoteCopy
+import com.syrok0010.nextgallery.core.media.hasLocalCopy
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
-import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
@@ -21,21 +20,37 @@ internal sealed interface AlbumTarget {
 }
 
 /**
- * Server copies join the album directly; local-only [uploads] are uploaded once the album exists
- * and join it after the upload.
+ * Copies of the selection fixed when the album picker opens. Physical server ids stay inside the
+ * albums module; callers only read counts and pass the preparation back to [Albums.add].
  */
-internal data class AlbumAdditionRequest(
-    val fileIds: List<Long>,
-    val uploads: List<MediaId> = emptyList(),
-    val items: List<MediaItem> = emptyList(),
+internal class AlbumAdditionPreparation private constructor(
+    internal val cloud: List<CloudMember>,
+    internal val uploads: List<MediaId>,
 ) {
-    companion object {
-        fun of(items: List<MediaItem>) =
-            AlbumAdditionRequest(
-                fileIds = items.mapNotNull { it.remoteFileId }.distinct(),
-                uploads = items.filterNot { it.hasRemoteCopy }.map { it.mediaId },
-                items = items,
-            )
+    val cloudCount: Int get() = cloud.size
+    val uploadCount: Int get() = uploads.size
+    val hasUploads: Boolean get() = uploads.isNotEmpty()
+    internal val cloudMediaIds: Set<MediaId> get() = cloud.mapTo(LinkedHashSet()) { it.mediaId }
+    internal val fileIds: List<Long> get() = cloud.map { it.fileId }.distinct()
+
+    internal data class CloudMember(val mediaId: MediaId, val fileId: Long)
+
+    internal companion object {
+        /** Objects without any available copy are skipped; null when nothing remains to add. */
+        fun of(items: Collection<MediaItem>): AlbumAdditionPreparation? {
+            val cloud = mutableListOf<CloudMember>()
+            val uploads = mutableListOf<MediaId>()
+            items.distinctBy { it.mediaId }.forEach { item ->
+                val fileId = item.remoteFileId
+                if (fileId != null) {
+                    cloud += CloudMember(item.mediaId, fileId)
+                } else if (item.hasLocalCopy) {
+                    uploads += item.mediaId
+                }
+            }
+            return AlbumAdditionPreparation(cloud, uploads)
+                .takeIf { it.cloudCount > 0 || it.uploadCount > 0 }
+        }
     }
 }
 
@@ -44,8 +59,8 @@ internal enum class AlbumAdditionFailure { AlbumExists, Network, NotWritable, Qu
 internal sealed interface AlbumAdditionState {
     data object Idle : AlbumAdditionState
 
-    /** [fileIds] are the server copies being copied into the album. */
-    data class Running(val albumName: String, val fileIds: Set<Long>) : AlbumAdditionState
+    /** [mediaIds] are the objects whose cloud copies are being copied into the album. */
+    data class Running(val albumName: String, val mediaIds: Set<MediaId>) : AlbumAdditionState
 
     data class Done(val albumName: String, val result: AlbumAddResult, val localUploads: Int) :
         AlbumAdditionState
@@ -72,9 +87,7 @@ internal fun albumOperationSnapshots(state: AlbumAdditionState): List<OperationS
             details = lines.drop(1),
             running = running != null,
             failed = failed,
-            media = running?.fileIds.orEmpty().map {
-                OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
-            },
+            media = running?.mediaIds.orEmpty().map { OperationMediaActivity(it) },
         ),
     )
 }

@@ -17,7 +17,7 @@ import com.syrok0010.nextgallery.app.library.TimelineProjectionStore
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.hasRemoteCopy
 import com.syrok0010.nextgallery.feature.albums.AddToAlbumSheet
-import com.syrok0010.nextgallery.feature.albums.AlbumAdditionRequest
+import com.syrok0010.nextgallery.feature.albums.AlbumAdditionPreparation
 import com.syrok0010.nextgallery.feature.albums.Albums
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.MediaViewportLoadingMode
@@ -54,7 +54,11 @@ internal fun PhotosScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val askForNotifications = rememberUploadNotificationRequest()
-    var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
+    var albumRequest by remember {
+        mutableStateOf<Pair<AlbumAdditionPreparation, () -> Unit>?>(
+            null,
+        )
+    }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
     // Asked on every dialog, so the answer is fresh when the user decides.
     val cloudTrash by produceState(CloudTrashStatus.Checking, deleteRequest) {
@@ -78,7 +82,9 @@ internal fun PhotosScreen(
     val albumAction = SelectionAction(
         icon = painterResource(R.drawable.ic_albums),
         label = stringResource(R.string.album_add_action),
-    ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone }
+    ) { items, onDone ->
+        albums.prepareAddition(items.map { it.mediaId })?.let { albumRequest = it to onDone }
+    }
     val uploadAction = SelectionAction(
         icon = painterResource(R.drawable.ic_cloud_upload),
         label = stringResource(R.string.upload_action),
@@ -160,17 +166,17 @@ internal fun PhotosScreen(
             },
         )
     }
-    albumRequest?.let { (request, onDone) ->
+    albumRequest?.let { (addition, onDone) ->
         AddToAlbumSheet(
-            request = request,
+            addition = addition,
             onDismiss = { albumRequest = null },
             onPick = { target ->
                 // A rejected request keeps the sheet and the selection; the sheet explains why.
-                if (albums.add(target, request)) {
+                if (albums.add(target, addition)) {
                     albumRequest = null
                     onDone()
                     // Phone-only items are uploaded into the album.
-                    if (request.uploads.isNotEmpty()) scope.launch { askForNotifications() }
+                    if (addition.hasUploads) scope.launch { askForNotifications() }
                 }
             },
         )

@@ -1,24 +1,24 @@
 package com.syrok0010.nextgallery.feature.upload
 
 import com.syrok0010.nextgallery.R
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
-import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.ui.UiText
 import com.syrok0010.nextgallery.core.ui.pluralText
 import com.syrok0010.nextgallery.core.ui.uiText
 
 /**
- * Upload work shown next to the system notification. [pending] holds identity URIs of files not
+ * Upload work shown next to the system notification. [pending] holds [MediaId]s of objects not
  * done yet; [current] is on the wire. [total] and [processed] count files of the current pass, so
  * a file queued meanwhile extends the same progress.
  */
 internal data class UploadActivity(
-    val pending: Set<String>,
+    val pending: Set<MediaId>,
     val total: Int,
     val processed: Int,
-    val current: String? = null,
+    val current: MediaId? = null,
     val percent: Int? = null,
     val sentBytes: Long? = null,
     val totalBytes: Long? = null,
@@ -43,10 +43,10 @@ internal fun uploadActivity(rows: List<UploadJob>, pass: Set<String>, progress: 
     if (active.isEmpty()) return null
     val current = progress?.let { p -> active.firstOrNull { it.id == p.id && it.state == TransferState.Running } }
     return UploadActivity(
-        pending = active.mapTo(HashSet()) { it.selection.identityUri },
+        pending = active.mapTo(HashSet()) { MediaId(it.selection.mediaId) },
         total = pass.size,
         processed = pass.size - active.size,
-        current = current?.selection?.identityUri,
+        current = current?.selection?.mediaId?.let(::MediaId),
         percent = progress?.percent?.takeIf { current != null },
         sentBytes = progress?.sentBytes?.takeIf { current != null },
         totalBytes = progress?.totalBytes?.takeIf { current != null && it >= 0L },
@@ -86,10 +86,10 @@ internal fun uploadOperationSnapshots(activity: UploadActivity?, result: UploadR
             val media = buildList {
                 activity.current?.let {
                     val fileProgress = activity.percent?.takeUnless { activity.saving }?.div(100f)
-                    add(OperationMediaActivity(OperationMediaReference.LocalUri(it), fileProgress))
+                    add(OperationMediaActivity(it, fileProgress))
                 }
                 activity.pending.asSequence().filterNot { it == activity.current }.mapTo(this) {
-                    OperationMediaActivity(OperationMediaReference.LocalUri(it), 0f)
+                    OperationMediaActivity(it, 0f)
                 }
             }
             add(

@@ -3,7 +3,6 @@ package com.syrok0010.nextgallery.feature.deletion
 import com.syrok0010.nextgallery.R
 import com.syrok0010.nextgallery.core.operation.OperationKind
 import com.syrok0010.nextgallery.core.operation.OperationMediaActivity
-import com.syrok0010.nextgallery.core.operation.OperationMediaReference
 import com.syrok0010.nextgallery.core.operation.OperationStatusSnapshot
 import com.syrok0010.nextgallery.core.operation.OperationStatusSource
 import com.syrok0010.nextgallery.core.media.MediaId
@@ -48,6 +47,7 @@ internal data class DeletionTargets(
     val contentUris: List<String>,
     val fileIds: List<Long>,
     val phoneSources: Map<String, String> = emptyMap(),
+    val mediaIds: List<String> = emptyList(),
 )
 
 /** How many selected objects have only a phone copy, only a cloud copy, or both. */
@@ -69,7 +69,7 @@ internal data class DeletionPlan(val phoneOnly: Int, val cloudOnly: Int, val mer
  */
 internal class DeletionPreparation private constructor(
     private val phoneOnly: List<PhoneCopy>,
-    private val cloudOnly: List<Long>,
+    private val cloudOnly: List<CloudCopy>,
     private val merged: List<MergedCopies>,
 ) {
     val plan = DeletionPlan(phoneOnly.size, cloudOnly.size, merged.size)
@@ -77,33 +77,36 @@ internal class DeletionPreparation private constructor(
     /** Without [cloudAllowed] cloud copies stay untouched whatever the [scope]. */
     fun confirm(scope: DeletionScope, cloudAllowed: Boolean): DeletionTargets {
         val phone = phoneOnly + if (scope == DeletionScope.CloudOnly) emptyList() else merged.map { it.phone }
+        val cloud = if (!cloudAllowed) {
+            emptyList()
+        } else {
+            cloudOnly + if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.cloud }
+        }
         return DeletionTargets(
             contentUris = phone.map { it.trashUri },
             phoneSources = phone.associate { it.trashUri to it.sourceKey },
-            fileIds = if (!cloudAllowed) {
-                emptyList()
-            } else {
-                (
-                    cloudOnly +
-                        if (scope == DeletionScope.PhoneOnly) emptyList() else merged.map { it.fileId }
-                    ).distinct()
-            },
+            fileIds = cloud.map { it.fileId }.distinct(),
+            mediaIds = (phone.map { it.mediaId.value } + cloud.map { it.mediaId.value }).distinct(),
         )
     }
 
-    private class PhoneCopy(val trashUri: String, val sourceKey: String)
+    private class PhoneCopy(val mediaId: MediaId, val trashUri: String, val sourceKey: String)
 
-    private class MergedCopies(val phone: PhoneCopy, val fileId: Long)
+    private class CloudCopy(val mediaId: MediaId, val fileId: Long)
+
+    private class MergedCopies(val phone: PhoneCopy, val cloud: CloudCopy)
 
     companion object {
         /** Objects without any copy left are skipped; null when nothing remains to delete. */
         internal fun of(items: List<MediaItem>): DeletionPreparation? {
             val phoneOnly = mutableListOf<PhoneCopy>()
-            val cloudOnly = mutableListOf<Long>()
+            val cloudOnly = mutableListOf<CloudCopy>()
             val merged = mutableListOf<MergedCopies>()
             items.forEach { item ->
-                val local = item.localCopy?.contentUri?.let { PhoneCopy(mediaStoreItemUri(it, item.isVideo), it) }
-                val remote = item.remoteFileId
+                val local = item.localCopy?.contentUri?.let {
+                    PhoneCopy(item.mediaId, mediaStoreItemUri(it, item.isVideo), it)
+                }
+                val remote = item.remoteFileId?.let { CloudCopy(item.mediaId, it) }
                 when {
                     local != null && remote != null -> merged += MergedCopies(local, remote)
                     local != null -> phoneOnly += local
@@ -128,21 +131,17 @@ internal fun mediaStoreItemUri(contentUri: String, isVideo: Boolean): String {
 }
 
 /**
- * Cloud copies queued or being deleted. [total] and [processed] count files of all deletions
- * started since the queue was last empty, so a queued deletion extends the same progress.
- */
-/**
- * [requests] still in the queue, phone-only ones included. [queued] holds their cloud file ids,
- * once per request: two requests may name the same file, and the first one to finish must not
+ * [requests] still in the queue, phone-only ones included. [queued] holds their [MediaId]s,
+ * once per request: two requests may name the same object, and the first one to finish must not
  * unmark it for the second. [total] and [processed] count cloud copies.
  */
 internal data class DeletionProgress(
-    val queued: List<Long>,
+    val queued: List<MediaId>,
     val total: Int,
     val processed: Int,
     val requests: Int = 1,
 ) {
-    val fileIds: Set<Long> get() = queued.toSet()
+    val mediaIds: Set<MediaId> get() = queued.toSet()
 }
 
 internal data class CloudDeleteResult(val deleted: Int, val failed: Int)
@@ -215,10 +214,11 @@ internal class MediaDeletionRepository(
     /** Requests run one after another; a new one never cancels a deletion already started. */
     fun delete(targets: DeletionTargets) {
         val fileIds = targets.fileIds
+        val mediaIds = targets.mediaIds.map(::MediaId)
         // Every request counts, so even a phone-only one keeps logout from ending the process.
         mutableState.update { state ->
             DeletionProgress(
-                queued = state.running?.queued.orEmpty() + fileIds,
+                queued = state.running?.queued.orEmpty() + mediaIds,
                 total = (state.running?.total ?: 0) + fileIds.size,
                 processed = state.running?.processed ?: 0,
                 requests = (state.running?.requests ?: 0) + 1,
@@ -246,11 +246,12 @@ internal class MediaDeletionRepository(
                         targets.contentUris.size
                     }
                 }
-                val cloud = if (fileIds.isEmpty()) {
-                    CloudDeleteResult(deleted = 0, failed = 0)
+                val (cloud, deletedCloudIds) = if (fileIds.isEmpty()) {
+                    CloudDeleteResult(deleted = 0, failed = 0) to emptySet()
                 } else {
                     deleteCloud(credentials, fileIds)
                 }
+                if (deletedCloudIds.isNotEmpty()) library.forgetRemote(deletedCloudIds)
                 val done = DeletionResult(
                     phoneTrashed = phoneTrashed,
                     cloud = cloud,
@@ -261,7 +262,7 @@ internal class MediaDeletionRepository(
                     state.copy(
                         running = state.running
                             ?.copy(
-                                queued = state.running.queued.withoutOnce(fileIds),
+                                queued = state.running.queued.withoutOnce(mediaIds),
                                 requests = state.running.requests - 1,
                             )
                             ?.takeIf { it.requests > 0 },
@@ -292,7 +293,7 @@ internal class MediaDeletionRepository(
     private suspend fun deleteCloud(
         credentials: AccountCredentials,
         fileIds: List<Long>,
-    ): CloudDeleteResult {
+    ): Pair<CloudDeleteResult, Set<Long>> {
         val permits = Semaphore(PARALLEL_CLOUD_DELETES)
         val outcomes = coroutineScope {
             fileIds
@@ -321,15 +322,16 @@ internal class MediaDeletionRepository(
                                     ),
                                 )
                             }
-                            deleted
+                            fileId to deleted
                         }
                     }
                 }.awaitAll()
         }
+        val deletedIds = outcomes.filter { it.second }.mapTo(mutableSetOf()) { it.first }
         return CloudDeleteResult(
-            deleted = outcomes.count { it },
-            failed = outcomes.count { !it },
-        )
+            deleted = deletedIds.size,
+            failed = outcomes.size - deletedIds.size,
+        ) to deletedIds
     }
 
     private companion object {
@@ -338,7 +340,7 @@ internal class MediaDeletionRepository(
 }
 
 /** Removes one occurrence of each of [ids]. */
-private fun List<Long>.withoutOnce(ids: List<Long>): List<Long> =
+private fun <T> List<T>.withoutOnce(ids: List<T>): List<T> =
     toMutableList().apply { ids.forEach { remove(it) } }
 
 private fun deletionOperationSnapshots(
@@ -359,9 +361,7 @@ private fun deletionOperationSnapshots(
                 },
                 running = true,
                 progress = if (it.total == 0) null else it.processed.toFloat() / it.total,
-                media = it.fileIds.map {
-                    OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
-                },
+                media = it.mediaIds.map { OperationMediaActivity(it) },
             ),
         )
     }
