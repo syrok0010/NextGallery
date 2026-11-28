@@ -1,6 +1,7 @@
 package com.syrok0010.nextgallery.feature.albums
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -35,7 +36,7 @@ class AlbumCatalogUiTest {
                 "Отпуск с очень длинным названием папки",
                 AlbumOrigin.Phone,
                 12,
-                "Pictures/Путешествия/Отпуск/ · external_primary",
+                "Pictures/Путешествия/Отпуск",
                 location = AlbumLocation.Folder("external_primary", "Pictures/Путешествия/Отпуск/"),
             ),
         )
@@ -56,28 +57,39 @@ class AlbumCatalogUiTest {
         rule.runOnIdle { assertEquals(albums[1], opened) }
     }
 
-    @Test fun localIndexingShowsLoaderOnlyWhenLocalSectionIsVisible() {
-        val state = AlbumsUiState(
-            local = AlbumSourceState(
+    @Test fun initialIndexingShowsProgressAndOneTimeNoteWhileReindexShowsSpinner() {
+        var status by androidx.compose.runtime.mutableStateOf(
+            com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
                 loading = true,
-                progress = AlbumLoadingProgress(loaded = 200, total = 1_000),
+                initial = true,
+                progress = com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress(
+                    indexedCount = 200,
+                    totalCount = 1_000,
+                ),
             ),
-            permission = com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode.Full,
         )
-        var filter: AlbumOrigin? = null
         rule.setContent {
             NextGalleryTheme {
-                AlbumsPanel(
-                    state = state,
-                    listState = androidx.compose.foundation.lazy.rememberLazyListState(),
-                    filter = filter,
-                    onFilter = { filter = it },
-                    onRetry = {},
-                    onOpen = {},
-                )
+                LocalIndexingBanner(status)
             }
         }
-        rule.onNodeWithTag("albums_loader").assertIsDisplayed()
-        rule.onNodeWithTag("albums_local_indexing").assertIsDisplayed()
+        rule.onNodeWithTag("local_indexing_banner").assertIsDisplayed()
+        rule.onNodeWithTag("local_indexing_progress").assertIsDisplayed()
+        rule.onNodeWithText(string(R.string.local_indexing_one_time_note)).assertIsDisplayed()
+        rule.onNodeWithTag("local_indexing_spinner").assertDoesNotExist()
+
+        rule.runOnIdle {
+            status = com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
+                loading = true,
+                initial = false,
+                progress = com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress(
+                    indexedCount = 200,
+                    totalCount = 1_000,
+                ),
+            )
+        }
+        rule.onNodeWithTag("local_indexing_spinner").assertIsDisplayed()
+        rule.onNodeWithTag("local_indexing_progress").assertDoesNotExist()
+        rule.onNodeWithText(string(R.string.local_indexing_one_time_note)).assertDoesNotExist()
     }
 }

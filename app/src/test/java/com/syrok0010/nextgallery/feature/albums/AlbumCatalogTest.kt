@@ -30,6 +30,8 @@ class AlbumCatalogTest {
         assertEquals(5, result.size)
         assertEquals(5, result.map { it.id }.toSet().size)
         assertEquals(2, local.first().count)
+        assertEquals("Pictures/Отпуск", local.first().detail)
+        assertEquals("Pictures/Отпуск · sd", local.first { it.id.contains(":sd:") }.detail)
         assertEquals(AlbumCover.Local("content://1", 9), local.first().cover)
         assertEquals("anna", remote.detail)
         assertEquals(AlbumCover.Remote(2, "v2"), remote.cover)

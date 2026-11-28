@@ -76,7 +76,7 @@ class AlbumsTest {
         assertEquals(1, withoutLocal.remote.items.size)
     }
 
-    @Test fun `local indexing status exposes loader progress in catalog and open folder`() = scenario { harness, scope ->
+    @Test fun `local indexing status exposes loading state in catalog and open folder`() = scenario { harness, scope ->
         val library = MediaLibraryIndex()
         val albums = harness.albums(scope, library = library)
         val folder = AlbumLocation.Folder("external_primary", "Pictures/")
@@ -84,11 +84,12 @@ class AlbumsTest {
         library.publishLocalStatus(
             LocalLibraryStatus(
                 loading = true,
+                initial = true,
                 progress = LocalMediaIndexProgress(indexedCount = 200, totalCount = 1_000),
             ),
         )
         val catalogLoading = albums.catalog.first { it.local.loading }
-        assertEquals(AlbumLoadingProgress(200, 1_000), catalogLoading.local.progress)
+        assertTrue(catalogLoading.local.loading)
 
         val folderLoading = albums.observeContents(folder).first { it.loading }
         assertTrue(folderLoading.items.isEmpty())
