@@ -12,7 +12,16 @@
 ./gradlew :app:assemblePreview
 ```
 
-Готовый APK лежит в `app/build/outputs/apk/preview/app-preview.apk`.
+Готовый APK лежит в `app/build/outputs/apk/preview/app-preview.apk`. Чтобы передать
+его пользователю для установки с телефона (по WireGuard), скопируй файл в
+`/home/syrok/nextgallery-apks/` на `syrok-server` и дай ссылку вида
+`http://10.9.0.1:8183/<имя>.apk` (каталог раздаётся user-сервисом
+`nextgallery-apk-http.service` только на VPN-интерфейсе `10.9.0.1`):
+
+```bash
+cp app/build/outputs/apk/preview/app-preview.apk \
+  "/home/syrok/nextgallery-apks/NextGallery-preview-$(git rev-parse --short HEAD).apk"
+```
 
 При необходимости получить артефакт через GitHub Actions (например, чтобы скачать на
 другое устройство без локальной сборки):
