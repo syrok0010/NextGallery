@@ -1,15 +1,11 @@
 package com.syrok0010.nextgallery.feature.timeline.remote
 
-import com.syrok0010.nextgallery.core.media.MediaAssetRef
 import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.network.memories.MemoriesConfigDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
+import com.syrok0010.nextgallery.feature.library.toMemoriesMediaItem
 import com.syrok0010.nextgallery.feature.timeline.MemoriesConfig
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
 fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig =
     MemoriesConfig(
@@ -23,35 +19,4 @@ fun MemoriesConfigDto.toMemoriesConfig(): MemoriesConfig =
         dedupIdentical = dedupIdentical,
     )
 
-fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem {
-    val isVideoValue = isVideo.asFlexibleBoolean() || mimetype?.startsWith("video/") == true
-
-    return MediaItem(
-        mediaId = mediaId,
-        dayId = dayid,
-        displayName = basename ?: "file-$fileid",
-        mimeType = mimetype,
-        width = w,
-        height = h,
-        etag = etag,
-        indexedAtEpochSeconds = indexedAt,
-        livePhotoId = liveid,
-        auid = auid,
-        buid = buid,
-        sharedBy = sharedBy,
-        takenAtEpochSeconds = epoch,
-        isVideo = isVideoValue,
-        videoDurationSeconds = videoDuration,
-        isFavorite = isFavorite.asFlexibleBoolean(),
-        isHidden = isHidden.asFlexibleBoolean(),
-        assetRef = MediaAssetRef.MemoriesFile(photoFileId = fileid),
-    )
-}
-
-private fun JsonElement?.asFlexibleBoolean(): Boolean {
-    val primitive = this?.jsonPrimitive ?: return false
-    return primitive.booleanOrNull
-        ?: primitive.intOrNull?.let { it != 0 }
-        ?: primitive.content.equals("true", ignoreCase = true) ||
-        primitive.content == "1"
-}
+fun MemoriesPhotoDto.toMediaItem(mediaId: MediaId): MediaItem = toMemoriesMediaItem(mediaId)

@@ -2,9 +2,6 @@ package com.syrok0010.nextgallery.feature.albums
 
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.core.media.MediaSourceKind
-import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.dav.AddToAlbumResult
 import com.syrok0010.nextgallery.core.network.dav.AlbumPath
 import com.syrok0010.nextgallery.core.network.dav.CreateAlbumResult
@@ -16,7 +13,7 @@ import com.syrok0010.nextgallery.core.network.memories.MemoriesAlbumDto
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
-import com.syrok0010.nextgallery.feature.timeline.remote.toMediaItem
+import com.syrok0010.nextgallery.feature.library.ingestRemotePhotos
 import com.syrok0010.nextgallery.feature.upload.temporary
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -82,20 +79,8 @@ internal class MemoriesAlbums(
             val total = days.sumOf { it.count }
             val items = linkedMapOf<Long, MediaItem>()
             suspend fun add(photos: List<MemoriesPhotoDto>) {
-                val candidates = photos.distinctBy { it.fileid }.map { photo ->
-                    mediaIdentityCandidate(
-                        MediaSourceIdentity(MediaSourceKind.Memories, photo.fileid.toString()),
-                        auid = photo.auid,
-                        buid = photo.buid,
-                    )
-                }
-                val resolution = identities.resolve(candidates)
-                photos.forEach { photo ->
-                    items[photo.fileid] = photo.toMediaItem(
-                        resolution.mediaIds.getValue(
-                            MediaSourceIdentity(MediaSourceKind.Memories, photo.fileid.toString()),
-                        ),
-                    )
+                ingestRemotePhotos(photos, identities).forEach { item ->
+                    item.remoteFileId?.let { items[it] = item }
                 }
             }
 
