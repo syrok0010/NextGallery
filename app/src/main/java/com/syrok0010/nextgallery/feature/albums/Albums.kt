@@ -170,20 +170,33 @@ internal class Albums(
     }
 
     @MainThread
-    fun removeMembers(location: AlbumLocation.Remote, name: String, ids: Set<Long>): Boolean {
-        val address = AlbumAddress.of(location)?.takeIf { it.owner == credentials.userId } ?: return false
-        if (ids.isEmpty() || removalJob?.isActive == true) return false
-        removalState.value = AlbumRemovalState.Running(name, ids)
+    fun removeMembers(
+        location: AlbumLocation.Remote,
+        name: String,
+        mediaIds: Collection<MediaId>,
+    ): Boolean {
+        val address = AlbumAddress
+            .of(
+                location,
+            )?.takeIf { it.owner == credentials.userId } ?: return false
+        if (removalJob?.isActive == true) return false
+        val members = resolveRemovalMembers(location, mediaIds)
+        if (members.isEmpty()) return false
+        val fileIds = members.mapTo(LinkedHashSet()) { it.fileId }
+        removalState.value = AlbumRemovalState.Running(
+            name,
+            members.mapTo(LinkedHashSet()) { it.mediaId },
+        )
         removalJob = scope.launch {
             mutations.withLock {
                 val result = try {
-                    val batch = remote.remove(address, ids)
+                    val batch = remote.remove(address, fileIds)
                     applyRemoved(location, batch.removedIds)
                     batch.summary
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    AlbumRemovalResult(0, ids.size)
+                    AlbumRemovalResult(0, fileIds.size)
                 }
                 removalState.value = AlbumRemovalState.Done(name, result)
             }
@@ -196,7 +209,6 @@ internal class Albums(
     fun onCloudDeleted(fileIds: Set<Long>) {
         if (fileIds.isEmpty()) return
         entries.forEach { (location, entry) ->
-            if (location !is AlbumLocation.Remote) return@forEach
             if (entry.state.value.items.any { it.remoteFileId in fileIds }) {
                 applyRemoved(location, fileIds)
             } else if (!entry.loaded) {
@@ -204,6 +216,17 @@ internal class Albums(
             }
         }
         refreshCatalog()
+    }
+
+    private fun resolveRemovalMembers(
+        location: AlbumLocation.Remote,
+        mediaIds: Collection<MediaId>,
+    ): List<AlbumAdditionPreparation.CloudMember> {
+        val cached = entries[location]?.state?.value?.items?.associateBy { it.mediaId }.orEmpty()
+        return mediaIds.distinct().mapNotNull { mediaId ->
+            val item = library[mediaId] ?: cached[mediaId]
+            item?.remoteFileId?.let { AlbumAdditionPreparation.CloudMember(mediaId, it) }
+        }
     }
 
     /** Worker entry point. Replay checks exact membership before COPY and never repeats the upload. */
@@ -335,7 +358,14 @@ internal class Albums(
         entry.state.value = entry.state.value.copy(
             items = remaining,
             loaded = remaining.size,
-            total = if (entry.loaded) remaining.size else (entry.state.value.total - removedCount).coerceAtLeast(remaining.size),
+            total = if (entry.loaded) {
+                remaining.size
+            } else {
+                (entry.state.value.total - removedCount)
+                    .coerceAtLeast(
+                        remaining.size,
+                    )
+            },
             loading = false,
         )
         if (entry.loaded) {
@@ -419,7 +449,9 @@ internal class Albums(
             val result = remote.loadCatalog()
             val synced = result.albums.map { album ->
                 val location = album.location as? AlbumLocation.Remote ?: return@map album
-                val cached = entries[location]?.takeIf { it.loaded && !it.stale } ?: return@map album
+                val cached = entries[location]?.takeIf {
+                    it.loaded && !it.stale
+                } ?: return@map album
                 album.withContents(cached.state.value.items)
             }
             mutableCatalog.update {

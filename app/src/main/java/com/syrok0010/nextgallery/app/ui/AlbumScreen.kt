@@ -13,7 +13,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.syrok0010.nextgallery.R
-import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.feature.albums.*
 import com.syrok0010.nextgallery.feature.collection.MediaCollectionScreen
 import com.syrok0010.nextgallery.feature.collection.SelectionAction
@@ -48,9 +48,9 @@ internal fun AlbumScreen(
     val selection = rememberMediaSelection()
     val supported = viewModel.supportsActions
     val canRemove = viewModel.canModify
-    var albumRequest by remember { mutableStateOf<Pair<AlbumAdditionRequest, () -> Unit>?>(null) }
+    var albumRequest by remember { mutableStateOf<PendingAlbumAddition?>(null) }
     var deleteRequest by remember { mutableStateOf<DeletionPreparation?>(null) }
-    var removeRequest by remember { mutableStateOf<Pair<List<MediaItem>, () -> Unit>?>(null) }
+    var removeRequest by remember { mutableStateOf<PendingAlbumRemoval?>(null) }
     val removing by viewModel.removing.collectAsStateWithLifecycle()
     val departedIds by viewModel.departedIds.collectAsStateWithLifecycle()
     // Asked on every dialog, so the answer is fresh when the user decides.
@@ -72,9 +72,9 @@ internal fun AlbumScreen(
                         isPrimary = true,
                     ) { items, onDone ->
                         items
-                            .filter { it.remoteFileId != null }
+                            .map { it.mediaId }
                             .takeIf { it.isNotEmpty() }
-                            ?.let { removeRequest = it to onDone }
+                            ?.let { removeRequest = PendingAlbumRemoval(it, onDone) }
                     },
                 )
             }
@@ -85,7 +85,11 @@ internal fun AlbumScreen(
                         if (canRemove) R.string.album_add_other else R.string.album_add_action,
                     ),
                     inOverflow = canRemove,
-                ) { items, onDone -> albumRequest = AlbumAdditionRequest.of(items) to onDone },
+                ) { items, onDone ->
+                    viewModel.prepareAddition(items.map { it.mediaId })?.let {
+                        albumRequest = PendingAlbumAddition(it, onDone)
+                    }
+                },
             )
             add(
                 SelectionAction(
@@ -94,8 +98,7 @@ internal fun AlbumScreen(
                     isDestructive = true,
                     inOverflow = canRemove,
                 ) { items, _ ->
-                    // Album members may not have been hydrated into the timeline index yet.
-                    deleteRequest = DeletionPreparation.of(items)
+                    deleteRequest = deletions.prepare(items.map { it.mediaId })
                 },
             )
         }
@@ -135,12 +138,12 @@ internal fun AlbumScreen(
             }
         }
     }
-    removeRequest?.let { (items, onDone) ->
+    removeRequest?.let { pending ->
         AlertDialog(
             onDismissRequest = { removeRequest = null },
             title = {
                 Text(
-                    stringResource(R.string.album_remove_title, album.title, items.size),
+                    stringResource(R.string.album_remove_title, album.title, pending.mediaIds.size),
                 )
             },
             text = {
@@ -154,9 +157,9 @@ internal fun AlbumScreen(
                 TextButton(
                     enabled = !removing,
                     onClick = {
-                        if (viewModel.removeMembers(album.title, items)) {
+                        if (viewModel.removeMembers(album.title, pending.mediaIds)) {
                             removeRequest = null
-                            onDone()
+                            pending.onDone()
                         }
                     },
                 ) { Text(stringResource(R.string.album_remove_action)) }
@@ -179,18 +182,25 @@ internal fun AlbumScreen(
             },
         )
     }
-    albumRequest?.let { (request, onDone) ->
+    albumRequest?.let { pending ->
         AddToAlbumSheet(
-            request = request,
+            addition = pending.addition,
             excludedLocation = album.location,
             onDismiss = { albumRequest = null },
             onPick = { target ->
-                if (viewModel.addToAlbum(target, request)) {
+                if (viewModel.addToAlbum(target, pending.addition)) {
                     albumRequest = null
-                    onDone()
-                    if (request.uploads.isNotEmpty()) scope.launch { askForNotifications() }
+                    pending.onDone()
+                    if (pending.addition.hasUploads) scope.launch { askForNotifications() }
                 }
             },
         )
     }
 }
+
+private data class PendingAlbumAddition(
+    val addition: AlbumAdditionPreparation,
+    val onDone: () -> Unit,
+)
+
+private data class PendingAlbumRemoval(val mediaIds: List<MediaId>, val onDone: () -> Unit)

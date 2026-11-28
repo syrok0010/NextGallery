@@ -154,7 +154,7 @@ internal fun albumAdditionMessage(state: AlbumAdditionState): List<UiText>? =
 
 internal sealed interface AlbumRemovalState {
     data object Idle : AlbumRemovalState
-    data class Running(val name: String, val fileIds: Set<Long>) : AlbumRemovalState
+    data class Running(val name: String, val mediaIds: Set<MediaId>) : AlbumRemovalState
     data class Done(val name: String, val result: AlbumRemovalResult) : AlbumRemovalState
 }
 
@@ -167,9 +167,7 @@ internal fun removalOperationSnapshots(state: AlbumRemovalState): List<Operation
                 kind = OperationKind.RemoveFromAlbum,
                 title = uiText(R.string.album_remove_running, state.name),
                 running = true,
-                media = state.fileIds.map {
-                    OperationMediaActivity(OperationMediaReference.RemoteFileId(it))
-                },
+                media = state.mediaIds.map { OperationMediaActivity(it) },
             ),
         )
 

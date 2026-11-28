@@ -351,8 +351,10 @@ class AlbumsTest {
     @Test fun `removing from an unopened album refreshes catalog without reading contents`() = scenario { harness, scope ->
         val reads = AtomicInteger()
         val refreshes = AtomicInteger()
+        val library = MediaLibraryIndex().apply { publish(listOf(first)) }
         val albums = harness.albums(
             scope,
+            library = library,
             remoteContents = {
                 reads.incrementAndGet()
                 flowOf(AlbumContentsBatch(emptyList(), 0))
@@ -363,7 +365,7 @@ class AlbumsTest {
             },
         )
         val initial = refreshes.get()
-        assertTrue(albums.removeMembers(album, "album", setOf(1L)))
+        assertTrue(albums.removeMembers(album, "album", setOf(first.mediaId)))
         albums.operations.first { it.singleOrNull()?.running == false }
         while (refreshes.get() == initial) delay(10)
         assertEquals(0, reads.get())
@@ -397,7 +399,7 @@ class AlbumsTest {
         contents.first { !it.loading && it.loaded == 2 }
         albums.refresh(album)
         started.await()
-        assertTrue(albums.removeMembers(album, "album", setOf(1L, 2L)))
+        assertTrue(albums.removeMembers(album, "album", setOf(first.mediaId, second.mediaId)))
         cancelled.await()
         val after = contents.first { !it.loading && it.items.map { item -> item.mediaId } == listOf(second.mediaId) }
         assertEquals(1, after.total)
@@ -406,12 +408,19 @@ class AlbumsTest {
     }
 
     @Test fun `consumeSucceeded clears succeeded addition while keeping failed removal`() = scenario { harness, scope ->
+        val library = MediaLibraryIndex().apply { publish(listOf(first, second)) }
         val albums = harness.albums(
             scope,
+            library = library,
             remove = { _, fileIds -> AlbumRemovalBatch(removedIds = emptySet(), failed = fileIds.size) },
         )
-        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
-        assertTrue(albums.removeMembers(album, "album", setOf(2L)))
+        assertTrue(
+            albums.add(
+                AlbumTarget.Existing(album, "album"),
+                requireNotNull(albums.prepareAddition(listOf(first.mediaId))),
+            ),
+        )
+        assertTrue(albums.removeMembers(album, "album", setOf(second.mediaId)))
         albums.operations.first { ops -> ops.size == 2 && ops.all { !it.running } }
         albums.consumeSucceeded()
         val remaining = albums.operations.first { it.size == 1 }.single()
@@ -449,10 +458,15 @@ class AlbumsTest {
             val departedCollector = scope.launch { ownedVm.departedIds.collect {} }
             try {
                 ownedVm.state.first { !it.loading && it.items.size == 2 }
-                assertTrue(ownedVm.removeMembers("album", listOf(first)))
+                assertTrue(ownedVm.removeMembers("album", listOf(first.mediaId)))
                 val departed = ownedVm.departedIds.first { first.mediaId in it }
                 assertEquals(setOf(first.mediaId), departed)
-                assertTrue(ownedVm.addToAlbum(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+                assertTrue(
+                    ownedVm.addToAlbum(
+                        AlbumTarget.Existing(album, "album"),
+                        requireNotNull(ownedVm.prepareAddition(listOf(first.mediaId))),
+                    ),
+                )
                 val restored = ownedVm.departedIds.first { first.mediaId !in it }
                 assertTrue(restored.isEmpty())
             } finally {
