@@ -272,10 +272,9 @@ internal class Albums(
         }
         entry.job?.cancel()
         entry.generation++
-        val known = buildMap<Long, MediaItem> {
-            library.state.value.values.forEach { item -> item.remoteFileId?.let { put(it, item) } }
-            entry.state.value.items.forEach { item -> item.remoteFileId?.let { put(it, item) } }
-        }
+        val known = (library.state.value.values + entry.state.value.items)
+            .mapNotNull { item -> item.remoteFileId?.let { it to item } }
+            .toMap()
         val resolved = ids.mapNotNull { known[it] }
         val merged = (entry.state.value.items + resolved).distinctBy { it.mediaId }
         val complete = entry.loaded && resolved.size == ids.size

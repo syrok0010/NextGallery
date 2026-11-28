@@ -5,6 +5,9 @@ import com.syrok0010.nextgallery.core.ui.uiText
 import com.syrok0010.nextgallery.feature.timeline.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -13,36 +16,24 @@ internal class TimelineProjectionStore(
     publication: LibraryPublicationStore,
     scope: CoroutineScope,
 ) {
-    private var lastSnapshot: TimelineSnapshot? = null
-    private var lastLibrary: com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary? = null
-    private var lastProjected: TimelineSnapshot? = null
+    private val projected = publication.state
+        .map { it.remote.snapshot to it.library }
+        .distinctUntilChanged { a, b -> a.first === b.first && a.second === b.second }
+        .map { (snapshot, library) ->
+            Triple(snapshot, library, TimelineSnapshotProjection.project(snapshot, library))
+        }
 
-    val state = publication.state
-        .map { publication ->
-            val source = publication.remote
-            val projected = if (
-                source.snapshot === lastSnapshot &&
-                publication.library === lastLibrary
-            ) {
-                lastProjected
-            } else {
-                TimelineSnapshotProjection.project(source.snapshot, publication.library).also {
-                    lastSnapshot = source.snapshot
-                    lastLibrary = publication.library
-                    lastProjected = it
-                }
-            }
-            TimelineUiState(
-                projected,
-                source.loadingDayIds,
-                source.failedDayIds,
-                if (source.failedDayIds.isEmpty()) {
-                    null
-                } else {
-                    uiText(
-                        R.string.error_load_timeline_batch_failed,
-                    )
-                },
-            )
-        }.stateIn(scope, SharingStarted.Eagerly, TimelineUiState())
+    val state = combine(publication.state, projected) { current, (snapshot, library, timeline) ->
+        if (current.remote.snapshot !== snapshot || current.library !== library) return@combine null
+        val failed = current.remote.failedDayIds
+        TimelineUiState(
+            timeline,
+            current.remote.loadingDayIds,
+            failed,
+            failed.takeIf { it.isNotEmpty() }?.let {
+                uiText(R.string.error_load_timeline_batch_failed)
+            },
+        )
+    }.filterNotNull()
+        .stateIn(scope, SharingStarted.Eagerly, TimelineUiState())
 }

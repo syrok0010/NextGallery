@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,30 +95,17 @@ internal class OperationStatus(
     private val sources: List<OperationStatusSource>,
     private val snapshots: State<List<OperationStatusSnapshot>>,
 ) {
-    private var cachedSnapshots: List<OperationStatusSnapshot>? = null
-    private var cachedActivities: Map<MediaId, MediaTileActivity> = emptyMap()
+    private val activitiesByMediaId by derivedStateOf {
+        snapshots.value
+            .sortedByDescending { it.kind.priority }
+            .flatMap { snapshot ->
+                val operation = snapshot.kind.toTileOperation()
+                snapshot.media.map { it.mediaId to MediaTileActivity(operation, it.progress) }
+            }.toMap()
+    }
 
     /** Reads snapshot state: a tile recomposes only when its own activity changes. */
-    fun tileActivity(item: MediaItem): MediaTileActivity? = activities()[item.mediaId]
-
-    private fun activities(): Map<MediaId, MediaTileActivity> {
-        val current = currentSnapshots()
-        if (current !== cachedSnapshots) {
-            val map = LinkedHashMap<MediaId, MediaTileActivity>()
-            current.sortedBy { it.kind.priority }.forEach { snapshot ->
-                val operation = snapshot.kind.toTileOperation()
-                snapshot.media.forEach { activity ->
-                    map.putIfAbsent(
-                        activity.mediaId,
-                        MediaTileActivity(operation, activity.progress),
-                    )
-                }
-            }
-            cachedSnapshots = current
-            cachedActivities = map
-        }
-        return cachedActivities
-    }
+    fun tileActivity(item: MediaItem): MediaTileActivity? = activitiesByMediaId[item.mediaId]
 
     @Composable
     fun entries(): List<OperationEntry> =
