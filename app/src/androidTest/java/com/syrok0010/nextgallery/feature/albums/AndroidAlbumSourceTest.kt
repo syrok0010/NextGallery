@@ -1,30 +1,37 @@
 package com.syrok0010.nextgallery.feature.albums
 
-import com.syrok0010.nextgallery.core.media.MediaAssetRef
-import org.koin.core.context.GlobalContext
-import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import android.content.ContentUris
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.exifinterface.media.ExifInterface
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.last
-import org.junit.Assert.*
-import org.junit.Test
+import androidx.room.Room
+import androidx.test.platform.app.InstrumentationRegistry
+import com.syrok0010.nextgallery.core.database.NextGalleryDatabase
+import com.syrok0010.nextgallery.core.database.RoomMediaIdentityRegistry
+import com.syrok0010.nextgallery.core.media.MediaAssetRef
+import com.syrok0010.nextgallery.core.media.MediaItem
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionRepository
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaProjectionStore
 import java.time.Instant
 import java.time.LocalDate
 import java.util.TimeZone
+import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.*
+import org.junit.Test
 
 class AndroidAlbumSourceTest {
     @Test fun sameNamedFoldersInDifferentPathsHaveSeparateCountsAndUsableCovers() = runBlocking {
         val previousZone = TimeZone.getDefault()
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Moscow"))
         val epoch = Instant.parse("2026-11-07T22:02:00Z").epochSecond
-        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = targetContext.contentResolver
+        val database = Room.inMemoryDatabaseBuilder(targetContext, NextGalleryDatabase::class.java).build()
+        val identities = RoomMediaIdentityRegistry(database)
+        val projections = LocalMediaProjectionRepository(database)
         val inserted = mutableListOf<Uri>()
         val prefix = "Pictures/NextGalleryCatalogTest-${System.nanoTime()}"
         fun insert(path: String) {
@@ -54,7 +61,7 @@ class AndroidAlbumSourceTest {
         try {
             insert("$prefix/one/Отпуск/"); insert("$prefix/one/Отпуск/"); insert("$prefix/two/Отпуск/")
             insert("$prefix/one/Отпуск/Nested/")
-            val folders = AndroidFolders(resolver, GlobalContext.get().get(), GlobalContext.get().get())
+            val folders = AndroidFolders(resolver, identities, projections)
             val albums = folders.loadCatalog().filter { it.detail.contains(prefix) && it.name == "Отпуск" }
             assertEquals(2, albums.size)
             assertEquals(setOf(1, 2), albums.map { it.count }.toSet())
@@ -80,7 +87,7 @@ class AndroidAlbumSourceTest {
                     override suspend fun saveLocalMediaBatch(items: List<MediaItem>) = error("Read only")
                     override suspend fun finishLocalMediaReconciliation(contentUris: Set<String>) = error("Read only")
                 }
-                val cachedContents = AndroidFolders(resolver, GlobalContext.get().get(), cache)
+                val cachedContents = AndroidFolders(resolver, identities, cache)
                     .loadContents(album.location).last()
                 assertTrue(cachedContents.items.all { it.dayId == 42 && it.takenAtEpochSeconds == 42 * 86_400L })
                 contents.items.forEach { item ->
@@ -89,6 +96,7 @@ class AndroidAlbumSourceTest {
                 resolver.openInputStream(Uri.parse((album.cover as AlbumCover.Local).uri))!!.use { assertTrue(it.read() >= 0) }
             }
         } finally {
+            database.close()
             inserted.forEach { resolver.delete(it, null, null) }
             TimeZone.setDefault(previousZone)
         }
