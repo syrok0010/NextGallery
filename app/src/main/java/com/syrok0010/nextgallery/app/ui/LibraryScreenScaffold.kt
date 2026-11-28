@@ -85,6 +85,8 @@ internal fun LibraryScreenScaffold(
 
 @Composable
 internal fun LocalIndexingBanner(status: LocalLibraryStatus) {
+    val indexed = status.progress?.indexedCount ?: 0
+    val total = status.progress?.totalCount ?: 0
     Column(
         Modifier
             .fillMaxWidth()
@@ -92,37 +94,17 @@ internal fun LocalIndexingBanner(status: LocalLibraryStatus) {
             .testTag("local_indexing_banner"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        val progress = status.progress
-        if (progress != null && progress.totalCount > 0) {
-            LinearProgressIndicator(
-                progress = {
-                    (progress.indexedCount.toFloat() / progress.totalCount).coerceIn(0f, 1f)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("local_indexing_progress"),
-            )
-            Text(
-                stringResource(
-                    R.string.local_indexing_initial_progress,
-                    progress.indexedCount,
-                    progress.totalCount,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("local_indexing_progress"),
-            )
-            Text(
-                stringResource(R.string.local_indexing_initial),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        LinearProgressIndicator(
+            progress = { if (total > 0) (indexed.toFloat() / total).coerceIn(0f, 1f) else 0f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("local_indexing_progress"),
+        )
+        Text(
+            stringResource(R.string.local_indexing_initial_progress, indexed, total),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             stringResource(R.string.local_indexing_one_time_note),
             style = MaterialTheme.typography.bodySmall,

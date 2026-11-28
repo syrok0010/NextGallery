@@ -91,7 +91,6 @@
     <string name="albums_permission">Папки телефона появятся при полном доступе к фото и видео. Ограниченный доступ пока не поддерживается.</string>
     <string name="albums_remote_error">Не удалось обновить альбомы Nextcloud. Список может быть устаревшим.</string>
     <string name="albums_local_error">Не удалось обновить папки телефона. Список может быть устаревшим.</string>
-    <string name="local_indexing_initial">Индексация файлов телефона…</string>
     <string name="local_indexing_initial_progress">Индексация файлов телефона: %1$d из %2$d</string>
     <string name="local_indexing_one_time_note">Это нужно только один раз, дальше будет быстрее</string>
     <string name="albums_empty">Нет доступных альбомов в этом разделе</string>

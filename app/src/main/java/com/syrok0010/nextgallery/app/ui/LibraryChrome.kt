@@ -121,7 +121,7 @@ internal fun LibraryHeader(
                 .fillMaxWidth()
                 .padding(top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 title ?: stringResource(destination.titleRes),
@@ -133,6 +133,7 @@ internal fun LibraryHeader(
             if (reindexing) {
                 CircularProgressIndicator(
                     modifier = Modifier
+                        .padding(start = 12.dp)
                         .size(16.dp)
                         .testTag("local_indexing_spinner"),
                     strokeWidth = 2.dp,
