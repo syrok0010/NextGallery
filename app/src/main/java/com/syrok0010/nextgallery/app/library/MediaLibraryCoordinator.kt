@@ -3,6 +3,7 @@ package com.syrok0010.nextgallery.app.library
 import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
+import com.syrok0010.nextgallery.feature.library.LocalLibraryStatus
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
@@ -48,8 +49,22 @@ internal class MediaLibraryCoordinator(
                             access = permissions,
                         ),
                     ) { remoteState, localState ->
-                        remoteState to localState.items
-                    }.collect { (remoteState, localItems) ->
+                        remoteState to localState
+                    }.collect { (remoteState, localState) ->
+                        val hasAccess = permissions.value == LocalMediaPermissionMode.Full
+                        index.publishLocalStatus(
+                            if (!hasAccess) {
+                                LocalLibraryStatus()
+                            } else {
+                                LocalLibraryStatus(
+                                    loading = localState.progress != null ||
+                                        (!localState.failure && localState.processed == null),
+                                    progress = localState.progress,
+                                    failed = localState.failure,
+                                )
+                            },
+                        )
+                        val localItems = localState.items
                         val sameInputs = hasProjected &&
                             localItems === lastLocalItems &&
                             remoteState.snapshot === lastRemoteSnapshot
@@ -83,6 +98,10 @@ internal class MediaLibraryCoordinator(
 
     fun refresh() {
         remoteIndexer?.refresh()
+        localRefresh.tryEmit(Unit)
+    }
+
+    fun refreshLocal() {
         localRefresh.tryEmit(Unit)
     }
 

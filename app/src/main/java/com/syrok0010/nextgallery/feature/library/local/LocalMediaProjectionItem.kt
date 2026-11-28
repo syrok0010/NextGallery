@@ -19,6 +19,8 @@ internal data class LocalMediaProjectionItem(
     val auid: String?,
     val buid: String?,
     val dayId: Int = localMediaDayId(takenAtEpochSeconds),
+    val volumeName: String? = null,
+    val relativePath: String? = null,
 ) {
     fun toMediaItem(): MediaItem =
         MediaItem(
@@ -42,6 +44,8 @@ internal data class LocalMediaProjectionItem(
                 contentUri = contentUri,
                 modifiedAtEpochSeconds = modifiedAtEpochSeconds,
                 sizeBytes = sizeBytes,
+                volumeName = volumeName,
+                relativePath = relativePath,
             ),
         )
 }

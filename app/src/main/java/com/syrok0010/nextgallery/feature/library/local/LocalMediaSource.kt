@@ -48,6 +48,7 @@ data class LocalMediaMetadata(
     val isVideo: Boolean,
     val generationModified: Long? = null,
     val volumeName: String? = null,
+    val relativePath: String? = null,
 )
 
 data class LocalMediaBatch(
@@ -166,13 +167,24 @@ class LocalMediaSource(
                         reconcileTriggers.trySend(Unit)
                     }
                 }
+                var volumeRetries = 0
                 reconcileTriggers.trySend(Unit)
                 for (ignored in reconcileTriggers) {
                     try {
                         reconcile()
+                        volumeRetries = 0
                     } catch (cancelled: CancellationException) {
                         throw cancelled
+                    } catch (_: MediaStoreChangedDuringScanException) {
+                        if (volumeRetries < MAX_VOLUME_RETRIES) {
+                            volumeRetries += 1
+                            reconcileTriggers.trySend(Unit)
+                        } else {
+                            volumeRetries = 0
+                            send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
+                        }
                     } catch (_: Exception) {
+                        volumeRetries = 0
                         send(LocalMediaIndexState(publishedItems, progress = null, failure = true))
                     }
                 }
@@ -228,6 +240,8 @@ class LocalMediaSource(
         videoDurationSeconds = metadata.durationMillis?.takeIf { it > 0 }?.div(1_000),
         auid = aliases.auid,
         buid = aliases.buid,
+        volumeName = metadata.volumeName,
+        relativePath = metadata.relativePath,
     ).toMediaItem()
 
     private fun LocalMediaMetadata.timelineEpochSeconds(): Long? =
@@ -249,6 +263,7 @@ class LocalMediaSource(
 
     private companion object {
         const val DEFAULT_BATCH_SIZE = 200
+        const val MAX_VOLUME_RETRIES = 3
         val DEFAULT_CHANGE_DEBOUNCE = 500.milliseconds
     }
 }

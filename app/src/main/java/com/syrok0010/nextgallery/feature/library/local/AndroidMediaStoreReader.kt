@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
+class MediaStoreChangedDuringScanException : IllegalStateException("MediaStore volumes changed during scan")
+
 class AndroidMediaStoreReader(
     private val contentResolver: ContentResolver,
     private val metadataCache: LocalMediaMetadataDao? = null,
@@ -26,6 +28,7 @@ class AndroidMediaStoreReader(
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
             MediaStore.MediaColumns.VOLUME_NAME,
+            MediaStore.MediaColumns.RELATIVE_PATH,
             MediaStore.MediaColumns.GENERATION_MODIFIED,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.MediaColumns.DISPLAY_NAME,
@@ -72,6 +75,7 @@ class AndroidMediaStoreReader(
             val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
             val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
             val volumeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.VOLUME_NAME)
+            val relativePathColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
             val generationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.GENERATION_MODIFIED)
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.VideoColumns.DURATION)
             val batch = ArrayList<LocalMediaMetadata>(batchSize)
@@ -105,13 +109,14 @@ class AndroidMediaStoreReader(
                     durationMillis = cursor.nullableLong(durationColumn),
                     isVideo = isVideo,
                     volumeName = cursor.nullableString(volumeColumn),
+                    relativePath = cursor.nullableString(relativePathColumn),
                     generationModified = cursor.nullableLong(generationColumn),
                 )
                 indexedCount += 1
                 if (batch.size == batchSize) {
                     val enriched = enrich(batch)
-                    if (indexedCount == cursor.count) {
-                        check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
+                    if (indexedCount == cursor.count && volumeVersions() != versions) {
+                        throw MediaStoreChangedDuringScanException()
                     }
                     emit(
                         LocalMediaBatch(
@@ -125,7 +130,7 @@ class AndroidMediaStoreReader(
             }
             if (batch.isNotEmpty() || cursor.count == 0) {
                 val enriched = enrich(batch)
-                check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
+                if (volumeVersions() != versions) throw MediaStoreChangedDuringScanException()
                 emit(
                     LocalMediaBatch(
                         metadata = enriched,
@@ -135,7 +140,7 @@ class AndroidMediaStoreReader(
                 )
             }
         } ?: error("MediaStore query returned no cursor")
-        check(volumeVersions() == versions) { "MediaStore volumes changed during scan" }
+        if (volumeVersions() != versions) throw MediaStoreChangedDuringScanException()
         enrichment.finish()
     }.flowOn(Dispatchers.IO)
 

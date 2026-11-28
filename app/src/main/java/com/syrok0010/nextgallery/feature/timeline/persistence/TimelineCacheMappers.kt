@@ -118,6 +118,8 @@ fun MediaItem.toLocalMediaEntity(): LocalMediaEntity {
         videoDurationSeconds = videoDurationSeconds,
         auid = auid,
         buid = buid,
+        volumeName = localContent.volumeName,
+        relativePath = localContent.relativePath,
     )
 }
 
@@ -137,4 +139,6 @@ fun IdentifiedLocalMedia.toMediaItem(): MediaItem =
         videoDurationSeconds = media.videoDurationSeconds,
         auid = media.auid,
         buid = media.buid,
+        volumeName = media.volumeName,
+        relativePath = media.relativePath,
     ).toMediaItem()

@@ -39,6 +39,8 @@ sealed interface MediaAssetRef {
         val contentUri: String,
         val modifiedAtEpochSeconds: Long?,
         val sizeBytes: Long,
+        val volumeName: String? = null,
+        val relativePath: String? = null,
     ) : MediaAssetRef
 
     data class LocalFirst(val local: LocalContent, val remote: MemoriesFile) : MediaAssetRef

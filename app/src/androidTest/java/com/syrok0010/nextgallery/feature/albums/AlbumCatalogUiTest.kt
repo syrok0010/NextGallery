@@ -55,4 +55,29 @@ class AlbumCatalogUiTest {
         rule.onNodeWithTag("album_card:long").performClick()
         rule.runOnIdle { assertEquals(albums[1], opened) }
     }
+
+    @Test fun localIndexingShowsLoaderOnlyWhenLocalSectionIsVisible() {
+        val state = AlbumsUiState(
+            local = AlbumSourceState(
+                loading = true,
+                progress = AlbumLoadingProgress(loaded = 200, total = 1_000),
+            ),
+            permission = com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode.Full,
+        )
+        var filter: AlbumOrigin? = null
+        rule.setContent {
+            NextGalleryTheme {
+                AlbumsPanel(
+                    state = state,
+                    listState = androidx.compose.foundation.lazy.rememberLazyListState(),
+                    filter = filter,
+                    onFilter = { filter = it },
+                    onRetry = {},
+                    onOpen = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("albums_loader").assertIsDisplayed()
+        rule.onNodeWithTag("albums_local_indexing").assertIsDisplayed()
+    }
 }
