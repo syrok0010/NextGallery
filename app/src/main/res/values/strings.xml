@@ -92,7 +92,6 @@
     <string name="local_indexing_initial">Indexing phone files…</string>
     <string name="local_indexing_initial_progress">Indexing phone files: %1$d of %2$d</string>
     <string name="local_indexing_one_time_note">This only happens once; next time will be faster</string>
-    <string name="local_indexing_refreshing">Updating phone files…</string>
     <string name="albums_empty">No albums in this section</string>
     <string name="album_contents_progress">Loaded %1$d of %2$d items</string>
     <string name="album_contents_empty">This album has no photos or videos yet</string>

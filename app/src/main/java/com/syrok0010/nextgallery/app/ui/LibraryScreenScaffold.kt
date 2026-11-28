@@ -2,12 +2,10 @@ package com.syrok0010.nextgallery.app.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -39,6 +37,7 @@ internal fun LibraryScreenScaffold(
     val context = LocalContext.current
     val logout = LocalSessionLogout.current
     val localStatus by libraryIndex.localStatus.collectAsStateWithLifecycle()
+    val showLocalStatus = !isSubscreen && localStatus.loading
     Column(
         Modifier
             .fillMaxSize()
@@ -63,6 +62,7 @@ internal fun LibraryScreenScaffold(
                     }
                 },
                 logoutEnabled = !operations.running,
+                reindexing = showLocalStatus && !localStatus.initial,
                 onBack = if (isSubscreen) navigator::back else null,
                 title = title,
                 statusActive = operations.active,
@@ -74,7 +74,7 @@ internal fun LibraryScreenScaffold(
                 },
             )
         }
-        if (!isSubscreen && localStatus.loading) {
+        if (showLocalStatus && localStatus.initial) {
             Box(if (viewerVisible) Modifier.clearAndSetSemantics {} else Modifier) {
                 LocalIndexingBanner(localStatus)
             }
@@ -85,71 +85,48 @@ internal fun LibraryScreenScaffold(
 
 @Composable
 internal fun LocalIndexingBanner(status: LocalLibraryStatus) {
-    if (status.initial) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 6.dp)
-                .testTag("local_indexing_banner"),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val progress = status.progress
-            if (progress != null && progress.totalCount > 0) {
-                LinearProgressIndicator(
-                    progress = {
-                        (progress.indexedCount.toFloat() / progress.totalCount).coerceIn(0f, 1f)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("local_indexing_progress"),
-                )
-                Text(
-                    stringResource(
-                        R.string.local_indexing_initial_progress,
-                        progress.indexedCount,
-                        progress.totalCount,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("local_indexing_progress"),
-                )
-                Text(
-                    stringResource(R.string.local_indexing_initial),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                stringResource(R.string.local_indexing_one_time_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    } else {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 6.dp)
-                .testTag("local_indexing_banner"),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CircularProgressIndicator(
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 6.dp)
+            .testTag("local_indexing_banner"),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        val progress = status.progress
+        if (progress != null && progress.totalCount > 0) {
+            LinearProgressIndicator(
+                progress = {
+                    (progress.indexedCount.toFloat() / progress.totalCount).coerceIn(0f, 1f)
+                },
                 modifier = Modifier
-                    .size(14.dp)
-                    .testTag("local_indexing_spinner"),
-                strokeWidth = 2.dp,
+                    .fillMaxWidth()
+                    .testTag("local_indexing_progress"),
             )
             Text(
-                stringResource(R.string.local_indexing_refreshing),
+                stringResource(
+                    R.string.local_indexing_initial_progress,
+                    progress.indexedCount,
+                    progress.totalCount,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("local_indexing_progress"),
+            )
+            Text(
+                stringResource(R.string.local_indexing_initial),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Text(
+            stringResource(R.string.local_indexing_one_time_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
