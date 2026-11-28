@@ -80,6 +80,14 @@ class AndroidMediaStoreReader(
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.VideoColumns.DURATION)
             val batch = ArrayList<LocalMediaMetadata>(batchSize)
             var indexedCount = 0
+            if (cursor.count > 0) {
+                emit(
+                    LocalMediaBatch(
+                        metadata = emptyList(),
+                        progress = LocalMediaIndexProgress(0, cursor.count),
+                    ),
+                )
+            }
 
             while (cursor.moveToNext()) {
                 val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
