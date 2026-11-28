@@ -2,13 +2,11 @@ package com.syrok0010.nextgallery.feature.timeline.remote
 
 import com.syrok0010.nextgallery.core.media.MediaIdentityRegistry
 import com.syrok0010.nextgallery.core.media.MediaItem
-import com.syrok0010.nextgallery.core.media.MediaSourceIdentity
-import com.syrok0010.nextgallery.core.media.MediaSourceKind
-import com.syrok0010.nextgallery.core.media.mediaIdentityCandidate
 import com.syrok0010.nextgallery.core.network.bestEffort
 import com.syrok0010.nextgallery.core.network.memories.MemoriesApiClient
 import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.core.session.AccountCredentials
+import com.syrok0010.nextgallery.feature.library.ingestRemotePhotos
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
 import com.syrok0010.nextgallery.feature.timeline.TimelineDay
 import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
@@ -73,23 +71,6 @@ class MemoriesRepository(
         return items
     }
 
-    private suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> {
-        val candidates = map { photo ->
-            mediaIdentityCandidate(
-                source = photo.sourceIdentity(),
-                auid = photo.auid,
-                buid = photo.buid,
-            )
-        }
-        val resolution = identityRegistry.resolve(candidates)
-        return map { photo ->
-            photo.toMediaItem(resolution.mediaIds.getValue(photo.sourceIdentity()))
-        }
-    }
-
-    private fun MemoriesPhotoDto.sourceIdentity() =
-        MediaSourceIdentity(
-            source = MediaSourceKind.Memories,
-            sourceKey = fileid.toString(),
-        )
+    private suspend fun List<MemoriesPhotoDto>.toIdentifiedMediaItems(): List<MediaItem> =
+        ingestRemotePhotos(this, identityRegistry)
 }

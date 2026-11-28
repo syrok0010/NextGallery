@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.app.library
 
+import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
@@ -7,6 +8,7 @@ import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
+import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflow
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflowState
 import kotlinx.coroutines.coroutineScope
@@ -35,6 +37,10 @@ internal class MediaLibraryCoordinator(
                 val remote = TimelineWorkflow(credentials, remoteSource, this)
                 remoteIndexer = remote
                 try {
+                    var hasProjected = false
+                    var lastLocalItems: List<MediaItem>? = null
+                    var lastRemoteSnapshot: TimelineSnapshot? = null
+                    var lastLibrary = CanonicalMediaLibrary()
                     combine(
                         remote.state,
                         localMedia.updates(
@@ -44,11 +50,23 @@ internal class MediaLibraryCoordinator(
                     ) { remoteState, localState ->
                         remoteState to localState.items
                     }.collect { (remoteState, localItems) ->
-                        val library = projectMediaLibrary(
-                            localItems = localItems,
-                            remoteItems = remoteState.snapshot?.items.orEmpty(),
-                        )
-                        index.publish(library.items)
+                        val sameInputs = hasProjected &&
+                            localItems === lastLocalItems &&
+                            remoteState.snapshot === lastRemoteSnapshot
+                        val library = if (sameInputs) {
+                            lastLibrary
+                        } else {
+                            projectMediaLibrary(
+                                localItems = localItems,
+                                remoteItems = remoteState.snapshot?.items.orEmpty(),
+                            ).also { projected ->
+                                hasProjected = true
+                                lastLocalItems = localItems
+                                lastRemoteSnapshot = remoteState.snapshot
+                                lastLibrary = projected
+                                index.publish(projected.items)
+                            }
+                        }
                         publish(LibraryPublication(remoteState, library))
                     }
                 } finally {

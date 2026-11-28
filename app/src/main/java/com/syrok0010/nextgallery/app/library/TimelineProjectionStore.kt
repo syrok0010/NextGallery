@@ -13,11 +13,27 @@ internal class TimelineProjectionStore(
     publication: LibraryPublicationStore,
     scope: CoroutineScope,
 ) {
+    private var lastSnapshot: TimelineSnapshot? = null
+    private var lastLibrary: com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary? = null
+    private var lastProjected: TimelineSnapshot? = null
+
     val state = publication.state
         .map { publication ->
             val source = publication.remote
+            val projected = if (
+                source.snapshot === lastSnapshot &&
+                publication.library === lastLibrary
+            ) {
+                lastProjected
+            } else {
+                TimelineSnapshotProjection.project(source.snapshot, publication.library).also {
+                    lastSnapshot = source.snapshot
+                    lastLibrary = publication.library
+                    lastProjected = it
+                }
+            }
             TimelineUiState(
-                TimelineSnapshotProjection.project(source.snapshot, publication.library),
+                projected,
                 source.loadingDayIds,
                 source.failedDayIds,
                 if (source.failedDayIds.isEmpty()) {

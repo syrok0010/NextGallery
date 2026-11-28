@@ -291,6 +291,7 @@ internal class Albums(
                 var latest: AlbumContentsBatch? = null
                 stream.collect { batch ->
                     if (entry.generation != generation) return@collect
+                    if (location is AlbumLocation.Remote) library.observeRemote(batch.items)
                     latest = batch
                     if (!hadItems) {
                         entry.state.value = entry.state.value.copy(

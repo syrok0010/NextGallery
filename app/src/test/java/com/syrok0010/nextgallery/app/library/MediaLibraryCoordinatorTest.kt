@@ -93,6 +93,31 @@ class MediaLibraryCoordinatorTest {
             assertEquals(shown(), index.state.value.keys.map(MediaId::value).toSet())
         }
 
+    @Test fun loadingDaysStatusChangeReusesProjectedLibraryWithoutRecomputing() =
+        running {
+            waitFor { shown() == setOf(PHONE_FILE, CLOUD_PHOTO) }
+            val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+            remote.pendingDayId = 19_699
+            remote.dayLoadGate = release
+            coordinator.refresh()
+            waitFor {
+                publications.lastOrNull()?.remote?.snapshot?.days?.any {
+                    it.dayId == 19_699
+                } == true
+            }
+            val before = publications.last().library
+
+            coordinator.requestDays(listOf(19_699))
+            waitFor { 19_699 in publications.lastOrNull()?.remote?.loadingDayIds.orEmpty() }
+            assertTrue(
+                "loadingDayIds update should reuse the existing CanonicalMediaLibrary instance",
+                publications.last().library === before,
+            )
+
+            release.complete(Unit)
+            waitFor { 19_699 !in publications.lastOrNull()?.remote?.loadingDayIds.orEmpty() }
+        }
+
     private fun running(block: suspend CoroutineScope.() -> Unit) =
         runBlocking {
             val job: Job = launch { coordinator.run { publications += it } }
@@ -120,6 +145,10 @@ class MediaLibraryCoordinatorTest {
 
         @Volatile var photo = cloudItem(CLOUD_PHOTO)
 
+        @Volatile var pendingDayId: Int? = null
+
+        @Volatile var dayLoadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
         override suspend fun loadCachedTimeline(
             credentials: AccountCredentials,
         ): TimelineSnapshot? = null
@@ -129,9 +158,10 @@ class MediaLibraryCoordinatorTest {
         ): TimelineSnapshot {
             initialLoads.incrementAndGet()
             val photo = this.photo
+            val extra = pendingDayId?.let { listOf(TimelineDay(it, 1)) }.orEmpty()
             return TimelineSnapshotAssembler.assemble(
                 config = config,
-                days = listOf(TimelineDay(photo.dayId, 1)),
+                days = listOf(TimelineDay(photo.dayId, 1)) + extra,
                 mediaItems = listOf(photo),
                 loadedDayIds = setOf(photo.dayId),
             )
@@ -140,7 +170,10 @@ class MediaLibraryCoordinatorTest {
         override suspend fun loadTimelineDays(
             credentials: AccountCredentials,
             dayIds: List<Int>,
-        ): List<MediaItem> = emptyList()
+        ): List<MediaItem> {
+            dayLoadGate?.await()
+            return emptyList()
+        }
     }
 
     private class InMemoryProjection : LocalMediaProjectionStore {
