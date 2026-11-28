@@ -13,6 +13,7 @@ import com.syrok0010.nextgallery.core.network.memories.MemoriesPhotoDto
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -33,9 +34,14 @@ internal data class LocalLibraryStatus(
  * any visible [MediaId] and its merged copies from one place.
  */
 internal class MediaLibraryIndex {
-    private val lock = Any()
-    private var published: Map<MediaId, MediaItem> = emptyMap()
-    private val observedRemote = LinkedHashMap<MediaId, MediaItem>()
+    private data class Snapshot(
+        val published: Map<MediaId, MediaItem> = emptyMap(),
+        val observedRemote: Map<MediaId, MediaItem> = emptyMap(),
+    ) {
+        val items: Map<MediaId, MediaItem> = mergeCatalog(published, observedRemote)
+    }
+
+    private val snapshot = MutableStateFlow(Snapshot())
     private val mutableState = MutableStateFlow<Map<MediaId, MediaItem>>(emptyMap())
     private val mutableLocalStatus = MutableStateFlow(LocalLibraryStatus())
     val state = mutableState.asStateFlow()
@@ -46,12 +52,10 @@ internal class MediaLibraryIndex {
     fun findByRemoteFileId(fileId: Long): MediaItem? =
         state.value.values.firstOrNull { it.remoteFileId == fileId }
 
-    internal fun publish(items: List<MediaItem>) {
-        synchronized(lock) {
-            published = items.associateBy { it.mediaId }
-            mutableState.value = rebuildLocked()
+    internal fun publish(items: List<MediaItem>) =
+        update {
+            copy(published = items.associateBy { it.mediaId })
         }
-    }
 
     internal fun publishLocalStatus(status: LocalLibraryStatus) {
         mutableLocalStatus.value = status
@@ -59,73 +63,64 @@ internal class MediaLibraryIndex {
 
     /** Records remote copies loaded outside the timeline and merges them with known local copies. */
     internal fun observeRemote(items: Collection<MediaItem>) {
-        if (items.isEmpty()) return
-        synchronized(lock) {
-            var changed = false
-            items.forEach { item ->
-                val remote = item.remoteCopy ?: return@forEach
-                val remoteOnly = if (item.assetRef == remote) item else item.copy(assetRef = remote)
-                if (observedRemote.put(item.mediaId, remoteOnly) != remoteOnly) {
-                    changed = true
-                }
-            }
-            if (changed) mutableState.value = rebuildLocked()
+        val incoming = items.mapNotNull { item ->
+            val remote = item.remoteCopy ?: return@mapNotNull null
+            item.mediaId to if (item.assetRef == remote) item else item.copy(assetRef = remote)
         }
+        if (incoming.isNotEmpty()) update { copy(observedRemote = observedRemote + incoming) }
     }
 
     /** Drops confirmed deleted cloud copies immediately without waiting for the next timeline refresh. */
     internal fun forgetRemote(fileIds: Set<Long>) {
         if (fileIds.isEmpty()) return
-        synchronized(lock) {
-            var changed = observedRemote.entries.removeAll { (_, item) ->
-                item.remoteFileId in fileIds
-            }
-            if (published.values.any { it.remoteFileId in fileIds }) {
-                published = buildMap(published.size) {
-                    published.forEach { (id, item) ->
+        update {
+            copy(
+                published = published.values
+                    .mapNotNull { item ->
                         if (item.remoteFileId !in fileIds) {
-                            put(id, item)
+                            item
                         } else {
-                            item.localCopy?.let { local -> put(id, item.copy(assetRef = local)) }
+                            item.localCopy?.let { item.copy(assetRef = it) }
                         }
-                    }
-                }
-                changed = true
-            }
-            if (changed) mutableState.value = rebuildLocked()
+                    }.associateBy { it.mediaId },
+                observedRemote = observedRemote.filterValues { it.remoteFileId !in fileIds },
+            )
         }
     }
 
     internal fun clear() {
-        synchronized(lock) {
-            published = emptyMap()
-            observedRemote.clear()
-            mutableState.value = emptyMap()
-            mutableLocalStatus.value = LocalLibraryStatus()
-        }
+        update { Snapshot() }
+        mutableLocalStatus.value = LocalLibraryStatus()
     }
 
-    private fun rebuildLocked(): Map<MediaId, MediaItem> {
-        if (observedRemote.isEmpty()) return published
-        val merged = LinkedHashMap<MediaId, MediaItem>(published.size + observedRemote.size)
-        merged.putAll(published)
-        observedRemote.forEach { (id, remoteItem) ->
-            val remote = remoteItem.remoteCopy ?: return@forEach
-            val existing = merged[id]
-            merged[id] = when {
-                existing == null -> remoteItem
-
-                existing.remoteCopy != null -> existing
-
-                existing.localCopy != null -> remoteItem.copy(
-                    assetRef = MediaAssetRef.LocalFirst(requireNotNull(existing.localCopy), remote),
-                )
-
-                else -> remoteItem
-            }
-        }
-        return merged
+    private fun update(transform: Snapshot.() -> Snapshot) {
+        mutableState.value = snapshot.updateAndGet(transform).items
     }
+}
+
+private fun mergeCatalog(
+    published: Map<MediaId, MediaItem>,
+    observedRemote: Map<MediaId, MediaItem>,
+): Map<MediaId, MediaItem> {
+    if (observedRemote.isEmpty()) return published
+    val mergedRemote = observedRemote.mapValues { (id, remoteItem) ->
+        val existing = published[id]
+        when {
+            existing == null -> remoteItem
+
+            existing.remoteCopy != null -> existing
+
+            existing.localCopy != null -> remoteItem.copy(
+                assetRef = MediaAssetRef.LocalFirst(
+                    requireNotNull(existing.localCopy),
+                    requireNotNull(remoteItem.remoteCopy),
+                ),
+            )
+
+            else -> remoteItem
+        }
+    }
+    return published + mergedRemote
 }
 
 /** Resolves persistent [MediaId]s for Memories photos and optionally registers them in [index]. */

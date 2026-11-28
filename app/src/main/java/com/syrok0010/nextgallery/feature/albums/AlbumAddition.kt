@@ -38,16 +38,19 @@ internal class AlbumAdditionPreparation private constructor(
     internal companion object {
         /** Objects without any available copy are skipped; null when nothing remains to add. */
         fun of(items: Collection<MediaItem>): AlbumAdditionPreparation? {
-            val cloud = mutableListOf<CloudMember>()
-            val uploads = mutableListOf<MediaId>()
-            items.distinctBy { it.mediaId }.forEach { item ->
-                val fileId = item.remoteFileId
-                if (fileId != null) {
-                    cloud += CloudMember(item.mediaId, fileId)
-                } else if (item.hasLocalCopy) {
-                    uploads += item.mediaId
+            val unique = items.distinctBy { it.mediaId }
+            val cloud = unique.mapNotNull { item ->
+                item.remoteFileId?.let {
+                    CloudMember(
+                        item.mediaId,
+                        it,
+                    )
                 }
             }
+            val uploads = unique
+                .filter {
+                    it.remoteFileId == null && it.hasLocalCopy
+                }.map { it.mediaId }
             return AlbumAdditionPreparation(cloud, uploads)
                 .takeIf { it.cloudCount > 0 || it.uploadCount > 0 }
         }

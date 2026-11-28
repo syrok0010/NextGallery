@@ -1,22 +1,24 @@
 package com.syrok0010.nextgallery.app.library
 
-import com.syrok0010.nextgallery.core.media.MediaItem
 import com.syrok0010.nextgallery.core.session.AccountCredentials
 import com.syrok0010.nextgallery.feature.library.CanonicalMediaLibrary
 import com.syrok0010.nextgallery.feature.library.LocalLibraryStatus
 import com.syrok0010.nextgallery.feature.library.MediaLibraryIndex
+import com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexState
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaPermissionMode
 import com.syrok0010.nextgallery.feature.library.local.LocalMediaSource
 import com.syrok0010.nextgallery.feature.library.projectMediaLibrary
 import com.syrok0010.nextgallery.feature.timeline.RemoteTimelineSource
-import com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflow
 import com.syrok0010.nextgallery.feature.timeline.TimelineWorkflowState
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.Mutex
 
 /** Owns a session's indexers and publishes their reconciled canonical media identities. */
@@ -38,52 +40,29 @@ internal class MediaLibraryCoordinator(
                 val remote = TimelineWorkflow(credentials, remoteSource, this)
                 remoteIndexer = remote
                 try {
-                    var hasProjected = false
-                    var lastLocalItems: List<MediaItem>? = null
-                    var lastRemoteSnapshot: TimelineSnapshot? = null
-                    var lastLibrary = CanonicalMediaLibrary()
-                    combine(
-                        remote.state,
-                        localMedia.updates(
-                            reconcileRequests = localRefresh,
-                            access = permissions,
-                        ),
-                    ) { remoteState, localState ->
-                        remoteState to localState
-                    }.collect { (remoteState, localState) ->
-                        val hasAccess = permissions.value == LocalMediaPermissionMode.Full
-                        index.publishLocalStatus(
-                            if (!hasAccess) {
-                                LocalLibraryStatus()
-                            } else {
-                                LocalLibraryStatus(
-                                    loading = localState.progress != null ||
-                                        (!localState.failure && localState.processed == null),
-                                    progress = localState.progress,
-                                    failed = localState.failure,
-                                )
-                            },
-                        )
-                        val localItems = localState.items
-                        val sameInputs = hasProjected &&
-                            localItems === lastLocalItems &&
-                            remoteState.snapshot === lastRemoteSnapshot
-                        val library = if (sameInputs) {
-                            lastLibrary
-                        } else {
-                            projectMediaLibrary(
-                                localItems = localItems,
-                                remoteItems = remoteState.snapshot?.items.orEmpty(),
-                            ).also { projected ->
-                                hasProjected = true
-                                lastLocalItems = localItems
-                                lastRemoteSnapshot = remoteState.snapshot
-                                lastLibrary = projected
-                                index.publish(projected.items)
-                            }
-                        }
-                        publish(LibraryPublication(remoteState, library))
+                    val remoteSnapshots = remote.state
+                        .map { it.snapshot }
+                        .distinctUntilChanged { a, b -> a === b }
+                    val localItems = localMedia
+                        .updates(reconcileRequests = localRefresh, access = permissions)
+                        .onEach { index.publishLocalStatus(it.toLibraryStatus(permissions.value)) }
+                        .map { it.items }
+                        .distinctUntilChanged { a, b -> a === b }
+                    val projected = combine(remoteSnapshots, localItems) { snapshot, items ->
+                        val library = projectMediaLibrary(items, snapshot?.items.orEmpty())
+                        index.publish(library.items)
+                        snapshot to library
                     }
+                    combine(remote.state, projected) { remoteState, (snapshot, library) ->
+                        if (remoteState.snapshot === snapshot) {
+                            LibraryPublication(
+                                remoteState,
+                                library,
+                            )
+                        } else {
+                            null
+                        }
+                    }.filterNotNull().collect(publish)
                 } finally {
                     remoteIndexer = null
                 }
@@ -113,6 +92,19 @@ internal class MediaLibraryCoordinator(
         index.clear()
     }
 }
+
+private fun LocalMediaIndexState.toLibraryStatus(
+    permission: LocalMediaPermissionMode?,
+): LocalLibraryStatus =
+    if (permission != LocalMediaPermissionMode.Full) {
+        LocalLibraryStatus()
+    } else {
+        LocalLibraryStatus(
+            loading = progress != null || (!failure && processed == null),
+            progress = progress,
+            failed = failure,
+        )
+    }
 
 internal data class LibraryPublication(
     val remote: TimelineWorkflowState = TimelineWorkflowState(),
