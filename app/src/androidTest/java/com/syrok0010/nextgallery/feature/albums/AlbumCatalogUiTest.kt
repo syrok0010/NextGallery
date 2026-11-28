@@ -57,20 +57,31 @@ class AlbumCatalogUiTest {
         rule.runOnIdle { assertEquals(albums[1], opened) }
     }
 
-    @Test fun initialIndexingShowsProgressAndOneTimeNoteWhileReindexShowsSpinner() {
-        var status by androidx.compose.runtime.mutableStateOf(
-            com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
-                loading = true,
-                initial = true,
-                progress = com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress(
-                    indexedCount = 200,
-                    totalCount = 1_000,
-                ),
-            ),
-        )
+    @Test fun initialIndexingShowsProgressAndOneTimeNoteWhileReindexShowsSpinnerOnly() {
+        var reindexing by mutableStateOf(false)
         rule.setContent {
             NextGalleryTheme {
-                LocalIndexingBanner(status)
+                Column {
+                    LibraryHeader(
+                        destination = TopLevelDestination.Photos,
+                        onRefresh = {},
+                        onLogout = {},
+                        reindexing = reindexing,
+                    )
+                    if (!reindexing) {
+                        LocalIndexingBanner(
+                            com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
+                                loading = true,
+                                initial = true,
+                                progress = com.syrok0010.nextgallery.feature.library.local
+                                    .LocalMediaIndexProgress(
+                                        indexedCount = 200,
+                                        totalCount = 1_000,
+                                    ),
+                            ),
+                        )
+                    }
+                }
             }
         }
         rule.onNodeWithTag("local_indexing_banner").assertIsDisplayed()
@@ -78,18 +89,8 @@ class AlbumCatalogUiTest {
         rule.onNodeWithText(string(R.string.local_indexing_one_time_note)).assertIsDisplayed()
         rule.onNodeWithTag("local_indexing_spinner").assertDoesNotExist()
 
-        rule.runOnIdle {
-            status = com.syrok0010.nextgallery.feature.library.LocalLibraryStatus(
-                loading = true,
-                initial = false,
-                progress = com.syrok0010.nextgallery.feature.library.local.LocalMediaIndexProgress(
-                    indexedCount = 200,
-                    totalCount = 1_000,
-                ),
-            )
-        }
+        rule.runOnIdle { reindexing = true }
         rule.onNodeWithTag("local_indexing_spinner").assertIsDisplayed()
-        rule.onNodeWithTag("local_indexing_progress").assertDoesNotExist()
-        rule.onNodeWithText(string(R.string.local_indexing_one_time_note)).assertDoesNotExist()
+        rule.onNodeWithTag("local_indexing_banner").assertDoesNotExist()
     }
 }

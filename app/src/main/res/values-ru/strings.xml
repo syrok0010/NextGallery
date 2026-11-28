@@ -94,7 +94,6 @@
     <string name="local_indexing_initial">Индексация файлов телефона…</string>
     <string name="local_indexing_initial_progress">Индексация файлов телефона: %1$d из %2$d</string>
     <string name="local_indexing_one_time_note">Это нужно только один раз, дальше будет быстрее</string>
-    <string name="local_indexing_refreshing">Обновление файлов телефона…</string>
     <string name="albums_empty">Нет доступных альбомов в этом разделе</string>
     <string name="album_contents_progress">Загружено %1$d из %2$d элементов</string>
     <string name="album_contents_empty">В этом альбоме пока нет фото и видео</string>

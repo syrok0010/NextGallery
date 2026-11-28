@@ -36,6 +36,7 @@ internal fun LibraryHeader(
     /** While [statusActive], takes the place of the app name, between the logo and the menu. */
     statusActive: Boolean = false,
     logoutEnabled: Boolean = true,
+    reindexing: Boolean = false,
     status: @Composable () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -115,13 +116,29 @@ internal fun LibraryHeader(
                 }
             }
         }
-        Text(
-            title ?: stringResource(destination.titleRes),
-            style = MaterialTheme.typography.headlineLarge,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                title ?: stringResource(destination.titleRes),
+                style = MaterialTheme.typography.headlineLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (reindexing) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .testTag("local_indexing_spinner"),
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
     }
 }
 
