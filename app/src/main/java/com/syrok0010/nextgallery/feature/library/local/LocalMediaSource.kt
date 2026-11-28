@@ -69,6 +69,7 @@ data class LocalMediaIndexState(
     val failure: Boolean = false,
     val processed: LocalMediaIndexProgress? = progress,
     val initial: Boolean = false,
+    val hasAccess: Boolean = true,
 )
 
 fun interface LocalMediaReader {
@@ -106,7 +107,7 @@ class LocalMediaSource(
     ): Flow<LocalMediaIndexState> = channelFlow {
         access.distinctUntilChanged().collectLatest { mode ->
             if (mode != LocalMediaPermissionMode.Full) {
-                send(LocalMediaIndexState(items = emptyList(), progress = null))
+                send(LocalMediaIndexState(items = emptyList(), progress = null, hasAccess = false))
                 return@collectLatest
             }
 

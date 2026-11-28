@@ -45,19 +45,19 @@ internal class MediaLibraryCoordinator(
                         .distinctUntilChanged { a, b -> a === b }
                     val localItems = localMedia
                         .updates(reconcileRequests = localRefresh, access = permissions)
-                        .onEach { index.publishLocalStatus(it.toLibraryStatus(permissions.value)) }
+                        .onEach { index.publishLocalStatus(it.toLibraryStatus()) }
                         .map { it.items }
                         .distinctUntilChanged { a, b -> a === b }
                     val projected = combine(remoteSnapshots, localItems) { snapshot, items ->
                         val library = projectMediaLibrary(items, snapshot?.items.orEmpty())
                         index.publish(library.items)
-                        snapshot to library
+                        ProjectedLibrary(snapshot, library)
                     }
-                    combine(remote.state, projected) { remoteState, (snapshot, library) ->
-                        if (remoteState.snapshot === snapshot) {
+                    combine(remote.state, projected) { remoteState, projected ->
+                        if (remoteState.snapshot === projected.snapshot) {
                             LibraryPublication(
                                 remoteState,
-                                library,
+                                projected.library,
                             )
                         } else {
                             null
@@ -93,13 +93,17 @@ internal class MediaLibraryCoordinator(
     }
 }
 
-private fun LocalMediaIndexState.toLibraryStatus(
-    permission: LocalMediaPermissionMode?,
-): LocalLibraryStatus =
-    if (permission != LocalMediaPermissionMode.Full) {
+private data class ProjectedLibrary(
+    val snapshot: com.syrok0010.nextgallery.feature.timeline.TimelineSnapshot?,
+    val library: CanonicalMediaLibrary,
+)
+
+private fun LocalMediaIndexState.toLibraryStatus(): LocalLibraryStatus =
+    if (!hasAccess) {
         LocalLibraryStatus()
     } else {
         LocalLibraryStatus(
+            hasAccess = true,
             loading = progress != null || (!failure && processed == null),
             initial = initial,
             progress = progress,
