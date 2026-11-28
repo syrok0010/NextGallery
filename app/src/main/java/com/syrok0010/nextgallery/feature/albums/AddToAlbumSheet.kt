@@ -27,7 +27,7 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AddToAlbumSheet(
-    request: AlbumAdditionRequest,
+    addition: AlbumAdditionPreparation,
     onDismiss: () -> Unit,
     onPick: (AlbumTarget) -> Unit,
     albums: Albums = koinInject(),
@@ -47,15 +47,15 @@ internal fun AddToAlbumSheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(Modifier.height(4.dp))
-            if (request.fileIds.isNotEmpty()) {
+            if (addition.cloudCount > 0) {
                 Text(
-                    stringResource(R.string.album_add_eligible, request.fileIds.size),
+                    stringResource(R.string.album_add_eligible, addition.cloudCount),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (request.uploads.isNotEmpty()) {
+            if (addition.uploadCount > 0) {
                 Text(
-                    stringResource(R.string.album_add_local_uploads, request.uploads.size),
+                    stringResource(R.string.album_add_local_uploads, addition.uploadCount),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

@@ -50,7 +50,11 @@ class MediaDeletionTest {
                 val preparation = requireNotNull(repository.prepare(listOf(duplicate.mediaId)))
                 assertEquals(DeletionPlan(phoneOnly = 1, cloudOnly = 0, merged = 0), preparation.plan)
                 assertEquals(
-                    targets(listOf("content://media/external/images/media/${position + 1}"), emptyList()),
+                    targets(
+                        listOf("content://media/external/images/media/${position + 1}"),
+                        emptyList(),
+                        listOf(duplicate.mediaId.value),
+                    ),
                     preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
                 )
             }
@@ -80,6 +84,7 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = listOf(10, 20),
+                mediaIds = listOf("phone", "video", "both", "cloud"),
             ),
             preparation.confirm(DeletionScope.Everywhere, cloudAllowed = true),
         )
@@ -91,6 +96,7 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = listOf(10),
+                mediaIds = listOf("phone", "video", "both", "cloud"),
             ),
             preparation.confirm(DeletionScope.PhoneOnly, cloudAllowed = true),
         )
@@ -101,6 +107,7 @@ class MediaDeletionTest {
                     "content://media/external/video/media/3",
                 ),
                 fileIds = listOf(10, 20),
+                mediaIds = listOf("phone", "video", "cloud", "both"),
             ),
             preparation.confirm(DeletionScope.CloudOnly, cloudAllowed = true),
         )
@@ -113,6 +120,7 @@ class MediaDeletionTest {
                     "content://media/external/images/media/2",
                 ),
                 fileIds = emptyList(),
+                mediaIds = listOf("phone", "video", "both"),
             ),
             preparation.confirm(DeletionScope.Everywhere, cloudAllowed = false),
         )
@@ -156,6 +164,7 @@ class MediaDeletionTest {
                     targets(
                         contentUris = listOf("content://media/external/images/media/2"),
                         fileIds = listOf(20),
+                        mediaIds = listOf("both"),
                     ),
                     preparation?.confirm(DeletionScope.Everywhere, cloudAllowed = true),
                 )
@@ -305,14 +314,19 @@ class MediaDeletionTest {
     private fun memories(fileId: Long) = MediaSourceIdentity(MediaSourceKind.Memories, fileId.toString())
 
     /** Phone copies are indexed by their `file` URI and trashed by the typed one. */
-    private fun targets(contentUris: List<String>, fileIds: List<Long>) =
+    private fun targets(
+        contentUris: List<String>,
+        fileIds: List<Long>,
+        mediaIds: List<String> = emptyList(),
+    ) =
         DeletionTargets(
             contentUris = contentUris,
             fileIds = fileIds,
             phoneSources = contentUris.associateWith { "content://media/external/file/${it.substringAfterLast('/')}" },
+            mediaIds = mediaIds,
         )
 
-    @Test fun `progress marks queued cloud copies until the queue is done`() = runBlocking {
+    @Test fun `progress marks queued media ids until the queue is done`() = runBlocking {
         val release = CountDownLatch(1)
         NextcloudFixture { request ->
             release.await()
@@ -331,10 +345,21 @@ class MediaDeletionTest {
                     { it },
                     scope,
                 ) {}
-                repository.delete(DeletionTargets(emptyList(), listOf(1, 3)))
-                repository.delete(DeletionTargets(listOf("content://media/external/images/media/8"), listOf(2)))
+                repository.delete(DeletionTargets(emptyList(), listOf(1, 3), mediaIds = listOf("m1", "m3")))
+                repository.delete(
+                    DeletionTargets(
+                        listOf("content://media/external/images/media/8"),
+                        listOf(2),
+                        mediaIds = listOf("m2"),
+                    ),
+                )
                 assertEquals(
-                    DeletionProgress(queued = listOf(1, 3, 2), total = 3, processed = 0, requests = 2),
+                    DeletionProgress(
+                        queued = listOf(MediaId("m1"), MediaId("m3"), MediaId("m2")),
+                        total = 3,
+                        processed = 0,
+                        requests = 2,
+                    ),
                     repository.state.value.running,
                 )
                 release.countDown()
@@ -368,12 +393,12 @@ class MediaDeletionTest {
                 scope,
             ) { finished.incrementAndGet() }
 
-            repository.delete(DeletionTargets(emptyList(), listOf(1)))
-            repository.delete(DeletionTargets(emptyList(), listOf(1)))
+            repository.delete(DeletionTargets(emptyList(), listOf(1), mediaIds = listOf("m1")))
+            repository.delete(DeletionTargets(emptyList(), listOf(1), mediaIds = listOf("m1")))
             gates[0].countDown()
             withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
 
-            assertEquals(setOf(1L), repository.state.value.running?.fileIds)
+            assertEquals(setOf(MediaId("m1")), repository.state.value.running?.mediaIds)
             gates[1].countDown()
             // The result is published before the callback, so the queue is empty by now.
             withTimeout(5_000) { while (finished.get() < 2) kotlinx.coroutines.delay(10) }
@@ -384,7 +409,7 @@ class MediaDeletionTest {
         }
     }
 
-    @Test fun `a phone-only deletion counts as running until the trash is checked`() = runBlocking {
+    @Test fun `a phone-only deletion counts as running and marks its tile until the trash is checked`() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val checked = CountDownLatch(1)
         try {
@@ -401,12 +426,15 @@ class MediaDeletionTest {
                 scope,
             ) { finished.incrementAndGet() }
 
-            repository.delete(targets(listOf("content://media/external/images/media/5"), emptyList()))
+            repository.delete(
+                targets(listOf("content://media/external/images/media/5"), emptyList(), listOf("phone-5")),
+            )
 
             // A running operation keeps logout, which ends the process, disabled.
             val shown = withTimeout(5_000) { repository.operations.first { it.isNotEmpty() } }.single()
             assertTrue(shown.running)
             assertEquals("delete_progress_phone", resourceName(shown.title))
+            assertEquals(listOf(MediaId("phone-5")), shown.media.map { it.mediaId })
             checked.countDown()
             withTimeout(5_000) { while (finished.get() < 1) kotlinx.coroutines.delay(10) }
             assertEquals(null, repository.state.value.running)

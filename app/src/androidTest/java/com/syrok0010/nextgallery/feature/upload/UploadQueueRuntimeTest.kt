@@ -395,7 +395,7 @@ class UploadQueueRuntimeTest {
                     queue.consumeResult()
                     waitFor { queue.result.value == null }
                     waitFor { queue.activity.value!!.percent == 25 }
-                    assertEquals(job.selection.identityUri, queue.activity.value!!.current)
+                    assertEquals(MediaId(job.selection.mediaId), queue.activity.value!!.current)
                     queue.cancel(job.id)
                     waitFor { phases()[1] == UploadPhase.Cancelled }
                     assertNull("A cancelled file must not stay current", queue.activity.value!!.current)

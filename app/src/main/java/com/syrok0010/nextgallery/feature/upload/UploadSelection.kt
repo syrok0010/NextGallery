@@ -17,6 +17,7 @@ internal data class UploadSelection(
     val displayName: String,
     val mimeType: String?,
     val stamp: SourceStamp? = null,
+    val mediaId: String = local.contentUri,
 ) {
     val contentUri: String get() = local.contentUri
 
@@ -55,6 +56,7 @@ internal fun uploadSelection(item: MediaItem): UploadSelection? =
             local = local,
             displayName = item.displayName,
             mimeType = item.mimeType,
+            mediaId = item.mediaId.value,
         )
     }
 

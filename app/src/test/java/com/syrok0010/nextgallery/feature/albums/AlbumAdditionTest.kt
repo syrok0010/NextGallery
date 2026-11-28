@@ -30,16 +30,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AlbumAdditionTest {
-    @Test fun `request keeps server copies and uploads local-only objects`() {
-        val request = AlbumAdditionRequest.of(
-            listOf(
-                item("remote", MediaAssetRef.MemoriesFile(10)),
-                item("merged", MediaAssetRef.LocalFirst(local("merged"), MediaAssetRef.MemoriesFile(11))),
-                item("local", local("local")),
+    @Test fun `preparation splits cloud copies and phone-only objects by mediaId`() {
+        val preparation = requireNotNull(
+            AlbumAdditionPreparation.of(
+                listOf(
+                    item("remote", MediaAssetRef.MemoriesFile(10)),
+                    item("merged", MediaAssetRef.LocalFirst(local("merged"), MediaAssetRef.MemoriesFile(11))),
+                    item("local", local("local")),
+                ),
             ),
         )
-        assertEquals(listOf(10L, 11L), request.fileIds)
-        assertEquals(listOf(MediaId("local")), request.uploads)
+        assertEquals(2, preparation.cloudCount)
+        assertEquals(1, preparation.uploadCount)
+        assertEquals(listOf(10L, 11L), preparation.fileIds)
+        assertEquals(setOf(MediaId("remote"), MediaId("merged")), preparation.cloudMediaIds)
+        assertEquals(listOf(MediaId("local")), preparation.uploads)
     }
 
     @Test fun `only albums owned by current user are writable`() {
@@ -107,7 +112,14 @@ class AlbumAdditionTest {
                 }
                 val accepted = additions.add(
                     AlbumTarget.New("Поход"),
-                    AlbumAdditionRequest(listOf(1L), listOf(MediaId("local"))),
+                    requireNotNull(
+                        AlbumAdditionPreparation.of(
+                            listOf(
+                                item("cloud", MediaAssetRef.MemoriesFile(1L)),
+                                item("local", local("local")),
+                            ),
+                        ),
+                    ),
                 )
                 assertTrue(accepted)
                 val done = withTimeout(5_000) {
@@ -145,7 +157,9 @@ class AlbumAdditionTest {
             try {
                 val additions = fixture.albums(scope)
                 val album = AlbumTarget.Existing(AlbumLocation.Remote("anna/Лето"), "Лето")
-                val request = AlbumAdditionRequest(listOf(1L))
+                val request = requireNotNull(
+                    AlbumAdditionPreparation.of(listOf(item("cloud", MediaAssetRef.MemoriesFile(1L)))),
+                )
                 assertTrue(additions.add(album, request))
                 assertFalse(additions.add(album, request))
                 release.countDown()
@@ -220,7 +234,19 @@ class AlbumAdditionTest {
                 })
                 fixture.requests.clear()
 
-                assertTrue(additions.add(target, AlbumAdditionRequest(listOf(1L), listOf(MediaId("phone-only")))))
+                assertTrue(
+                    additions.add(
+                        target,
+                        requireNotNull(
+                            AlbumAdditionPreparation.of(
+                                listOf(
+                                    item("cloud", MediaAssetRef.MemoriesFile(1L)),
+                                    item("phone-only", local("phone-only")),
+                                ),
+                            ),
+                        ),
+                    ),
+                )
 
                 val failed = withTimeout(5_000) {
                     additions.operations.first { it.singleOrNull()?.failed == true }.single()

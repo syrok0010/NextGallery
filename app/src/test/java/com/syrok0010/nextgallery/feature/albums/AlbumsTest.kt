@@ -106,8 +106,10 @@ class AlbumsTest {
         val started = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
         val reads = AtomicInteger()
+        val library = MediaLibraryIndex().apply { publish(listOf(first, third)) }
         val albums = harness.albums(
             scope,
+            library = library,
             catalog = { RemoteAlbumsCatalog(listOf(summary.copy(count = 1, cover = AlbumCover.Remote(2, null)))) },
             remoteContents = {
                 flow {
@@ -127,7 +129,8 @@ class AlbumsTest {
         contents.first { !it.loading && it.loaded == 1 }
         albums.refresh(album)
         started.await()
-        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first, third))))
+        val addition = requireNotNull(albums.prepareAddition(listOf(first.mediaId, third.mediaId)))
+        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), addition))
         cancelled.await()
         val after = contents.first { !it.loading && it.items.any { item -> item.mediaId == first.mediaId } }
         assertEquals(setOf(first.mediaId, second.mediaId), after.items.map { it.mediaId }.toSet())
@@ -139,8 +142,10 @@ class AlbumsTest {
     @Test fun `adding to an unopened album refreshes catalog without reading contents`() = scenario { harness, scope ->
         val reads = AtomicInteger()
         val refreshes = AtomicInteger()
+        val library = MediaLibraryIndex().apply { publish(listOf(first)) }
         val albums = harness.albums(
             scope,
+            library = library,
             remoteContents = {
                 reads.incrementAndGet()
                 flowOf(AlbumContentsBatch(emptyList(), 0))
@@ -151,7 +156,12 @@ class AlbumsTest {
             },
         )
         val initial = refreshes.get()
-        assertTrue(albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest.of(listOf(first))))
+        assertTrue(
+            albums.add(
+                AlbumTarget.Existing(album, "album"),
+                requireNotNull(albums.prepareAddition(listOf(first.mediaId))),
+            ),
+        )
         albums.operations.first { it.singleOrNull()?.running == false }
         while (refreshes.get() == initial) delay(10)
         assertEquals(0, reads.get())
@@ -184,7 +194,10 @@ class AlbumsTest {
         try {
             albums.observeContents(album).first { !it.loading && it.loaded == 1 }
             albums.observeContents(other).first { !it.loading && it.loaded == 1 }
-            albums.add(AlbumTarget.Existing(album, "album"), AlbumAdditionRequest(listOf(1)))
+            albums.add(
+                AlbumTarget.Existing(album, "album"),
+                requireNotNull(AlbumAdditionPreparation.of(listOf(first))),
+            )
             albums.observeContents(album).first { !it.loading && it.loaded == 2 }
             assertEquals(2, targetReads.get())
             assertEquals(1, otherReads.get())

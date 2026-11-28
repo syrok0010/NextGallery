@@ -169,12 +169,17 @@ internal class Albums(
         }
     }
 
+    /** Resolves selected [mediaIds] into an addition plan before opening the album picker. */
     @MainThread
-    fun add(target: AlbumTarget, request: AlbumAdditionRequest): Boolean {
+    fun prepareAddition(mediaIds: Collection<MediaId>): AlbumAdditionPreparation? =
+        AlbumAdditionPreparation.of(mediaIds.distinct().mapNotNull { library[it] })
+
+    @MainThread
+    fun add(target: AlbumTarget, addition: AlbumAdditionPreparation): Boolean {
         if (additionJob?.isActive == true) return false
-        additionState.value = AlbumAdditionState.Running(target.name, request.fileIds.toSet())
+        additionState.value = AlbumAdditionState.Running(target.name, addition.cloudMediaIds)
         additionJob = scope.launch {
-            mutations.withLock { additionState.value = performAddition(target, request) }
+            mutations.withLock { additionState.value = performAddition(target, addition) }
         }
         return true
     }
@@ -221,7 +226,7 @@ internal class Albums(
 
     private suspend fun performAddition(
         target: AlbumTarget,
-        request: AlbumAdditionRequest,
+        addition: AlbumAdditionPreparation,
     ): AlbumAdditionState =
         try {
             val location = when (target) {
@@ -232,9 +237,9 @@ internal class Albums(
             if (address == null || address.owner != credentials.userId) {
                 AlbumAdditionState.Failed(target.name, AlbumAdditionFailure.NotWritable)
             } else {
-                val queued = enqueue(request.uploads, UploadAlbum(address.owner, address.name))
-                val result = remote.add(address, request.fileIds)
-                applyAdded(location, result.presentIds, request.items)
+                val queued = enqueue(addition.uploads, UploadAlbum(address.owner, address.name))
+                val result = remote.add(address, addition.fileIds)
+                applyAdded(location, result.presentIds)
                 AlbumAdditionState.Done(target.name, result.summary, queued)
             }
         } catch (cancelled: CancellationException) {
@@ -258,11 +263,7 @@ internal class Albums(
             }
         }
 
-    private fun applyAdded(
-        location: AlbumLocation.Remote,
-        ids: Set<Long>,
-        supplied: List<MediaItem> = emptyList(),
-    ) {
+    private fun applyAdded(location: AlbumLocation.Remote, ids: Set<Long>) {
         if (ids.isEmpty()) return
         val entry = entries[location]
         if (entry == null) {
@@ -273,7 +274,6 @@ internal class Albums(
         entry.generation++
         val known = buildMap<Long, MediaItem> {
             library.state.value.values.forEach { item -> item.remoteFileId?.let { put(it, item) } }
-            supplied.forEach { item -> item.remoteFileId?.let { put(it, item) } }
             entry.state.value.items.forEach { item -> item.remoteFileId?.let { put(it, item) } }
         }
         val resolved = ids.mapNotNull { known[it] }

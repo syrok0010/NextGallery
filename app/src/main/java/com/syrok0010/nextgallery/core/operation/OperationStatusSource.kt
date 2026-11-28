@@ -1,5 +1,6 @@
 package com.syrok0010.nextgallery.core.operation
 
+import com.syrok0010.nextgallery.core.media.MediaId
 import com.syrok0010.nextgallery.core.ui.UiText
 import kotlinx.coroutines.flow.StateFlow
 
@@ -10,17 +11,7 @@ internal enum class OperationKind {
     Delete,
 }
 
-/** A media reference used by an operation to mark a tile while it is active. */
-internal sealed interface OperationMediaReference {
-    data class LocalUri(val value: String) : OperationMediaReference
-
-    data class RemoteFileId(val value: Long) : OperationMediaReference
-}
-
-internal data class OperationMediaActivity(
-    val reference: OperationMediaReference,
-    val progress: Float? = null,
-)
+internal data class OperationMediaActivity(val mediaId: MediaId, val progress: Float? = null)
 
 /** Presentation-neutral data published by one long-lived operation. */
 internal data class OperationStatusSnapshot(
